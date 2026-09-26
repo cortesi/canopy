@@ -17,7 +17,7 @@ use canopy::{
 use crate::inspector::Inspector;
 use crate::{
     Button, Container, KeyHint,
-    help::{BindingList, Help, ModeHelp},
+    help::{BindingList, Help, ModeHelp, Shown},
 };
 
 /// Default root bindings exposed through `root.default_bindings()`.
@@ -424,9 +424,14 @@ fn sync_mode_help(context: &mut dyn Context) -> Result<()> {
     let Some(main_pane) = context.child_slot_of(context.node_id(), KEY_MAIN_PANE) else {
         return Ok(());
     };
-    context.clear_effects(main_pane)?;
-    if shown {
-        context.push_effect(main_pane, effects::brightness(effects::MODAL_DIM))?;
+    // A panel that stays up keeps its dim, so the fade runs once.
+    match shown {
+        Shown::Opened => {
+            context.clear_effects(main_pane)?;
+            context.push_effect(main_pane, effects::modal_dim())?;
+        }
+        Shown::Kept => {}
+        Shown::Hidden => context.clear_effects(main_pane)?,
     }
     Ok(())
 }

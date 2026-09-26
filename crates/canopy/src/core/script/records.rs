@@ -13,6 +13,7 @@ use crate::{
     core::termbuf::TermBuf,
     input,
     input::{KeyRouteExplanation, KeyRouteStep, RouteOutcome, key::Key},
+    render::cursor::{CursorMotion, CursorShape, CursorSnapshot},
     runtime::{FrameSnapshot, NodeSnapshot},
     widget::EventOutcome,
 };
@@ -42,7 +43,48 @@ pub(super) fn snapshot_to_arg(frame: &FrameSnapshot) -> ArgValue {
             ArgValue::Array(frame.nodes.iter().map(snapshot_node_to_arg).collect()),
         ),
         ("cells".into(), ArgValue::Array(rows)),
+        (
+            "cursors".into(),
+            ArgValue::Array(frame.cursors.iter().map(cursor_to_arg).collect()),
+        ),
     ]))
+}
+
+/// Convert one painted cursor.
+fn cursor_to_arg(cursor: &CursorSnapshot) -> ArgValue {
+    ArgValue::Map(BTreeMap::from([
+        ("node".into(), ArgValue::Node(cursor.node)),
+        ("x".into(), ArgValue::UInt(u64::from(cursor.location.x))),
+        ("y".into(), ArgValue::UInt(u64::from(cursor.location.y))),
+        ("role".into(), ArgValue::String(cursor.role.clone())),
+        (
+            "shape".into(),
+            ArgValue::String(cursor_shape_name(cursor.look.shape).into()),
+        ),
+        ("color".into(), color_to_arg(cursor.look.color)),
+        (
+            "motion".into(),
+            ArgValue::String(cursor_motion_name(cursor.look.motion).into()),
+        ),
+        ("primary".into(), ArgValue::Bool(cursor.primary)),
+    ]))
+}
+
+/// Return the script name of a cursor shape.
+pub(super) fn cursor_shape_name(shape: CursorShape) -> &'static str {
+    match shape {
+        CursorShape::Block => "block",
+        CursorShape::Underline => "underline",
+    }
+}
+
+/// Return the script name of a cursor motion.
+pub(super) fn cursor_motion_name(motion: CursorMotion) -> &'static str {
+    match motion {
+        CursorMotion::Steady => "steady",
+        CursorMotion::Blink { .. } => "blink",
+        CursorMotion::Pulse { .. } => "pulse",
+    }
 }
 
 /// Serialize owned semantic and geometry data, including expired node tokens.

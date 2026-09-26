@@ -777,11 +777,12 @@ mod tests {
     use canopy::{
         geom::Size,
         input::{ModalBindings, ModalOptions},
+        render::cursor,
         testing::harness::Harness,
     };
 
     use super::*;
-    use crate::{Confirm, input::CARET};
+    use crate::Confirm;
 
     /// Build a picker showing `items`, rendered once.
     fn picker(items: &[&str], width: u32, height: u32) -> Result<Harness> {
@@ -1122,9 +1123,32 @@ mod tests {
                 .map(|cell| cell.style.bg)
                 .unwrap_or_else(|| panic!("{needle:?} renders"))
         };
+        let caret = |harness: &Harness| {
+            harness
+                .canopy
+                .snapshot()
+                .expect("published picker")
+                .cursors
+                .iter()
+                .find(|c| c.role == cursor::INACTIVE)
+                .map(|c| c.location)
+        };
+        let field = caret(&harness).expect("the unfocused search shows where typing lands");
+        let field_ground = harness
+            .canopy
+            .snapshot()
+            .expect("published picker")
+            .buffer
+            .get(Point {
+                x: field.x + 1,
+                y: field.y,
+            })
+            .expect("the field continues past its caret")
+            .style
+            .bg;
 
         assert_ne!(
-            ground(&harness, CARET),
+            field_ground,
             ground(&harness, 'b'),
             "the field does not share the ground the rows sit on"
         );
@@ -1132,7 +1156,7 @@ mod tests {
 
         commit(&mut harness)?;
         assert!(
-            !harness.tbuf().contains_text(&CARET.to_string()),
+            caret(&harness).is_none(),
             "a search that has been given drops its caret"
         );
         assert_ne!(

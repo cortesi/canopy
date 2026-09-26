@@ -4,7 +4,7 @@ use canopy::{
     geom::{Point, Rect, Size},
     layout::Layout,
     render::Render,
-    style::ResolvedStyle,
+    style::Coverage,
 };
 
 use crate::font::{FontEffects, FontLayout, FontRenderer, LayoutOptions, align_offset};
@@ -148,22 +148,15 @@ impl Widget for FontBanner {
                     continue;
                 }
                 let point = Point { x, y };
-                let resolved = rndr.resolve_style(style).resolve_at(bounds, point);
-                let blended = blend_style(resolved, cell.fg_coverage, cell.bg_coverage);
-                rndr.put_cell(blended, point, cell.ch)?;
+                let coverage = Coverage {
+                    fg: cell.fg_coverage,
+                    bg: cell.bg_coverage,
+                };
+                rndr.put_covered(style, bounds, point, cell.ch, coverage)?;
             }
         }
         Ok(())
     }
-}
-
-/// Blend a resolved style by coverage weights.
-fn blend_style(resolved: ResolvedStyle, fg_cov: u8, bg_cov: u8) -> ResolvedStyle {
-    let fg_weight = f32::from(fg_cov) / 255.0;
-    let bg_weight = f32::from(bg_cov) / 255.0;
-    let fg = resolved.bg.blend(resolved.fg, fg_weight);
-    let bg = resolved.bg.blend(resolved.fg, bg_weight);
-    ResolvedStyle::new(fg, bg, resolved.attrs)
 }
 
 /// Compute a gradient bounds rect aligned to the rendered content.

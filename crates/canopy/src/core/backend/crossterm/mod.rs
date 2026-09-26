@@ -123,6 +123,7 @@ pub fn runloop(mut cnpy: Canopy, options: RunOptions) -> Result<i32> {
     let mut events = EventSource::new(cevent::EventStream::new(), rx);
     let size = translate_result(terminal::size())?;
     cnpy.set_screen_size(Size::new(size.0.into(), size.1.into()))?;
+    cnpy.set_motion_live(true);
 
     let runtime = Builder::new_current_thread()
         .enable_time()
@@ -147,7 +148,7 @@ pub fn runloop(mut cnpy: Canopy, options: RunOptions) -> Result<i32> {
         if let Some(code) = outcome.exit_code {
             return Ok(code);
         }
-        if outcome.frame.is_some() {
+        if outcome.frame.is_some() || outcome.motion {
             cnpy.emit_frame(&mut be)
                 .map_err(|error| handle_render_error(error, &cnpy.core, &mut session))?;
         }

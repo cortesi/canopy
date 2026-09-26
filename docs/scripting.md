@@ -566,6 +566,18 @@ content rectangle, and a `Rect` target crops to that screen rectangle.
 `canopy.snapshot().cells` holds the styled cells. Use a snapshot for
 attachment, ancestor visibility, and clipping decisions.
 
+`canopy.snapshot().cursors` holds the cursors the frame painted, the primary
+cursor first. Each record has the declaring node, the screen location, the
+role, the shape, the painted color, the motion, and whether it is primary.
+Assert cursor roles and locations directly; do not infer them from cell colors.
+Snapshots show every cell at rest, so moving colors never change what a script
+reads.
+
+`canopy.set_cursor_look(role, look)` replaces parts of a cursor role's look in
+every theme, for example `{ color = "#98c379", motion = "steady" }`.
+`canopy.set_motion(options)` replaces the given motion settings: `enabled`,
+`max_fps`, and `idle_ms`.
+
 The generated API is test-covered by an exact golden tail that includes command
 enums, optional named arguments, fixtures, and default bindings.
 

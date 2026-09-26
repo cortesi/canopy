@@ -1,6 +1,9 @@
 //! Modal input admission and the stack of open modals.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+};
 
 use super::{Core, focus::is_focus_candidate};
 use crate::{
@@ -95,6 +98,8 @@ struct ModalScope {
     modal: Identity,
     /// Dimming target lifetime, independent from its ordinary effects.
     dim: Option<Identity>,
+    /// The dimming effect, kept for the scope's life so its fade runs once.
+    dim_effect: Effect,
     /// Exact prior focus followed by its nearest ancestors.
     focus_ancestry: Vec<Identity>,
     /// Whether the modal sits in the overlay layer rather than inside its
@@ -209,7 +214,7 @@ impl Core {
                     identity.node == node && self.modal_identity_live(identity)
                 })
             })
-            .map(|_| effects::brightness(effects::MODAL_DIM))
+            .map(|scope| Arc::clone(&scope.dim_effect))
             .collect()
     }
 
@@ -275,6 +280,7 @@ impl Core {
             owner,
             modal,
             dim,
+            dim_effect: effects::modal_dim(),
             focus_ancestry,
             overlay,
         });

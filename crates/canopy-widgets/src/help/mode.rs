@@ -100,11 +100,11 @@ impl ModeHelp {
     /// the panel when no such mode is active, and return whether it shows.
     ///
     /// Contextual help replaces the panel while it is open.
-    pub(crate) fn sync(context: &mut dyn Context, overlay: NodeId) -> Result<bool> {
+    pub(crate) fn sync(context: &mut dyn Context, overlay: NodeId) -> Result<Shown> {
         let snapshot = context.available_bindings(context.focused_node())?;
         let Some(mode) = snapshot.transient_mode else {
             context.set_hidden(overlay, true)?;
-            return Ok(false);
+            return Ok(Shown::Hidden);
         };
         let bindings = snapshot
             .bindings
@@ -128,9 +128,23 @@ impl ModeHelp {
             list.bindings = bindings;
             Ok(())
         })?;
-        context.set_hidden(overlay, false)?;
-        Ok(true)
+        Ok(if context.set_hidden(overlay, false)?.changed() {
+            Shown::Opened
+        } else {
+            Shown::Kept
+        })
     }
+}
+
+/// Whether the mode help panel shows after a sync.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shown {
+    /// The panel was hidden and now shows.
+    Opened,
+    /// The panel showed and still does.
+    Kept,
+    /// The panel is hidden.
+    Hidden,
 }
 
 impl Widget for ModeHelp {

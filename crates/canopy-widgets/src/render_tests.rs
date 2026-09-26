@@ -312,10 +312,17 @@ mod tests {
             harness.tbuf().lines()
         );
         assert_eq!(harness.buf().get(prompt).unwrap().ch, '查');
+        let caret = harness
+            .canopy
+            .snapshot()
+            .expect("published frame")
+            .cursors
+            .first()
+            .map(|cursor| cursor.location);
+        assert_eq!(caret, Some(point(&harness, first.into(), 10)));
         harness.with_root_widget_context(|_: &mut SnapshotRoot<crate::Input>, ctx| {
             ctx.with_widget_mut(first, |input: &mut crate::Input, _| {
                 assert_eq!(input.value(), "hello");
-                assert_eq!(input.cursor().unwrap().location.x, 10);
                 Ok(())
             })?;
             ctx.set_focus(second.into()).map(|_| ())

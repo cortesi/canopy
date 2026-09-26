@@ -35,6 +35,7 @@ use crate::{
     core::{context::matching_nodes, inputmap::IntentCatalog},
     geom::PointI32,
     input::{BindingId, BindingTarget, KeyExpectation},
+    style::Color,
     tree::FocusDirection,
 };
 
@@ -309,6 +310,24 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         docs: Some("Pop the newest mode and return the newest active mode after the pop."),
         signature: || FunctionSignature::new().ret(Type::String),
         handler: Handler::Sync(host_pop_mode),
+    },
+    BaseFunction {
+        name: "set_cursor_look",
+        docs: Some(
+            "Replace parts of the look of a cursor role, such as cursor/vi/insert, in this theme and every later one.",
+        ),
+        signature: || {
+            FunctionSignature::new()
+                .param(("role", Type::String))
+                .param(("look", Type::named("CursorLook")))
+        },
+        handler: Handler::Sync(host_set_cursor_look),
+    },
+    BaseFunction {
+        name: "set_motion",
+        docs: Some("Replace the given motion settings. Omitted fields keep their values."),
+        signature: || FunctionSignature::new().param(("options", Type::named("MotionOptions"))),
+        handler: Handler::Sync(host_set_motion),
     },
     BaseFunction {
         name: "snapshot",
@@ -636,6 +655,164 @@ fn parse_push_mode_options<'s>(
             "push_mode option `transient` must be a boolean",
         )),
     }
+}
+
+/// Check that an options table has only known fields, and return them.
+fn option_fields<'s>(
+    scope: &Scope<'s>,
+    table: &Table<'s>,
+    owner: &str,
+    known: &[&str],
+) -> StdResult<Vec<(String, ScopedValue<'s>)>, RuntimeError> {
+    let mut fields = Vec::new();
+    for (key, value) in table.pairs(scope)? {
+        let ScopedValue::String(_) = key else {
+            return Err(RuntimeError::runtime(format!(
+                "{owner} fields must be named"
+            )));
+        };
+        let name = String::from_lua(key, scope)?;
+        if !known.contains(&name.as_str()) {
+            return Err(RuntimeError::runtime(format!(
+                "{owner} has an unknown field `{name}`"
+            )));
+        }
+        fields.push((name, value));
+    }
+    Ok(fields)
+}
+
+/// Read a string option value.
+fn option_string<'s>(
+    scope: &Scope<'s>,
+    value: ScopedValue<'s>,
+    owner: &str,
+    name: &str,
+) -> StdResult<String, RuntimeError> {
+    match value {
+        ScopedValue::String(_) => String::from_lua(value, scope),
+        other => Err(RuntimeError::runtime(format!(
+            "{owner} field `{name}` must be a string, got {}",
+            other.type_name()
+        ))),
+    }
+}
+
+/// Parse a `#rrggbb` color.
+fn parse_hex_color(text: &str) -> Option<Color> {
+    let digits = text.strip_prefix('#')?;
+    if digits.len() != 6 || !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let byte = |at: usize| u8::from_str_radix(&digits[at..at + 2], 16).ok();
+    Some(Color::Rgb {
+        r: byte(0)?,
+        g: byte(2)?,
+        b: byte(4)?,
+    })
+}
+
+/// `canopy.set_cursor_look`: replace parts of a cursor role's look.
+fn host_set_cursor_look<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    use crate::render::cursor::{CursorLookPatch, CursorMotion, CursorShape};
+
+    const OWNER: &str = "cursor look";
+    let mut args = HostArgCursor::new(scope, args);
+    let role = args.required::<String>("role")?;
+    let look = args.required::<Table<'_>>("look")?;
+    let mut patch = CursorLookPatch::default();
+    for (name, value) in option_fields(scope, &look, OWNER, &["shape", "color", "motion"])? {
+        let text = option_string(scope, value, OWNER, &name)?;
+        match (name.as_str(), text.as_str()) {
+            ("shape", "block") => patch.shape = Some(CursorShape::Block),
+            ("shape", "underline") => patch.shape = Some(CursorShape::Underline),
+            ("motion", "steady") => patch.motion = Some(CursorMotion::Steady),
+            ("motion", "blink") => patch.motion = Some(CursorMotion::BLINK),
+            ("motion", "pulse") => patch.motion = Some(CursorMotion::PULSE),
+            ("color", color) => {
+                patch.color = Some(parse_hex_color(color).ok_or_else(|| {
+                    RuntimeError::runtime(format!(
+                        "cursor look color must be #rrggbb, got `{color}`"
+                    ))
+                })?);
+            }
+            (name, value) => {
+                return Err(RuntimeError::runtime(format!(
+                    "cursor look {name} has no value `{value}`"
+                )));
+            }
+        }
+    }
+    with_current_canopy(scope, |canopy, _| {
+        canopy.set_cursor_look(&role, patch);
+        Ok(())
+    })?;
+    Ok(ret_none())
+}
+
+/// `canopy.set_motion`: replace the given motion settings.
+fn host_set_motion<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    const OWNER: &str = "motion options";
+    let mut args = HostArgCursor::new(scope, args);
+    let options = args.required::<Table<'_>>("options")?;
+    let fields = option_fields(scope, &options, OWNER, &["enabled", "max_fps", "idle_ms"])?;
+    let number = |name: &str, value: ScopedValue<'s>| match value {
+        ScopedValue::Integer(_) | ScopedValue::Number(_) => {
+            let number = f64::from_lua(value, scope)?;
+            if number.is_finite() && number >= 0.0 {
+                Ok(number)
+            } else {
+                Err(RuntimeError::runtime(format!(
+                    "{OWNER} field `{name}` must be a number of zero or more"
+                )))
+            }
+        }
+        other => Err(RuntimeError::runtime(format!(
+            "{OWNER} field `{name}` must be a number, got {}",
+            other.type_name()
+        ))),
+    };
+    let mut enabled = None;
+    let mut max_fps = None;
+    let mut idle = None;
+    for (name, value) in fields {
+        match name.as_str() {
+            "enabled" => match value {
+                ScopedValue::Boolean(on) => enabled = Some(on),
+                other => {
+                    return Err(RuntimeError::runtime(format!(
+                        "{OWNER} field `enabled` must be a boolean, got {}",
+                        other.type_name()
+                    )));
+                }
+            },
+            "max_fps" => {
+                let fps = number(&name, value)?;
+                if fps < 1.0 {
+                    return Err(RuntimeError::runtime(format!(
+                        "{OWNER} field `max_fps` must be at least 1"
+                    )));
+                }
+                max_fps = Some(fps.min(f64::from(u32::MAX)) as u32);
+            }
+            _ => idle = Some(Duration::from_secs_f64(number(&name, value)? / 1000.0)),
+        }
+    }
+    with_current_canopy(scope, |canopy, _| {
+        let mut settings = canopy.motion();
+        settings.enabled = enabled.unwrap_or(settings.enabled);
+        settings.max_fps = max_fps.unwrap_or(settings.max_fps);
+        settings.idle_pause = idle.unwrap_or(settings.idle_pause);
+        canopy.set_motion(settings);
+        Ok(())
+    })?;
+    Ok(ret_none())
 }
 
 /// Read a required node-id argument, validating the handle against the live

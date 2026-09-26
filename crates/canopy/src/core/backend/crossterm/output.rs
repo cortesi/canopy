@@ -195,6 +195,17 @@ impl RenderBackend for CrosstermRender {
         translate_result(self.text(loc, txt))
     }
 
+    fn park_cursor(&mut self, location: Option<Point>) -> Result<()> {
+        let Some(location) = location else {
+            return Ok(());
+        };
+        translate_result((|| {
+            let x = cell_coord(location.x)?;
+            let y = cell_coord(location.y)?;
+            self.pending.queue(ccursor::MoveTo(x, y)).map(|_| ())
+        })())
+    }
+
     fn supports_char_shift(&self) -> bool {
         true
     }

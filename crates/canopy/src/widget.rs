@@ -12,7 +12,7 @@ use crate::{
     geom::{Rect, Size},
     input::{Event, key::Key},
     layout::{CanvasContext, Layout, MeasureConstraints, Measurement},
-    render::{Render, cursor},
+    render::Render,
     runtime::{PollLifetime, WidgetSemantics},
 };
 
@@ -146,11 +146,6 @@ pub trait Widget: Any {
     /// whether they have children) when deciding whether to accept focus.
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         false
-    }
-
-    /// Cursor specification for focused widgets.
-    fn cursor(&self) -> Option<cursor::Cursor> {
-        None
     }
 
     /// Return the rectangle of this widget's canvas that

@@ -172,6 +172,7 @@ fn publish(canopy: &mut Canopy, buffer: TermBuf) {
         buffer: Arc::new(buffer),
         nodes: Vec::new(),
         focus: None,
+        cursors: Vec::new(),
     }));
 }
 

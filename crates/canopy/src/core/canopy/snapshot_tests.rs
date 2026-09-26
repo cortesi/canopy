@@ -147,6 +147,7 @@ fn capture_distinguishes_attachment_visibility_and_accumulated_clipping() -> Res
             &app.core,
             FrameId(10),
             Arc::new(app.published_buf().unwrap().clone()),
+            Vec::new(),
         )
     };
     let snapshot = capture(&app)?;

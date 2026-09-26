@@ -19,7 +19,6 @@ One rule names every stock widget's styles:
 | `roles::BORDER` | `border` | `button/focused/border` |
 | `roles::KEY` | `key` | `status_bar/key` |
 | `roles::PROMPT` | `prompt` | `input/focused/prompt` |
-| `roles::CURSOR` | `text/cursor` | `input/focused/text/cursor` |
 | `roles::TITLE` | `title` | |
 | `roles::THUMB` | `thumb` | |
 
@@ -31,10 +30,62 @@ The built-in themes are captured in `crates/canopy/src/core/style/themes.golden`
 Set `UPDATE_GOLDEN` when running the style tests to rewrite that capture from
 the themes rather than editing it.
 
-Input cursor styling applies to the painted grapheme before the central cursor
-overlay; block cursors then exchange its foreground and background. Styling
-preserves combining characters and wide-cell continuations. An absent cursor
-rule falls back to the input text role.
+## Cursor roles
+
+A cursor names what it means with a role, and the theme decides how the role
+looks. A role resolves like a style path: `cursor/vi/insert` falls back to
+`cursor/vi`, then to `cursor`. Each `CursorLook` has a shape, a color, and a
+motion:
+
+| Role | Shape | Color | Motion |
+| --- | --- | --- | --- |
+| `cursor` | block | `fg` | blink |
+| `cursor/text` | block | `fg` | blink |
+| `cursor/vi/insert` | block | `green` | blink |
+| `cursor/vi/normal` | block | `blue` | steady |
+| `cursor/vi/visual` | block | `magenta` | steady |
+| `cursor/inactive` | block | `fg` mixed 35% into `bg` | steady |
+| `cursor/terminal` | block | set by the child program | set by the child program |
+
+Canopy draws only shapes that it can draw exactly on every cell. A block fills
+the cell with the cursor color, and the grapheme takes the candidate color with
+the highest WCAG contrast: the ground, the text color, black, or white. An
+underline colors the grapheme and underlines it. A child terminal program's bar
+becomes an underline.
+
+Add looks for a theme with `Setup::cursor_looks`. The rules apply over the
+built-in looks now and after every theme switch. `Canopy::set_cursor_look`
+and Luau `canopy.set_cursor_look(role, look)` replace parts of a look in every
+theme.
+
+## Motion
+
+`Paint::Animated` holds an `Animation`: colors at stops over one run, like the
+stops of a gradient over space. `Repeat` sets what follows a run, `Easing` how
+time maps to the stops, and `AnimationStart` when the first run starts.
+`Easing::Hold` keeps each stop until the next one. `Animation::fade`,
+`Animation::pulse`, and `Animation::blink` build the common cases. A
+`GradientSpec::with_drift` gradient slides across its rectangle once in each
+period.
+
+```rust
+setup.widget_styles(|palette, rules| {
+    rules
+        .fg("status/busy", Animation::pulse(palette.accent, palette.muted_fg, Duration::from_secs(1)))
+        .apply();
+});
+```
+
+Frames show every animation at rest: the last stop of a single run, and the
+first stop of a repeating one. Colors mix in OKLab by default, so equal steps
+look equal. `Mix::Oklch` takes the shorter way around the hue circle, and
+`Mix::Rgb` mixes the sRGB channels. `Color::mix` mixes two colors in any of
+these spaces.
+
+`effects::transition(effect, duration)` fades each color from its value to the
+value of another effect. The fade starts with the first frame that shows it,
+so keep the effect for as long as it applies. Modal dimming uses
+`effects::modal_dim`, a transition to `effects::MODAL_DIM`.
 
 ## Themes and widget styles
 

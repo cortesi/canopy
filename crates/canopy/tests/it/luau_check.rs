@@ -77,6 +77,8 @@ mod tests {
                 || file.starts_with("examples/todo/smoke/")
                 || file.starts_with("examples/hello/smoke/")
                 || file.starts_with("examples/gyms/smoke/")
+                // The gyms' tests run each script against its own demo.
+                || file.starts_with("examples/gyms/scripts/")
                 // Each app's tests build it without a home, which compiles
                 // its defaults under the startup-script contract.
                 || file == "examples/hello/src/default_config.luau"

@@ -22,6 +22,10 @@ use super::{
 
 mod builder;
 pub use builder::{CanopyBuilder, ScriptTrust};
+mod motion;
+pub use motion::MotionSettings;
+#[cfg(test)]
+mod motion_tests;
 mod rendering;
 #[cfg(test)]
 mod rendering_tests;
@@ -46,7 +50,11 @@ pub use turn::{
 mod turn_cleanup_tests;
 use crate::{
     NodeId, TypedId, commands,
-    core::{Core, dump::dump},
+    core::{
+        Core,
+        cursor::{CursorLookPatch, CursorLooks, CursorRules},
+        dump::dump,
+    },
     error,
     error::Result,
     geom::Size,
@@ -142,6 +150,14 @@ pub struct Canopy {
     palette: Palette,
     /// Rule sets reapplied from the palette whenever the theme changes.
     widget_styles: Vec<WidgetStyles>,
+    /// Look of each cursor role.
+    cursor_looks: CursorLooks,
+    /// Cursor look rule sets reapplied whenever the theme changes.
+    cursor_rules: Vec<CursorRules>,
+    /// Cursor look replacements applied over every theme.
+    cursor_patches: Vec<(String, CursorLookPatch)>,
+    /// Motion at emission.
+    motion: motion::MotionState,
 }
 
 /// Frame geometry and the buffers the frame pipeline owns.
@@ -244,6 +260,10 @@ impl Canopy {
             style: themes::default_dark().style_map(),
             palette: themes::default_dark(),
             widget_styles: Vec::new(),
+            cursor_looks: CursorLooks::for_palette(&themes::default_dark()),
+            cursor_rules: Vec::new(),
+            cursor_patches: Vec::new(),
+            motion: motion::MotionState::default(),
             core,
         }
     }
@@ -300,7 +320,43 @@ impl Canopy {
             rules(&palette, style.rules());
         }
         self.style = style;
+        self.rebuild_cursor_looks();
         self.core.invalidate(crate::Invalidation::Paint);
+    }
+
+    /// Return the look of each cursor role.
+    pub fn cursor_looks(&self) -> &CursorLooks {
+        &self.cursor_looks
+    }
+
+    /// Replace parts of a cursor role's look, in this theme and every later
+    /// one.
+    pub fn set_cursor_look(&mut self, role: &str, patch: CursorLookPatch) {
+        self.cursor_looks.patch(role, patch);
+        self.cursor_patches.push((role.to_owned(), patch));
+        self.core.invalidate(crate::Invalidation::Paint);
+    }
+
+    /// Apply cursor look rules to the current looks, and again after every
+    /// theme switch.
+    pub(crate) fn add_cursor_rules(&mut self, rules: CursorRules) {
+        rules(&self.palette, &mut self.cursor_looks);
+        self.cursor_rules.push(rules);
+        self.rebuild_cursor_looks();
+        self.core.invalidate(crate::Invalidation::Paint);
+    }
+
+    /// Rebuild the cursor looks from the palette, the rules, and the
+    /// replacements, in that order.
+    fn rebuild_cursor_looks(&mut self) {
+        let mut looks = CursorLooks::for_palette(&self.palette);
+        for rules in &self.cursor_rules {
+            rules(&self.palette, &mut looks);
+        }
+        for (role, patch) in &self.cursor_patches {
+            looks.patch(role, *patch);
+        }
+        self.cursor_looks = looks;
     }
 
     /// Apply `rules` to the current map, and again after every theme switch.

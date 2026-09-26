@@ -243,6 +243,54 @@ pub(super) fn register_framework_declarations(
         ]),
     ));
     builder.alias(declaration::Alias::new(
+        "CursorShape",
+        declaration::Type::literals(["block", "underline"]),
+    ));
+    builder.alias(declaration::Alias::new(
+        "CursorMotion",
+        declaration::Type::literals(["steady", "blink", "pulse"]),
+    ));
+    builder.alias(declaration::Alias::new(
+        "CursorLook",
+        declaration::Type::table([
+            declaration::Field::new("shape", declaration::Type::named("CursorShape").optional()),
+            declaration::Field::new("color", declaration::Type::String.optional())
+                .doc("Cursor color as #rrggbb."),
+            declaration::Field::new(
+                "motion",
+                declaration::Type::named("CursorMotion").optional(),
+            ),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
+        "CursorInfo",
+        declaration::Type::table([
+            declaration::Field::new("node", declaration::Type::named("NodeId"))
+                .doc("Node that declared the cursor."),
+            declaration::Field::new("x", declaration::Type::Number),
+            declaration::Field::new("y", declaration::Type::Number),
+            declaration::Field::new("role", declaration::Type::String)
+                .doc("Cursor role, such as cursor/vi/insert."),
+            declaration::Field::new("shape", declaration::Type::named("CursorShape")),
+            declaration::Field::new("color", declaration::Type::String)
+                .doc("Painted cursor color as #rrggbb."),
+            declaration::Field::new("motion", declaration::Type::named("CursorMotion")),
+            declaration::Field::new("primary", declaration::Type::Boolean)
+                .doc("True for the cursor of the deepest focused node that declared one."),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
+        "MotionOptions",
+        declaration::Type::table([
+            declaration::Field::new("enabled", declaration::Type::Boolean.optional())
+                .doc("Whether cells move. False keeps every cell at rest."),
+            declaration::Field::new("max_fps", declaration::Type::Number.optional())
+                .doc("Most samples a second of continuous motion."),
+            declaration::Field::new("idle_ms", declaration::Type::Number.optional())
+                .doc("Milliseconds without input after which repeating motion rests."),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
         "PushModeOptions",
         declaration::Type::table([declaration::Field::new(
             "transient",
@@ -693,6 +741,8 @@ fn register_snapshot_info(builder: &mut module::Builder) {
             Field::new("focus", Type::named("NodeId").optional()),
             Field::new("nodes", Type::named("NodeSnapshot").array()),
             Field::new("cells", Type::named("ScreenCell").array().array()),
+            Field::new("cursors", Type::named("CursorInfo").array())
+                .doc("Cursors the frame painted, the primary cursor first."),
         ]),
     ));
 }

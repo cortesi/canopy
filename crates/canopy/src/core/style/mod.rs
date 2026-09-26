@@ -1,12 +1,20 @@
+pub mod animation;
 /// Color helpers.
 mod color;
 /// Style effects system.
 pub mod effects;
 pub mod themes;
 
-use std::{collections::HashMap, iter};
+use std::{
+    collections::HashMap,
+    iter,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
-pub use color::{Color, hex_byte};
+pub(crate) use animation::MotionClocks;
+pub use animation::{Animation, AnimationStart, Easing, Repeat};
+pub use color::{Color, Mix, hex_byte};
 
 use crate::geom;
 
@@ -25,8 +33,6 @@ pub mod roles {
     pub const KEY: &str = "key";
     /// A fixed prompt before editable text.
     pub const PROMPT: &str = "prompt";
-    /// The text cell under a caret, falling back to [`TEXT`].
-    pub const CURSOR: &str = "text/cursor";
     /// A title in a widget's chrome.
     pub const TITLE: &str = "title";
     /// A scrollbar thumb.
@@ -176,6 +182,11 @@ pub struct GradientSpec {
     pub angle_deg: f32,
     /// Ordered list of gradient stops.
     pub stops: Vec<GradientStop>,
+    /// The space that mixes colors between stops.
+    pub mix: Mix,
+    /// Time in which the gradient slides once across its rectangle, wrapping
+    /// around. `None` holds it still.
+    pub drift: Option<Duration>,
 }
 
 impl GradientSpec {
@@ -186,7 +197,26 @@ impl GradientSpec {
             stops.push(GradientStop::new(1.0, Color::White));
         }
         stops.sort_by(|a, b| a.offset.total_cmp(&b.offset));
-        Self { angle_deg, stops }
+        Self {
+            angle_deg,
+            stops,
+            mix: Mix::Oklab,
+            drift: None,
+        }
+    }
+
+    /// Replace the mixing space.
+    #[must_use]
+    pub fn with_mix(mut self, mix: Mix) -> Self {
+        self.mix = mix;
+        self
+    }
+
+    /// Slide the gradient once across its rectangle in each `period`.
+    #[must_use]
+    pub fn with_drift(mut self, period: Duration) -> Self {
+        self.drift = Some(period);
+        self
     }
 
     /// Map all colors in this gradient through a transform.
@@ -198,15 +228,43 @@ impl GradientSpec {
             .map(|stop| GradientStop::new(stop.offset, f(stop.color)))
             .collect();
         Self {
-            angle_deg: self.angle_deg,
             stops,
+            ..self.clone()
         }
     }
 
-    /// Resolve a gradient color at a point within a rectangle.
+    /// Resolve a gradient color at a point within a rectangle, at rest.
     pub fn color_at(&self, rect: geom::Rect, point: geom::Point) -> Color {
+        self.color_for_ratio(self.ratio_at(rect, point))
+    }
+
+    /// Resolve a gradient color at a point at the clocks' time, drifted by
+    /// the time since the motion epoch.
+    pub(crate) fn color_in_motion(
+        &self,
+        rect: geom::Rect,
+        point: geom::Point,
+        clocks: &MotionClocks,
+    ) -> Color {
+        let ratio = self.ratio_at(rect, point);
+        let Some(period) = self
+            .drift
+            .filter(|period| !period.is_zero() && !clocks.paused)
+        else {
+            return self.color_for_ratio(ratio);
+        };
+        let elapsed = clocks
+            .now
+            .saturating_duration_since(clocks.epoch)
+            .as_nanos();
+        let phase = (elapsed % period.as_nanos()) as f64 / period.as_nanos() as f64;
+        self.color_for_ratio((f64::from(ratio) - phase).rem_euclid(1.0) as f32)
+    }
+
+    /// Return the position of a point along the gradient, 0.0 to 1.0.
+    fn ratio_at(&self, rect: geom::Rect, point: geom::Point) -> f32 {
         if rect.w == 0 || rect.h == 0 {
-            return self.stops[0].color;
+            return 0.0;
         }
 
         let width = rect.w as f32;
@@ -226,13 +284,11 @@ impl GradientSpec {
         let local_x = point.x.saturating_sub(rect.tl.x) as f32 + 0.5;
         let local_y = point.y.saturating_sub(rect.tl.y) as f32 + 0.5;
         let dot = dir_x * local_x + dir_y * local_y;
-        let ratio = if (max_dot - min_dot).abs() < f32::EPSILON {
+        if (max_dot - min_dot).abs() < f32::EPSILON {
             0.0
         } else {
             ((dot - min_dot) / (max_dot - min_dot)).clamp(0.0, 1.0)
-        };
-
-        self.color_for_ratio(ratio)
+        }
     }
 
     /// Blend between gradient stops for a normalized ratio.
@@ -246,7 +302,7 @@ impl GradientSpec {
             if ratio <= stop.offset {
                 let span = (stop.offset - prev.offset).max(f32::EPSILON);
                 let local = (ratio - prev.offset) / span;
-                return prev.color.blend(stop.color, local);
+                return prev.color.mix(stop.color, local, self.mix);
             }
             prev = stop;
         }
@@ -261,6 +317,8 @@ pub enum Paint {
     Solid(Color),
     /// Gradient fill.
     Gradient(GradientSpec),
+    /// A color that changes over time.
+    Animated(Arc<Animation>),
 }
 
 impl Paint {
@@ -274,19 +332,73 @@ impl Paint {
         Self::Gradient(spec)
     }
 
+    /// Construct an animated paint.
+    pub fn animated(animation: Animation) -> Self {
+        Self::Animated(Arc::new(animation))
+    }
+
     /// Return the solid color if this paint is solid.
     pub fn solid_color(&self) -> Option<Color> {
         match self {
             Self::Solid(color) => Some(*color),
-            Self::Gradient(_) => None,
+            Self::Gradient(_) | Self::Animated(_) => None,
         }
     }
 
-    /// Resolve the paint at a location.
+    /// Resolve the paint at a location, at rest.
     pub fn resolve(&self, rect: geom::Rect, point: geom::Point) -> Color {
         match self {
             Self::Solid(color) => *color,
             Self::Gradient(spec) => spec.color_at(rect, point),
+            Self::Animated(animation) => animation.rest(),
+        }
+    }
+
+    /// Resolve the paint at a location at the clocks' time.
+    pub(crate) fn resolve_in_motion(
+        &self,
+        rect: geom::Rect,
+        point: geom::Point,
+        clocks: &MotionClocks,
+    ) -> Color {
+        match self {
+            Self::Solid(color) => *color,
+            Self::Gradient(spec) => spec.color_in_motion(rect, point, clocks),
+            Self::Animated(animation) => animation.color(clocks),
+        }
+    }
+
+    /// Return whether the paint changes over time.
+    pub fn moves(&self) -> bool {
+        match self {
+            Self::Solid(_) => false,
+            Self::Gradient(spec) => spec.drift.is_some(),
+            Self::Animated(_) => true,
+        }
+    }
+
+    /// Bind the start of an animation that starts when shown, and return
+    /// whether the paint still moves at `clocks.now`.
+    pub(crate) fn show(&self, clocks: &MotionClocks) -> bool {
+        match self {
+            Self::Solid(_) => false,
+            Self::Gradient(spec) => spec.drift.is_some(),
+            Self::Animated(animation) => {
+                animation.bind_shown(clocks.now);
+                !animation.finished(clocks)
+            }
+        }
+    }
+
+    /// Return the next time the paint can change after the clocks' time.
+    pub(crate) fn next_change(&self, clocks: &MotionClocks, sample: Duration) -> Option<Instant> {
+        match self {
+            Self::Solid(_) => None,
+            Self::Gradient(spec) => spec
+                .drift
+                .filter(|_| !clocks.paused)
+                .map(|_| clocks.now + sample),
+            Self::Animated(animation) => animation.next_change(clocks, sample),
         }
     }
 
@@ -296,6 +408,7 @@ impl Paint {
         match self {
             Self::Solid(color) => Self::Solid(f(*color)),
             Self::Gradient(spec) => Self::Gradient(spec.map_colors(f)),
+            Self::Animated(animation) => Self::Animated(Arc::new(animation.map_colors(f))),
         }
     }
 }
@@ -309,6 +422,12 @@ impl From<Color> for Paint {
 impl From<GradientSpec> for Paint {
     fn from(spec: GradientSpec) -> Self {
         Self::Gradient(spec)
+    }
+}
+
+impl From<Animation> for Paint {
+    fn from(animation: Animation) -> Self {
+        Self::animated(animation)
     }
 }
 
@@ -327,6 +446,30 @@ impl ResolvedStyle {
     /// Construct a resolved style from components.
     pub fn new(fg: Color, bg: Color, attrs: AttrSet) -> Self {
         Self { fg, bg, attrs }
+    }
+}
+
+/// How much of a cell a glyph covers, for antialiased drawing.
+///
+/// A covered cell mixes its style's background toward its foreground: by
+/// `fg` for the glyph and by `bg` for the cell ground, each 0 to 255.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Coverage {
+    /// Glyph coverage.
+    pub fg: u8,
+    /// Ground coverage.
+    pub bg: u8,
+}
+
+impl Coverage {
+    /// Apply the coverage to a resolved style.
+    pub fn apply(self, style: ResolvedStyle) -> ResolvedStyle {
+        let weight = |coverage: u8| f32::from(coverage) / 255.0;
+        ResolvedStyle::new(
+            style.bg.mix(style.fg, weight(self.fg), Mix::Rgb),
+            style.bg.mix(style.fg, weight(self.bg), Mix::Rgb),
+            style.attrs,
+        )
     }
 }
 
@@ -349,6 +492,11 @@ impl Style {
             self.bg.resolve(rect, point),
             self.attrs,
         )
+    }
+
+    /// Return whether either paint changes over time.
+    pub fn moves(&self) -> bool {
+        self.fg.moves() || self.bg.moves()
     }
 
     /// Resolve the style to a solid variant if both paints are solid.
@@ -792,7 +940,6 @@ mod tests {
         let mut input = StyleManager::new();
         input.push_layer("input");
         input.push_layer(WidgetState::Focused.layer());
-        assert_eq!(input.get(&map, roles::CURSOR), input.get(&map, roles::TEXT));
     }
 
     #[test]
@@ -1156,8 +1303,8 @@ mod tests {
         let left = spec.color_at(rect, geom::Point { x: 0, y: 0 });
         let right = spec.color_at(rect, geom::Point { x: 9, y: 0 });
 
-        assert_eq!(left, start.blend(end, 0.05));
-        assert_eq!(right, start.blend(end, 0.95));
+        assert_eq!(left, start.mix(end, 0.05, Mix::Oklab));
+        assert_eq!(right, start.mix(end, 0.95, Mix::Oklab));
     }
 
     #[test]
@@ -1177,8 +1324,8 @@ mod tests {
         let top = spec.color_at(rect, geom::Point { x: 0, y: 0 });
         let bottom = spec.color_at(rect, geom::Point { x: 0, y: 9 });
 
-        assert_eq!(top, start.blend(end, 0.05));
-        assert_eq!(bottom, start.blend(end, 0.95));
+        assert_eq!(top, start.mix(end, 0.05, Mix::Oklab));
+        assert_eq!(bottom, start.mix(end, 0.95, Mix::Oklab));
     }
 
     #[test]
@@ -1213,12 +1360,53 @@ mod tests {
         let dot = dir_x * local_x + dir_y * 0.5;
         let ratio = ((dot - min_dot) / (max_dot - min_dot)).clamp(0.0, 1.0);
         let expected = if ratio <= 0.5 {
-            red.blend(green, ratio / 0.5)
+            red.mix(green, ratio / 0.5, Mix::Oklab)
         } else {
-            green.blend(blue, (ratio - 0.5) / 0.5)
+            green.mix(blue, (ratio - 0.5) / 0.5, Mix::Oklab)
         };
 
         assert_eq!(spec.color_at(rect, point), expected);
+    }
+
+    #[test]
+    fn a_drifting_gradient_slides_and_wraps() {
+        use std::time::{Duration, Instant};
+        let spec = GradientSpec::with_stops(
+            0.0,
+            vec![
+                GradientStop::new(0.0, Color::Black),
+                GradientStop::new(1.0, Color::White),
+            ],
+        )
+        .with_drift(Duration::from_secs(1));
+        let rect = geom::Rect::new(0, 0, 10, 1);
+        let point = geom::Point { x: 7, y: 0 };
+        let t0 = Instant::now();
+        let at = |ms: u64| MotionClocks {
+            now: t0 + Duration::from_millis(ms),
+            ..MotionClocks::at(t0)
+        };
+        assert_eq!(
+            spec.color_in_motion(rect, point, &at(0)),
+            spec.color_at(rect, point)
+        );
+        let shifted = geom::Point { x: 2, y: 0 };
+        assert_eq!(
+            spec.color_in_motion(rect, point, &at(500)),
+            spec.color_at(rect, shifted)
+        );
+        assert_eq!(
+            spec.color_in_motion(rect, point, &at(1000)),
+            spec.color_at(rect, point)
+        );
+        let paused = MotionClocks {
+            paused: true,
+            ..at(500)
+        };
+        assert_eq!(
+            spec.color_in_motion(rect, point, &paused),
+            spec.color_at(rect, point)
+        );
     }
 
     #[test]

@@ -29,6 +29,10 @@ trait TerminalOperations {
     fn push_keyboard_enhancements(&mut self) -> io::Result<()>;
     /// Pop keyboard enhancement flags.
     fn pop_keyboard_enhancements(&mut self) -> io::Result<()>;
+    /// Enable terminal focus change reporting.
+    fn enable_focus_change(&mut self) -> io::Result<()>;
+    /// Disable terminal focus change reporting.
+    fn disable_focus_change(&mut self) -> io::Result<()>;
 }
 
 impl TerminalOperations for Stderr {
@@ -75,6 +79,14 @@ impl TerminalOperations for Stderr {
         self.execute(cevent::PopKeyboardEnhancementFlags)
             .map(|_| ())
     }
+
+    fn enable_focus_change(&mut self) -> io::Result<()> {
+        self.execute(cevent::EnableFocusChange).map(|_| ())
+    }
+
+    fn disable_focus_change(&mut self) -> io::Result<()> {
+        self.execute(cevent::DisableFocusChange).map(|_| ())
+    }
 }
 
 /// Terminal capabilities currently owned by one controller.
@@ -90,6 +102,8 @@ struct TerminalCapabilities {
     cursor_hidden: bool,
     /// Whether keyboard enhancement flags were pushed.
     keyboard_enhancements_pushed: bool,
+    /// Whether focus change reporting is enabled.
+    focus_change_enabled: bool,
 }
 
 impl TerminalCapabilities {
@@ -100,6 +114,7 @@ impl TerminalCapabilities {
             || self.mouse_capture_enabled
             || self.cursor_hidden
             || self.keyboard_enhancements_pushed
+            || self.focus_change_enabled
     }
 }
 
@@ -118,6 +133,8 @@ fn acquire_terminal(
     capabilities.cursor_hidden = true;
     terminal.push_keyboard_enhancements()?;
     capabilities.keyboard_enhancements_pushed = true;
+    terminal.enable_focus_change()?;
+    capabilities.focus_change_enabled = true;
     Ok(())
 }
 
@@ -136,6 +153,13 @@ fn release_terminal(
     capabilities: &mut TerminalCapabilities,
 ) -> io::Result<()> {
     let mut first_error = None;
+    if capabilities.focus_change_enabled {
+        record_release(
+            terminal.disable_focus_change(),
+            &mut capabilities.focus_change_enabled,
+            &mut first_error,
+        );
+    }
     if capabilities.keyboard_enhancements_pushed {
         record_release(
             terminal.pop_keyboard_enhancements(),
@@ -298,6 +322,14 @@ mod tests {
         fn pop_keyboard_enhancements(&mut self) -> io::Result<()> {
             self.release("keyboard-")
         }
+
+        fn enable_focus_change(&mut self) -> io::Result<()> {
+            self.acquire("focus+")
+        }
+
+        fn disable_focus_change(&mut self) -> io::Result<()> {
+            self.release("focus-")
+        }
     }
 
     #[test]
@@ -316,6 +348,8 @@ mod tests {
                 "mouse+",
                 "cursor-",
                 "keyboard+",
+                "focus+",
+                "focus-",
                 "keyboard-",
                 "cursor+",
                 "mouse-",
@@ -329,7 +363,7 @@ mod tests {
 
     #[test]
     fn every_partial_terminal_start_restores_acquired_capabilities() {
-        for fail_at in 1..=5 {
+        for fail_at in 1..=6 {
             let mut terminal = FakeTerminal {
                 fail_at: Some(fail_at),
                 ..FakeTerminal::default()

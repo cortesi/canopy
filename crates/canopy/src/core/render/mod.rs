@@ -1,11 +1,14 @@
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::termbuf::TermBuf;
+use super::termbuf::{MotionStyle, TermBuf};
 use crate::{
-    core::text,
+    NodeId,
+    core::{cursor::CursorRequest, text},
     error::Result,
     geom,
-    style::{ResolvedStyle, Style, StyleManager, StyleMap, effects::Effect},
+    style::{
+        Coverage, MotionClocks, ResolvedStyle, Style, StyleManager, StyleMap, effects::Effect,
+    },
 };
 
 /// The trait implemented by renderers.
@@ -35,6 +38,11 @@ pub trait RenderBackend {
     }
     /// Flush output to the terminal.
     fn flush(&mut self) -> Result<()>;
+    /// Move the hidden terminal cursor to the primary soft cursor, where input
+    /// methods and screen magnifiers look for it. `None` leaves it in place.
+    fn park_cursor(&mut self, _location: Option<geom::Point>) -> Result<()> {
+        Ok(())
+    }
     /// Reset the backend to a clean state.
     fn reset(&mut self) -> Result<()> {
         Ok(())
@@ -103,6 +111,29 @@ fn untranslate(origin: Offset, p: geom::Point) -> geom::Point {
     }
 }
 
+/// A cursor a node declared while it rendered.
+#[derive(Clone)]
+pub struct DeclaredCursor {
+    /// Node that declared the cursor.
+    pub node: NodeId,
+    /// Screen location of the cursor.
+    pub location: geom::Point,
+    /// The declaration.
+    pub request: CursorRequest,
+    /// Style effects of the node, which apply to the cursor color.
+    pub effects: Vec<Effect>,
+}
+
+/// Frame state that one node's render shares with the whole frame.
+pub struct RenderFrame<'a> {
+    /// Node being rendered.
+    pub node: NodeId,
+    /// Clocks of the frame, which start animations shown for the first time.
+    pub clocks: MotionClocks,
+    /// Cursors declared so far in the frame.
+    pub cursors: &'a mut Vec<DeclaredCursor>,
+}
+
 /// A renderer that only renders to a specific rectangle within the target
 /// terminal buffer.
 pub struct Render<'a> {
@@ -118,6 +149,8 @@ pub struct Render<'a> {
     origin: Offset,
     /// Current effect stack, applied in order to resolved styles.
     effects: &'a [Effect],
+    /// Frame state, absent when rendering outside a frame.
+    frame: Option<RenderFrame<'a>>,
 }
 
 impl<'a> Render<'a> {
@@ -139,7 +172,78 @@ impl<'a> Render<'a> {
             clip,
             origin: Offset::between(screen_origin, clip.tl),
             effects: &[],
+            frame: None,
         }
+    }
+
+    /// Attach the frame state for one node's render.
+    pub(crate) fn with_frame(mut self, frame: RenderFrame<'a>) -> Self {
+        self.frame = Some(frame);
+        self
+    }
+
+    /// Declare the cursor of this node at a location, in the coordinates of
+    /// its other drawing.
+    ///
+    /// A cursor outside the visible view is not drawn. A node holds at most
+    /// one cursor, so a later declaration replaces an earlier one. The
+    /// cursor of the deepest node on the focus path is the primary cursor,
+    /// which moves; every other cursor stays steady.
+    pub fn cursor(&mut self, location: geom::Point, request: CursorRequest) {
+        if !self.clip.contains_point(location) {
+            return;
+        }
+        let screen = self.translate_point(location);
+        let effects = self.effects.to_vec();
+        let Some(frame) = self.frame.as_mut() else {
+            return;
+        };
+        let node = frame.node;
+        frame.cursors.retain(|cursor| cursor.node != node);
+        frame.cursors.push(DeclaredCursor {
+            node,
+            location: screen,
+            request,
+            effects,
+        });
+    }
+
+    /// Record motion for the graphemes in a buffer rectangle when a style
+    /// moves. `rect` is the canvas rectangle that resolves a gradient.
+    fn mark_motion(&mut self, style: &Style, area: geom::Rect, rect: geom::Rect) {
+        self.mark_covered_motion(style, area, rect, None);
+    }
+
+    /// Record motion as [`Self::mark_motion`] does, for cells with a glyph
+    /// coverage.
+    fn mark_covered_motion(
+        &mut self,
+        style: &Style,
+        area: geom::Rect,
+        rect: geom::Rect,
+        coverage: Option<Coverage>,
+    ) {
+        if !style.moves() {
+            return;
+        }
+        if let Some(frame) = &self.frame {
+            // Bind both paints, since each may start when shown.
+            let fg = style.fg.show(&frame.clocks);
+            let bg = style.bg.show(&frame.clocks);
+            if !fg && !bg {
+                return;
+            }
+        }
+        let origin = self.origin;
+        let (fg, bg, attrs) = (style.fg.clone(), style.bg.clone(), style.attrs);
+        self.buf.set_motion(area, |p| MotionStyle::Paint {
+            fg: fg.clone(),
+            bg: bg.clone(),
+            attrs,
+            rect,
+            point: untranslate(origin, p),
+            coverage,
+        });
     }
 
     /// Set the effect stack for this renderer.
@@ -174,9 +278,12 @@ impl<'a> Render<'a> {
     /// text.
     pub fn restyle(&mut self, style: &str, point: geom::Point) {
         if self.clip.contains_point(point) {
-            let style = self.resolve_style(style).resolve_at(self.clip, point);
+            let style = self.resolve_style(style);
+            let at = self.translate_point(point);
             self.buf
-                .restyle_grapheme(self.translate_point(point), style);
+                .restyle_grapheme(at, style.resolve_at(self.clip, point));
+            let clip = self.clip;
+            self.mark_motion(&style, geom::Rect::new(at.x, at.y, 1, 1), clip);
         }
     }
 
@@ -190,7 +297,9 @@ impl<'a> Render<'a> {
         let adjusted = self.translate_rect(intersection);
         let origin = self.origin;
         self.buf
-            .fill_with(adjusted, c, |p| style.resolve_at(r, untranslate(origin, p)))
+            .fill_with(adjusted, c, |p| style.resolve_at(r, untranslate(origin, p)))?;
+        self.mark_motion(&style, adjusted, r);
+        Ok(())
     }
 
     /// Print text in the specified line. If the text is wider than the
@@ -211,7 +320,10 @@ impl<'a> Render<'a> {
         let origin = self.origin;
         self.buf.text_with(adjusted_line, out, |p| {
             style.resolve_at(line_rect, untranslate(origin, p))
-        })
+        })?;
+        let area = geom::Rect::new(adjusted_line.tl.x, adjusted_line.tl.y, adjusted_line.w, 1);
+        self.mark_motion(&style, area, line_rect);
+        Ok(())
     }
 
     /// Paint styled runs left to right from the start of `l`, clipped to it.
@@ -239,10 +351,41 @@ impl<'a> Render<'a> {
                 }
                 let point = geom::Point { x, y: l.tl.y };
                 self.put_grapheme(merged.resolve_at(line_rect, point), point, grapheme)?;
+                if merged.moves() && self.clip.contains_point(point) {
+                    let at = self.translate_point(point);
+                    self.mark_motion(&merged, geom::Rect::new(at.x, at.y, 1, 1), line_rect);
+                }
                 x = x.saturating_add(width);
             }
         }
         Ok(x - l.tl.x)
+    }
+
+    /// Write a single antialiased cell: the named style, resolved at `p`
+    /// within `rect`, with a glyph coverage applied. The cell moves when the
+    /// style moves.
+    pub fn put_covered(
+        &mut self,
+        style: &str,
+        rect: geom::Rect,
+        p: geom::Point,
+        ch: char,
+        coverage: Coverage,
+    ) -> Result<()> {
+        if !self.clip.contains_point(p) {
+            return Ok(());
+        }
+        let style = self.resolve_style(style);
+        let at = self.translate_point(p);
+        self.buf
+            .put(at, ch, coverage.apply(style.resolve_at(rect, p)))?;
+        self.mark_covered_motion(
+            &style,
+            geom::Rect::new(at.x, at.y, 1, 1),
+            rect,
+            Some(coverage),
+        );
+        Ok(())
     }
 
     /// Write a single cell with a resolved style.

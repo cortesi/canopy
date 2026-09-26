@@ -2,10 +2,10 @@
 
 use std::path::PathBuf;
 
-use super::{Canopy, Hook};
+use super::{Canopy, Hook, MotionSettings};
 use crate::{
     commands,
-    core::inputmap,
+    core::{cursor::CursorLooks, inputmap},
     error::{Error, Result},
     render::RenderLimits,
     script::Fixture,
@@ -173,6 +173,19 @@ impl Setup {
     /// Start with the theme `palette`.
     pub fn set_theme(&mut self, palette: Palette) {
         self.canopy.set_theme(palette);
+    }
+
+    /// Add cursor looks derived from the active palette.
+    ///
+    /// The rules apply over the theme's built-in looks now and again after
+    /// every theme switch.
+    pub fn cursor_looks(&mut self, rules: impl Fn(&Palette, &mut CursorLooks) + 'static) {
+        self.canopy.add_cursor_rules(Box::new(rules));
+    }
+
+    /// Replace the motion settings.
+    pub fn set_motion(&mut self, settings: MotionSettings) {
+        self.canopy.set_motion(settings);
     }
 
     /// Add style rules derived from the active palette.

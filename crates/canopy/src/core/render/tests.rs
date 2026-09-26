@@ -432,3 +432,84 @@ fn runs_take_their_foreground_over_the_base_and_clip() {
     assert_eq!(cell.style.fg, Color::Green);
     assert_eq!(cell.style.bg, Color::Blue, "a run keeps the base ground");
 }
+
+#[test]
+fn cursors_clip_to_the_view_and_a_later_one_replaces_an_earlier_one() {
+    use std::time::Instant;
+
+    use crate::{
+        core::{
+            cursor::{self, CursorRequest},
+            id::testing_node_id,
+        },
+        style::effects,
+    };
+
+    let mut target = TestTarget::new(geom::Rect::new(2, 0, 3, 1));
+    let node = testing_node_id();
+    let mut cursors = Vec::new();
+    let dim = [effects::brightness(0.5)];
+    {
+        let mut render = Render::new(
+            &target.stylemap,
+            &mut target.style,
+            &mut target.buf,
+            target.clip,
+            geom::Point::ZERO,
+        )
+        .with_effects(&dim)
+        .with_frame(RenderFrame {
+            node,
+            clocks: MotionClocks::at(Instant::now()),
+            cursors: &mut cursors,
+        });
+        render.cursor(geom::Point { x: 1, y: 0 }, CursorRequest::new(cursor::TEXT));
+        render.cursor(geom::Point { x: 2, y: 0 }, CursorRequest::new(cursor::TEXT));
+        render.cursor(
+            geom::Point { x: 3, y: 0 },
+            CursorRequest::new(cursor::VI_NORMAL),
+        );
+    }
+    assert_eq!(
+        cursors.len(),
+        1,
+        "a node holds one cursor, and a clipped one is dropped"
+    );
+    assert_eq!(cursors[0].node, node);
+    assert_eq!(cursors[0].location, geom::Point { x: 1, y: 0 });
+    assert_eq!(cursors[0].request.role, cursor::VI_NORMAL);
+    assert_eq!(
+        cursors[0].effects.len(),
+        1,
+        "the node's effects apply to its cursor"
+    );
+}
+
+#[test]
+fn moving_styles_record_motion_for_the_cells_they_paint() {
+    use std::time::Duration;
+
+    use crate::style::{Animation, Paint};
+
+    let mut target = TestTarget::new(geom::Rect::new(0, 0, 4, 2));
+    target
+        .stylemap
+        .rules()
+        .fg(
+            "moving",
+            Paint::animated(Animation::pulse(
+                Color::Red,
+                Color::Blue,
+                Duration::from_millis(500),
+            )),
+        )
+        .apply();
+    target
+        .render(|r| r.text("moving", geom::Line::new(0, 0, 2), "ab"))
+        .unwrap();
+    assert!(target.buf.has_motion());
+    target
+        .render(|r| r.fill("", geom::Rect::new(0, 0, 4, 2), ' '))
+        .unwrap();
+    assert!(!target.buf.has_motion(), "the fill owns the cells now");
+}

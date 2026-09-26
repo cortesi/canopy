@@ -133,6 +133,9 @@ impl EvalOutcome {
 pub struct TurnOutcome {
     /// Frame published by this turn, if any.
     pub frame: Option<FrameId>,
+    /// Whether moving cells changed without a new frame, so the adapter
+    /// emits again.
+    pub motion: bool,
     /// Evaluation accepted by this turn.
     pub started: Option<EvalId>,
     /// Evaluations completed after publication without an automation ticket.
@@ -400,6 +403,7 @@ impl Canopy {
             self.poller.next_deadline(),
             self.driver.active.as_ref().and_then(|a| a.deadline),
             self.driver.publication.next_deadline(),
+            self.motion_deadline(),
         ]
         .into_iter()
         .flatten()
@@ -410,6 +414,15 @@ impl Canopy {
     /// Layout settles before each mouse event that follows another event, so
     /// hit testing sees current geometry. Dispatch stops after an exit request.
     fn dispatch_batch(&mut self, events: &[Event]) -> Result<()> {
+        let now = self.now();
+        for event in events {
+            match event {
+                Event::Key(_) | Event::Mouse(_) | Event::Paste(_) => self.motion.input(now),
+                Event::FocusGained => self.motion.focus(true, now),
+                Event::FocusLost => self.motion.focus(false, now),
+                Event::Resize(_) => {}
+            }
+        }
         for (index, event) in events.iter().enumerate() {
             if index > 0 {
                 if self.core.exit_requested.is_some() {
@@ -534,6 +547,8 @@ impl Canopy {
         }
         if self.driver.publication.generation() != before {
             outcome.frame = Some(FrameId(self.driver.publication.generation()));
+        } else {
+            outcome.motion = self.motion_due();
         }
         if let Some(error) = dispatch_error {
             return Err(error);

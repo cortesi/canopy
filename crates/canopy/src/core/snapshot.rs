@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use super::{
     context::CoreViewContext,
+    cursor::CursorSnapshot,
     termbuf::TermBuf,
     view::View,
     world::{Core, WidgetOperation},
@@ -74,6 +75,8 @@ pub struct FrameSnapshot {
     pub nodes: Vec<NodeSnapshot>,
     /// Focus owner at publication.
     pub focus: Option<NodeId>,
+    /// Cursors the frame painted, the primary cursor first.
+    pub cursors: Vec<CursorSnapshot>,
 }
 
 impl FrameSnapshot {
@@ -88,6 +91,7 @@ pub(super) fn capture(
     core: &Core,
     frame_id: FrameId,
     buffer: Arc<TermBuf>,
+    cursors: Vec<CursorSnapshot>,
 ) -> Result<FrameSnapshot> {
     let size = buffer.size();
     let mut nodes = Vec::with_capacity(core.nodes.len());
@@ -137,5 +141,6 @@ pub(super) fn capture(
         buffer,
         nodes,
         focus: core.focus,
+        cursors,
     })
 }

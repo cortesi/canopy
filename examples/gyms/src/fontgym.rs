@@ -1,4 +1,4 @@
-use std::{f32::consts::TAU, time::Duration};
+use std::time::Duration;
 
 use canopy::{
     CanopyBuilder, ChangeOutcome, Context, ContextExt, EventOutcome, NodeId, NodeName, ViewContext,
@@ -11,10 +11,10 @@ use canopy::{
     },
     render::{
         Render,
-        cursor::{Cursor, CursorShape},
+        cursor::{self, CursorRequest},
     },
     rgb,
-    style::{Attr, Color, StyleMap},
+    style::{Attr, Color, GradientSpec, GradientStop, Paint, StyleMap},
     text,
 };
 use canopy_widgets::{
@@ -48,21 +48,17 @@ const STATUS_WRAP_WIDTH: u32 = 44;
 const LABEL_HEIGHT: u32 = 1;
 /// Gap between banner and label.
 const LABEL_GAP: u32 = 1;
-/// Milliseconds between gradient animation steps.
-const GRADIENT_POLL_MS: u64 = 50;
-/// Phase step for gradient color animation.
-const GRADIENT_PHASE_STEP: f32 = 0.01;
+/// Time in which a banner gradient slides once across its banner.
+const GRADIENT_DRIFT: Duration = Duration::from_secs(6);
 /// Base angle for gradient direction.
 const GRADIENT_BASE_ANGLE: f32 = 25.0;
-/// Hue sweep amplitude for animated palettes.
-const HUE_SWEEP_DEG: f32 = 60.0;
 /// One banner: its style path, gradient angle and palette, and font bytes.
 struct BannerSpec {
     /// Style path the banner renders through.
     style: &'static str,
     /// Gradient angle offset from `GRADIENT_BASE_ANGLE`.
     angle_offset: f32,
-    /// Four-stop gradient palette before the animated hue shift.
+    /// Four-stop gradient palette.
     palette: [Color; 4],
     /// Embedded font bytes.
     font: &'static [u8],
@@ -117,23 +113,13 @@ const BANNERS: [BannerSpec; 4] = [
 ];
 
 /// Demo node that renders ASCII font banners.
-pub struct FontGym {
-    /// Animated gradient phase.
-    gradient_phase: f32,
-}
-
-impl Default for FontGym {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+#[derive(Default)]
+pub struct FontGym;
 
 impl FontGym {
     /// Construct a new font gym demo.
     pub fn new() -> Self {
-        Self {
-            gradient_phase: 0.0,
-        }
+        Self
     }
 }
 
@@ -144,7 +130,7 @@ impl Widget for FontGym {
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let style_state = FontEffects::default();
-        ctx.set_style(font_styles(self.gradient_phase));
+        ctx.set_style(font_styles());
 
         let list_id = ctx.create_detached(List::new())?;
         ctx.set_layout_override(list_id.into(), Layout::fill().into())?;
@@ -218,12 +204,6 @@ impl Widget for FontGym {
         ctx.set_layout_override(status_row_id.into(), fixed_row(STATUS_HEIGHT))?;
         ctx.set_focus(input_id.into())?;
         Ok(())
-    }
-
-    fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
-        self.gradient_phase = (self.gradient_phase + GRADIENT_PHASE_STEP).fract();
-        ctx.set_style(font_styles(self.gradient_phase));
-        Ok(Some(Duration::from_millis(GRADIENT_POLL_MS)))
     }
 }
 
@@ -516,6 +496,16 @@ struct FontGymInput {
 }
 
 impl FontGymInput {
+    /// Return the display column of the cursor.
+    fn cursor_column(&self) -> u32 {
+        text::slice_by_columns(
+            &self.text[..byte_index_for_char(&self.text, self.cursor)],
+            0,
+            usize::MAX,
+        )
+        .1 as u32
+    }
+
     /// Create a new input widget targeting the provided banners.
     fn new(
         text: impl Into<String>,
@@ -718,27 +708,19 @@ impl Widget for FontGymInput {
         true
     }
 
-    fn cursor(&self) -> Option<Cursor> {
-        Some(Cursor {
-            location: Point {
-                x: text::slice_by_columns(
-                    &self.text[..byte_index_for_char(&self.text, self.cursor)],
-                    0,
-                    usize::MAX,
-                )
-                .1 as u32,
-                y: 0,
-            },
-            shape: CursorShape::Block,
-        })
-    }
-
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let view_rect = view.view_rect();
         let origin = view.content_origin();
         let line = Line::new(origin.x, origin.y, view_rect.w);
         rndr.text("text", line, &self.text)?;
+        if ctx.is_focused() {
+            let location = Point {
+                x: origin.x.saturating_add(self.cursor_column()),
+                y: origin.y,
+            };
+            rndr.cursor(location, CursorRequest::new(cursor::TEXT));
+        }
         Ok(())
     }
 
@@ -1009,10 +991,29 @@ fn block_layout(banner_height: u32) -> Layout {
         .fixed_height(block_height(banner_height))
 }
 
+/// Construct a banner gradient that drifts across its banner.
+///
+/// The stops return to the first color, so the gradient wraps without a
+/// seam.
+fn drifting_gradient(angle_deg: f32, colors: [Color; 4]) -> Paint {
+    Paint::gradient(
+        GradientSpec::with_stops(
+            angle_deg,
+            vec![
+                GradientStop::new(0.0, colors[0]),
+                GradientStop::new(0.25, colors[1]),
+                GradientStop::new(0.5, colors[2]),
+                GradientStop::new(0.75, colors[3]),
+                GradientStop::new(1.0, colors[0]),
+            ],
+        )
+        .with_drift(GRADIENT_DRIFT),
+    )
+}
+
 /// Construct the style map used by the demo banners.
-fn font_styles(phase: f32) -> StyleMap {
+fn font_styles() -> StyleMap {
     let mut style = StyleMap::new();
-    let hue = (phase * TAU).sin() * HUE_SWEEP_DEG;
     let mut rules = style
         .rules()
         .attr("fontgym/legend", Attr::Dim)
@@ -1024,10 +1025,7 @@ fn font_styles(phase: f32) -> StyleMap {
     for spec in &BANNERS {
         rules = rules.fg(
             spec.style,
-            crate::banner_gradient(
-                GRADIENT_BASE_ANGLE + spec.angle_offset,
-                spec.palette.map(|color| color.shift_hue(hue)),
-            ),
+            drifting_gradient(GRADIENT_BASE_ANGLE + spec.angle_offset, spec.palette),
         );
     }
     rules.apply();
@@ -1196,8 +1194,7 @@ mod tests {
             let mut input = FontGymInput::new(text, Vec::new(), 1, FontEffects::default(), status);
             for (position, column) in columns.into_iter().enumerate() {
                 input.cursor = position;
-                let cursor = input.cursor().expect("input cursor");
-                assert_eq!(cursor.location, Point { x: column, y: 0 });
+                assert_eq!(input.cursor_column(), column);
             }
             assert_eq!(
                 input.measure(MeasureConstraints {

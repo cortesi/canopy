@@ -14,7 +14,7 @@ use canopy::{
     layout::{Edges, Layout},
     render::Render,
 };
-pub use mode::ModeHelp;
+pub use mode::{ModeHelp, Shown};
 
 use crate::Dialog;
 

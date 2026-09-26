@@ -23,3 +23,33 @@ fn luau_smoke_suite_passes() -> Result<()> {
     assert_eq!(result.scripts.len(), 1, "all checked-in smoke scripts ran");
     Ok(())
 }
+
+/// Run one checked-in gym script against a fresh headless instance of a demo.
+fn run_gym_script(demo: Demo, script: &str) -> Result<()> {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts");
+    let factory = AppFactory::new(
+        AppMetadata {
+            app: "gyms".into(),
+            reset: ResetPolicy::Isolated,
+        },
+        move || demo.build(false).map_err(McpError::app),
+    );
+    let config = SuiteConfig {
+        scripts: vec![dir.join(script)],
+        ..SuiteConfig::new(&dir)
+    };
+    let result = run_suite(&factory, &config).map_err(|error| Error::App(Box::new(error)))?;
+    assert!(result.success(), "{result:#?}");
+    assert_eq!(result.scripts.len(), 1);
+    Ok(())
+}
+
+#[test]
+fn the_cursor_gym_script_passes() -> Result<()> {
+    run_gym_script(Demo::Cursorgym, "cursorgym.luau")
+}
+
+#[test]
+fn the_motion_gym_script_passes() -> Result<()> {
+    run_gym_script(Demo::Motiongym, "motiongym.luau")
+}

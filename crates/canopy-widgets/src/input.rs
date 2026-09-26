@@ -6,7 +6,10 @@ use canopy::{
     geom::{Line, Point, Size},
     input::{Event, IntentSpec, key},
     layout::{Layout, MeasureConstraints, Measurement},
-    render::{Render, cursor},
+    render::{
+        Render,
+        cursor::{self, CursorRequest},
+    },
     runtime::WidgetSemantics,
     style::{WidgetState, roles},
     text,
@@ -218,9 +221,6 @@ pub fn register_clear_intent(setup: &mut Setup) -> Result<()> {
         "Clear the focused field, or reset what the focused widget shows",
     )?)
 }
-
-/// Glyph drawn after the value of a field that is active without focus.
-pub const CARET: char = '▏';
 
 /// Single-line text input widget.
 ///
@@ -492,18 +492,6 @@ impl Widget for Input {
         true
     }
 
-    fn cursor(&self) -> Option<cursor::Cursor> {
-        Some(cursor::Cursor {
-            location: Point {
-                x: self
-                    .prompt_width()
-                    .saturating_add(self.buffer.cursor_display()),
-                y: 0,
-            },
-            shape: cursor::CursorShape::Block,
-        })
-    }
-
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("input");
         let active = self.is_active(ctx);
@@ -540,15 +528,11 @@ impl Widget for Input {
         };
         if self.buffer.cursor_display() < width {
             if ctx.is_focused() {
-                r.restyle(roles::CURSOR, caret);
+                r.cursor(caret, CursorRequest::new(cursor::TEXT));
             } else if active {
-                // Without focus there is no terminal cursor, so an active
-                // field draws its own caret where typing lands.
-                r.text(
-                    roles::TEXT,
-                    Line::new(caret.x, caret.y, 1),
-                    &CARET.to_string(),
-                )?;
+                // An active field without focus still shows where typing
+                // lands.
+                r.cursor(caret, CursorRequest::new(cursor::INACTIVE));
             }
         }
         Ok(())

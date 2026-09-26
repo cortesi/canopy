@@ -5,7 +5,7 @@
 //! theme at once. Applications style their own paths from the palette through
 //! `Setup::widget_styles`, which keeps those rules across theme switches.
 
-use super::{Attr, AttrSet, Color, PartialStyle, StyleMap};
+use super::{Attr, AttrSet, Color, Mix, PartialStyle, StyleMap};
 use crate::rgb;
 
 /// How far a scrollbar thumb leans from the theme's base toward the accent.
@@ -75,7 +75,7 @@ impl Palette {
         // The thumb is chrome, but the position is worth seeing, so it leans
         // toward the accent without becoming a highlight. A drag holds the full
         // accent, which reads as the thumb waking up.
-        let thumb = p.frame_thumb.blend(p.accent, THUMB_ACCENT);
+        let thumb = p.frame_thumb.mix(p.accent, THUMB_ACCENT, Mix::Rgb);
         c.rules()
             .style(
                 "/",
@@ -163,7 +163,7 @@ impl Palette {
                 "/editor/search/match",
                 PartialStyle::new()
                     .fg(p.fg)
-                    .bg(p.yellow.blend(p.bg, MATCH_FADE)),
+                    .bg(p.yellow.mix(p.bg, MATCH_FADE, Mix::Rgb)),
             )
             // Scrollbar marks take the full yellow as a foreground: a mark
             // under the thumb keeps its style but takes the thumb glyph, and a

@@ -395,7 +395,7 @@ releases capture.
 The frame pipeline has five words. To prepare is to build a frame: mount pending
 nodes, run layout, render, and publish. To render is widget painting only:
 Canopy renders visible nodes in tree order into an offscreen buffer, then
-overlays the cursor. To publish is to make a `FrameSnapshot` current; the
+paints the cursors that nodes declared. To publish is to make a `FrameSnapshot` current; the
 snapshot owns its buffer through an `Arc<TermBuf>`. To emit is to write a
 buffer to a backend, in full (`TermBuf::emit`) or as a diff against the last
 emitted buffer (`TermBuf::emit_diff`). To flush is only to push backend bytes.
@@ -429,11 +429,53 @@ with full render output.
 If a pre-render hook marks layout dirty, Canopy runs layout again before
 rendering. Rendering must not rely on stale views.
 
+### Soft cursors
+
+Canopy draws its own cursors. The terminal cursor stays hidden for the whole
+session, so snapshots, screen dumps, and headless runs see every cursor, and
+style effects apply to cursor cells like any other cells.
+
+A widget declares a cursor while it renders, with `Render::cursor(location,
+CursorRequest)`. The request names a role, such as `cursor/vi/insert`, and can
+replace the color, shape, or motion of the role. Canopy clips the declaration
+to the node's visible view. A node holds at most one cursor.
+
+After the tree renders, Canopy resolves each role to a `CursorLook` and paints
+it. The primary cursor is the declaration of the deepest node on the focus
+path. It takes the motion of its look. Every other cursor is a steady
+secondary cursor. `FrameSnapshot::cursors` records every painted cursor, the
+primary cursor first. After each emission, the backend moves the hidden
+terminal cursor to the primary cursor, where input methods and screen
+magnifiers look for it.
+
+### Motion at emission
+
+A paint can change over time: `Paint::Animated` holds an `Animation`, and a
+`GradientSpec` can drift. Motion belongs to emission. Rendering writes the
+rest color of every moving paint, and the published buffer stays at rest, so
+snapshots, screen text, and tests do not depend on time.
+
+The `TermBuf` keeps a motion record for each moving grapheme. Every write to a
+cell clears the record of the grapheme it overwrites, so a later layer, such as
+a modal or a cursor, owns its cells. `emit_frame` writes the current colors of
+the moving cells over a copy of the published buffer, then diffs that against
+the last emitted buffer. The composed buffer becomes the new baseline. A motion
+record applies one style to its whole grapheme, so wide graphemes stay
+canonical.
+
+Motion is emitted only when an adapter sets it live. The terminal adapter does;
+headless evaluation and the test harness keep every cell at rest unless a test
+calls `Canopy::set_motion_live`. `MotionSettings` can turn motion off, limit
+continuous samples per second, and set the idle pause: after a time without
+input, repeating motion holds at rest and sets no deadline. Repeating motion
+also rests while the terminal lacks focus.
+
 ## Runtime Turns
 
 `Canopy::turn(TurnInput)` drives input, background wakes, evaluation start or cancellation,
-and explicit preparation. `TurnOutcome` reports the published `FrameId`, evaluation
-admission, unticketed completion, and exit status. Ticket-backed evaluations complete
+and explicit preparation. `TurnOutcome` reports the published `FrameId`, whether
+moving cells changed without a new frame, evaluation admission, unticketed
+completion, and exit status. Ticket-backed evaluations complete
 through their `EvalTicket`. Crossterm, headless evaluation, and the test harness use
 this driver.
 
@@ -477,7 +519,10 @@ this: its footer reads the file selector during render, and its listings read
 another node's focus. Any narrower invalidation must keep this guarantee.
 
 Poll deadlines belong to the driver. There is no eager scheduler thread per
-application. The terminal adapter, headless evaluation, and the test
+application. The next change of a moving cell is also a driver deadline: the
+next stop edge of a held animation, or the next sample of a continuous one. A
+turn at that deadline reports motion only when an emitted color would change,
+and the adapter then emits with no layout or render. The terminal adapter, headless evaluation, and the test
 harness share one work selector. It waits on adapter input, runtime
 notifications, and the next driver deadline, and it takes ready sources in
 rotating order, so a source that stays ready cannot starve the others. Tests can

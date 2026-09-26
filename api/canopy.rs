@@ -43,7 +43,7 @@ use std::{
         Arc,
         mpmc::{RecvError, SendError, TrySendError},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 pub use canopy_derive::{CommandArg, CommandEnum, command, derive_commands};
@@ -536,9 +536,6 @@ pub trait Widget: Any {
     /// `content` is this node's content size (outer minus padding).
     fn canvas(&self, content: Size, _ctx: &CanvasContext<'_>) -> Size {}
 
-    /// Cursor specification for focused widgets.
-    fn cursor(&self) -> Option<Cursor> {}
-
     /// Predict this widget's result for `key` without changing any state.
     ///
     /// `ctx` is a read-only view bound to this widget's node. Its focus
@@ -744,6 +741,9 @@ impl Canopy {
         target: CommandTarget,
     ) -> crate::error::Result<Vec<CommandAvailability>>;
 
+    /// Return the look of each cursor role.
+    pub fn cursor_looks(&self) -> &CursorLooks;
+
     /// Explain where `key` would go for a node or the current focus.
     ///
     /// The result is advisory: it predicts the route from the same resolver
@@ -795,6 +795,10 @@ impl Canopy {
     /// Return the most recent key or mouse route trace.
     pub fn route_trace(&self) -> &[RouteTraceEntry];
 
+    /// Replace parts of a cursor role's look, in this theme and every later
+    /// one.
+    pub fn set_cursor_look(&mut self, role: &str, patch: CursorLookPatch);
+
     /// Replace the active modes with one mode. The empty string returns to
     /// the default mode.
     pub fn set_mode(&mut self, mode: &str);
@@ -830,6 +834,18 @@ impl Canopy {
 
     /// Run a closure against an immutable view of the root context.
     pub fn with_root_view<R>(&self, f: impl FnOnce(&dyn ViewContext) -> R) -> R;
+}
+
+impl Canopy {
+    /// Return the motion settings.
+    pub fn motion(&self) -> MotionSettings;
+
+    /// Replace the motion settings.
+    pub fn set_motion(&mut self, settings: MotionSettings);
+
+    /// Emit motion. The terminal adapter enables it. Headless runs and tests
+    /// keep every cell at rest unless they enable it.
+    pub fn set_motion_live(&mut self, live: bool);
 }
 
 impl Canopy {
@@ -1010,6 +1026,12 @@ impl Setup {
         target: BindingAction,
     ) -> crate::error::Result<BindingId>;
 
+    /// Add cursor looks derived from the active palette.
+    ///
+    /// The rules apply over the theme's built-in looks now and again after
+    /// every theme switch.
+    pub fn cursor_looks(&mut self, rules: impl 'static + Fn(&Palette, &mut CursorLooks));
+
     /// Register a hook that runs against the root context before the next
     /// frame whenever a binding or the mode stack has changed.
     ///
@@ -1072,6 +1094,9 @@ impl Setup {
     /// frame preparation, before the user and project `init.luau` modules.
     pub fn register_startup_script(&mut self, name: &str, source: &str)
     -> crate::error::Result<()>;
+
+    /// Replace the motion settings.
+    pub fn set_motion(&mut self, settings: MotionSettings);
 
     /// Replace the limits on the visible render target.
     pub fn set_render_limits(&mut self, limits: RenderLimits);
@@ -3523,12 +3548,17 @@ pub mod path {
 }
 
 pub mod render {
-    //! Rendering: the widget renderer, frame buffers, backends, and cursors.
+    //! Rendering: the widget renderer, frame buffers, backends, cursors, and
+    //! motion.
 
     /// The trait implemented by renderers.
     pub trait RenderBackend {
         /// Flush output to the terminal.
         fn flush(&mut self) -> crate::error::Result<()>;
+
+        /// Move the hidden terminal cursor to the primary soft cursor, where input
+        /// methods and screen magnifiers look for it. `None` leaves it in place.
+        fn park_cursor(&mut self, _location: Option<Point>) -> crate::error::Result<()> {}
 
         /// Reset the backend to a clean state.
         fn reset(&mut self) -> crate::error::Result<()> {}
@@ -3579,6 +3609,17 @@ pub mod render {
         pub fn rendered_text(&self) -> String;
     }
 
+    /// Global motion settings.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub struct MotionSettings {
+        /// Whether cells move. With `false`, every cell stays at rest.
+        pub enabled: bool,
+        /// Most samples a second of motion that changes continuously.
+        pub max_fps: u32,
+        /// Time without input after which repeating motion pauses at rest.
+        pub idle_pause: Duration,
+    }
+
     /// A render backend that discards all output.
     ///
     /// Rendering through this backend refreshes the terminal buffer without
@@ -3603,6 +3644,15 @@ pub mod render {
         /// manager.
         pub fn apply_effects(&self, style: Style) -> Style;
 
+        /// Declare the cursor of this node at a location, in the coordinates of
+        /// its other drawing.
+        ///
+        /// A cursor outside the visible view is not drawn. A node holds at most
+        /// one cursor, so a later declaration replaces an earlier one. The
+        /// cursor of the deepest node on the focus path is the primary cursor,
+        /// which moves; every other cursor stays steady.
+        pub fn cursor(&mut self, location: Point, request: CursorRequest);
+
         /// Fill a rectangle with a specified character. Writes out of bounds will
         /// be clipped.
         pub fn fill(&mut self, style: &str, r: Rect, c: char) -> crate::error::Result<()>;
@@ -3616,6 +3666,18 @@ pub mod render {
             style: ResolvedStyle,
             p: Point,
             ch: char,
+        ) -> crate::error::Result<()>;
+
+        /// Write a single antialiased cell: the named style, resolved at `p`
+        /// within `rect`, with a glyph coverage applied. The cell moves when the
+        /// style moves.
+        pub fn put_covered(
+            &mut self,
+            style: &str,
+            rect: Rect,
+            p: Point,
+            ch: char,
+            coverage: Coverage,
         ) -> crate::error::Result<()>;
 
         /// Write a grapheme with a resolved style, including continuation cells.
@@ -3731,25 +3793,178 @@ pub mod render {
 
     pub mod cursor {
         //! Cursor and position helpers.
+        //! Soft cursors: roles, looks, and the declarations widgets make while they
+        //! render.
+        //!
+        //! A widget names what its cursor means with a role, such as
+        //! `cursor/vi/insert`. The theme decides how each role looks: a shape that
+        //! Canopy draws exactly on every cell, a color, and a motion.
 
-        /// Cursor position and shape.
+        /// How long a blinking cursor hides.
+        pub const BLINK_OFF: Duration = _;
+
+        /// How long a blinking cursor shows.
+        pub const BLINK_ON: Duration = _;
+
+        /// The root cursor role, which every other role falls back to.
+        pub const CURSOR: &str = "cursor";
+
+        /// Where typing lands in a field that is active without focus.
+        pub const INACTIVE: &str = "cursor/inactive";
+
+        /// One period of a pulsing cursor.
+        pub const PULSE_PERIOD: Duration = _;
+
+        /// The cursor of a program that runs in an embedded terminal.
+        pub const TERMINAL: &str = "cursor/terminal";
+
+        /// The cursor of editable text outside vi modes.
+        pub const TEXT: &str = "cursor/text";
+
+        /// The cursor of vi insert mode.
+        pub const VI_INSERT: &str = "cursor/vi/insert";
+
+        /// The cursor of vi normal mode.
+        pub const VI_NORMAL: &str = "cursor/vi/normal";
+
+        /// The cursor of vi visual mode.
+        pub const VI_VISUAL: &str = "cursor/vi/visual";
+
+        /// How a cursor role looks.
         #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        pub struct Cursor {
-            /// Location of the cursor, relative to (0, 0) in the node view rect.
-            pub location: Point,
+        pub struct CursorLook {
             /// Shape of the cursor.
             pub shape: CursorShape,
+            /// Color of the cursor.
+            pub color: Color,
+            /// Change of the cursor over time.
+            pub motion: CursorMotion,
         }
 
-        /// Cursor glyph shape variants.
+        impl CursorLook {
+            /// A blinking block in `color`.
+            pub const fn blinking_block(color: Color) -> Self;
+
+            /// Construct a look.
+            pub const fn new(shape: CursorShape, color: Color, motion: CursorMotion) -> Self;
+
+            /// A steady block in `color`.
+            pub const fn steady_block(color: Color) -> Self;
+        }
+
+        /// A replacement for parts of a role's look, kept across theme switches.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        pub struct CursorLookPatch {
+            /// Replacement shape.
+            pub shape: Option<CursorShape>,
+            /// Replacement color.
+            pub color: Option<Color>,
+            /// Replacement motion.
+            pub motion: Option<CursorMotion>,
+        }
+
+        /// The look of each cursor role.
+        ///
+        /// A role resolves with the fallback of style paths: `cursor/vi/insert` falls
+        /// back to `cursor/vi`, then to `cursor`.
+        #[derive(Clone, Debug, Default, PartialEq)]
+        pub struct CursorLooks {/* private fields */}
+
+        impl CursorLooks {
+            /// Return the built-in looks for a palette.
+            pub fn for_palette(p: &Palette) -> Self;
+
+            /// Return the look set for exactly this role, without fallback.
+            pub fn get(&self, role: &str) -> Option<CursorLook>;
+
+            /// Resolve the look of a role, falling back to its parent roles.
+            pub fn resolve(&self, role: &str) -> CursorLook;
+
+            /// Set the look of a role.
+            pub fn set(&mut self, role: &str, look: CursorLook);
+        }
+
+        /// How a cursor changes over time.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        pub enum CursorMotion {
+            /// Always shown.
+            Steady,
+            /// Shown for `on`, then the cell below for `off`.
+            Blink {
+                /// Time the cursor shows.
+                on: Duration,
+                /// Time the cell below shows.
+                off: Duration,
+            },
+            /// Fades between the cursor color and the cell below over one period.
+            Pulse {
+                /// Time of one fade out and back.
+                period: Duration,
+            },
+        }
+
+        impl CursorMotion {
+            /// The default blink.
+            pub const BLINK: Self = _;
+            /// The default pulse.
+            pub const PULSE: Self = _;
+        }
+
+        /// A cursor that a widget declares while it renders.
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        pub struct CursorRequest {
+            /// Role of the cursor.
+            pub role: Cow<'static, str>,
+            /// A color that replaces the color of the role, such as the cursor color
+            /// that a child terminal program sets.
+            pub color: Option<Color>,
+            /// A motion that replaces the motion of the role.
+            pub motion: Option<CursorMotion>,
+            /// A shape that replaces the shape of the role.
+            pub shape: Option<CursorShape>,
+        }
+
+        impl CursorRequest {
+            /// Request a cursor in `role`, with the look of the role.
+            pub fn new(role: impl Into<Cow<'static, str>>) -> Self;
+
+            /// Replace the color of the role.
+            #[must_use]
+            pub fn with_color(self, color: Color) -> Self;
+
+            /// Replace the motion of the role.
+            #[must_use]
+            pub fn with_motion(self, motion: CursorMotion) -> Self;
+
+            /// Replace the shape of the role.
+            #[must_use]
+            pub fn with_shape(self, shape: CursorShape) -> Self;
+        }
+
+        /// A cursor shape that Canopy draws exactly on every cell.
         #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
         pub enum CursorShape {
-            /// Underscore cursor.
-            Underscore,
-            /// Vertical bar cursor.
-            Line,
-            /// Block cursor.
+            /// The whole cell takes the cursor color, and the grapheme takes a
+            /// contrasting color.
             Block,
+            /// The grapheme and its underline take the cursor color.
+            Underline,
+        }
+
+        /// One cursor in a published frame.
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        pub struct CursorSnapshot {
+            /// Node that declared the cursor.
+            pub node: NodeId,
+            /// Screen location of the cursor.
+            pub location: Point,
+            /// Role of the cursor.
+            pub role: String,
+            /// Look the frame painted, after request replacements and style effects.
+            pub look: CursorLook,
+            /// Whether this is the primary cursor: the declaration of the deepest node
+            /// on the focus path.
+            pub primary: bool,
         }
     }
 }
@@ -3772,6 +3987,8 @@ pub mod runtime {
         pub nodes: Vec<NodeSnapshot>,
         /// Focus owner at publication.
         pub focus: Option<NodeId>,
+        /// Cursors the frame painted, the primary cursor first.
+        pub cursors: Vec<CursorSnapshot>,
     }
 
     impl FrameSnapshot {
@@ -3881,6 +4098,9 @@ pub mod runtime {
     pub struct TurnOutcome {
         /// Frame published by this turn, if any.
         pub frame: Option<FrameId>,
+        /// Whether moving cells changed without a new frame, so the adapter
+        /// emits again.
+        pub motion: bool,
         /// Evaluation accepted by this turn.
         pub started: Option<EvalId>,
         /// Evaluations completed after publication without an automation ticket.
@@ -4179,6 +4399,76 @@ pub mod script {
 pub mod style {
     //! Styling and color helpers.
 
+    /// Colors over time: stops over one run, a run length, and a repeat.
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct Animation {
+        /// Colors over one run, as gradient stops are colors over space.
+        pub stops: Vec<GradientStop>,
+        /// Length of one run.
+        pub duration: Duration,
+        /// What follows one run.
+        pub repeat: Repeat,
+        /// How time maps to the stops.
+        pub easing: Easing,
+        /// When the first run starts.
+        pub start: AnimationStart,
+        /// The space that mixes colors between stops.
+        pub mix: Mix,
+        /* private fields */
+    }
+
+    impl Animation {
+        /// Show `on` for `on_time`, then `off` for `off_time`, in a loop.
+        pub fn blink(on: Color, off: Color, on_time: Duration, off_time: Duration) -> Self;
+
+        /// Fade once from `from` to `to`, from the first frame that shows it.
+        pub fn fade(from: Color, to: Color, duration: Duration) -> Self;
+
+        /// Map every stop color, keeping the timing and the bound start.
+        #[must_use]
+        pub fn map_colors(&self, f: impl Fn(Color) -> Color) -> Self;
+
+        /// Construct a linear loop over `stops`, in step with the motion epoch.
+        pub fn new(stops: Vec<GradientStop>, duration: Duration) -> Self;
+
+        /// Fade from `from` to `to` and back, once each period.
+        pub fn pulse(from: Color, to: Color, period: Duration) -> Self;
+
+        /// Return the color that frames show at rest: the last stop of a single
+        /// run, and the first stop of a repeating one.
+        pub fn rest(&self) -> Color;
+
+        /// Replace the easing.
+        #[must_use]
+        pub fn with_easing(self, easing: Easing) -> Self;
+
+        /// Replace the mixing space.
+        #[must_use]
+        pub fn with_mix(self, mix: Mix) -> Self;
+
+        /// Replace the repeat.
+        #[must_use]
+        pub fn with_repeat(self, repeat: Repeat) -> Self;
+
+        /// Replace the start.
+        #[must_use]
+        pub fn with_start(self, start: AnimationStart) -> Self;
+    }
+
+    /// When the first run of an animation starts.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub enum AnimationStart {
+        /// The shared motion epoch, which keeps loops in step with each other.
+        Epoch,
+        /// A fixed time on the driver clock.
+        At(Instant),
+        /// The last input event, so the motion restarts whenever the operator acts.
+        LastInput,
+        /// The first published frame that shows the animation. Clones share the
+        /// bound time, so a paint that renders again keeps its start.
+        Shown,
+    }
+
     /// A text attribute.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum Attr {
@@ -4272,13 +4562,26 @@ pub mod style {
     }
 
     impl Color {
-        /// Blend this color with another. ratio 0.0 = self, 1.0 = other.
-        #[must_use]
-        pub fn blend(self, other: Self, ratio: f32) -> Self;
+        /// Return the WCAG contrast ratio with another color, from 1.0 for equal
+        /// luminance to 21.0 for black on white.
+        pub fn contrast_ratio(self, other: Self) -> f32;
 
         /// Invert RGB channels (255 - value for each channel).
         #[must_use]
         pub fn invert_rgb(self) -> Self;
+
+        /// Mix this color with another in a color space. `t` 0.0 is `self`, and
+        /// 1.0 is `other`.
+        ///
+        /// `Mix::Rgb` mixes the sRGB channels. `Mix::Oklab` mixes in the
+        /// perceptual OKLab space, so equal steps look equal. `Mix::Oklch` also
+        /// takes the shorter way around the hue circle.
+        #[must_use]
+        pub fn mix(self, other: Self, t: f32, space: Mix) -> Self;
+
+        /// Return the WCAG relative luminance, from 0.0 for black to 1.0 for
+        /// white.
+        pub fn relative_luminance(self) -> f32;
 
         /// Return this color's RGB channels.
         ///
@@ -4300,6 +4603,34 @@ pub mod style {
         pub fn shift_hue(self, degrees: f32) -> Self;
     }
 
+    /// How much of a cell a glyph covers, for antialiased drawing.
+    ///
+    /// A covered cell mixes its style's background toward its foreground: by
+    /// `fg` for the glyph and by `bg` for the cell ground, each 0 to 255.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct Coverage {
+        /// Glyph coverage.
+        pub fg: u8,
+        /// Ground coverage.
+        pub bg: u8,
+    }
+
+    impl Coverage {
+        /// Apply the coverage to a resolved style.
+        pub fn apply(self, style: ResolvedStyle) -> ResolvedStyle;
+    }
+
+    /// How time within a run maps to the stops.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub enum Easing {
+        /// Colors change at a constant rate.
+        Linear,
+        /// Colors change slowly at the ends of a run and quickly in the middle.
+        InOut,
+        /// Each stop holds until the next one, with no mixing.
+        Hold,
+    }
+
     /// A gradient paint specification.
     #[derive(Clone, Debug, PartialEq)]
     pub struct GradientSpec {
@@ -4307,15 +4638,28 @@ pub mod style {
         pub angle_deg: f32,
         /// Ordered list of gradient stops.
         pub stops: Vec<GradientStop>,
+        /// The space that mixes colors between stops.
+        pub mix: Mix,
+        /// Time in which the gradient slides once across its rectangle, wrapping
+        /// around. `None` holds it still.
+        pub drift: Option<Duration>,
     }
 
     impl GradientSpec {
-        /// Resolve a gradient color at a point within a rectangle.
+        /// Resolve a gradient color at a point within a rectangle, at rest.
         pub fn color_at(&self, rect: Rect, point: Point) -> Color;
 
         /// Map all colors in this gradient through a transform.
         #[must_use]
         pub fn map_colors(&self, f: impl Fn(Color) -> Color) -> Self;
+
+        /// Slide the gradient once across its rectangle in each `period`.
+        #[must_use]
+        pub fn with_drift(self, period: Duration) -> Self;
+
+        /// Replace the mixing space.
+        #[must_use]
+        pub fn with_mix(self, mix: Mix) -> Self;
 
         /// Construct a gradient from explicit stops.
         pub fn with_stops(angle_deg: f32, stops: Vec<GradientStop>) -> Self;
@@ -4335,6 +4679,18 @@ pub mod style {
         pub fn new(offset: f32, color: Color) -> Self;
     }
 
+    /// The space in which two colors mix.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub enum Mix {
+        /// The sRGB channels.
+        Rgb,
+        /// The perceptual OKLab space, where equal steps look equal.
+        #[default]
+        Oklab,
+        /// OKLab in polar form, which takes the shorter way around the hue circle.
+        Oklch,
+    }
+
     /// A paint definition for a style channel.
     #[derive(Clone, Debug, PartialEq)]
     pub enum Paint {
@@ -4342,9 +4698,14 @@ pub mod style {
         Solid(Color),
         /// Gradient fill.
         Gradient(GradientSpec),
+        /// A color that changes over time.
+        Animated(Arc<Animation>),
     }
 
     impl Paint {
+        /// Construct an animated paint.
+        pub fn animated(animation: Animation) -> Self;
+
         /// Construct a gradient paint.
         pub fn gradient(spec: GradientSpec) -> Self;
 
@@ -4352,7 +4713,10 @@ pub mod style {
         #[must_use]
         pub fn map_colors(&self, f: impl Fn(Color) -> Color) -> Self;
 
-        /// Resolve the paint at a location.
+        /// Return whether the paint changes over time.
+        pub fn moves(&self) -> bool;
+
+        /// Resolve the paint at a location, at rest.
         pub fn resolve(&self, rect: Rect, point: Point) -> Color;
 
         /// Construct a solid paint.
@@ -4361,6 +4725,8 @@ pub mod style {
         /// Return the solid color if this paint is solid.
         pub fn solid_color(&self) -> Option<Color>;
     }
+
+    impl From<Animation> for Paint {}
 
     impl From<Color> for Paint {}
 
@@ -4399,6 +4765,17 @@ pub mod style {
         pub fn new() -> Self;
     }
 
+    /// What follows one run of an animation.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub enum Repeat {
+        /// One run, which then holds its last color.
+        Once,
+        /// Runs one after another, each from the first stop.
+        Loop,
+        /// Runs forward, then backward, then forward again.
+        Alternate,
+    }
+
     /// A resolved style specification stored in terminal buffers.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub struct ResolvedStyle {
@@ -4427,6 +4804,9 @@ pub mod style {
     }
 
     impl Style {
+        /// Return whether either paint changes over time.
+        pub fn moves(&self) -> bool;
+
         /// Resolve the style at a location within a rectangle.
         pub fn resolve_at(&self, rect: Rect, point: Point) -> ResolvedStyle;
 
@@ -4544,6 +4924,16 @@ pub mod style {
     #[doc(hidden)]
     pub const fn hex_byte(high: u8, low: u8) -> u8;
 
+    pub mod animation {
+        //! Colors that change over time.
+        //!
+        //! An [`Animation`] is to time what a gradient is to space: colors at stops
+        //! over one run. Canopy renders every animation at rest, and evaluates it only
+        //! when it emits cells to the terminal.
+
+        pub use crate::style::{Animation, AnimationStart, Easing, Repeat};
+    }
+
     pub mod effects {
         //! Style effects system.
         //! Style effects system for transforming styles during rendering.
@@ -4554,6 +4944,9 @@ pub mod style {
         /// Brightness factor for what a modal covers, so a panel over the view reads
         /// apart from the dimmed view behind it.
         pub const MODAL_DIM: f32 = 0.5;
+
+        /// Time a modal takes to dim what it covers.
+        pub const MODAL_FADE: Duration = _;
 
         /// A style transformation that can be applied during rendering.
         ///
@@ -4582,8 +4975,20 @@ pub mod style {
         /// Create an effect that adds italic attribute.
         pub fn italic() -> Effect;
 
+        /// Create the effect of what a modal covers: a fade to [`MODAL_DIM`] over
+        /// [`MODAL_FADE`].
+        pub fn modal_dim() -> Effect;
+
         /// Create a saturation effect. 0.0 = grayscale, 1.0 = unchanged.
         pub fn saturation(factor: f32) -> Effect;
+
+        /// Create an effect that fades each color from its value to the value of
+        /// `effect` over `duration`.
+        ///
+        /// The fade starts with the first frame that shows it, and frames at rest
+        /// show the faded colors. Keep the returned effect for as long as it applies:
+        /// a new transition fades again.
+        pub fn transition(effect: Effect, duration: Duration) -> Effect;
     }
 
     pub mod roles {
@@ -4597,9 +5002,6 @@ pub mod style {
 
         /// Box chrome drawn around a widget.
         pub const BORDER: &str = "border";
-
-        /// The text cell under a caret, falling back to [`TEXT`].
-        pub const CURSOR: &str = "text/cursor";
 
         /// A key name, such as an accelerator or a binding hint.
         pub const KEY: &str = "key";

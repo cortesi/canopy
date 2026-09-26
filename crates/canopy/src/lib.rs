@@ -83,9 +83,11 @@ pub mod runtime {
     };
 }
 
-/// Rendering: the widget renderer, frame buffers, backends, and cursors.
+/// Rendering: the widget renderer, frame buffers, backends, cursors, and
+/// motion.
 pub mod render {
     pub use crate::core::{
+        canopy::MotionSettings,
         cursor,
         render::{NopBackend, Render, RenderBackend},
         termbuf::{Cell, RenderLimits, TermBuf},

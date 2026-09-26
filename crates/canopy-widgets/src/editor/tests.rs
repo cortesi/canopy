@@ -128,12 +128,27 @@ fn editor_selection(harness: &mut Harness) -> Selection {
     with_editor(harness, |editor| editor.buffer().selection())
 }
 
+/// Return the primary cursor of the last frame, relative to the editor's
+/// content.
 fn editor_cursor_location(harness: &mut Harness) -> Point {
-    with_editor(harness, |editor| {
-        <Editor as Widget>::cursor(editor)
-            .expect("cursor missing")
-            .location
-    })
+    let screen = harness
+        .canopy
+        .snapshot()
+        .expect("published frame")
+        .cursors
+        .first()
+        .filter(|cursor| cursor.primary)
+        .expect("cursor missing")
+        .location;
+    let origin = harness
+        .with_root_widget_context(|_root: &mut EditorHost, ctx| {
+            ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |_editor, ctx| Ok(ctx.view().content.tl))
+        })
+        .expect("editor missing");
+    Point {
+        x: screen.x - u32::try_from(origin.x).expect("editor on screen"),
+        y: screen.y - u32::try_from(origin.y).expect("editor on screen"),
+    }
 }
 
 fn editor_view_scroll(harness: &mut Harness) -> Point {
@@ -504,6 +519,37 @@ fn set_vi_mode_moves_between_modes() {
         "hihi",
         "leaving insert mode records the insert"
     );
+}
+
+/// Return the role of the primary cursor after a render.
+fn cursor_role(harness: &mut Harness) -> String {
+    harness.render().unwrap();
+    harness
+        .canopy
+        .snapshot()
+        .expect("published frame")
+        .cursors
+        .first()
+        .filter(|cursor| cursor.primary)
+        .expect("cursor missing")
+        .role
+        .clone()
+}
+
+#[test]
+fn the_cursor_names_the_editing_mode() {
+    use canopy::render::cursor;
+
+    let mut text = build_harness("ab", EditorConfig::new(), 10, 2);
+    assert_eq!(cursor_role(&mut text), cursor::TEXT);
+
+    let mut vi = build_harness("ab", EditorConfig::new().with_mode(EditMode::Vi), 10, 2);
+    assert_eq!(cursor_role(&mut vi), cursor::VI_NORMAL);
+    vi.key('i').unwrap();
+    assert_eq!(cursor_role(&mut vi), cursor::VI_INSERT);
+    vi.key(key::KeyCode::Esc).unwrap();
+    vi.key('v').unwrap();
+    assert_eq!(cursor_role(&mut vi), cursor::VI_VISUAL);
 }
 
 #[test]

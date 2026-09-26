@@ -10,7 +10,10 @@ use canopy::{
     input,
     input::{key, mouse},
     layout::{CanvasContext, MeasureConstraints, Measurement},
-    render::{Render, cursor},
+    render::{
+        Render,
+        cursor::{self, CursorRequest},
+    },
     rgb,
     style::{AttrSet, Color, ResolvedStyle, Style},
     text,
@@ -152,8 +155,8 @@ pub struct Terminal {
     session: Option<Session>,
     /// Most recent terminal size.
     last_size: TerminalSize,
-    /// Cached cursor for rendering.
-    cursor: Option<cursor::Cursor>,
+    /// Cursor the child program shows, cached for rendering.
+    cursor: Option<(geom::Point, CursorRequest)>,
     /// Whether a selection drag is active.
     selection_active: bool,
     /// Selection anchor in viewport coordinates.
@@ -507,7 +510,7 @@ impl Widget for Terminal {
         let child_exited = session.child_exited();
         let child_exit_code = session.child_exit_code().unwrap_or(1);
         let default_bg = DEFAULT_BACKGROUND;
-        self.cursor = cursor_from_state(&state);
+        self.cursor = cursor_from_state(&state, session.cursor_blink_enabled());
 
         for (row_idx, line) in runs.iter().enumerate() {
             for run in line {
@@ -536,6 +539,17 @@ impl Widget for Terminal {
                 );
                 rndr.text("text", line, &message)?;
             }
+        }
+
+        if ctx.is_focused()
+            && let Some((location, request)) = &self.cursor
+        {
+            let origin = view.content_origin();
+            let location = geom::Point {
+                x: origin.x.saturating_add(location.x),
+                y: origin.y.saturating_add(location.y),
+            };
+            rndr.cursor(location, request.clone());
         }
 
         Ok(())
@@ -641,10 +655,6 @@ impl Widget for Terminal {
 
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
-    }
-
-    fn cursor(&self) -> Option<cursor::Cursor> {
-        self.cursor
     }
 
     fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
@@ -753,25 +763,41 @@ fn map_key(key: key::Key) -> Option<IttyKey> {
     Some(IttyKey { code, modifiers })
 }
 
-/// Convert backend cursor state into Canopy's cursor model.
-fn cursor_from_state(state: &TerminalState) -> Option<cursor::Cursor> {
+/// Convert the child program's cursor into a cursor declaration.
+///
+/// The child sets the color and the blink. A block stays a block. An
+/// underline or a bar becomes an underline: a bar cannot be drawn in a cell
+/// grid, and a thin cursor keeps its meaning of insertion.
+fn cursor_from_state(state: &TerminalState, blink: bool) -> Option<(geom::Point, CursorRequest)> {
     let (row, col) = state.cursor.grid_pos?;
     if !state.cursor.visible_in_viewport {
         return None;
     }
 
     let shape = match state.cursor.shape.as_str() {
-        "Underline" => cursor::CursorShape::Underscore,
-        "Beam" => cursor::CursorShape::Line,
+        "Underline" | "Beam" => cursor::CursorShape::Underline,
         _ => cursor::CursorShape::Block,
     };
-    Some(cursor::Cursor {
-        location: geom::Point {
+    let color = state.cursor.color;
+    let request = CursorRequest::new(cursor::TERMINAL)
+        .with_shape(shape)
+        .with_color(Color::Rgb {
+            r: color.r,
+            g: color.g,
+            b: color.b,
+        })
+        .with_motion(if blink {
+            cursor::CursorMotion::BLINK
+        } else {
+            cursor::CursorMotion::Steady
+        });
+    Some((
+        geom::Point {
             x: col as u32,
             y: row as u32,
         },
-        shape,
-    })
+        request,
+    ))
 }
 
 /// Render one styled run from the backend snapshot into Canopy cells.

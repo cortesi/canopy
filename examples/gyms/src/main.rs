@@ -11,10 +11,7 @@ use canopy::{
     error::{Error, Result},
     input::key::Key,
     layout::{Direction, Layout, LayoutOverride, Sizing},
-    style::{
-        AttrSet, Color, GradientSpec, GradientStop, Paint, PartialStyle, StyleRules,
-        themes::Palette,
-    },
+    style::{AttrSet, PartialStyle, StyleRules, themes::Palette},
     terminal::{InterruptPolicy, RunOptions},
 };
 use canopy_mcp::{AppFactory, AppMetadata, Error as McpError, LaunchMode, ResetPolicy, launch};
@@ -26,6 +23,7 @@ pub(crate) const HELP_LABEL: &str = "help";
 
 /// Char gym example nodes.
 mod chargym;
+mod cursorgym;
 /// Editor gym example nodes.
 mod editorgym;
 /// Focus gym example nodes.
@@ -40,6 +38,7 @@ mod imgview;
 mod intervals;
 /// List gym example nodes.
 mod listgym;
+mod motiongym;
 /// Pager example nodes.
 mod pager;
 /// Stylegym example nodes.
@@ -50,20 +49,6 @@ mod termgym;
 mod textgym;
 /// Widget editor example nodes.
 mod widget_editor;
-
-/// Build a four-stop gradient paint at a fixed angle, evenly weighted toward
-/// the tail.
-pub(crate) fn banner_gradient(angle_deg: f32, colors: [Color; 4]) -> Paint {
-    Paint::gradient(GradientSpec::with_stops(
-        angle_deg,
-        vec![
-            GradientStop::new(0.0, colors[0]),
-            GradientStop::new(0.35, colors[1]),
-            GradientStop::new(0.7, colors[2]),
-            GradientStop::new(1.0, colors[3]),
-        ],
-    ))
-}
 
 /// Add the standard normal and selected entry rules under a path prefix.
 pub(crate) fn selectable_entry_styles<'a>(
@@ -236,6 +221,8 @@ enum Demo {
     },
     /// Browse the character and glyph rendering gym.
     Chargym,
+    /// Compare every cursor role, motion, and shape.
+    Cursorgym,
     /// Drive the experimental editor widget.
     Editorgym,
     /// Explore focus traversal across a node grid.
@@ -253,6 +240,8 @@ enum Demo {
     Intervals,
     /// Explore the list widget.
     Listgym,
+    /// Watch colors change over time.
+    Motiongym,
     /// Page through a text file.
     Pager {
         /// File to page.
@@ -301,6 +290,7 @@ impl Demo {
                 builder.configure(widget_editor::WidgetEditor::register),
             ),
             Self::Chargym => chargym::binding_setup(builder.configure(chargym::CharGym::register)),
+            Self::Cursorgym => cursorgym::binding_setup(builder),
             Self::Editorgym => {
                 editorgym::binding_setup(builder.configure(editorgym::EditorGym::register))
             }
@@ -316,6 +306,7 @@ impl Demo {
                 intervals::binding_setup(builder.configure(intervals::Intervals::register))
             }
             Self::Listgym => listgym::binding_setup(builder.configure(listgym::ListGym::register)),
+            Self::Motiongym => motiongym::binding_setup(builder),
             Self::Pager { .. } => pager::binding_setup(builder.configure(pager::Pager::register)),
             Self::Stylegym => {
                 stylegym::binding_setup(builder.configure(stylegym::Stylegym::register))
@@ -341,6 +332,7 @@ impl Demo {
                 inspector,
             ),
             Self::Chargym => install(builder, chargym::CharGym::new(), inspector),
+            Self::Cursorgym => install(builder, cursorgym::CursorGym::new(), inspector),
             Self::Editorgym => install(builder, editorgym::EditorGym::new(), inspector),
             Self::Focusgym => install(builder, focusgym::FocusGym::new(), inspector),
             Self::Fontgym => install(builder, fontgym::FontGym::new(), inspector),
@@ -348,6 +340,7 @@ impl Demo {
             Self::Imgview { file } => install(builder, ImageView::from_path(file)?, inspector),
             Self::Intervals => install(builder, intervals::Intervals::new(), inspector),
             Self::Listgym => install(builder, listgym::ListGym::new(), inspector),
+            Self::Motiongym => install(builder, motiongym::MotionGym::new(), inspector),
             Self::Pager { file } => install(builder, pager::Pager::new(&read(file)?), inspector),
             Self::Stylegym => install(builder, stylegym::Stylegym::new(), inspector),
             Self::Termgym => install(builder, termgym::TermGym::new(), inspector),

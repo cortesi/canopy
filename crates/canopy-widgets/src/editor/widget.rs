@@ -9,7 +9,10 @@ use canopy::{
         CanvasContext, Constraint, MeasureConstraints, Measurement, RevealAlign, ScrollAxis,
         ScrollMark,
     },
-    render::{Render, cursor},
+    render::{
+        Render,
+        cursor::{self, CursorRequest},
+    },
     style::Style,
     tree::FocusDirection,
 };
@@ -1128,21 +1131,23 @@ impl Editor {
     }
 }
 
+impl Editor {
+    /// Return the cursor role of the current editing mode.
+    fn cursor_role(&self) -> &'static str {
+        match self.config.mode {
+            EditMode::Text => cursor::TEXT,
+            EditMode::Vi => match self.vi.mode() {
+                ViMode::Insert => cursor::VI_INSERT,
+                ViMode::Normal => cursor::VI_NORMAL,
+                ViMode::Visual(_) => cursor::VI_VISUAL,
+            },
+        }
+    }
+}
+
 impl Widget for Editor {
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         self.config.interaction.focusable()
-    }
-
-    fn cursor(&self) -> Option<cursor::Cursor> {
-        let location = self.cursor_view_point?;
-        let shape = match self.config.mode {
-            EditMode::Text => cursor::CursorShape::Line,
-            EditMode::Vi => match self.vi.mode() {
-                ViMode::Insert => cursor::CursorShape::Line,
-                _ => cursor::CursorShape::Block,
-            },
-        };
-        Some(cursor::Cursor { location, shape })
     }
 
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
@@ -1181,6 +1186,15 @@ impl Widget for Editor {
         }
 
         self.render_prompt(r, view_rect, origin)?;
+        if ctx.is_focused()
+            && let Some(point) = self.cursor_view_point
+        {
+            let location = Point {
+                x: origin.x.saturating_add(point.x),
+                y: origin.y.saturating_add(point.y),
+            };
+            r.cursor(location, CursorRequest::new(self.cursor_role()));
+        }
         Ok(())
     }
 

@@ -2,17 +2,25 @@
 
 use std::sync::Arc;
 
-use super::{Canopy, FrameId};
+use super::{Canopy, FrameId, motion::PrimaryCursor};
 use crate::{
     NodeId,
     core::{
-        context::CoreViewContext, notice::NoticeSource, snapshot, termbuf::TermBuf, view::View,
+        context::CoreViewContext,
+        cursor::{CursorMotion, CursorSnapshot},
+        notice::NoticeSource,
+        render::{DeclaredCursor, RenderFrame},
+        snapshot,
+        termbuf::TermBuf,
+        view::View,
         world::WidgetOperation,
     },
     error::{Error, Result},
     geom::{Point, Rect, Size},
-    render::{Render, RenderBackend, cursor},
-    style::{StyleChange, StyleManager, effects::Effect},
+    render::{Render, RenderBackend},
+    style::{
+        AttrSet, Color, MotionClocks, Paint, Style, StyleChange, StyleManager, effects::Effect,
+    },
 };
 
 /// Rendering traversal scratch state shared across recursion.
@@ -23,6 +31,24 @@ struct RenderTraversal<'a> {
     styl: &'a mut StyleManager,
     /// Accumulated style effects for the current subtree.
     effect_stack: &'a mut Vec<Effect>,
+    /// Cursors declared so far.
+    cursors: &'a mut Vec<DeclaredCursor>,
+    /// Clocks of the frame.
+    clocks: MotionClocks,
+}
+
+/// Apply a node's style effects to a cursor color, at rest.
+fn effect_color(effects: &[Effect], color: Color) -> Color {
+    let style = Style {
+        fg: Paint::Solid(color),
+        bg: Paint::Solid(color),
+        attrs: AttrSet::default(),
+    };
+    effects
+        .iter()
+        .fold(style, |style, effect| effect.apply(style))
+        .fg
+        .resolve(Rect::new(0, 0, 1, 1), Point::ZERO)
 }
 
 impl Canopy {
@@ -121,17 +147,19 @@ impl Canopy {
         &self,
         dest_buf: &mut TermBuf,
         styl: &mut StyleManager,
-        node_id: NodeId,
+        frame: RenderFrame<'_>,
         view: View,
         screen_clip: Rect,
         effect_slice: &[Effect],
     ) -> Result<()> {
+        let node_id = frame.node;
         let local = view.outer.to_local_point(screen_clip.tl);
         let local_clip = Rect::new(local.x, local.y, screen_clip.w, screen_clip.h);
         let screen_origin = screen_clip.tl;
 
         let mut rndr = Render::new(&self.style, styl, dest_buf, local_clip, screen_origin)
-            .with_effects(effect_slice);
+            .with_effects(effect_slice)
+            .with_frame(frame);
 
         let result = self.core.with_widget_render(node_id, |widget, core| {
             let ctx = CoreViewContext::new(core, node_id);
@@ -176,10 +204,15 @@ impl Canopy {
 
         {
             let effect_slice = &traversal.effect_stack[active_start..active_start + current_len];
+            let frame = RenderFrame {
+                node: node_id,
+                clocks: traversal.clocks,
+                cursors: traversal.cursors,
+            };
             self.render_node(
                 traversal.dest_buf,
                 traversal.styl,
-                node_id,
+                frame,
                 view,
                 screen_clip,
                 effect_slice,
@@ -198,8 +231,12 @@ impl Canopy {
         Ok(())
     }
 
-    /// Render the tree into an offscreen buffer.
-    fn render_pass(&self, screen_size: Size) -> Result<TermBuf> {
+    /// Render the tree into an offscreen buffer, with its cursors painted.
+    fn render_pass(
+        &self,
+        screen_size: Size,
+        clocks: MotionClocks,
+    ) -> Result<(TermBuf, Vec<CursorSnapshot>)> {
         let mut styl = StyleManager::default();
 
         let def_style = styl
@@ -211,47 +248,70 @@ impl Canopy {
 
         let screen_clip = Rect::new(0, 0, screen_size.w, screen_size.h);
         let mut effect_stack: Vec<Effect> = Vec::new();
+        let mut cursors = Vec::new();
         let mut traversal = RenderTraversal {
             dest_buf: &mut next,
             styl: &mut styl,
             effect_stack: &mut effect_stack,
+            cursors: &mut cursors,
+            clocks,
         };
         self.render_recursive(&mut traversal, self.core.root, screen_clip, 0, 0)?;
-        self.overlay_cursor(&mut next)?;
+        let cursors = self.paint_cursors(&mut next, cursors);
 
-        Ok(next)
+        Ok((next, cursors))
     }
 
-    /// Post-render sweep of the tree.
-    fn overlay_cursor(&self, buf: &mut TermBuf) -> Result<()> {
+    /// Paint the declared cursors over the frame, secondary cursors first.
+    ///
+    /// The primary cursor is the declaration of the deepest node on the focus
+    /// path. It takes the motion of its look. Every other cursor is steady.
+    fn paint_cursors(
+        &self,
+        buf: &mut TermBuf,
+        declared: Vec<DeclaredCursor>,
+    ) -> Vec<CursorSnapshot> {
+        let mut primary = None;
         let mut current = self.core.focus;
-        let mut cursor_spec: Option<(View, cursor::Cursor)> = None;
         while let Some(id) = current {
-            let cursor = self
-                .core
-                .with_widget(id, WidgetOperation::render("cursor"), |w, _| w.cursor())?;
-            if let Some(node_cursor) = cursor
-                && let Some(node) = self.core.nodes.get(id)
-            {
-                cursor_spec = Some((node.view, node_cursor));
+            if declared.iter().any(|cursor| cursor.node == id) {
+                primary = Some(id);
                 break;
             }
-            current = self.core.nodes.get(id).and_then(|n| n.parent);
+            current = self.core.nodes.get(id).and_then(|node| node.parent);
         }
-
-        if let Some((view, c)) = cursor_spec {
-            let view_rect = Rect::new(0, 0, view.content.w, view.content.h);
-            if view_rect.contains_point(c.location) {
-                let screen_x = i64::from(view.content.tl.x) + i64::from(c.location.x);
-                let screen_y = i64::from(view.content.tl.y) + i64::from(c.location.y);
-                if let (Ok(x), Ok(y)) = (u32::try_from(screen_x), u32::try_from(screen_y)) {
-                    let screen_pos = Point { x, y };
-                    buf.overlay_cursor(screen_pos, c.shape);
-                }
+        let (first, secondary): (Vec<_>, Vec<_>) = declared
+            .into_iter()
+            .partition(|cursor| Some(cursor.node) == primary);
+        let mut snapshots = Vec::new();
+        for cursor in secondary.into_iter().chain(first) {
+            let is_primary = Some(cursor.node) == primary;
+            let mut look = cursor
+                .request
+                .apply(self.cursor_looks.resolve(&cursor.request.role));
+            look.color = effect_color(&cursor.effects, look.color);
+            if !is_primary {
+                look.motion = CursorMotion::Steady;
             }
+            let Some(paint) = buf.paint_cursor(cursor.location, look.shape, look.color) else {
+                continue;
+            };
+            if is_primary {
+                buf.move_cursor(paint, look.motion);
+            }
+            snapshots.push(CursorSnapshot {
+                node: cursor.node,
+                location: cursor.location,
+                role: cursor.request.role.into_owned(),
+                look,
+                primary: is_primary,
+            });
         }
-
-        Ok(())
+        // The primary cursor leads, then the rest in render order.
+        if let Some(last) = snapshots.pop_if(|cursor| cursor.primary) {
+            snapshots.insert(0, last);
+        }
+        snapshots
     }
 
     /// Bring geometry up to date without painting, so the input routed next
@@ -300,10 +360,20 @@ impl Canopy {
             self.mount_pending()?;
             self.core.update_layout(screen_size)?;
         }
-        let next = self.render_pass(screen_size)?;
+        let clocks = self.motion_clocks();
+        let (next, cursors) = self.render_pass(screen_size, clocks)?;
         let frame_id = FrameId(self.driver.publication.generation() + 1);
-        let snapshot = snapshot::capture(&self.core, frame_id, Arc::new(next))?;
+        let primary = cursors
+            .first()
+            .filter(|cursor| cursor.primary)
+            .map(|cursor| PrimaryCursor {
+                node: cursor.node,
+                location: cursor.location,
+                role: cursor.role.clone(),
+            });
+        let snapshot = snapshot::capture(&self.core, frame_id, Arc::new(next), cursors)?;
         self.frame.snapshot = Some(Arc::new(snapshot));
+        self.motion.primary(primary, clocks.now);
         self.core.changes = crate::ChangeSet::default();
         self.driver.publication.publish();
         Ok(true)
@@ -311,9 +381,22 @@ impl Canopy {
 
     /// Emit published cells. After a backend failure, repaint the next frame
     /// in full because some output may already have reached the terminal.
+    ///
+    /// Emission writes the current colors of moving cells over the published
+    /// buffer, which stays at rest. The composed buffer becomes the last
+    /// emitted buffer, so the next emission diffs against the screen.
     pub(crate) fn emit_frame<R: RenderBackend>(&mut self, be: &mut R) -> Result<()> {
-        let Some(next) = self.frame.snapshot.as_ref().map(|s| Arc::clone(&s.buffer)) else {
+        let Some(snapshot) = self.frame.snapshot.clone() else {
             return Ok(());
+        };
+        let now = self.now();
+        let next = if self.motion.active() && snapshot.buffer.has_motion() {
+            let clocks = self.motion.clocks(now);
+            let mut composed = (*snapshot.buffer).clone();
+            composed.apply_motion(&clocks);
+            Arc::new(composed)
+        } else {
+            Arc::clone(&snapshot.buffer)
         };
         let previous = self.frame.emitted_buf.take();
         be.reset()?;
@@ -322,8 +405,15 @@ impl Canopy {
         } else {
             next.emit(be)?;
         }
+        let parked = snapshot
+            .cursors
+            .iter()
+            .find(|cursor| cursor.primary)
+            .map(|cursor| cursor.location);
+        be.park_cursor(parked)?;
         be.flush()?;
         self.frame.emitted_buf = Some(next);
+        self.schedule_motion(now);
         Ok(())
     }
 

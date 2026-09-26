@@ -108,12 +108,12 @@ impl<'a> BufTest<'a> {
                         let fg_matches = match &style.fg {
                             None => true,
                             Some(Paint::Solid(color)) => *color == cell.style.fg,
-                            Some(Paint::Gradient(_)) => false,
+                            Some(Paint::Gradient(_) | Paint::Animated(_)) => false,
                         };
                         let bg_matches = match &style.bg {
                             None => true,
                             Some(Paint::Solid(color)) => *color == cell.style.bg,
-                            Some(Paint::Gradient(_)) => false,
+                            Some(Paint::Gradient(_) | Paint::Animated(_)) => false,
                         };
                         let attr_matches =
                             style.attrs.is_none() || style.attrs == Some(cell.style.attrs);

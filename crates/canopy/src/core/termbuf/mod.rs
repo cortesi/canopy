@@ -1,4 +1,9 @@
-use std::{mem, ops::Range};
+#![expect(
+    clippy::multiple_inherent_impl,
+    reason = "TermBuf methods are split between cell storage and motion."
+)]
+
+use std::{collections::BTreeMap, ops::Range};
 
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -6,9 +11,13 @@ use crate::{
     core::text,
     error::{Error, Result},
     geom::{Line, Point, Rect, Size},
-    render::{RenderBackend, cursor},
-    style::{Attr, ResolvedStyle},
+    render::RenderBackend,
+    style::ResolvedStyle,
 };
+
+/// Motion records and cursor painting.
+mod motion;
+pub use motion::MotionStyle;
 
 /// NULL character constant.
 const NULL: char = '\0';
@@ -189,6 +198,8 @@ pub struct TermBuf {
     pub(crate) size: Size,
     /// Backing cell storage.
     pub(crate) cells: Vec<Cell>,
+    /// Moving graphemes, keyed by base cell index.
+    motion: BTreeMap<usize, motion::MotionRecord>,
 }
 
 impl TermBuf {
@@ -218,7 +229,11 @@ impl TermBuf {
             .try_reserve_exact(count)
             .map_err(|_| Error::RenderAllocation { cells: count })?;
         cells.resize(count, cell);
-        Ok(Self { size, cells })
+        Ok(Self {
+            size,
+            cells,
+            motion: BTreeMap::new(),
+        })
     }
 
     /// Return the buffer size.
@@ -257,6 +272,7 @@ impl TermBuf {
     /// Clear the complete grapheme occupying one cell index.
     fn clear_grapheme_at(&mut self, index: usize, style: ResolvedStyle) {
         if let Some(range) = self.grapheme_span(index) {
+            self.clear_motion(range.start);
             self.cells[range].fill(Cell::new(NULL, style));
         }
     }
@@ -347,31 +363,9 @@ impl TermBuf {
         let Some(range) = self.grapheme_span(idx) else {
             return;
         };
+        self.clear_motion(range.start);
         for cell in &mut self.cells[range] {
             cell.style = style;
-        }
-    }
-
-    /// Overlay a cursor on a cell by adjusting its style.
-    pub(crate) fn overlay_cursor(&mut self, location: Point, shape: cursor::CursorShape) {
-        let Some(idx) = self.idx(location) else {
-            return;
-        };
-        if self.cells[idx].is_empty() {
-            self.cells[idx] = Cell::new(' ', self.cells[idx].style);
-        }
-        let Some(range) = self.grapheme_span(idx) else {
-            return;
-        };
-        for cell in &mut self.cells[range] {
-            match shape {
-                cursor::CursorShape::Underscore => {
-                    cell.style.attrs = cell.style.attrs.with(Attr::Underline);
-                }
-                cursor::CursorShape::Block | cursor::CursorShape::Line => {
-                    mem::swap(&mut cell.style.fg, &mut cell.style.bg);
-                }
-            }
         }
     }
 

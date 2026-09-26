@@ -3,9 +3,9 @@
 //! Effects are transformations applied to styles that inherit through the node
 //! tree. They can modify colors, attributes, or both.
 
-use std::{fmt::Debug, sync::Arc};
+use std::{fmt::Debug, sync::Arc, time::Duration};
 
-use super::{Attr, Color, Style};
+use super::{Animation, Attr, Color, Paint, Style, animation::ShownAt};
 
 /// A style transformation that can be applied during rendering.
 ///
@@ -63,6 +63,64 @@ impl StyleEffect for ColorEffect {
 /// Brightness factor for what a modal covers, so a panel over the view reads
 /// apart from the dimmed view behind it.
 pub const MODAL_DIM: f32 = 0.5;
+
+/// Time a modal takes to dim what it covers.
+pub const MODAL_FADE: Duration = Duration::from_millis(120);
+
+/// Create the effect of what a modal covers: a fade to [`MODAL_DIM`] over
+/// [`MODAL_FADE`].
+pub fn modal_dim() -> Effect {
+    transition(brightness(MODAL_DIM), MODAL_FADE)
+}
+
+/// An effect whose colors fade to those of another effect.
+#[derive(Debug)]
+struct Transition {
+    /// Effect the colors fade to.
+    effect: Effect,
+    /// Length of the fade.
+    duration: Duration,
+    /// Start of the fade, shared by every paint the effect produces.
+    shown: ShownAt,
+}
+
+impl Transition {
+    /// Fade one paint to its target. Only solid colors fade; other paints
+    /// take their target at once.
+    fn fade(&self, from: &Paint, to: Paint) -> Paint {
+        match (from, &to) {
+            (Paint::Solid(from), Paint::Solid(target)) if from != target => Paint::animated(
+                Animation::fade(*from, *target, self.duration).share_start(&self.shown),
+            ),
+            _ => to,
+        }
+    }
+}
+
+impl StyleEffect for Transition {
+    fn apply(&self, style: Style) -> Style {
+        let target = self.effect.apply(style.clone());
+        Style {
+            fg: self.fade(&style.fg, target.fg),
+            bg: self.fade(&style.bg, target.bg),
+            attrs: target.attrs,
+        }
+    }
+}
+
+/// Create an effect that fades each color from its value to the value of
+/// `effect` over `duration`.
+///
+/// The fade starts with the first frame that shows it, and frames at rest
+/// show the faded colors. Keep the returned effect for as long as it applies:
+/// a new transition fades again.
+pub fn transition(effect: Effect, duration: Duration) -> Effect {
+    Arc::new(Transition {
+        effect,
+        duration,
+        shown: ShownAt::default(),
+    })
+}
 
 /// Create a brightness effect. Factor below 1.0 dims, above 1.0 brightens.
 pub fn brightness(factor: f32) -> Effect {
@@ -163,6 +221,44 @@ mod tests {
         assert!(!style.attrs.bold);
         let bold_style = bold().apply(style);
         assert!(bold_style.attrs.bold);
+    }
+
+    #[test]
+    fn a_transition_fades_solid_colors_and_rests_at_its_target() {
+        use std::time::Instant;
+
+        use crate::style::MotionClocks;
+
+        let style = test_style();
+        let target = brightness(0.5).apply(style.clone());
+        let faded = transition(brightness(0.5), Duration::from_millis(100)).apply(style.clone());
+        let Paint::Animated(fg) = &faded.fg else {
+            panic!("expected a fade");
+        };
+        assert_eq!(Some(fg.rest()), target.fg.solid_color());
+        let t0 = Instant::now();
+        fg.bind_shown(t0);
+        assert_eq!(
+            fg.color(&MotionClocks::at(t0)),
+            Color::Rgb {
+                r: 200,
+                g: 100,
+                b: 50
+            }
+        );
+        // Paints from later renders share the start of the first.
+        let again = transition(brightness(0.5), Duration::from_millis(100));
+        let first = again.apply(style.clone());
+        let second = again.apply(style);
+        let (Paint::Animated(first), Paint::Animated(second)) = (&first.fg, &second.fg) else {
+            panic!("expected fades");
+        };
+        first.bind_shown(t0);
+        let late = MotionClocks {
+            now: t0 + Duration::from_millis(100),
+            ..MotionClocks::at(t0)
+        };
+        assert!(second.finished(&late));
     }
 
     #[test]
