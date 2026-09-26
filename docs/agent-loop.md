@@ -31,8 +31,13 @@ permission profile.
 
 `canopy::terminal::runloop(canopy, options)` runs the terminal adapter. With
 `RunOptions::default()`, Ctrl+C restores the terminal, dumps the node tree, and
-returns status 130. `InterruptPolicy::RouteToApplication` delivers Ctrl+C
-through normal input routing instead, including to embedded terminal widgets.
+returns status 130. Set `RunOptions::interrupt_dump` to `false` to exit without
+the dump. `Setup::on_interrupt` installs a hook that takes each Ctrl+C before
+any widget, dialog, or binding sees it. The hook returns whether it took the
+interrupt, for example to stop running work, and the adapter exits on one that
+the hook declines. `Canopy::take_interrupt` offers an interrupt to the hook as
+the adapter does. `InterruptPolicy::RouteToApplication` delivers Ctrl+C through normal
+input routing instead, including to embedded terminal widgets.
 
 `RunOptions::emergency_exit` optionally specifies a separate exact `Key` match.
 It exits with status 130 before widget dispatch and restores the terminal once.

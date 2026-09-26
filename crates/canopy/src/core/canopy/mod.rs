@@ -80,6 +80,10 @@ pub enum AdapterEvent {
 /// Hook run against the root context after runtime state it follows changes.
 type Hook = fn(&mut dyn crate::Context) -> Result<()>;
 
+/// Hook that takes a Ctrl+C before the terminal adapter exits on it. It runs
+/// against the root context and returns whether it took the interrupt.
+pub type InterruptHook = fn(&mut dyn crate::Context) -> Result<bool>;
+
 /// Named hooks that follow one piece of runtime state through its change
 /// counter.
 #[derive(Default)]
@@ -160,6 +164,8 @@ pub struct Canopy {
     cursor_patches: Vec<(String, CursorLookPatch)>,
     /// Motion at emission.
     motion: motion::MotionState,
+    /// Hook that takes Ctrl+C before the terminal adapter exits on it.
+    interrupt_hook: Option<InterruptHook>,
 }
 
 /// Frame geometry and the buffers the frame pipeline owns.
@@ -266,6 +272,7 @@ impl Canopy {
             cursor_rules: Vec::new(),
             cursor_patches: Vec::new(),
             motion: motion::MotionState::default(),
+            interrupt_hook: None,
             core,
         }
     }
@@ -327,6 +334,16 @@ impl Canopy {
         self.style = style;
         self.rebuild_cursor_looks();
         self.core.invalidate(crate::Invalidation::Paint);
+    }
+
+    /// Offer a Ctrl+C to the interrupt hook, as the terminal adapter does, and
+    /// return whether the hook took it. Without a hook, or when the hook
+    /// fails, the interrupt is declined, so Ctrl+C still exits.
+    pub fn take_interrupt(&mut self) -> bool {
+        let Some(hook) = self.interrupt_hook else {
+            return false;
+        };
+        self.with_root_context(hook).unwrap_or(false)
     }
 
     /// Return the look of each cursor role.

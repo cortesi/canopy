@@ -96,7 +96,10 @@ pub mod render {
 
 /// Crossterm terminal run-loop integration.
 pub mod terminal {
-    pub use crate::core::backend::crossterm::{InterruptPolicy, RunOptions, runloop};
+    pub use crate::core::{
+        backend::crossterm::{InterruptPolicy, RunOptions, runloop},
+        canopy::InterruptHook,
+    };
 }
 
 // Re-export derive macros

@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use super::{Canopy, Hook, MotionSettings};
+use super::{Canopy, Hook, InterruptHook, MotionSettings};
 use crate::{
     commands,
     core::{cursor::CursorLooks, inputmap},
@@ -181,6 +181,17 @@ impl Setup {
     /// every theme switch.
     pub fn cursor_looks(&mut self, rules: impl Fn(&Palette, &mut CursorLooks) + 'static) {
         self.canopy.add_cursor_rules(Box::new(rules));
+    }
+
+    /// Let `hook` take Ctrl+C before the terminal adapter exits on it.
+    ///
+    /// Under `InterruptPolicy::Exit130`, the adapter offers each Ctrl+C to the
+    /// hook before any widget, dialog, or binding sees it. The hook returns
+    /// `true` when it took the interrupt, for example to stop running work,
+    /// and `false` to let the adapter exit. The emergency exit key never
+    /// reaches the hook.
+    pub fn on_interrupt(&mut self, hook: InterruptHook) {
+        self.canopy.interrupt_hook = Some(hook);
     }
 
     /// Replace the motion settings.

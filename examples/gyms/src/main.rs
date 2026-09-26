@@ -357,6 +357,7 @@ impl Demo {
             Self::Termgym => RunOptions {
                 interrupt_policy: InterruptPolicy::RouteToApplication,
                 emergency_exit: Some(Key::parse_spec("Ctrl+Alt+q")?),
+                ..RunOptions::default()
             },
             _ => RunOptions::default(),
         })

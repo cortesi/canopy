@@ -849,6 +849,11 @@ impl Canopy {
     /// must survive one belong in `Setup::widget_styles`.
     pub fn style_mut(&mut self) -> &mut StyleMap;
 
+    /// Offer a Ctrl+C to the interrupt hook, as the terminal adapter does, and
+    /// return whether the hook took it. Without a hook, or when the hook
+    /// fails, the interrupt is declined, so Ctrl+C still exits.
+    pub fn take_interrupt(&mut self) -> bool;
+
     /// Run a closure against a mutable context bound to a node.
     pub fn with_context<R>(
         &mut self,
@@ -1061,6 +1066,15 @@ impl Setup {
     /// The rules apply over the theme's built-in looks now and again after
     /// every theme switch.
     pub fn cursor_looks(&mut self, rules: impl 'static + Fn(&Palette, &mut CursorLooks));
+
+    /// Let `hook` take Ctrl+C before the terminal adapter exits on it.
+    ///
+    /// Under `InterruptPolicy::Exit130`, the adapter offers each Ctrl+C to the
+    /// hook before any widget, dialog, or binding sees it. The hook returns
+    /// `true` when it took the interrupt, for example to stop running work,
+    /// and `false` to let the adapter exit. The emergency exit key never
+    /// reaches the hook.
+    pub fn on_interrupt(&mut self, hook: InterruptHook);
 
     /// Register a hook that runs against the root context before the next
     /// frame whenever a binding or the mode stack has changed.
@@ -5152,6 +5166,10 @@ pub mod style {
 pub mod terminal {
     //! Crossterm terminal run-loop integration.
 
+    /// Hook that takes a Ctrl+C before the terminal adapter exits on it. It runs
+    /// against the root context and returns whether it took the interrupt.
+    pub type InterruptHook = fn(_: &mut dyn Context) -> crate::error::Result<bool>;
+
     /// Host handling of terminal Ctrl+C input.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub enum InterruptPolicy {
@@ -5169,14 +5187,18 @@ pub mod terminal {
         pub interrupt_policy: InterruptPolicy,
         /// Optional exact key that exits even when Ctrl+C is routed.
         pub emergency_exit: Option<Key>,
+        /// Whether an exit on Ctrl+C or the emergency key prints the node tree to
+        /// standard error after it restores the terminal.
+        pub interrupt_dump: bool,
     }
 
     /// Run the terminal adapter until the application requests an exit.
     ///
     /// `options` decides how Ctrl+C and the emergency exit key stop the loop. With
     /// the default options, Ctrl+C restores the terminal, dumps the node tree, and
-    /// returns status 130. Keyboard enhancement flags are enabled so escape codes
-    /// are unambiguous.
+    /// returns status 130. `RunOptions::interrupt_dump` turns the dump off, and an
+    /// interrupt hook (`Setup::on_interrupt`) can take a Ctrl+C instead.
+    /// Keyboard enhancement flags are enabled so escape codes are unambiguous.
     pub fn runloop(cnpy: Canopy, options: RunOptions) -> crate::error::Result<i32>;
 }
 

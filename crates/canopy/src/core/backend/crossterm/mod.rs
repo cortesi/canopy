@@ -34,47 +34,65 @@ pub enum InterruptPolicy {
 }
 
 /// Terminal adapter policy, applied before application input dispatch.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RunOptions {
     /// Policy for Ctrl+C.
     pub interrupt_policy: InterruptPolicy,
     /// Optional exact key that exits even when Ctrl+C is routed.
     pub emergency_exit: Option<key::Key>,
+    /// Whether an exit on Ctrl+C or the emergency key prints the node tree to
+    /// standard error after it restores the terminal.
+    pub interrupt_dump: bool,
 }
 
-/// Decide host interruption without starting or mutating a terminal session.
+impl Default for RunOptions {
+    fn default() -> Self {
+        Self {
+            interrupt_policy: InterruptPolicy::default(),
+            emergency_exit: None,
+            interrupt_dump: true,
+        }
+    }
+}
+
+/// Return whether a key is Ctrl+C.
+fn is_control_c(pressed: key::Key) -> bool {
+    pressed.key == key::KeyCode::Char('c') && pressed.mods.ctrl
+}
+
+/// Take the interrupts of a batch before it dispatches, and return the rest
+/// of the batch and the exit status, if the host exits.
 ///
-/// An interrupt anywhere in a batch stops the host before the batch dispatches.
-fn interrupt_exit_code(work: &TurnInput, options: RunOptions) -> Option<i32> {
-    let TurnInput::Events(events) = work else {
-        return None;
-    };
-    events
-        .iter()
-        .any(|event| {
-            let Event::Key(pressed) = event else {
-                return false;
-            };
-            let emergency = options.emergency_exit == Some(*pressed);
-            let interrupt = options.interrupt_policy == InterruptPolicy::Exit130
-                && pressed.key == key::KeyCode::Char('c')
-                && pressed.mods.ctrl;
-            emergency || interrupt
-        })
-        .then_some(130)
-}
-
-/// Restore an intercepted terminal session before any widget sees the key.
+/// The emergency key always exits. Under `InterruptPolicy::Exit130`, the
+/// application's interrupt hook takes each Ctrl+C first, and the host exits
+/// on the first one that the hook declines. A taken Ctrl+C leaves the batch.
+/// An exit restores the terminal before any event of the batch dispatches.
 fn intercept_interrupt(
     session: &mut TerminalSession,
-    work: &TurnInput,
+    canopy: &mut Canopy,
+    work: TurnInput,
     options: RunOptions,
-) -> Result<Option<i32>> {
-    let code = interrupt_exit_code(work, options);
-    if code.is_some() {
-        session.stop()?;
+) -> Result<(TurnInput, Option<i32>)> {
+    let TurnInput::Events(events) = work else {
+        return Ok((work, None));
+    };
+    let mut kept = Vec::with_capacity(events.len());
+    for event in events {
+        if let Event::Key(pressed) = event {
+            let emergency = options.emergency_exit == Some(pressed);
+            let interrupt =
+                options.interrupt_policy == InterruptPolicy::Exit130 && is_control_c(pressed);
+            if interrupt && !emergency && canopy.take_interrupt() {
+                continue;
+            }
+            if emergency || interrupt {
+                session.stop()?;
+                return Ok((TurnInput::Events(kept), Some(130)));
+            }
+        }
+        kept.push(event);
     }
-    Ok(code)
+    Ok((TurnInput::Events(kept), None))
 }
 
 /// Map IO results into canopy errors.
@@ -109,8 +127,9 @@ fn handle_render_error(
 ///
 /// `options` decides how Ctrl+C and the emergency exit key stop the loop. With
 /// the default options, Ctrl+C restores the terminal, dumps the node tree, and
-/// returns status 130. Keyboard enhancement flags are enabled so escape codes
-/// are unambiguous.
+/// returns status 130. `RunOptions::interrupt_dump` turns the dump off, and an
+/// interrupt hook (`Setup::on_interrupt`) can take a Ctrl+C instead.
+/// Keyboard enhancement flags are enabled so escape codes are unambiguous.
 pub fn runloop(mut cnpy: Canopy, options: RunOptions) -> Result<i32> {
     let mut be = CrosstermRender::default();
     let mut session = TerminalSession::new(Box::new(CrosstermControl::new()))?;
@@ -135,12 +154,16 @@ pub fn runloop(mut cnpy: Canopy, options: RunOptions) -> Result<i32> {
     // The first turn prepares the initial frame.
     let mut work = TurnInput::Prepare;
     loop {
-        if let Some(code) = intercept_interrupt(&mut session, &work, options)? {
-            stop_and_dump(
-                &mut session,
-                &cnpy.core,
-                "\nTerminal interrupt - Node tree dump:",
-            );
+        let (rest, exit) = intercept_interrupt(&mut session, &mut cnpy, work, options)?;
+        work = rest;
+        if let Some(code) = exit {
+            if options.interrupt_dump {
+                stop_and_dump(
+                    &mut session,
+                    &cnpy.core,
+                    "\nTerminal interrupt - Node tree dump:",
+                );
+            }
             return Ok(code);
         }
 
@@ -281,12 +304,14 @@ mod tests {
             canopy.set_screen_size(Size::new(8, 2))?;
             canopy.turn(TurnInput::Prepare)?;
             let work = TurnInput::Events(vec![Event::Key(pressed)]);
-            let result = intercept_interrupt(
+            let (work, result) = intercept_interrupt(
                 &mut session,
-                &work,
+                &mut canopy,
+                work,
                 RunOptions {
                     interrupt_policy: policy,
                     emergency_exit: Some(emergency),
+                    ..RunOptions::default()
                 },
             )?;
             assert_eq!(result, expected_exit);
@@ -303,6 +328,76 @@ mod tests {
         assert_eq!(
             RunOptions::default().interrupt_policy,
             InterruptPolicy::Exit130
+        );
+        assert!(RunOptions::default().interrupt_dump);
+        Ok(())
+    }
+
+    /// Interrupts that `take_first_interrupt` has seen.
+    static OFFERED: AtomicUsize = AtomicUsize::new(0);
+
+    /// Take the first interrupt, and decline every later one.
+    fn take_first_interrupt(_context: &mut dyn crate::Context) -> Result<bool> {
+        Ok(OFFERED.fetch_add(1, Ordering::SeqCst) == 0)
+    }
+
+    #[test]
+    fn an_interrupt_hook_takes_ctrl_c_until_it_declines() -> Result<()> {
+        let control_c = key::Ctrl + 'c';
+        let emergency = key::Ctrl + key::Alt + 'q';
+        let options = RunOptions {
+            emergency_exit: Some(emergency),
+            ..RunOptions::default()
+        };
+        let stops = Arc::new(AtomicUsize::new(0));
+        let received = Arc::new(AtomicUsize::new(0));
+        let mut session = TerminalSession::new(Box::new(PolicyBackend(stops.clone())))?;
+        let mut canopy = CanopyBuilder::new()
+            .configure(|setup| {
+                setup.on_interrupt(take_first_interrupt);
+                Ok(())
+            })
+            .build()?;
+        canopy.replace_root(PolicyTerminal(received.clone()))?;
+        canopy.set_screen_size(Size::new(8, 2))?;
+        canopy.turn(TurnInput::Prepare)?;
+
+        // The hook takes the first Ctrl+C, and the rest of the batch runs.
+        let batch = TurnInput::Events(vec![Event::Key(control_c), Event::Key(key::Key::from('x'))]);
+        let (rest, exit) = intercept_interrupt(&mut session, &mut canopy, batch, options)?;
+        assert_eq!(exit, None);
+        assert!(matches!(&rest, TurnInput::Events(events) if events.len() == 1));
+        canopy.turn(rest)?;
+        assert_eq!(
+            received.load(Ordering::SeqCst),
+            1,
+            "Ctrl+C reached no widget"
+        );
+
+        // The emergency key exits without asking the hook.
+        let (_, exit) = intercept_interrupt(
+            &mut session,
+            &mut canopy,
+            TurnInput::Events(vec![Event::Key(emergency)]),
+            options,
+        )?;
+        assert_eq!(exit, Some(130));
+        assert_eq!(OFFERED.load(Ordering::SeqCst), 1);
+
+        // A declined Ctrl+C exits.
+        let (_, exit) = intercept_interrupt(
+            &mut session,
+            &mut canopy,
+            TurnInput::Events(vec![Event::Key(control_c)]),
+            options,
+        )?;
+        assert_eq!(exit, Some(130));
+        assert_eq!(OFFERED.load(Ordering::SeqCst), 2);
+        drop(session);
+        assert_eq!(
+            stops.load(Ordering::SeqCst),
+            1,
+            "the terminal restores once"
         );
         Ok(())
     }
