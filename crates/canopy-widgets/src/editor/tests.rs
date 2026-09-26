@@ -463,6 +463,25 @@ fn enter_reaches_the_bindings_when_it_adds_no_line() {
 }
 
 #[test]
+fn escape_in_normal_mode_reaches_the_bindings_unless_it_has_work() {
+    let mut harness = build_harness("ab", EditorConfig::new().with_mode(EditMode::Vi), 10, 2);
+    bind_to_host(&mut harness, "esc");
+    // Insert mode takes Esc to return to normal mode.
+    harness.key('i').unwrap();
+    harness.key(key::KeyCode::Esc).unwrap();
+    assert_eq!(host_binding_hits(&mut harness), 0);
+    // Esc clears a pending prefix, so the next key starts afresh.
+    harness.key('d').unwrap();
+    harness.key(key::KeyCode::Esc).unwrap();
+    assert_eq!(host_binding_hits(&mut harness), 0);
+    harness.key('l').unwrap();
+    assert_eq!(editor_text(&mut harness), "ab");
+    // With nothing to do, Esc reaches the host.
+    harness.key(key::KeyCode::Esc).unwrap();
+    assert_eq!(host_binding_hits(&mut harness), 1);
+}
+
+#[test]
 fn a_modified_enter_never_adds_a_line() {
     for mode in [EditMode::Text, EditMode::Vi] {
         let mut harness = build_harness("", EditorConfig::new().with_mode(mode), 10, 3);

@@ -395,12 +395,18 @@ impl Editor {
     /// Classify one normal-mode key, resolving a pending prefix first.
     ///
     /// Pending matches ignore modifiers, exactly as the handler does, so a
-    /// chord that would otherwise fall through completes the prefix.
+    /// chord that would otherwise fall through completes the prefix. Esc
+    /// clears a pending prefix. With nothing pending it has no work, so it
+    /// reaches the host's bindings, which can use it to cancel or close.
     fn normal_command(&self, key: key::Key) -> Option<NormalCommand> {
-        if let Some(pending) = self.vi.pending()
-            && let Some(command) = Self::pending_command(pending, key)
-        {
-            return Some(NormalCommand::Pending(command));
+        match self.vi.pending() {
+            Some(pending) => {
+                if let Some(command) = Self::pending_command(pending, key) {
+                    return Some(NormalCommand::Pending(command));
+                }
+            }
+            None if key.key == key::KeyCode::Esc => return None,
+            None => {}
         }
         Self::plain_command(key).map(NormalCommand::Plain)
     }
