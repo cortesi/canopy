@@ -66,11 +66,13 @@ impl Canopy {
         // An explicit wake can arrive before the existing timer. Consume that
         // timer too, so the callback's return value decides all future polling.
         self.poller.cancel_owner(stamp.node, stamp.incarnation);
+        let sources = self.core.push_notice_source(NoticeSource::Poll);
         let result = self.with_dispatch_boundary(|canopy| {
             canopy
                 .core
                 .with_widget_ctx(node_id, |widget, ctx| widget.poll(ctx))?
         });
+        self.core.pop_notice_source(sources);
         let next = match result {
             Ok(next) => {
                 self.poller.set_interval(stamp, next);
@@ -97,6 +99,11 @@ impl Canopy {
         let mut layout_dirty = false;
         let mut stack = vec![root];
         while let Some(id) = stack.pop() {
+            // A mount's posted calls and a first poll can remove nodes the
+            // sweep has already stacked.
+            if !self.core.nodes.contains_key(id) {
+                continue;
+            }
             let hidden = self.core.nodes.get(id).map(|n| n.hidden).unwrap_or(false);
             if hidden {
                 continue;
@@ -109,7 +116,14 @@ impl Canopy {
             let mounted = self.core.nodes.get(id).map(|n| n.mounted).unwrap_or(false);
             if !mounted {
                 layout_dirty = true;
-                self.core.mount_node(id)?;
+                // The mount is its own boundary, so the calls its hook posts
+                // run now, and may remove the node before the sweep polls it.
+                self.with_notice_boundary(NoticeSource::Widget, Some(id), |canopy| {
+                    canopy.core.mount_node(id)
+                })?;
+                if !self.core.nodes.contains_key(id) {
+                    continue;
+                }
             }
 
             let initialized = self

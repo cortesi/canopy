@@ -1,19 +1,38 @@
-//! Dispatch boundaries, deferred removals and modal closes, and wake handles.
+//! Dispatch boundaries, posted calls, deferred removals and modal closes, and
+//! wake handles.
+//!
+//! Work that a callback cannot do while widget cells are out waits in one FIFO
+//! batch, and the batch drains when the outermost dispatch boundary succeeds.
+//! The drain pops one request at a time, and a posted call's dispatch opens its
+//! own checkpoint after the pop, so the batch's length checkpoints stay valid
+//! under four invariants:
+//!
+//! - The drain pops the next request only after the current one, and every edit
+//!   nested in it, has finished.
+//! - A nested `finish_dispatch` neither drains nor clears the shared queue.
+//! - No drain starts while a tree edit is open, because a tree edit runs inside
+//!   a callback or a dispatch boundary.
+//! - The drain restores `draining` on every exit.
 
-use std::collections::VecDeque;
+use std::{collections::VecDeque, mem};
 
 use super::Core;
 use crate::{
     NodeId,
-    core::wake::PollOwner,
+    commands::{self, CommandCall, CommandTarget},
+    core::{notice::NoticeSource, wake::PollOwner},
     error::{Error, Result},
-    input::ModalToken,
+    input::{Event, ModalToken},
     runtime::{NodeWakeHandle, PollLifetime},
 };
 
 /// Maximum retained completion requests across one outer dispatch and its
 /// nested callbacks.
 const MAX_COMPLETION_REQUESTS: usize = 1024;
+
+/// Maximum posted calls one drain runs. A posted command that posts itself
+/// again would otherwise never let the drain end.
+pub const MAX_POSTED_CALLS: usize = 1024;
 
 /// One queued removal tied to the widget that received the request.
 pub(super) struct RemovalRequest {
@@ -23,18 +42,57 @@ pub(super) struct RemovalRequest {
     incarnation: u64,
 }
 
+/// One posted call, resolved when it was posted.
+pub(super) struct PostRequest {
+    /// Node that posted the call, which a failure's notice names.
+    origin: NodeId,
+    /// Node the call resolved to.
+    target: NodeId,
+    /// Target widget incarnation when posted.
+    incarnation: u64,
+    /// The call, bound to exactly the target.
+    call: CommandCall,
+    /// Event in scope when posted, which the call's injections read.
+    event: Option<Event>,
+    /// Kind of handler that was running when posted, which a failure's
+    /// notice names.
+    source: Option<NoticeSource>,
+}
+
+/// Where the posted call that stopped a drain came from.
+#[derive(Clone, Copy, Debug)]
+pub struct PostFailure {
+    /// Node that posted the call.
+    pub(crate) origin: NodeId,
+    /// Kind of handler that posted it, if a known kind was running.
+    pub(crate) source: Option<NoticeSource>,
+}
+
 /// Mutation deferred until the outer callback boundary completes.
 pub(super) enum CompletionRequest {
+    /// Run a posted call.
+    Post(PostRequest),
     /// Remove a widget incarnation.
     Remove(RemovalRequest),
     /// Close a modal and all its descendants.
     CloseModal(ModalToken),
 }
 
+impl PostRequest {
+    /// Return where this call came from, for a failure's notice.
+    fn failure(&self) -> PostFailure {
+        PostFailure {
+            origin: self.origin,
+            source: self.source,
+        }
+    }
+}
+
 impl CompletionRequest {
     /// Name the deferred work for diagnostics.
     fn label(&self) -> &'static str {
         match self {
+            Self::Post(_) => "posted call",
             Self::Remove(_) => "removal",
             Self::CloseModal(_) => "modal close",
         }
@@ -48,8 +106,15 @@ pub(super) struct CompletionBatch {
     pub(super) requests: VecDeque<CompletionRequest>,
     /// Active explicit dispatch boundaries.
     depth: usize,
-    /// Lifecycle cleanup cannot add work while this is true.
+    /// Whether a drain loop runs, so a boundary that finishes inside it does
+    /// not start another.
     draining: bool,
+    /// Lifecycle hooks running. No work can be queued while any runs.
+    sealed: usize,
+    /// The posted call whose failure stopped the last drain.
+    failed: Option<PostFailure>,
+    /// Kinds of the running handlers, innermost last.
+    notice_sources: Vec<NoticeSource>,
 }
 
 impl Core {
@@ -140,11 +205,63 @@ impl Core {
         self.enqueue_completion(CompletionRequest::CloseModal(token))
     }
 
+    /// Post `call` from `origin`, to run when the outermost dispatch
+    /// completes.
+    ///
+    /// The target resolves and the arguments are checked now, so a bad call
+    /// fails here. The call keeps the event in scope for its injections.
+    pub(crate) fn post(&mut self, origin: NodeId, call: &CommandCall) -> Result<()> {
+        let target = commands::resolve_posted(self, origin, call)?;
+        let incarnation = self.nodes[target].incarnation;
+        self.enqueue_completion(CompletionRequest::Post(PostRequest {
+            origin,
+            target,
+            incarnation,
+            call: call.clone().with_target(CommandTarget::Exact(target)),
+            event: self.current_event().cloned(),
+            source: self.completion.notice_sources.last().copied(),
+        }))
+    }
+
+    /// Run `hook`, a lifecycle hook, with the batch sealed against new work.
+    pub(crate) fn sealed<R>(&mut self, hook: impl FnOnce(&mut Self) -> R) -> R {
+        self.completion.sealed += 1;
+        let result = hook(self);
+        self.completion.sealed -= 1;
+        result
+    }
+
+    /// Return how many requests wait in the batch.
+    #[cfg(test)]
+    pub(crate) fn queued_completions(&self) -> usize {
+        self.completion.requests.len()
+    }
+
+    /// Take the posted call whose failure stopped the last drain, if a posted
+    /// call stopped it.
+    pub(crate) fn take_failed_post(&mut self) -> Option<PostFailure> {
+        self.completion.failed.take()
+    }
+
+    /// Note that a handler of kind `source` runs, and return the depth to
+    /// restore when it returns. A call it posts keeps the kind, so the call's
+    /// failure reads as the handler's own.
+    pub(crate) fn push_notice_source(&mut self, source: NoticeSource) -> usize {
+        let depth = self.completion.notice_sources.len();
+        self.completion.notice_sources.push(source);
+        depth
+    }
+
+    /// Restore the running handler kinds to `depth`.
+    pub(crate) fn pop_notice_source(&mut self, depth: usize) {
+        self.completion.notice_sources.truncate(depth);
+    }
+
     /// Admit a completion request unless lifecycle cleanup forbids new work or
     /// the batch is full, then drain the outer boundary when no dispatch
     /// remains open.
     fn enqueue_completion(&mut self, request: CompletionRequest) -> Result<()> {
-        if self.completion.draining || self.rolling_back_tree_edit {
+        if self.completion.sealed > 0 || self.rolling_back_tree_edit {
             return Err(Error::Invalid(format!(
                 "cannot queue {} during lifecycle cleanup",
                 request.label()
@@ -169,30 +286,62 @@ impl Core {
             return Ok(());
         }
         self.completion.draining = true;
+        self.completion.failed = None;
         let result = self.drain_completion_inner();
         self.completion.requests.clear();
         self.completion.draining = false;
         result
     }
 
-    /// Apply requests in FIFO order. A removal applies only while the node's
-    /// widget incarnation still matches the request.
+    /// Apply requests in FIFO order. A posted call or a removal applies only
+    /// while its node's widget incarnation still matches the request.
     fn drain_completion_inner(&mut self) -> Result<()> {
+        let mut posted = 0;
         while let Some(request) = self.completion.requests.pop_front() {
             match request {
+                CompletionRequest::Post(request) => {
+                    if posted == MAX_POSTED_CALLS {
+                        self.completion.failed = Some(request.failure());
+                        return Err(Error::Invalid(format!(
+                            "one dispatch posted more than {MAX_POSTED_CALLS} calls; \
+                             a posted command may be posting itself"
+                        )));
+                    }
+                    posted += 1;
+                    if self.is_incarnation(request.target, request.incarnation) {
+                        let failure = request.failure();
+                        self.deliver(request).inspect_err(|_| {
+                            self.completion.failed = Some(failure);
+                        })?;
+                    }
+                }
                 CompletionRequest::CloseModal(token) => self.close_modal_now(token)?,
                 CompletionRequest::Remove(request) => {
-                    if self
-                        .nodes
-                        .get(request.node)
-                        .is_some_and(|node| node.incarnation == request.incarnation)
-                    {
+                    if self.is_incarnation(request.node, request.incarnation) {
                         self.remove_subtree(request.node)?;
                     }
                 }
             }
         }
         Ok(())
+    }
+
+    /// Return whether `node` still holds the widget incarnation `incarnation`.
+    fn is_incarnation(&self, node: NodeId, incarnation: u64) -> bool {
+        self.nodes
+            .get(node)
+            .is_some_and(|entry| entry.incarnation == incarnation)
+    }
+
+    /// Run a posted call in exactly the event it was posted in.
+    ///
+    /// The call's dispatch is its own boundary: a failure discards what the
+    /// call queued, and a success leaves its work for this drain to pick up.
+    fn deliver(&mut self, request: PostRequest) -> Result<()> {
+        let outer = mem::replace(&mut self.event_scope, request.event.into_iter().collect());
+        let result = commands::dispatch(self, request.target, &request.call);
+        self.event_scope = outer;
+        result.map(|_| ()).map_err(Error::from)
     }
 }
 

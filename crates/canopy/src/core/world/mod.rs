@@ -31,6 +31,8 @@ use crate::{
 mod change_tests;
 /// Dispatch boundaries, deferred removals and modal closes, and wake handles.
 mod completion;
+#[cfg(test)]
+pub use completion::MAX_POSTED_CALLS;
 /// Event dispatch and bubbling helpers.
 mod dispatch;
 /// Focus and mouse-capture management.

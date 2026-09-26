@@ -232,7 +232,9 @@ pub fn register_clear_intent(setup: &mut Setup) -> Result<()> {
 /// keys reach its owner and the application's bindings. An owner learns of
 /// the field through stored command calls: [`Input::with_on_change`] runs with
 /// the new value appended after every edit, and [`Input::with_on_submit`] and
-/// [`Input::with_on_cancel`] take Enter and Esc.
+/// [`Input::with_on_cancel`] take Enter and Esc. The field posts each call with
+/// [`Context::post`], so the call runs once the field's handler has returned,
+/// and the owner may read, change, or remove the field.
 pub struct Input {
     /// Text buffer for the input.
     buffer: InputBuffer,
@@ -244,11 +246,11 @@ pub struct Input {
     value_exposure: ValueExposure,
     /// Whether the field shows as taking keys, overriding its focus.
     active: Option<bool>,
-    /// Call run with the value appended after every edit.
+    /// Call posted with the value appended after every edit.
     on_change: Option<CommandCall>,
-    /// Call run by Enter.
+    /// Call posted by Enter.
     on_submit: Option<CommandCall>,
-    /// Call run by Esc.
+    /// Call posted by Esc.
     on_cancel: Option<CommandCall>,
     /// Path segment for this node.
     name: NodeName,
@@ -291,24 +293,27 @@ impl Input {
         self
     }
 
-    /// Run `call` with the new value appended after every edit.
+    /// Post `call` with the new value appended after every edit.
     ///
     /// The value is appended as the last positional argument, or as `value`
-    /// among named ones. [`Input::set_value`] is not an edit.
+    /// among named ones. [`Input::set_value`] is not an edit. Each call carries
+    /// the value of its own edit, so several edits in one dispatch arrive in
+    /// order, each with its value. An owner that reads the field instead sees
+    /// its latest value.
     #[must_use]
     pub fn with_on_change(mut self, call: CommandCall) -> Self {
         self.on_change = Some(call);
         self
     }
 
-    /// Run `call` when Enter is pressed in the field.
+    /// Post `call` when Enter is pressed in the field.
     #[must_use]
     pub fn with_on_submit(mut self, call: CommandCall) -> Self {
         self.on_submit = Some(call);
         self
     }
 
-    /// Run `call` when Esc is pressed in the field.
+    /// Post `call` when Esc is pressed in the field.
     #[must_use]
     pub fn with_on_cancel(mut self, call: CommandCall) -> Self {
         self.on_cancel = Some(call);
@@ -339,10 +344,10 @@ impl Input {
         self.active.unwrap_or_else(|| ctx.is_focused())
     }
 
-    /// Run the change call with the current value.
+    /// Post the change call with the current value.
     fn changed(&self, ctx: &mut dyn Context) -> Result<()> {
         if let Some(call) = &self.on_change {
-            ctx.dispatch(&call.with_arg("value", self.value()))?;
+            ctx.post(&call.with_arg("value", self.value()))?;
         }
         Ok(())
     }
@@ -565,12 +570,12 @@ impl Widget for Input {
             InputKey::Delete => self.edit(ctx, InputBuffer::delete)?,
             InputKey::Submit => {
                 if let Some(call) = &self.on_submit {
-                    ctx.dispatch(call)?;
+                    ctx.post(call)?;
                 }
             }
             InputKey::Cancel => {
                 if let Some(call) = &self.on_cancel {
-                    ctx.dispatch(call)?;
+                    ctx.post(call)?;
                 }
             }
         }
@@ -623,10 +628,11 @@ impl Widget for Input {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        CanopyBuilder, EventOutcome, Widget,
+        CanopyBuilder, EventOutcome, NodeId, Setup, ViewContextExt, Widget,
         error::Result,
         input::{Event, key},
         runtime::TurnInput,
+        testing::harness::Harness,
         text,
     };
 
@@ -871,6 +877,112 @@ mod tests {
             .with_root_widget(|owner: &mut Owner| (owner.values.clone(), owner.calls.clone()));
         assert_eq!(values, ["a", "ab", "abc", "bc", "b", "bx y"]);
         assert_eq!(calls, ["submit", "cancel"]);
+        Ok(())
+    }
+
+    /// Build a harness whose root is `owner`, holding its field.
+    fn owned<W: Widget + 'static>(
+        owner: W,
+        configure: impl FnOnce(&mut Setup) -> Result<()> + 'static,
+    ) -> Result<Harness> {
+        let mut harness = Harness::builder(owner)
+            .configure(configure)
+            .register::<Input>()
+            .size(20, 1)
+            .build()?;
+        harness.render()?;
+        Ok(harness)
+    }
+
+    /// Return the field under the harness root.
+    fn the_field(harness: &Harness) -> NodeId {
+        harness
+            .canopy
+            .with_root_view(|ctx| ctx.unique_descendant::<Input>(ctx.node_id()))
+            .expect("field lookup")
+            .expect("field mounted")
+            .into()
+    }
+
+    #[test]
+    fn edits_in_one_dispatch_arrive_in_order_with_their_own_values() -> Result<()> {
+        use canopy::{ContextExt, ViewContextExt};
+        let mut harness = owned(Owner::default(), |setup| setup.add_commands::<Owner>())?;
+        let field = the_field(&harness);
+        let root = harness.canopy.root_id();
+        harness.canopy.with_context(field, |ctx| {
+            ctx.with_widget_mut(field, |input: &mut Input, ctx| {
+                for key in [
+                    key::Key::from('a'),
+                    key::Key::from('b'),
+                    key::KeyCode::Enter.into(),
+                ] {
+                    input.on_event(&Event::Key(key), ctx)?;
+                }
+                Ok(())
+            })?;
+            // The owner hears nothing until the dispatch completes, and the
+            // field already holds its latest value.
+            let heard = ctx.with_widget(root, |owner: &Owner| Ok(owner.values.len()))?;
+            assert_eq!(heard, 0);
+            let value = ctx.with_widget(field, |input: &Input| Ok(input.value().to_owned()))?;
+            assert_eq!(value, "ab");
+            Ok(())
+        })?;
+        let (values, calls) = harness
+            .with_root_widget(|owner: &mut Owner| (owner.values.clone(), owner.calls.clone()));
+        assert_eq!(
+            values,
+            ["a", "ab"],
+            "each change carries its own edit's value"
+        );
+        assert_eq!(calls, ["submit"]);
+        Ok(())
+    }
+
+    /// Removes its field when the field submits.
+    #[derive(Default)]
+    struct Closer {
+        /// The field, until a submit removes it.
+        field: Option<canopy::NodeId>,
+    }
+
+    #[canopy::derive_commands]
+    impl Closer {
+        /// Remove the field that submitted.
+        #[command]
+        fn submit(&mut self, c: &mut dyn canopy::Context) -> Result<()> {
+            if let Some(field) = self.field.take() {
+                c.remove_subtree(field)?;
+            }
+            Ok(())
+        }
+    }
+
+    impl Widget for Closer {
+        fn on_mount(&mut self, c: &mut dyn canopy::Context) -> Result<()> {
+            use canopy::{ContextExt, commands::CommandTarget};
+            let owner = CommandTarget::Exact(c.node_id());
+            let field = c.add_child(
+                c.node_id(),
+                Input::new("").with_on_submit(Self::call_submit().with_target(owner)),
+            )?;
+            c.set_focus(field.into())?;
+            self.field = Some(field.into());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn an_owner_can_remove_the_field_that_submitted() -> Result<()> {
+        let mut harness = owned(Closer::default(), |setup| setup.add_commands::<Closer>())?;
+        let field = the_field(&harness);
+        harness.key(key::KeyCode::Enter)?;
+        let gone = harness
+            .canopy
+            .with_root_view(|ctx| ctx.type_id_of(field).is_none());
+        assert!(gone, "the owner removed the field from its submit");
+        assert!(harness.canopy.notices().is_empty());
         Ok(())
     }
 }

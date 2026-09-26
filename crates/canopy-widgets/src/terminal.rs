@@ -107,7 +107,7 @@ pub struct TerminalConfig {
     command: Option<Vec<String>>,
     /// Working directory for the terminal process.
     cwd: Option<PathBuf>,
-    /// Call run once when the process exits.
+    /// Call posted once when the process exits.
     on_exit: Option<CommandCall>,
 }
 
@@ -135,11 +135,13 @@ impl TerminalConfig {
         self
     }
 
-    /// Run `call` once when the process exits, with the terminal's node
+    /// Post `call` once when the process exits, with the terminal's node
     /// appended as the last argument (or as `node` among named ones).
     ///
     /// The terminal already watches its process, so a host learns of the exit
-    /// here rather than by polling [`Terminal::exited`].
+    /// here rather than by polling [`Terminal::exited`]. The terminal posts the
+    /// call with [`Context::post`], so it runs once the terminal's poll has
+    /// returned, and the host may remove the terminal.
     #[must_use]
     pub fn with_on_exit(mut self, call: CommandCall) -> Self {
         self.on_exit = Some(call);
@@ -661,7 +663,7 @@ impl Widget for Terminal {
         if !self.exit_reported && self.exited() {
             self.exit_reported = true;
             if let Some(call) = &self.config.on_exit {
-                ctx.dispatch(&call.with_arg("node", ctx.node_id()))?;
+                ctx.post(&call.with_arg("node", ctx.node_id()))?;
             }
         }
         Ok(Some(Duration::from_millis(POLL_INTERVAL_MS)))
@@ -1439,6 +1441,74 @@ mod tests {
         let exited = harness.with_root_widget(|host: &mut ExitHost| host.exited.clone());
         let terminal = harness.find_nodes("**/terminal")?;
         assert_eq!(exited, terminal, "one call, naming the terminal");
+        Ok(())
+    }
+
+    /// Removes each terminal whose exit call reaches it, as a host that reaps
+    /// its terminals does.
+    #[derive(Default)]
+    struct ReapHost {
+        /// Terminals whose exit call ran, and whether each was removed.
+        reaped: Vec<(canopy::NodeId, bool)>,
+    }
+
+    #[derive_commands]
+    impl ReapHost {
+        /// Remove the terminal that ended.
+        #[command]
+        fn ended(&mut self, c: &mut dyn Context, node: canopy::NodeId) -> Result<()> {
+            let removed = c.remove_subtree(node).is_ok();
+            self.reaped.push((node, removed));
+            Ok(())
+        }
+    }
+
+    impl Widget for ReapHost {
+        fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+            use canopy::{ContextExt, commands::CommandTarget};
+            let owner = CommandTarget::Exact(c.node_id());
+            c.add_child(
+                c.node_id(),
+                Terminal::new(
+                    TerminalConfig::new()
+                        .with_program(["sh", "-c", "exit 0"])
+                        .with_on_exit(Self::spec_ended().call().with_target(owner)),
+                ),
+            )?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_host_removes_an_ended_terminal_from_its_exit_call() -> Result<()> {
+        use canopy::testing::harness::Harness;
+        let mut harness = Harness::builder(ReapHost::default())
+            .configure(|setup| setup.add_commands::<ReapHost>())
+            .size(20, 5)
+            .build()?;
+        let terminal = harness.find_nodes("**/terminal")?;
+        harness.wait_until(Duration::from_secs(10), |harness| {
+            Ok(harness.with_root_widget(|host: &mut ReapHost| !host.reaped.is_empty()))
+        })?;
+        // Later turns must not poll the removed terminal.
+        harness
+            .wait_until(Duration::from_millis(200), |_| Ok(false))
+            .ok();
+        let reaped = harness.with_root_widget(|host: &mut ReapHost| host.reaped.clone());
+        assert_eq!(reaped.len(), 1, "one exit call");
+        assert_eq!(Some(reaped[0].0), terminal.first().copied());
+        assert!(
+            reaped[0].1,
+            "the host removed the terminal from its exit call"
+        );
+        assert!(
+            harness.find_nodes("**/terminal")?.is_empty(),
+            "the terminal is gone"
+        );
+        assert!(
+            harness.canopy.notices().is_empty(),
+            "no failure, then or later"
+        );
         Ok(())
     }
 

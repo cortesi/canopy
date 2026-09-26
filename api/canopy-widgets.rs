@@ -136,8 +136,12 @@ impl BoxGlyphs {
 /// however an application prefers. A modal that admits only its own framework
 /// group must bind activation in that group.
 ///
-/// User activation of a disabled action is consumed without dispatching.
-/// Calling [`Button::press`] directly still reports command errors.
+/// The button posts its action with [`Context::post`], so the action runs once
+/// the press has returned. It can then close a modal around the button, or
+/// remove the button. User activation of a disabled action is consumed without
+/// posting. Calling [`Button::press`] directly posts the action as well: the
+/// action's errors surface when the outermost dispatch completes, not from the
+/// call.
 pub struct Button {/* private fields */}
 
 impl Button {
@@ -817,7 +821,9 @@ impl Widget for ImageView {}
 /// keys reach its owner and the application's bindings. An owner learns of
 /// the field through stored command calls: [`Input::with_on_change`] runs with
 /// the new value appended after every edit, and [`Input::with_on_submit`] and
-/// [`Input::with_on_cancel`] take Enter and Esc.
+/// [`Input::with_on_cancel`] take Enter and Esc. The field posts each call with
+/// [`Context::post`], so the call runs once the field's handler has returned,
+/// and the owner may read, change, or remove the field.
 pub struct Input {/* private fields */}
 
 impl Input {
@@ -920,18 +926,21 @@ impl Input {
     #[must_use]
     pub fn with_name(self, name: &str) -> Self;
 
-    /// Run `call` when Esc is pressed in the field.
+    /// Post `call` when Esc is pressed in the field.
     #[must_use]
     pub fn with_on_cancel(self, call: CommandCall) -> Self;
 
-    /// Run `call` with the new value appended after every edit.
+    /// Post `call` with the new value appended after every edit.
     ///
     /// The value is appended as the last positional argument, or as `value`
-    /// among named ones. [`Input::set_value`] is not an edit.
+    /// among named ones. [`Input::set_value`] is not an edit. Each call carries
+    /// the value of its own edit, so several edits in one dispatch arrive in
+    /// order, each with its value. An owner that reads the field instead sees
+    /// its latest value.
     #[must_use]
     pub fn with_on_change(self, call: CommandCall) -> Self;
 
-    /// Run `call` when Enter is pressed in the field.
+    /// Post `call` when Enter is pressed in the field.
     #[must_use]
     pub fn with_on_submit(self, call: CommandCall) -> Self;
 
@@ -1227,7 +1236,12 @@ impl<W: Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> List<W, K> {
     #[must_use]
     pub fn with_checks(self) -> Self;
 
-    /// Build a list that dispatches a command when a row is activated.
+    /// Build a list that posts a command when a row is activated.
+    ///
+    /// The list posts the command with [`Context::post`] and the row's index
+    /// appended, so it runs once the list's handler has returned. The index
+    /// names a position, not a row: a list that changes its rows before the
+    /// command runs can put another row at that index.
     #[must_use]
     pub fn with_command(self, command: CommandCall) -> Self;
 
@@ -1303,13 +1317,10 @@ where
     /// closes. A host admits it beside its own group, which carries keys such
     /// as a delete.
     pub const BINDINGS: FrameworkBindingGroup = _;
-    /// Accept the selection by running the host's accept call.
-    ///
-    /// The call runs from the picker rather than the list, so a host that
-    /// reads the list while it accepts finds it free.
+    /// Accept the selection by posting the host's accept call.
     pub fn accept(&mut self, context: &mut dyn Context) -> canopy::error::Result<()>;
 
-    /// Close the picker by running the host's cancel call.
+    /// Close the picker by posting the host's cancel call.
     pub fn cancel(&mut self, context: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Return the filter field, or an error before the picker mounts.
@@ -1323,10 +1334,13 @@ where
     #[must_use]
     pub fn new() -> Self;
 
-    /// Set what accepting the selection and closing the picker run.
+    /// Set what accepting the selection and closing the picker post.
     ///
     /// Both calls usually target the host, which reads the selection and
-    /// closes the modal.
+    /// closes the modal. The picker posts them with [`Context::post`], so they
+    /// run once the picker's command has returned, and the host may read,
+    /// change, or close the picker. The accept call carries no selection: the
+    /// host reads the list as it is when the call runs.
     pub fn set_commands(&mut self, accept: CommandCall, cancel: CommandCall);
 
     /// Show `items` under `title`, with `placeholder` in place of an empty
@@ -2717,11 +2731,13 @@ pub mod terminal {
         #[must_use]
         pub fn with_cwd(self, cwd: impl Into<PathBuf>) -> Self;
 
-        /// Run `call` once when the process exits, with the terminal's node
+        /// Post `call` once when the process exits, with the terminal's node
         /// appended as the last argument (or as `node` among named ones).
         ///
         /// The terminal already watches its process, so a host learns of the exit
-        /// here rather than by polling [`Terminal::exited`].
+        /// here rather than by polling [`Terminal::exited`]. The terminal posts the
+        /// call with [`Context::post`], so it runs once the terminal's poll has
+        /// returned, and the host may remove the terminal.
         #[must_use]
         pub fn with_on_exit(self, call: CommandCall) -> Self;
 

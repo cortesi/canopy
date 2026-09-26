@@ -273,7 +273,12 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         self
     }
 
-    /// Build a list that dispatches a command when a row is activated.
+    /// Build a list that posts a command when a row is activated.
+    ///
+    /// The list posts the command with [`Context::post`] and the row's index
+    /// appended, so it runs once the list's handler has returned. The index
+    /// names a position, not a row: a list that changes its rows before the
+    /// command runs can put another row at that index.
     #[must_use]
     pub fn with_command(mut self, command: CommandCall) -> Self {
         self.on_activate = Some(command);
@@ -652,7 +657,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
                         if let Some(index) = index
                             && self.items.keys().get(index) == Some(&pending.key)
                         {
-                            self.dispatch_activate(c, index)?;
+                            self.post_activate(c, index)?;
                         }
                     }
                     return Ok(true);
@@ -673,13 +678,12 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         Ok(())
     }
 
-    /// Dispatch the activation command for a selected row.
-    fn dispatch_activate(&self, c: &mut dyn Context, index: usize) -> Result<()> {
+    /// Post the activation command for a selected row.
+    fn post_activate(&self, c: &mut dyn Context, index: usize) -> Result<()> {
         let Some(call) = self.on_activate.as_ref() else {
             return Ok(());
         };
-        c.dispatch(&call.with_arg("index", index))?;
-        Ok(())
+        c.post(&call.with_arg("index", index))
     }
 
     /// Move selection by one page.
@@ -1427,6 +1431,131 @@ mod tests {
         fn register(setup: &mut Setup) -> Result<()> {
             setup.add_commands::<Self>()
         }
+    }
+
+    /// Holds a keyed list, and records each activation with the key at its
+    /// index when the activation runs.
+    #[derive(Default)]
+    struct KeyedHost {
+        /// Index and key of each activation.
+        activated: Vec<(usize, Option<i64>)>,
+        /// Whether an activation removes the list.
+        remove_on_activate: bool,
+    }
+
+    #[derive_commands]
+    impl KeyedHost {
+        #[command]
+        fn activate(&mut self, ctx: &mut dyn Context, index: usize) -> Result<()> {
+            let (list, key) = ctx.with_unique_descendant::<List<Text, i64>, _>(|list, ctx| {
+                Ok((ctx.node_id(), list.keys().get(index).copied()))
+            })?;
+            self.activated.push((index, key));
+            if self.remove_on_activate {
+                ctx.remove_subtree(list)?;
+            }
+            Ok(())
+        }
+    }
+
+    impl Widget for KeyedHost {
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            let list = ctx.add_child(
+                ctx.node_id(),
+                List::<Text, i64>::new().with_command(
+                    Self::spec_activate()
+                        .call()
+                        .with_target(CommandTarget::Exact(ctx.node_id())),
+                ),
+            )?;
+            ctx.with_widget_mut(list, |list: &mut List<Text, i64>, ctx| {
+                list.reconcile(
+                    ctx,
+                    [10, 20],
+                    |key| Ok(Text::new(key.to_string())),
+                    |_, _, _| Ok(()),
+                )?;
+                Ok(())
+            })
+        }
+    }
+
+    impl Register for KeyedHost {
+        fn register(setup: &mut Setup) -> Result<()> {
+            setup.add_commands::<Self>()
+        }
+    }
+
+    /// Build a keyed host, rendered once, and return its list.
+    fn keyed_host(remove_on_activate: bool) -> Result<(Harness, NodeId)> {
+        let mut harness = Harness::builder(KeyedHost {
+            remove_on_activate,
+            ..KeyedHost::default()
+        })
+        .register::<KeyedHost>()
+        .size(20, 4)
+        .build()?;
+        harness.render()?;
+        let list = harness.with_root_widget_context(|_: &mut KeyedHost, ctx| {
+            ctx.with_unique_descendant::<List<Text, i64>, _>(|_, ctx| Ok(ctx.node_id()))
+        })?;
+        Ok((harness, list))
+    }
+
+    #[test]
+    fn an_activation_index_names_a_position_not_a_row() -> Result<()> {
+        let (mut harness, list) = keyed_host(false)?;
+        let press = |action| {
+            Event::Mouse(mouse::MouseEvent {
+                action,
+                button: mouse::Button::Left,
+                modifiers: key::Empty,
+                location: PointI32 { x: 0, y: 0 },
+            })
+        };
+        harness.canopy.with_context(list, |ctx| {
+            ctx.with_widget_mut(list, |list: &mut List<Text, i64>, ctx| {
+                list.on_event(&press(mouse::Action::Down), ctx)?;
+                list.on_event(&press(mouse::Action::Up), ctx)?;
+                // The rows change before the posted activation runs.
+                list.reconcile(
+                    ctx,
+                    [20, 10],
+                    |key| Ok(Text::new(key.to_string())),
+                    |_, _, _| Ok(()),
+                )?;
+                Ok(())
+            })
+        })?;
+        let activated = harness.with_root_widget(|host: &mut KeyedHost| host.activated.clone());
+        assert_eq!(
+            activated,
+            [(0, Some(20))],
+            "index 0 now holds the other row"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_host_can_remove_the_list_from_its_activation() -> Result<()> {
+        let (mut harness, list) = keyed_host(true)?;
+        let mut event = mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: PointI32 { x: 0, y: 0 },
+        };
+        harness.mouse(event)?;
+        event.action = mouse::Action::Up;
+        harness.mouse(event)?;
+        let activated = harness.with_root_widget(|host: &mut KeyedHost| host.activated.clone());
+        assert_eq!(activated, [(0, Some(10))]);
+        let gone = harness
+            .canopy
+            .with_root_view(|ctx| ctx.type_id_of(list).is_none());
+        assert!(gone, "the host removed the list that activated");
+        assert!(harness.canopy.notices().is_empty());
+        Ok(())
     }
 
     #[test]

@@ -19,7 +19,7 @@ const NOTICE_LIMIT: usize = 32;
 pub enum NoticeSource {
     /// A binding's command or callback failed.
     Binding,
-    /// A widget's event or intent handler failed.
+    /// A widget's event or intent handler failed, or a call a widget posted.
     Widget,
     /// A widget's poll failed.
     Poll,

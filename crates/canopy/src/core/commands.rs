@@ -1463,6 +1463,29 @@ pub(crate) fn dispatch(
     }
 }
 
+/// Resolve and check a call that runs later, as [`dispatch`] would now.
+///
+/// The command must exist, its arguments must convert, its node arguments
+/// must be live, and its target must resolve. A call without a target
+/// resolves from `origin`. The command's status is not read, because its
+/// owner can still be borrowed.
+pub(crate) fn resolve_posted(
+    core: &Core,
+    origin: NodeId,
+    call: &CommandCall,
+) -> Result<NodeId, CommandError> {
+    let spec = core
+        .commands
+        .get(call.id.0)
+        .ok_or_else(|| CommandError::UnknownCommand {
+            id: call.id.0.to_string(),
+        })?;
+    (spec.check)(&call.args)?;
+    validate_node_args(core, &call.args)?;
+    let resolver = CommandResolver::for_target(core, call.target_or(origin));
+    Ok(checked_resolution(&resolver, spec)?.target())
+}
+
 /// Invoke one command inside an established completion boundary.
 fn dispatch_inner(
     core: &mut Core,

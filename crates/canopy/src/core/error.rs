@@ -239,6 +239,13 @@ pub enum Error {
     /// Re-entrant widget borrow attempt.
     #[error("re-entrant widget borrow: {0:?}")]
     ReentrantWidgetBorrow(NodeId),
+    /// A removal or replacement reached a widget whose callback is running.
+    #[error(
+        "{0:?} is running a callback, so it cannot be removed or replaced now: \
+         a handler ends its own subtree with Context::remove_after_dispatch, and \
+         a widget notifies its host with Context::post"
+    )]
+    WidgetRunning(NodeId),
     /// Node-bound widget operation failure with its original source.
     #[error("{kind} {operation} for node {node:?} at {path}: {source}")]
     NodeOperation {
@@ -383,6 +390,7 @@ impl Error {
             | Self::Driver(_)
             | Self::Internal(_)
             | Self::ReentrantWidgetBorrow(_)
+            | Self::WidgetRunning(_)
             | Self::MultipleMatches
             | Self::DuplicateSlot(_)
             | Self::DuplicateChild { .. }
@@ -428,6 +436,7 @@ impl Error {
             | Self::Driver(_)
             | Self::Internal(_)
             | Self::ReentrantWidgetBorrow(_)
+            | Self::WidgetRunning(_)
             | Self::Invalid(_)
             | Self::NotFound(_)
             | Self::NodeTypeMismatch { .. }

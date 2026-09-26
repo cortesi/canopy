@@ -37,6 +37,8 @@ pub use scripting::{ScriptJournalEntry, ScriptOrigin};
 mod setup;
 pub use setup::{Register, Setup};
 #[cfg(test)]
+mod post_tests;
+#[cfg(test)]
 mod snapshot_tests;
 #[cfg(any(test, feature = "testing"))]
 mod testing;
@@ -283,12 +285,15 @@ impl Canopy {
     }
 
     /// Replace the root widget while preserving its stable node ID.
+    ///
+    /// The replacement runs inside a dispatch boundary, so calls that the new
+    /// widgets post as they mount run before this returns.
     pub fn replace_root<W>(&mut self, widget: W) -> Result<TypedId<W>>
     where
         W: Widget + 'static,
     {
         let root = self.root_id();
-        self.core.replace_subtree(root, widget)?;
+        self.with_dispatch_boundary(|canopy| canopy.core.replace_subtree(root, widget))?;
         self.core.invalidate(crate::Invalidation::Paint);
         Ok(TypedId::new(root))
     }
@@ -429,6 +434,36 @@ impl Canopy {
         let result = f(self);
         let completion = self.core.finish_dispatch(checkpoint, result.is_ok());
         result.and_then(|value| completion.map(|()| value))
+    }
+
+    /// Run work inside a completion boundary, and report a notice-class
+    /// failure of its drain as a notice.
+    ///
+    /// Input and lifecycle work use this where their boundary can be the
+    /// outermost one. A handler's own failure is the caller's to report, and
+    /// it returns unchanged. The drain runs after the handlers have returned,
+    /// so its failure, typically a posted call's, would otherwise escape the
+    /// code that turns handler failures into notices. The notice names the
+    /// node whose posted call failed and the kind of handler that posted it,
+    /// or `node` and `source` when no posted call failed.
+    pub(crate) fn with_notice_boundary<R>(
+        &mut self,
+        source: NoticeSource,
+        node: Option<NodeId>,
+        f: impl FnOnce(&mut Self) -> Result<R>,
+    ) -> Result<R> {
+        let checkpoint = self.core.begin_dispatch();
+        let result = f(self);
+        let completion = self.core.finish_dispatch(checkpoint, result.is_ok());
+        let value = result?;
+        if let Err(error) = completion {
+            let (node, source) = match self.core.take_failed_post() {
+                Some(post) => (Some(post.origin), post.source.unwrap_or(source)),
+                None => (node, source),
+            };
+            self.notice_or_fail(error, source, node)?;
+        }
+        Ok(value)
     }
 
     /// Run a closure against an immutable view of the root context.

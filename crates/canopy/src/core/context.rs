@@ -612,6 +612,10 @@ pub trait Context: ViewContext + sealed::Context {
 
     /// Dispatch a command call. A call without a target resolves from the
     /// current node.
+    ///
+    /// The command runs now, inside this callback, so it cannot remove or
+    /// replace the widget whose callback is running. A widget that notifies
+    /// its host uses [`Context::post`] instead.
     fn dispatch(&mut self, call: &CommandCall) -> StdResult<ArgValue, CommandError>;
 
     /// Return the event being handled, for injection.
@@ -645,6 +649,29 @@ pub trait Context: ViewContext + sealed::Context {
     /// returns an error without running removals or discarding previously
     /// accepted requests.
     fn remove_after_dispatch(&mut self, node: NodeId) -> Result<()>;
+
+    /// Run `call` when the outermost dispatch completes, after every callback
+    /// that led to this one has returned.
+    ///
+    /// A widget notifies its host this way, so the host's command can read,
+    /// change, or remove the widget that posted it. Delivery is synchronous:
+    /// it happens as the outermost dispatch boundary completes, not on a later
+    /// turn. A call without a target resolves from the current node.
+    ///
+    /// The target resolves now, as [`Context::dispatch`] would resolve it, and
+    /// the arguments are checked now, so a malformed call, an unknown command,
+    /// or a missing owner fails here. The call keeps the event in scope for its
+    /// injections, and it runs on exactly the node it resolved to. That node
+    /// is borrowed while its command runs, so the command cannot remove its own
+    /// node or an ancestor: use [`Context::remove_after_dispatch`] for that.
+    ///
+    /// A failed dispatch discards the calls it posted. A target that is gone or
+    /// replaced when the call would run drops the call. A node argument has no
+    /// such protection, and a removed one fails delivery. The first failure
+    /// stops the drain and discards the requests behind it; it undoes neither
+    /// widget state nor outside effects. From input, a failure that is a notice
+    /// shows as one. One dispatch runs at most 1,024 posted calls.
+    fn post(&mut self, call: &CommandCall) -> Result<()>;
 
     /// Capture a thread-safe wake handle for this widget's work lifetime.
     /// Attachment handles require this node to be attached when acquired.
@@ -1141,6 +1168,10 @@ impl Context for NodeCtx<&mut Core> {
 
     fn remove_after_dispatch(&mut self, node: NodeId) -> Result<()> {
         self.core.remove_after_dispatch(node)
+    }
+
+    fn post(&mut self, call: &CommandCall) -> Result<()> {
+        self.core.post(self.node_id, call)
     }
 
     fn remove_subtree(&mut self, node: NodeId) -> Result<()> {

@@ -305,7 +305,7 @@ impl Core {
             return Ok(());
         }
         let widget = Rc::clone(&node.widget);
-        self.with_widget_ctx(node_id, |widget, ctx| widget.on_unmount(ctx))?;
+        self.sealed(|core| core.with_widget_ctx(node_id, |widget, ctx| widget.on_unmount(ctx)))?;
         if let Some(node) = self.nodes.get_mut(node_id) {
             node.mounted = false;
         }
@@ -904,12 +904,16 @@ impl Core {
     }
 
     /// Build a stable plan for removing a complete subtree.
+    ///
+    /// A node whose widget runs a callback fails the plan with an error that
+    /// names the ways out.
     fn plan_subtree_removal(&self, root: NodeId, operation: &'static str) -> Result<RemovalPlan> {
         let pre_order = self
             .subtree_pre_order(root)
             .into_iter()
             .map(|node_id| {
-                self.ensure_widget_slot_available(node_id, operation)?;
+                self.ensure_widget_slot_available(node_id, operation)
+                    .map_err(name_running_widget)?;
                 let node = self
                     .nodes
                     .get(node_id)
@@ -939,7 +943,9 @@ impl Core {
     /// Run fallible removal hooks in deterministic pre-order.
     fn run_pre_remove_plan(&mut self, plan: &RemovalPlan) -> Result<()> {
         for entry in &plan.pre_order {
-            self.with_widget_ctx(entry.node_id, |widget, ctx| widget.pre_remove(ctx))??;
+            self.sealed(|core| {
+                core.with_widget_ctx(entry.node_id, |widget, ctx| widget.pre_remove(ctx))
+            })??;
         }
         Ok(())
     }
@@ -1093,4 +1099,27 @@ fn invariant_violation(message: impl Into<String>) -> Error {
 /// Return true when a view contains computed cache data.
 fn view_has_cached_state(view: View) -> bool {
     view != View::default()
+}
+
+/// Name the remedies when a removal meets a widget whose callback runs.
+///
+/// Access to a node fails this way when its cell is out for a callback. The
+/// error keeps its operation, node, and path.
+fn name_running_widget(error: Error) -> Error {
+    match error {
+        Error::NodeOperation {
+            kind,
+            operation,
+            node,
+            path,
+            source,
+        } if matches!(*source, Error::ReentrantWidgetBorrow(_)) => Error::NodeOperation {
+            kind,
+            operation,
+            node,
+            path,
+            source: Box::new(Error::WidgetRunning(node)),
+        },
+        error => error,
+    }
 }

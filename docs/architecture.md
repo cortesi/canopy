@@ -253,8 +253,67 @@ fails when the batch reaches capacity. A failed nested dispatch discards request
 added since its checkpoint. A failed outer dispatch discards its remaining batch.
 
 Missing or replaced targets are harmless. A lifecycle veto stops the drain and
-discards its tail. Earlier successful removals remain committed. Cleanup hooks
-cannot enqueue another removal. Direct removal retains the restrictions above.
+discards its tail. Earlier successful removals remain committed. Direct removal
+retains the restrictions above.
+
+## Posting
+
+A widget tells its host about an event with `Context::post(call)`. The call
+joins the same FIFO batch. It runs when the outermost dispatch completes, after
+every callback that led to it has returned. The host can then read, change, or
+remove the widget that posted. The stock widgets post every host call. These
+are a button's action, an input's change, submit, and cancel, a picker's
+accept and cancel, a list's activation, and a terminal's exit.
+
+`Context::dispatch` stays synchronous. A command that needs a result, or that
+must see its effect at once, dispatches. A notification posts.
+
+`remove_after_dispatch` and `close_modal` remain the tools for a callback that
+ends its own subtree. A posted command borrows its target while it runs. It can
+remove the child that notified it, but not itself or an ancestor. A
+removal or replacement that meets a running widget fails with an error that
+names both remedies.
+
+Admission resolves the target as `dispatch` would, from the call's explicit
+target or from the posting node. It checks the arguments, and validates node
+arguments, so a bad call fails from `post`. It does not read the command's
+status, because the owner can still be borrowed. The request records the
+target, its widget incarnation, the posting node, the event in scope, and the
+kind of handler that was running.
+
+Delivery dispatches the call to exactly the recorded node, inside its own
+checkpoint. It replaces the event scope with exactly the recorded event, or
+with none, and restores the scope on every exit. It revalidates node arguments
+and reads the command's status. A target that is gone or replaced drops the
+call without error. A node argument has no such protection, so a removed one
+fails delivery.
+
+A failed delivery stops the drain and discards the tail, as a lifecycle veto
+does. It undoes neither widget state nor outside effects. Every outermost
+boundary that routes input, and each mount in the render sweep, reports a
+notice-class drain failure as a notice. The notice names the posting node and
+the kind of handler that posted: a binding, a widget handler, or a poll. A
+direct command call, `Canopy::with_context`, and a script call return the
+failure. One drain runs at most 1,024 posted calls, so a command that posts
+itself fails instead of looping.
+
+Delivery is synchronous completion draining, not a later event-loop turn. A
+Luau command call at the top of a script drains before it returns. A Luau
+function bound to a key runs inside the key's boundary, so its later
+statements run before the posted calls.
+
+The drain pops a request before a posted call's dispatch opens its checkpoint,
+so the batch's length checkpoints stay valid. A nested boundary neither drains
+nor clears the queue, and the drain restores its state on every exit. Every
+`pre_remove` and `on_unmount` runs sealed, on every removal path, so a cleanup
+hook can neither post nor queue work.
+
+Callbacks that run outside any dispatch boundary would leave posted calls
+waiting for an unrelated later drain. `Canopy::replace_root` therefore runs in
+a boundary, and the render sweep mounts each node in its own boundary. The
+sweep skips a node that a delivered call removed. Draining whenever the
+outermost callback returns would run host commands inside tree edits, so the
+drain points stay at boundaries.
 
 ## Layout
 

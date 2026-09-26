@@ -48,8 +48,12 @@ canopy.keymap({
 /// however an application prefers. A modal that admits only its own framework
 /// group must bind activation in that group.
 ///
-/// User activation of a disabled action is consumed without dispatching.
-/// Calling [`Button::press`] directly still reports command errors.
+/// The button posts its action with [`Context::post`], so the action runs once
+/// the press has returned. It can then close a modal around the button, or
+/// remove the button. User activation of a disabled action is consumed without
+/// posting. Calling [`Button::press`] directly posts the action as well: the
+/// action's errors surface when the outermost dispatch completes, not from the
+/// call.
 pub struct Button {
     /// Button label.
     label: String,
@@ -125,15 +129,14 @@ impl Button {
         let Some(command) = self.command.as_ref() else {
             return Ok(());
         };
-        // A click puts focus on the button first. The action can close a modal,
-        // remove the button, or move focus itself, so focusing afterwards would
-        // undo what it did. A direct or keyboard call has no pointer to follow
-        // and leaves focus alone.
+        // A click puts focus on the button first. The action runs after the
+        // press returns, and can move focus itself, so it keeps the last word.
+        // A direct or keyboard call has no pointer to follow and leaves focus
+        // alone.
         if ctx.current_mouse_event().is_some() {
             ctx.set_focus(ctx.node_id())?;
         }
-        ctx.dispatch(command)?;
-        Ok(())
+        ctx.post(command)
     }
 
     /// Report the configured action's eligibility as this command's own.
@@ -729,17 +732,20 @@ mod tests {
         harness.mouse(press_at(location))?;
         harness.with_root_widget(|owner: &mut ActionOwner| assert_eq!(owner.activations, 1));
 
-        // A direct call still reports the reason rather than doing nothing.
+        // A direct call posts the action, so the press itself succeeds, and
+        // the reason arrives when the boundary around the call completes.
         let button = the_button(&harness);
-        harness.canopy.with_context(button, |ctx| {
+        let result = harness.canopy.with_context(button, |ctx| {
             ctx.with_widget_mut(button, |button: &mut Button, ctx| {
-                assert!(matches!(
-                    button.press(ctx),
-                    Err(Error::Command(CommandError::Disabled { .. }))
-                ));
+                assert!(button.press(ctx).is_ok(), "the press only posts");
                 Ok(())
             })
-        })?;
+        });
+        assert!(matches!(
+            result,
+            Err(Error::Command(CommandError::Disabled { .. }))
+        ));
+        harness.with_root_widget(|owner: &mut ActionOwner| assert_eq!(owner.activations, 1));
         Ok(())
     }
 
@@ -763,6 +769,72 @@ mod tests {
             .last()
             .expect("the failed activation is a notice");
         assert_eq!(notice.source, NoticeSource::Binding);
+        Ok(())
+    }
+
+    /// Root whose button removes itself, reading the click that pressed it.
+    #[derive(Default)]
+    struct Discarding {
+        /// The button, until its action removes it.
+        button: Option<NodeId>,
+        /// Actions of the clicks the action read.
+        clicks: Vec<mouse::Action>,
+    }
+
+    #[derive_commands]
+    impl Discarding {
+        /// Remove the button that ran this action.
+        #[command]
+        fn discard(&mut self, ctx: &mut dyn Context, event: mouse::MouseEvent) -> Result<()> {
+            self.clicks.push(event.action);
+            if let Some(button) = self.button.take() {
+                ctx.remove_subtree(button)?;
+            }
+            Ok(())
+        }
+    }
+
+    impl Widget for Discarding {
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            let mut button = Button::new("Close").with_command(
+                Self::spec_discard()
+                    .call()
+                    .with_target(CommandTarget::Exact(ctx.node_id())),
+            );
+            button.set_active(true);
+            self.button = Some(ctx.add_child(ctx.node_id(), button)?.into());
+            Ok(())
+        }
+    }
+
+    impl Register for Discarding {
+        fn register(setup: &mut Setup) -> Result<()> {
+            Button::register(setup)?;
+            setup.add_commands::<Self>()
+        }
+    }
+
+    #[test]
+    fn an_action_can_remove_its_button_and_read_its_click() -> Result<()> {
+        let mut harness = activating(Discarding::default(), 20, 5)?;
+        let button = the_button(&harness);
+        harness.mouse(press_at(origin(&harness, button)))?;
+        harness.with_root_widget(|root: &mut Discarding| {
+            assert_eq!(
+                root.clicks,
+                [mouse::Action::Down],
+                "the action read the click"
+            );
+            assert_eq!(root.button, None);
+        });
+        let gone = harness
+            .canopy
+            .with_root_view(|ctx| ctx.type_id_of(button).is_none());
+        assert!(gone, "the button's own action removed it");
+        assert!(
+            harness.canopy.notices().is_empty(),
+            "removal raised nothing"
+        );
         Ok(())
     }
 

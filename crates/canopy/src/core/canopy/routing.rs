@@ -243,7 +243,7 @@ impl Canopy {
         scope: Option<&Scope<'_>>,
         guard: Option<&mut KeyRouteGuard>,
     ) -> Result<bool> {
-        self.with_dispatch_boundary(|canopy| {
+        self.with_notice_boundary(NoticeSource::Widget, None, |canopy| {
             canopy.route_input_inner(start, path, input, scope, guard)
         })
     }
@@ -381,9 +381,11 @@ impl Canopy {
                     RoutedInput::Key(key) => self.core.node_key_outcome(id, key, route_focus).ok(),
                     RoutedInput::Mouse(_) => None,
                 };
+                let sources = self.core.push_notice_source(NoticeSource::Widget);
                 let dispatched = self.with_dispatch_boundary(|canopy| {
                     canopy.core.dispatch_event_on_node(id, &event)
                 });
+                self.core.pop_notice_source(sources);
                 let outcome = match dispatched {
                     Ok(outcome) => outcome,
                     Err(error) => return self.route_notice(error, NoticeSource::Widget, id, &path),
@@ -518,7 +520,9 @@ impl Canopy {
         T: Into<key::Key>,
     {
         let key = key.into();
-        self.with_dispatch_boundary(|canopy| canopy.key_checked_inner(scope, key, expectation))
+        self.with_notice_boundary(NoticeSource::Widget, None, |canopy| {
+            canopy.key_checked_inner(scope, key, expectation)
+        })
     }
 
     /// Run one checked key route inside its completion boundary.
@@ -564,7 +568,7 @@ impl Canopy {
     ) -> Result<bool> {
         self.dismiss_notice()?;
         if self.core.effective_transient_mode().is_some() {
-            self.with_dispatch_boundary(|canopy| {
+            self.with_notice_boundary(NoticeSource::Widget, None, |canopy| {
                 canopy.route_transient_key(start, &path, key, scope, guard)
             })
         } else {
@@ -677,6 +681,7 @@ impl Canopy {
 
         let event = input.event_for_node(&self.core, node_id);
         let depth = self.core.push_event_scope(&event);
+        let sources = self.core.push_notice_source(NoticeSource::Binding);
         // The run has its own completion boundary, so a failed run drops the
         // removals it queued even when its failure becomes a notice.
         let result = self.with_dispatch_boundary(|canopy| match binding.target {
@@ -702,6 +707,7 @@ impl Canopy {
                 }
             }
         });
+        self.core.pop_notice_source(sources);
         self.core.pop_event_scope(depth);
         let skipped = match result {
             Ok(skipped) => skipped,
@@ -773,11 +779,14 @@ impl Canopy {
         guard: &mut Option<&mut KeyRouteGuard>,
     ) -> Result<Option<EventOutcome>> {
         let event = input.event_for_node(&self.core, node);
+        let sources = self.core.push_notice_source(NoticeSource::Widget);
         let outcome = self.with_dispatch_boundary(|canopy| {
             canopy
                 .core
                 .dispatch_action_on_node(node, action.as_str(), &event)
-        })?;
+        });
+        self.core.pop_notice_source(sources);
+        let outcome = outcome?;
         debug_assert_eq!(
             outcome,
             EventOutcome::Handle,
@@ -817,8 +826,9 @@ impl Canopy {
             self.dismiss_notice()?;
         }
         let start = self.focus_or_root()?;
-        let dispatched =
-            self.with_dispatch_boundary(|canopy| canopy.core.dispatch_event(start, event));
+        let dispatched = self.with_notice_boundary(NoticeSource::Widget, None, |canopy| {
+            canopy.core.dispatch_event(start, event)
+        });
         match dispatched {
             Ok(_) => Ok(()),
             Err(error) => self.notice_or_fail(error, NoticeSource::Widget, None),
@@ -846,7 +856,9 @@ impl Canopy {
 
     /// Propagate an event through the tree.
     pub(crate) fn event(&mut self, e: &Event) -> Result<()> {
-        self.with_dispatch_boundary(|canopy| canopy.dispatch_input(e))
+        self.with_notice_boundary(NoticeSource::Widget, None, |canopy| {
+            canopy.dispatch_input(e)
+        })
     }
 
     /// Dispatch an event inside its completion boundary.

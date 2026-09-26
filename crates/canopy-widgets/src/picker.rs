@@ -70,9 +70,9 @@ where
     filter: Option<NodeId>,
     /// Which end a row drops when it does not fit.
     truncate: Truncate,
-    /// Call that accepting the selection runs.
+    /// Call that accepting the selection posts.
     on_accept: Option<CommandCall>,
-    /// Call that closing the picker runs.
+    /// Call that closing the picker posts.
     on_cancel: Option<CommandCall>,
 }
 
@@ -139,32 +139,32 @@ where
     /// as a delete.
     pub const BINDINGS: FrameworkBindingGroup = FrameworkBindingGroup::new("picker");
 
-    /// Set what accepting the selection and closing the picker run.
+    /// Set what accepting the selection and closing the picker post.
     ///
     /// Both calls usually target the host, which reads the selection and
-    /// closes the modal.
+    /// closes the modal. The picker posts them with [`Context::post`], so they
+    /// run once the picker's command has returned, and the host may read,
+    /// change, or close the picker. The accept call carries no selection: the
+    /// host reads the list as it is when the call runs.
     pub fn set_commands(&mut self, accept: CommandCall, cancel: CommandCall) {
         self.on_accept = Some(accept);
         self.on_cancel = Some(cancel);
     }
 
-    /// Accept the selection by running the host's accept call.
-    ///
-    /// The call runs from the picker rather than the list, so a host that
-    /// reads the list while it accepts finds it free.
+    /// Accept the selection by posting the host's accept call.
     #[command]
     pub fn accept(&mut self, context: &mut dyn Context) -> Result<()> {
         if let Some(call) = &self.on_accept {
-            context.dispatch(call)?;
+            context.post(call)?;
         }
         Ok(())
     }
 
-    /// Close the picker by running the host's cancel call.
+    /// Close the picker by posting the host's cancel call.
     #[command]
     pub fn cancel(&mut self, context: &mut dyn Context) -> Result<()> {
         if let Some(call) = &self.on_cancel {
-            context.dispatch(call)?;
+            context.post(call)?;
         }
         Ok(())
     }
@@ -775,6 +775,7 @@ where
 #[cfg(test)]
 mod tests {
     use canopy::{
+        commands::CommandTarget,
         geom::Size,
         input::{ModalBindings, ModalOptions},
         render::cursor,
@@ -861,6 +862,118 @@ mod tests {
             list: span(list),
             field: span(filter),
         })
+    }
+
+    /// Holds a picker, and records the selection each accept finds.
+    #[derive(Default)]
+    struct PickerHost {
+        /// The picker, until an accept closes it.
+        picker: Option<NodeId>,
+        /// The selection each accept read from the list.
+        accepted: Vec<String>,
+        /// Whether an accept removes the picker.
+        close_on_accept: bool,
+    }
+
+    #[canopy::derive_commands]
+    impl PickerHost {
+        /// Record the list's selection as it is now, and close the picker
+        /// when asked.
+        #[command]
+        fn accepted(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            let picker = self
+                .picker
+                .ok_or_else(|| Error::NotFound("picker".into()))?;
+            let name = ctx.with_widget_mut(picker, |picker: &mut Picker<String>, ctx| {
+                let list = picker.list()?;
+                ctx.with_widget_mut(list, |list: &mut PickerList<String>, _| {
+                    Ok(list.selected_name())
+                })
+            })?;
+            self.accepted.push(name);
+            if self.close_on_accept {
+                self.picker = None;
+                ctx.remove_subtree(picker)?;
+            }
+            Ok(())
+        }
+
+        /// Ignore a cancel.
+        #[command]
+        fn cancelled(&self) {}
+    }
+
+    impl Widget for PickerHost {
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            let owner = CommandTarget::Exact(ctx.node_id());
+            let mut picker = Picker::<String>::new();
+            picker.set_commands(
+                Self::call_accepted().with_target(owner),
+                Self::call_cancelled().with_target(owner),
+            );
+            self.picker = Some(ctx.add_child(ctx.node_id(), picker)?.into());
+            Ok(())
+        }
+    }
+
+    /// Build a host whose picker shows `/a`, `/b`, and `/c`.
+    fn hosting(close_on_accept: bool) -> Result<(Harness, NodeId)> {
+        let host = PickerHost {
+            close_on_accept,
+            ..PickerHost::default()
+        };
+        let mut harness = Harness::builder(host)
+            .configure(|setup| setup.add_commands::<PickerHost>())
+            .size(40, 12)
+            .build()?;
+        harness.render()?;
+        let picker = harness
+            .with_root_widget(|host: &mut PickerHost| host.picker)
+            .expect("the picker mounted");
+        harness.canopy.with_context(picker, |ctx| {
+            ctx.with_widget_mut(picker, |picker: &mut Picker<String>, ctx| {
+                let items = ["/a", "/b", "/c"].map(str::to_owned).to_vec();
+                picker.set_items(ctx, "Pick", "<none>", items)
+            })
+        })?;
+        harness.render()?;
+        Ok((harness, picker))
+    }
+
+    #[test]
+    fn an_accept_reads_the_selection_as_it_is_when_it_runs() -> Result<()> {
+        let (mut harness, picker) = hosting(false)?;
+        harness.canopy.with_context(picker, |ctx| {
+            ctx.with_widget_mut(picker, |picker: &mut Picker<String>, ctx| {
+                picker.accept(ctx)?;
+                // A later change in the same dispatch lands before the accept
+                // runs, because the accept carries no selection.
+                let list = picker.list()?;
+                ctx.with_widget_mut(list, |list: &mut PickerList<String>, ctx| {
+                    list.select_by(ctx, 1)
+                })
+            })
+        })?;
+        let accepted = harness.with_root_widget(|host: &mut PickerHost| host.accepted.clone());
+        assert_eq!(accepted, ["/b"]);
+        Ok(())
+    }
+
+    #[test]
+    fn a_host_can_remove_the_picker_from_its_accept() -> Result<()> {
+        let (mut harness, picker) = hosting(true)?;
+        harness.canopy.with_context(picker, |ctx| {
+            ctx.with_widget_mut(picker, |picker: &mut Picker<String>, ctx| {
+                picker.accept(ctx)
+            })
+        })?;
+        let accepted = harness.with_root_widget(|host: &mut PickerHost| host.accepted.clone());
+        assert_eq!(accepted, ["/a"]);
+        let gone = harness
+            .canopy
+            .with_root_view(|ctx| ctx.type_id_of(picker).is_none());
+        assert!(gone, "the host removed the picker that accepted");
+        Ok(())
     }
 
     #[test]

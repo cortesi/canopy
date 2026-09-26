@@ -100,6 +100,10 @@ pub trait Context: ViewContext + Context {
 
     /// Dispatch a command call. A call without a target resolves from the
     /// current node.
+    ///
+    /// The command runs now, inside this callback, so it cannot remove or
+    /// replace the widget whose callback is running. A widget that notifies
+    /// its host uses [`Context::post`] instead.
     fn dispatch(&mut self, call: &CommandCall) -> Result<ArgValue, CommandError>;
 
     /// Run immediate mutations with structural rollback on error.
@@ -133,6 +137,29 @@ pub trait Context: ViewContext + Context {
 
     /// Open a modal that owns focus, input admission, and visual effects.
     fn open_modal(&mut self, options: ModalOptions) -> crate::error::Result<ModalToken>;
+
+    /// Run `call` when the outermost dispatch completes, after every callback
+    /// that led to this one has returned.
+    ///
+    /// A widget notifies its host this way, so the host's command can read,
+    /// change, or remove the widget that posted it. Delivery is synchronous:
+    /// it happens as the outermost dispatch boundary completes, not on a later
+    /// turn. A call without a target resolves from the current node.
+    ///
+    /// The target resolves now, as [`Context::dispatch`] would resolve it, and
+    /// the arguments are checked now, so a malformed call, an unknown command,
+    /// or a missing owner fails here. The call keeps the event in scope for its
+    /// injections, and it runs on exactly the node it resolved to. That node
+    /// is borrowed while its command runs, so the command cannot remove its own
+    /// node or an ancestor: use [`Context::remove_after_dispatch`] for that.
+    ///
+    /// A failed dispatch discards the calls it posted. A target that is gone or
+    /// replaced when the call would run drops the call. A node argument has no
+    /// such protection, and a removed one fails delivery. The first failure
+    /// stops the drain and discards the requests behind it; it undoes neither
+    /// widget state nor outside effects. From input, a failure that is a notice
+    /// shows as one. One dispatch runs at most 1,024 posted calls.
+    fn post(&mut self, call: &CommandCall) -> crate::error::Result<()>;
 
     /// Add an effect to a node that will be applied during rendering.
     /// Effects stack and inherit through the tree.
@@ -785,6 +812,9 @@ impl Canopy {
     pub fn push_transient_mode(&mut self, mode: &str);
 
     /// Replace the root widget while preserving its stable node ID.
+    ///
+    /// The replacement runs inside a dispatch boundary, so calls that the new
+    /// widgets post as they mount run before this returns.
     pub fn replace_root<W>(&mut self, widget: W) -> crate::error::Result<TypedId<W>>
     where
         W: 'static + Widget;
@@ -1830,6 +1860,13 @@ pub mod error {
         /// Re-entrant widget borrow attempt.
         #[error("re-entrant widget borrow: {0:?}")]
         ReentrantWidgetBorrow(NodeId),
+        /// A removal or replacement reached a widget whose callback is running.
+        #[error(
+            "{0:?} is running a callback, so it cannot be removed or replaced now: \
+         a handler ends its own subtree with Context::remove_after_dispatch, and \
+         a widget notifies its host with Context::post"
+        )]
+        WidgetRunning(NodeId),
         /// Node-bound widget operation failure with its original source.
         #[error("{kind} {operation} for node {node:?} at {path}: {source}")]
         NodeOperation {
@@ -4053,7 +4090,7 @@ pub mod runtime {
     pub enum NoticeSource {
         /// A binding's command or callback failed.
         Binding,
-        /// A widget's event or intent handler failed.
+        /// A widget's event or intent handler failed, or a call a widget posted.
         Widget,
         /// A widget's poll failed.
         Poll,
