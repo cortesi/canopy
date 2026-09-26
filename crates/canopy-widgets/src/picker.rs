@@ -55,8 +55,8 @@ const FILTER_PROMPT: &str = " / ";
 ///
 /// The widget draws nothing of its own. It centres its dialog and swallows
 /// mouse input that lands on the margin around it. The root is a stack, so an
-/// overlay a host adds with [`Picker::add_overlay`] draws over the dialog
-/// within the same margin.
+/// overlay a host opens with `ContextExt::add_modal`, with the picker as its
+/// owner, draws over the dialog within the same margin.
 pub struct Picker<T>
 where
     T: ItemLabel,

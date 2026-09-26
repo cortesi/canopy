@@ -25,7 +25,7 @@ const CHOICE_GLYPHS: (&str, &str) = ("( ) ", "(•) ");
 /// The selection is the cursor that navigation moves; [`Selector::choose`]
 /// makes the selected item the choice. Navigation scrolls the selected row
 /// into view after layout. A host that changes its item set calls
-/// [`Selector::show`], which reinstalls both the items and the choice.
+/// [`Selector::set_items`], which reinstalls both the items and the choice.
 pub struct Selector<T>
 where
     T: ItemLabel,

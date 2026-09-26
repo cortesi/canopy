@@ -1,7 +1,8 @@
 //! Line diffs of two full texts and the rows a diff view shows.
 //!
-//! A [`Diff`] holds both versions and the changed line ranges between them.
-//! [`Diff::rows`] derives the display sequence for a [`Scope`]: every line in
+//! A [`Diff`](crate::diff::Diff) holds both versions and the changed line
+//! ranges between them. [`Diff::rows`](crate::diff::Diff::rows) derives the
+//! display sequence for a [`Scope`](crate::diff::Scope): every line in
 //! whole-file scope, or each change block with context and gap rows in context
 //! scope. Unified and side-by-side renderers consume the same rows, and every
 //! row names the line numbers it shows, so a renderer can ask a syntax

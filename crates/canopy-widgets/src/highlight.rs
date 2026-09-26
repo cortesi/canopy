@@ -1,12 +1,15 @@
 //! Syntax highlighting helpers.
 //!
-//! [`Highlighter`] and [`HighlightSpan`] carry no dependency of their own: a
-//! host can implement highlighting however it likes. [`SyntectHighlighter`],
+//! [`Highlighter`](crate::highlight::Highlighter) and
+//! [`HighlightSpan`](crate::highlight::HighlightSpan) carry no dependency of
+//! their own: a host can implement highlighting however it likes.
+//! `SyntectHighlighter`,
 //! behind the `syntax` feature, resolves a syntax from a file name or from
 //! the text itself, then highlights lines incrementally. Highlighting a line
 //! needs the parser state left by every line above it, so the highlighter
 //! walks forward from the last line it has seen and caches the spans it
-//! produces. A source set through [`Highlighter::prepare`] therefore costs
+//! produces. A source set through
+//! [`Highlighter::prepare`](crate::highlight::Highlighter::prepare) therefore costs
 //! only the lines that are actually asked for, and multi-line constructs such
 //! as block comments keep their state.
 

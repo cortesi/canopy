@@ -1282,8 +1282,8 @@ impl<W: 'static + Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> Widge
 ///
 /// The widget draws nothing of its own. It centres its dialog and swallows
 /// mouse input that lands on the margin around it. The root is a stack, so an
-/// overlay a host adds with [`Picker::add_overlay`] draws over the dialog
-/// within the same margin.
+/// overlay a host opens with `ContextExt::add_modal`, with the picker as its
+/// owner, draws over the dialog within the same margin.
 #[derive(Default)]
 pub struct Picker<T>
 where
@@ -1667,7 +1667,7 @@ impl Widget for Scroll {}
 /// The selection is the cursor that navigation moves; [`Selector::choose`]
 /// makes the selected item the choice. Navigation scrolls the selected row
 /// into view after layout. A host that changes its item set calls
-/// [`Selector::show`], which reinstalls both the items and the choice.
+/// [`Selector::set_items`], which reinstalls both the items and the choice.
 pub struct Selector<T>
 where
     T: ItemLabel, {/* private fields */}
@@ -1958,8 +1958,9 @@ pub mod diff {
     //! Line diffs of two full texts, and DiffView's supporting types.
     //! Line diffs of two full texts and the rows a diff view shows.
     //!
-    //! A [`Diff`] holds both versions and the changed line ranges between them.
-    //! [`Diff::rows`] derives the display sequence for a [`Scope`]: every line in
+    //! A [`Diff`](crate::diff::Diff) holds both versions and the changed line
+    //! ranges between them. [`Diff::rows`](crate::diff::Diff::rows) derives the
+    //! display sequence for a [`Scope`](crate::diff::Scope): every line in
     //! whole-file scope, or each change block with context and gap rows in context
     //! scope. Unified and side-by-side renderers consume the same rows, and every
     //! row names the line numbers it shows, so a renderer can ask a syntax
@@ -2243,8 +2244,7 @@ pub mod editor {
         ///
         /// The first match at or below the top of the view becomes current, and
         /// the view scrolls to it. Ranges must arrive in ascending order without
-        /// spanning lines; see [`SearchState::set_matches`]. An empty set clears
-        /// the search. Unlike [`Self::search`], the ranges need not come from a
+        /// spanning lines. An empty set clears the search. Unlike [`Self::search`], the ranges need not come from a
         /// literal query, so callers can highlight regular-expression matches.
         pub fn set_matches(&mut self, ctx: &mut dyn Context, matches: Vec<TextRange>);
 
@@ -2499,13 +2499,16 @@ pub mod highlight {
     //! Syntax highlighting shared by the Editor and DiffView.
     //! Syntax highlighting helpers.
     //!
-    //! [`Highlighter`] and [`HighlightSpan`] carry no dependency of their own: a
-    //! host can implement highlighting however it likes. [`SyntectHighlighter`],
+    //! [`Highlighter`](crate::highlight::Highlighter) and
+    //! [`HighlightSpan`](crate::highlight::HighlightSpan) carry no dependency of
+    //! their own: a host can implement highlighting however it likes.
+    //! `SyntectHighlighter`,
     //! behind the `syntax` feature, resolves a syntax from a file name or from
     //! the text itself, then highlights lines incrementally. Highlighting a line
     //! needs the parser state left by every line above it, so the highlighter
     //! walks forward from the last line it has seen and caches the spans it
-    //! produces. A source set through [`Highlighter::prepare`] therefore costs
+    //! produces. A source set through
+    //! [`Highlighter::prepare`](crate::highlight::Highlighter::prepare) therefore costs
     //! only the lines that are actually asked for, and multi-line constructs such
     //! as block comments keep their state.
 
