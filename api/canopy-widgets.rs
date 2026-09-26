@@ -45,6 +45,10 @@ pub const CLEAR_INTENT: &str = "canopy.clear";
 pub trait ItemLabel {
     /// Return the display label for this item.
     fn label(&self) -> &str;
+
+    /// Return whether the item shows muted, such as an item that cannot be
+    /// used now. A muted item can still be selected.
+    fn muted(&self) -> bool {}
 }
 
 impl ItemLabel for &str {}
@@ -1334,6 +1338,15 @@ where
     #[must_use]
     pub fn new() -> Self;
 
+    /// Return the selected item of the list, cloned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error before the picker mounts.
+    pub fn selected(&self, context: &dyn Context) -> canopy::error::Result<Option<T>>
+    where
+        T: Clone;
+
     /// Set what accepting the selection and closing the picker post.
     ///
     /// Both calls usually target the host, which reads the selection and
@@ -1353,6 +1366,17 @@ where
         title: &str,
         placeholder: &'static str,
         items: Vec<T>,
+    ) -> canopy::error::Result<()>;
+
+    /// Show `items` in place of the current items, and keep the filter and
+    /// the selected item. See [`PickerList::update_items`].
+    pub fn update_items(
+        &mut self,
+        context: &mut dyn Context,
+        title: &str,
+        placeholder: &'static str,
+        items: Vec<T>,
+        same: impl Fn(&T, &T) -> bool,
     ) -> canopy::error::Result<()>;
 
     /// Build a picker whose rows drop the given end when they do not fit.
@@ -1513,6 +1537,19 @@ where
     /// Open the filter field. Typed text narrows the list to the items that
     /// contain it.
     pub fn start_filter(&mut self, context: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Show `items` under `label` in place of the current items, and keep
+    /// the filter and the selected item, which `same` finds among the new
+    /// items. A selected item that left the list leaves the selection at its
+    /// row.
+    pub fn update_items(
+        &mut self,
+        context: &mut dyn Context,
+        label: String,
+        placeholder: &'static str,
+        items: Vec<T>,
+        same: impl Fn(&T, &T) -> bool,
+    ) -> canopy::error::Result<()>;
 }
 
 impl<T> CommandNode for PickerList<T> where T: 'static + ItemLabel {}
@@ -2244,8 +2281,9 @@ pub mod editor {
         ///
         /// The first match at or below the top of the view becomes current, and
         /// the view scrolls to it. Ranges must arrive in ascending order without
-        /// spanning lines. An empty set clears the search. Unlike [`Self::search`], the ranges need not come from a
-        /// literal query, so callers can highlight regular-expression matches.
+        /// spanning lines. An empty set clears the search. Unlike [`Self::search`],
+        /// the ranges need not come from a literal query, so callers can
+        /// highlight regular-expression matches.
         pub fn set_matches(&mut self, ctx: &mut dyn Context, matches: Vec<TextRange>);
 
         /// Replace the buffer contents.
@@ -2508,9 +2546,9 @@ pub mod highlight {
     //! needs the parser state left by every line above it, so the highlighter
     //! walks forward from the last line it has seen and caches the spans it
     //! produces. A source set through
-    //! [`Highlighter::prepare`](crate::highlight::Highlighter::prepare) therefore costs
-    //! only the lines that are actually asked for, and multi-line constructs such
-    //! as block comments keep their state.
+    //! [`Highlighter::prepare`](crate::highlight::Highlighter::prepare) therefore
+    //! costs only the lines that are actually asked for, and multi-line constructs
+    //! such as block comments keep their state.
 
     /// Theme used when the caller names none, matching the Canopy style theme.
     pub const DEFAULT_THEME: &str = "Canopy (dark)";

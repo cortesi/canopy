@@ -15,7 +15,7 @@
 
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
-    Widget,
+    ViewContextExt, Widget,
     commands::CommandCall,
     derive_commands,
     error::{Error, Result},
@@ -129,6 +129,36 @@ where
         context.with_widget_mut(list, |list: &mut PickerList<T>, context| {
             list.set_items(context, title, placeholder, items)
         })
+    }
+
+    /// Show `items` in place of the current items, and keep the filter and
+    /// the selected item. See [`PickerList::update_items`].
+    pub fn update_items(
+        &mut self,
+        context: &mut dyn Context,
+        title: &str,
+        placeholder: &'static str,
+        items: Vec<T>,
+        same: impl Fn(&T, &T) -> bool,
+    ) -> Result<()> {
+        let list = self.typed_list()?;
+        let title = title.to_owned();
+        context.with_widget_mut(list, |list: &mut PickerList<T>, context| {
+            list.update_items(context, title, placeholder, items, same)
+        })
+    }
+
+    /// Return the selected item of the list, cloned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error before the picker mounts.
+    pub fn selected(&self, context: &dyn Context) -> Result<Option<T>>
+    where
+        T: Clone,
+    {
+        let list = self.typed_list()?;
+        context.with_widget(list, |list: &PickerList<T>| Ok(list.selected().cloned()))
     }
 
     /// The framework group a picker's modal admits.
@@ -444,6 +474,37 @@ where
         self.refresh(context)
     }
 
+    /// Show `items` under `label` in place of the current items, and keep
+    /// the filter and the selected item, which `same` finds among the new
+    /// items. A selected item that left the list leaves the selection at its
+    /// row.
+    pub fn update_items(
+        &mut self,
+        context: &mut dyn Context,
+        label: String,
+        placeholder: &'static str,
+        items: Vec<T>,
+        same: impl Fn(&T, &T) -> bool,
+    ) -> Result<()> {
+        let row = self.cursor.index();
+        let kept = self
+            .selected()
+            .and_then(|old| items.iter().position(|new| same(old, new)));
+        self.items = items;
+        self.label = label;
+        self.placeholder = placeholder;
+        self.apply_filter();
+        match kept.and_then(|item| self.shown.iter().position(|&shown| shown == item)) {
+            Some(shown) => self.cursor.set_index(shown),
+            None => {
+                if let Some(row) = row.filter(|_| !self.shown.is_empty()) {
+                    self.cursor.set_index(row.min(self.shown.len() - 1));
+                }
+            }
+        }
+        self.refresh(context)
+    }
+
     /// Return the selected item.
     #[must_use]
     pub fn selected(&self) -> Option<&T> {
@@ -715,6 +776,8 @@ where
             // than driving it, so the selection dims until the keys come back.
             let style = if self.cursor.index() == Some(row) {
                 roles::selection(context.is_focused() && !self.filtering)
+            } else if item.muted() {
+                "muted"
             } else {
                 "text"
             };
@@ -1214,6 +1277,88 @@ mod tests {
             framed(&harness),
             closed,
             "dropping the search gives the row back to the list"
+        );
+        Ok(())
+    }
+
+    /// An item that can show muted.
+    struct Entry {
+        /// Label.
+        label: String,
+        /// Whether the entry shows muted.
+        muted: bool,
+    }
+
+    impl ItemLabel for Entry {
+        fn label(&self) -> &str {
+            &self.label
+        }
+
+        fn muted(&self) -> bool {
+            self.muted
+        }
+    }
+
+    #[test]
+    fn an_update_keeps_the_filter_and_the_selected_item() -> Result<()> {
+        let mut harness = picker(&["/tmp/alpha", "/tmp/beta", "/tmp/gamma"], 40, 12)?;
+        on_list(&mut harness, |list, context| {
+            list.set_filter(context, "a".into())?;
+            list.select_by(context, 1)
+        })?;
+        let items = ["/tmp/zeta", "/tmp/alpha", "/tmp/beta", "/tmp/gamma"]
+            .map(str::to_owned)
+            .to_vec();
+        harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
+            picker.update_items(context, "Bookmarks", "<none>", items, |old, new| old == new)
+        })?;
+        on_list(&mut harness, |list, _| {
+            assert_eq!(list.filter(), "a", "the filter stays");
+            assert_eq!(list.selected_name(), "/tmp/beta", "the selected item stays");
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn a_muted_item_takes_the_muted_foreground() -> Result<()> {
+        let mut harness = Harness::builder(Picker::<Entry>::new())
+            .size(40, 12)
+            .build()?;
+        harness.render()?;
+        let entries = vec![
+            Entry {
+                label: "first".to_owned(),
+                muted: false,
+            },
+            Entry {
+                label: "xmuted".to_owned(),
+                muted: true,
+            },
+            Entry {
+                label: "zplain".to_owned(),
+                muted: false,
+            },
+        ];
+        harness.with_root_widget_context(|picker: &mut Picker<Entry>, context| {
+            picker.set_items(context, "Entries", "<none>", entries)
+        })?;
+        harness.render()?;
+        let foreground = |needle: char| {
+            harness
+                .canopy
+                .snapshot()
+                .expect("published picker")
+                .buffer
+                .cells()
+                .iter()
+                .find(|cell| cell.ch == needle)
+                .map(|cell| cell.style.fg)
+                .unwrap_or_else(|| panic!("{needle:?} renders"))
+        };
+        assert_ne!(
+            foreground('x'),
+            foreground('z'),
+            "a muted row stands apart from a plain one"
         );
         Ok(())
     }

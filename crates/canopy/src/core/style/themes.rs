@@ -239,8 +239,8 @@ impl Palette {
                 &["/selection/dimmed", "/picker/selection/dimmed"],
                 PartialStyle::new().fg(p.fg).bg(p.selection_bg),
             )
-            .style(
-                "/picker/placeholder",
+            .style_all(
+                &["/picker/placeholder", "/picker/muted"],
                 PartialStyle::new().fg(p.muted_fg).bg(p.panel_bg),
             )
             // A field beside results, such as a picker's filter, takes the
