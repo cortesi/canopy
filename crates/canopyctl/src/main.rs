@@ -660,7 +660,7 @@ mod tests {
             .configure(move |setup| {
                 setup.register_fixture(Fixture::new("seed", "Seed live state", move |canopy| {
                     observed.fetch_add(1, Ordering::Relaxed);
-                    canopy.set_mode("seed");
+                    canopy.enter_mode("seed")?;
                     Ok(())
                 }))
             })
@@ -693,8 +693,8 @@ mod tests {
                         screen: bootstrap.metadata.screen.context("live screen")?,
                         fixture: Some("seed".into()), reset: ResetPolicy::External,
                         steps: [
-                            "canopy.assert(canopy.mode() == \"seed\"); canopy.set_mode(\"first\")",
-                            "canopy.assert(canopy.mode() == \"first\"); canopy.set_mode(\"second\")",
+                            "canopy.assert(canopy.mode() == \"seed\"); canopy.enter_mode(\"first\")",
+                            "canopy.assert(canopy.mode() == \"first\"); canopy.enter_mode(\"second\")",
                         ].into_iter().map(|source| ReplayStep { source: source.into(), expect: ReplayExpectation { success: true } }).collect(),
                     };
                     let args = ReplayArgs { socket: Some(socket), ..ReplayArgs::default() };

@@ -439,7 +439,7 @@ mod tests {
 
         // A mode contributes its own winner once it is active. Order follows
         // the label, so presentation is stable whatever the insertion order.
-        core.input_map.push_mode("insert");
+        core.input_map.enter_mode("insert")?;
         let snapshot = core.available_bindings(None)?;
         assert_eq!(
             snapshot
@@ -562,7 +562,7 @@ mod tests {
             "Global",
             3,
         )?;
-        core.input_map.push_mode("insert");
+        core.input_map.enter_mode("insert")?;
 
         let snapshot = core.available_bindings(None)?;
 
@@ -753,7 +753,7 @@ mod tests {
             "Mode key",
             1,
         )?;
-        core.input_map.push_transient_mode("go");
+        core.input_map.open_menu("go")?;
 
         let snapshot = core.available_bindings(None)?;
         assert_eq!(

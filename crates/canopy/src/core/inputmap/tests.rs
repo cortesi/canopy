@@ -129,8 +129,8 @@ fn resolution_uses_global_then_newest_mode_then_default() -> Result<()> {
     )?;
     bind(&mut map, BindingTier::Global, '?', "/root/**/", "Help", 4)?;
 
-    map.push_mode("normal");
-    map.push_mode("modal");
+    map.enter_mode("normal")?;
+    map.enter_mode("modal")?;
     assert_eq!(
         target(&map, "/root/editor", 'a'),
         Some(BindingAction::Script(script(3)))
@@ -141,12 +141,12 @@ fn resolution_uses_global_then_newest_mode_then_default() -> Result<()> {
     );
     assert_eq!(map.active_modes(), vec!["modal", "normal"]);
 
-    map.pop_mode();
+    map.leave_mode("modal")?;
     assert_eq!(
         target(&map, "/root/editor", 'a'),
         Some(BindingAction::Script(script(2)))
     );
-    map.pop_mode();
+    map.leave_mode("normal")?;
     assert_eq!(
         target(&map, "/root/editor", 'a'),
         Some(BindingAction::Script(script(1)))
@@ -309,9 +309,9 @@ fn a_transient_mode_hides_older_modes_and_the_default_tier() -> Result<()> {
     )?;
     bind(&mut map, BindingTier::Global, '?', "/root/**/", "Help", 4)?;
 
-    map.push_mode("normal");
+    map.enter_mode("normal")?;
     let generation = map.mode_generation();
-    map.push_transient_mode("prefix");
+    map.open_menu("prefix")?;
     assert_ne!(map.mode_generation(), generation);
     assert_eq!(map.transient_mode(), Some("prefix"));
     assert_eq!(map.mode(), "prefix");
@@ -332,7 +332,7 @@ fn a_transient_mode_hides_older_modes_and_the_default_tier() -> Result<()> {
         "blocked by transient mode prefix"
     );
 
-    map.pop_mode();
+    map.close_menu();
     assert_eq!(map.transient_mode(), None);
     assert_eq!(
         target(&map, "/root/editor", 'b'),
@@ -883,7 +883,7 @@ fn a_framework_modal_suspends_the_transient_cutoff() -> Result<()> {
         "test.clear",
         "Allowed",
     )?;
-    map.push_transient_mode("prefix");
+    map.open_menu("prefix")?;
     map.set_modal_bindings(Some(ModalBindings::Framework {
         groups: &[HELP],
         intents: &["test.clear"],
@@ -906,5 +906,90 @@ fn a_framework_modal_suspends_the_transient_cutoff() -> Result<()> {
             .is_none(),
         "without the modal, the transient mode cuts off the default tier"
     );
+    Ok(())
+}
+
+#[test]
+fn named_modes_enter_move_and_leave_by_name() -> Result<()> {
+    let mut map = InputMap::new();
+    map.enter_mode("normal")?;
+    map.enter_mode("insert")?;
+    assert_eq!(map.active_modes(), vec!["insert", "normal"]);
+
+    let generation = map.mode_generation();
+    map.enter_mode("insert")?;
+    assert_eq!(
+        map.mode_generation(),
+        generation,
+        "entering the newest mode changes nothing"
+    );
+    map.enter_mode("normal")?;
+    assert_eq!(
+        map.active_modes(),
+        vec!["normal", "insert"],
+        "an active mode moves to the top, and one name appears once"
+    );
+
+    map.leave_mode("insert")?;
+    assert_eq!(
+        map.active_modes(),
+        vec!["normal"],
+        "a mode leaves from any position"
+    );
+    let generation = map.mode_generation();
+    map.leave_mode("insert")?;
+    assert!(
+        map.enter_mode("").is_err(),
+        "the default mode has no name to enter"
+    );
+    assert!(
+        map.leave_mode("").is_err(),
+        "the default mode has no name to leave"
+    );
+    assert_eq!(
+        map.mode_generation(),
+        generation,
+        "a no-op or a failed call leaves the hooks alone"
+    );
+    assert_eq!(map.active_modes(), vec!["normal"]);
+    Ok(())
+}
+
+#[test]
+fn a_waiting_menu_stays_the_newest_mode() -> Result<()> {
+    let mut map = InputMap::new();
+    map.enter_mode("normal")?;
+    map.open_menu("go")?;
+    let generation = map.mode_generation();
+    assert!(
+        map.enter_mode("insert").is_err(),
+        "a mode cannot bury a waiting menu"
+    );
+    assert!(
+        map.leave_mode("go").is_err(),
+        "the menu closes with its key"
+    );
+    assert_eq!(map.active_modes(), vec!["go", "normal"]);
+    assert_eq!(
+        map.mode_generation(),
+        generation,
+        "the failed calls change nothing"
+    );
+
+    map.leave_mode("normal")?;
+    assert_eq!(
+        map.active_modes(),
+        vec!["go"],
+        "other modes can leave while a menu waits"
+    );
+    map.close_menu();
+    assert!(map.active_modes().is_empty());
+    assert!(map.open_menu("").is_err(), "a menu must name its mode");
+    map.enter_mode("go")?;
+    assert!(
+        map.open_menu("go").is_err(),
+        "one name never names a mode and a menu at once"
+    );
+    assert_eq!(map.active_modes(), vec!["go"]);
     Ok(())
 }

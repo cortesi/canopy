@@ -201,16 +201,10 @@ specs), `mouse` (one mouse spec or an array), a required `description`, and an
 local fs = command.file_select
 
 canopy.keymap({
-    mode = "preview",
+    path = "preview",
     { key = "j", description = "Scroll down", action = fs.pan_preview("down") },
     { key = { "k", "Up" }, mouse = "ScrollUp", description = "Scroll up", action = fs.pan_preview("up") },
-    {
-        key = "esc",
-        description = "Leave the preview",
-        action = function()
-            canopy.set_mode("")
-        end,
-    },
+    { key = "esc", description = "Leave the preview", action = fs.exit_preview() },
 })
 ```
 
@@ -241,19 +235,47 @@ canopy.bind("Ctrl+g", {
 `Ctrl+g` is Canopy's standard help key. A control chord reaches its binding
 even while a text field has focus, where `?` is a character to insert.
 
-`canopy.set_mode(mode)` replaces the active modes with one mode, and the empty
-string returns to the default mode. `canopy.push_mode(mode)` adds a mode above
-the active modes, and `canopy.pop_mode()` removes the newest one and returns the
-newest mode after it. `canopy.mode()` returns the newest active mode, or the
-empty string for the default mode. A key that the newest mode does not bind
-falls through to the older modes and then to the default tier. Rust uses the
-same words: `Canopy::mode`, `set_mode`, `push_mode`, `push_transient_mode`, and
-`pop_mode`.
+### Key scope
 
-Pass `{ transient = true }` to `canopy.push_mode` for a mode that takes only
-the next key. A transient mode is a menu: it offers a choice of keys. Bind the
-key that opens one to `canopy.menu(mode)`, which pushes `mode` as a transient
-mode:
+Keys that belong to one pane follow focus. Put focus in the pane, and scope its
+keys with `path`. The keys then apply while focus is on or inside the pane, and
+help follows focus without further work. Use a mode only for a state that no
+widget holds, such as a menu or an input mode that the script alone controls.
+Do not copy widget state into a mode: when the widget changes that state, the
+mode stays behind.
+
+A path filter is a list of node names separated by `/`. A segment matches one
+node name, `*` matches any one name, and `**` matches any number of names. A
+leading `/` anchors the filter at the root, and a trailing `/` anchors it at the
+end of the path. Without anchors, the filter can match anywhere in the path.
+Routing checks the filter against the path of each node on the route, from the
+focus up to the root.
+
+The trailing anchor changes the scope. A filter such as `preview` matches the
+path of every node in the `preview` region. At the focused node, it therefore
+wins over an unfiltered binding of the same tier. A filter such as `preview/`
+matches only at the region's own node. When focus is on a descendant, an
+unfiltered binding wins there first.
+
+An `after_widget` binding runs only when the focused widget declines the key.
+For example, an `Input` declines Up, Down, PageUp, PageDown, and control chords,
+so the path keys of its region still see them.
+
+### Modes and menus
+
+`canopy.enter_mode(mode)` makes a mode the newest active mode. A mode that is
+already active moves to the top, so one name appears in the stack only once.
+`canopy.leave_mode(mode)` removes a mode wherever it is in the stack, and
+leaving a mode that is not active changes nothing. `canopy.mode()` returns the
+newest active mode, or the empty string for the default mode, and
+`canopy.active_modes()` returns every active mode, newest first. A key that the
+newest mode does not bind falls through to the older modes and then to the
+default tier. No call clears every mode, so a script changes only the modes it
+names. Rust uses the same words: `Canopy::mode`, `enter_mode`, `leave_mode`,
+and `active_modes`.
+
+A menu is a mode that takes only the next key: it offers a choice of keys. Bind
+the key that opens one to `canopy.menu(mode)`:
 
 ```luau
 canopy.keymap({
@@ -266,19 +288,26 @@ canopy.keymap({
 })
 ```
 
-The next key pops a transient mode. When the mode binds that key, the binding
-runs after the pop, so it can enter another mode. It runs before the focused
-widget sees the key, whatever its phase. Any other key only pops the mode, and
-does not fall through to older modes or to the default tier. Global bindings
-still apply, and they also reach through every modal. `Root` lists the keys of a transient mode in a small panel until
-the mode ends, centred over the application and dimming it as a modal does.
+The next key closes a menu. When the menu binds that key, the binding runs after
+the menu closes, so it can enter a mode or open another menu. It runs before the
+focused widget sees the key, whatever its phase. Any other key only closes the
+menu, and does not fall through to older modes or to the default tier. Global
+bindings still apply, and they also reach through every modal. `Root` lists the
+keys of a menu in a small panel until the menu closes, centred over the
+application and dimming it as a modal does.
+
+An open menu is always the newest mode. `canopy.enter_mode` is an error while a
+menu waits for its key, and so is `canopy.leave_mode` with the menu's own name.
+Opening a menu whose name is an active mode is an error, and the key that opens
+it reports the error as a notice. An empty name is an error for all three
+calls. A call that fails changes nothing, and mode hooks run only when the
+stack changes.
 
 A menu binding's action kind is `menu`, so help and the mode panel mark it
 with `...` after its description: a key that leads to another choice reads
 apart from a key that acts, and a description never spells the marker itself.
-A function that calls `canopy.push_mode` also works, but it is opaque, so help
-cannot mark it. `canopy.bindings()` reports a menu with `action = "menu"` and
-the mode it opens in `menu`.
+`canopy.bindings()` reports a menu with `action = "menu"` and the mode it opens
+in `menu`.
 
 Native Rust installs bindings during setup with `Setup::bind(input, options,
 target)`. The target is a `BindingAction`: a command call built by a generated

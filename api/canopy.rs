@@ -753,6 +753,9 @@ impl Canopy {
 }
 
 impl Canopy {
+    /// Return the active modes, newest first. The default mode is not listed.
+    pub fn active_modes(&self) -> Vec<&str>;
+
     /// Return a handle for submitting automation work to this app's UI thread.
     pub fn automation_handle(&self) -> AutomationHandle;
 
@@ -771,6 +774,13 @@ impl Canopy {
     /// Return the look of each cursor role.
     pub fn cursor_looks(&self) -> &CursorLooks;
 
+    /// Make `mode` the newest active mode. A mode that is already active
+    /// moves to the top.
+    ///
+    /// An empty name is an error, and so is entering a mode while a menu
+    /// waits for its key. A failed call changes nothing.
+    pub fn enter_mode(&mut self, mode: &str) -> crate::error::Result<()>;
+
     /// Explain where `key` would go for a node or the current focus.
     ///
     /// The result is advisory: it predicts the route from the same resolver
@@ -781,6 +791,12 @@ impl Canopy {
         focus: Option<NodeId>,
         key: Key,
     ) -> crate::error::Result<KeyRouteExplanation>;
+
+    /// Remove `mode` from the active modes, wherever it is in the stack.
+    ///
+    /// Leaving a mode that is not active changes nothing. An empty name is an
+    /// error, and so is the name of a menu that waits for its key.
+    pub fn leave_mode(&mut self, mode: &str) -> crate::error::Result<()>;
 
     /// Return the newest active mode, or the empty string for the default
     /// mode.
@@ -797,19 +813,6 @@ impl Canopy {
 
     /// Return the palette of the active theme.
     pub fn palette(&self) -> &Palette;
-
-    /// Pop the newest mode and return the newest active mode after the pop.
-    pub fn pop_mode(&mut self) -> &str;
-
-    /// Push a mode above the active modes.
-    pub fn push_mode(&mut self, mode: &str);
-
-    /// Push a mode that takes only the next key.
-    ///
-    /// The next key pops the mode. When the mode binds that key, the binding
-    /// runs after the pop and before any widget sees the key. Any other key
-    /// only pops the mode.
-    pub fn push_transient_mode(&mut self, mode: &str);
 
     /// Replace the root widget while preserving its stable node ID.
     ///
@@ -828,10 +831,6 @@ impl Canopy {
     /// Replace parts of a cursor role's look, in this theme and every later
     /// one.
     pub fn set_cursor_look(&mut self, role: &str, patch: CursorLookPatch);
-
-    /// Replace the active modes with one mode. The empty string returns to
-    /// the default mode.
-    pub fn set_mode(&mut self, mode: &str);
 
     /// Switch to the theme `palette`, reapplying every widget style rule set.
     pub fn set_theme(&mut self, palette: Palette);

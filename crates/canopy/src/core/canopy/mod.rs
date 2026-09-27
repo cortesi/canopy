@@ -526,24 +526,26 @@ impl Canopy {
         self.core.input_map.mode()
     }
 
-    /// Replace the active modes with one mode. The empty string returns to
-    /// the default mode.
-    pub fn set_mode(&mut self, mode: &str) {
-        self.core.input_map.set_mode(mode);
-    }
-
-    /// Push a mode above the active modes.
-    pub fn push_mode(&mut self, mode: &str) {
-        self.core.input_map.push_mode(mode);
-    }
-
-    /// Push a mode that takes only the next key.
+    /// Make `mode` the newest active mode. A mode that is already active
+    /// moves to the top.
     ///
-    /// The next key pops the mode. When the mode binds that key, the binding
-    /// runs after the pop and before any widget sees the key. Any other key
-    /// only pops the mode.
-    pub fn push_transient_mode(&mut self, mode: &str) {
-        self.core.input_map.push_transient_mode(mode);
+    /// An empty name is an error, and so is entering a mode while a menu
+    /// waits for its key. A failed call changes nothing.
+    pub fn enter_mode(&mut self, mode: &str) -> Result<()> {
+        self.core.input_map.enter_mode(mode)
+    }
+
+    /// Remove `mode` from the active modes, wherever it is in the stack.
+    ///
+    /// Leaving a mode that is not active changes nothing. An empty name is an
+    /// error, and so is the name of a menu that waits for its key.
+    pub fn leave_mode(&mut self, mode: &str) -> Result<()> {
+        self.core.input_map.leave_mode(mode)
+    }
+
+    /// Return the active modes, newest first. The default mode is not listed.
+    pub fn active_modes(&self) -> Vec<&str> {
+        self.core.input_map.active_modes()
     }
 
     /// Return whether the mode stack, the bindings, or the shown notice
@@ -608,11 +610,6 @@ impl Canopy {
             self.with_root_context(hook)?;
         }
         Ok(())
-    }
-
-    /// Pop the newest mode and return the newest active mode after the pop.
-    pub fn pop_mode(&mut self) -> &str {
-        self.core.input_map.pop_mode()
     }
 
     /// Return the most recent key or mouse route trace.

@@ -602,7 +602,7 @@ impl Canopy {
             .core
             .transient_winner(start, key)
             .map(|(id, path, record)| (id, path, record.resolved()));
-        self.core.input_map.pop_mode();
+        self.core.input_map.close_menu();
         let Some((id, path, binding)) = winner else {
             self.trace_route(RouteTraceKind::Handled, None, path, "transient mode ended");
             if let Some(guard) = guard.as_deref_mut() {
@@ -688,10 +688,15 @@ impl Canopy {
             RunTarget::Script(function) => canopy
                 .execute_binding_with_scope(node_id, function, scope)
                 .map(|()| None),
-            RunTarget::Menu(mode) => {
-                canopy.push_transient_mode(&mode);
-                Ok(None)
-            }
+            // A menu whose name is an active mode is a configuration
+            // mistake, so it becomes a notice, as a failing script binding
+            // does.
+            RunTarget::Menu(mode) => canopy
+                .core
+                .input_map
+                .open_menu(&mode)
+                .map(|()| None)
+                .map_err(|error| Error::App(Box::new(error))),
             RunTarget::Command(call) => {
                 // Eligibility is read here, inside the event scope, rather than
                 // taken from the last frame, so a status hook sees the same

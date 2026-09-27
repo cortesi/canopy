@@ -16,6 +16,16 @@ pub use intent::{IntentCatalog, IntentName, IntentSpec, NavIntent};
 /// Default mode name.
 const DEFAULT_MODE: &str = "";
 
+/// Reject an empty mode name, which would name the default mode.
+fn check_mode_name(mode: &str) -> Result<()> {
+    if mode.is_empty() {
+        return Err(Error::Invalid(
+            "a mode must have a name; the default mode has none".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Monotonic identifier for a binding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BindingId(u64);
@@ -930,41 +940,78 @@ impl InputMap {
         }
     }
 
-    /// Replace the active modes with one mode.
-    pub fn set_mode(&mut self, mode: &str) {
-        self.mode_stack.clear();
-        self.push_active(mode, false);
-    }
-
-    /// Push a named mode.
-    pub fn push_mode(&mut self, mode: &str) {
-        self.push_active(mode, false);
-    }
-
-    /// Push a named mode that takes only the next key.
+    /// Make `mode` the newest active mode. A mode that is already active
+    /// moves to the top.
     ///
-    /// Keys the mode does not bind never fall through to older modes or the
-    /// default tier. Key routing pops the mode before it runs the binding.
-    pub fn push_transient_mode(&mut self, mode: &str) {
-        self.push_active(mode, true);
-    }
-
-    /// Push one mode stack entry. The empty default mode is never pushed.
-    fn push_active(&mut self, mode: &str, transient: bool) {
-        if !mode.is_empty() {
-            self.mode_stack.push(ActiveMode {
-                name: mode.to_string(),
-                transient,
-            });
+    /// An empty name is an error. So is entering a mode while a menu waits
+    /// for its key, because the mode would bury the menu. A failed call
+    /// changes nothing.
+    pub fn enter_mode(&mut self, mode: &str) -> Result<()> {
+        check_mode_name(mode)?;
+        if let Some(menu) = self.transient_mode() {
+            return Err(Error::Invalid(format!(
+                "mode {mode} cannot enter while menu {menu} waits for its key"
+            )));
         }
+        if self.mode() == mode {
+            return Ok(());
+        }
+        self.mode_stack.retain(|active| active.name != mode);
+        self.mode_stack.push(ActiveMode {
+            name: mode.to_string(),
+            transient: false,
+        });
         self.touch_modes();
+        Ok(())
     }
 
-    /// Pop the newest mode and return the newest active mode.
-    pub fn pop_mode(&mut self) -> &str {
-        self.mode_stack.pop();
+    /// Remove `mode` from the active modes, wherever it is in the stack. A
+    /// mode that is not active stays that way, and the call changes nothing.
+    ///
+    /// An empty name is an error, and so is the name of a menu that waits for
+    /// its key: the menu closes when its key arrives.
+    pub fn leave_mode(&mut self, mode: &str) -> Result<()> {
+        check_mode_name(mode)?;
+        if self.transient_mode() == Some(mode) {
+            return Err(Error::Invalid(format!(
+                "menu {mode} waits for its key, so it cannot be left"
+            )));
+        }
+        let before = self.mode_stack.len();
+        self.mode_stack.retain(|active| active.name != mode);
+        if self.mode_stack.len() != before {
+            self.touch_modes();
+        }
+        Ok(())
+    }
+
+    /// Open `mode` as a menu that waits for one key.
+    ///
+    /// Keys the menu does not bind never fall through to older modes or the
+    /// default tier. Key routing closes the menu before it runs the binding.
+    /// A mode that is already active cannot open as a menu, because one name
+    /// never names both.
+    pub(crate) fn open_menu(&mut self, mode: &str) -> Result<()> {
+        check_mode_name(mode)?;
+        if self.mode_stack.iter().any(|active| active.name == mode) {
+            return Err(Error::Invalid(format!(
+                "menu {mode} cannot open while {mode} is an active mode"
+            )));
+        }
+        self.mode_stack.push(ActiveMode {
+            name: mode.to_string(),
+            transient: true,
+        });
         self.touch_modes();
-        self.mode()
+        Ok(())
+    }
+
+    /// Close the menu that waits for a key, if one does.
+    pub(crate) fn close_menu(&mut self) {
+        if self.transient_mode().is_some() {
+            self.mode_stack.pop();
+            self.touch_modes();
+        }
     }
 
     /// Return the newest active mode.

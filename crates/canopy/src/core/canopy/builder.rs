@@ -189,7 +189,7 @@ mod tests {
     fn build_preserves_phase_order_without_preparing_or_running_startup() -> Result<()> {
         let directory = tempdir().expect("create test directory");
         let config = directory.path().join("config.luau");
-        fs::write(&config, "canopy.set_mode(\"config\")").expect("write test script");
+        fs::write(&config, "canopy.enter_mode(\"config\")").expect("write test script");
         let phases = Rc::new(RefCell::new(Vec::new()));
         let configure_first = Rc::clone(&phases);
         let configure_second = Rc::clone(&phases);
@@ -207,10 +207,10 @@ mod tests {
                 configure_first.borrow_mut().push("configure first");
                 setup.register_startup_script(
                     "deferred",
-                    "function setup() canopy.set_mode(\"startup\") end",
+                    "function setup() canopy.enter_mode(\"startup\") end",
                 )
             })
-            .script("first", "canopy.set_mode(\"first\")")
+            .script("first", "canopy.enter_mode(\"first\")")
             .script_file(config)
             .configure(move |_| {
                 configure_second.borrow_mut().push("configure second");
@@ -218,7 +218,7 @@ mod tests {
             })
             .script(
                 "last",
-                "canopy.assert(canopy.mode() == \"config\"); canopy.set_mode(\"last\")",
+                "canopy.assert(canopy.mode() == \"config\"); canopy.enter_mode(\"last\")",
             )
             .assemble(move |_| {
                 assemble_second.borrow_mut().push("assemble second");
@@ -345,7 +345,7 @@ mod tests {
         let directory = tempdir().expect("create test directory");
         fs::write(
             directory.path().join("init.luau"),
-            "function setup() canopy.set_mode(\"trusted\") end",
+            "function setup() canopy.enter_mode(\"trusted\") end",
         )
         .expect("write test script");
         let mut canopy = CanopyBuilder::new()

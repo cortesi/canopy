@@ -888,7 +888,7 @@ mod tests {
         canopy.eval_script(
             r#"
             canopy.bind("x", { description = "Leak sentinel" }, function()
-                canopy.set_mode("leaked")
+                canopy.enter_mode("leaked")
             end)
             local keys: {string} = { "b", "c", "d", "e", "f", "g", "h", "i", "j", "k",
                 "l", "m", "n", "o", "p", "r", "s", "t", "u", "v", "w", "y", "z" }
@@ -1111,9 +1111,7 @@ mod tests {
             &mut canopy,
             r#"
             canopy.bind("a", { description = "Default key" }, function() end)
-            canopy.bind("p", { description = "Pane keys" }, function()
-                canopy.push_mode("panes", { transient = true })
-            end)
+            canopy.bind("p", { description = "Pane keys" }, canopy.menu("panes"))
             canopy.keymap({
                 mode = "panes",
                 { key = "e", description = "Equal widths", action = function() end },

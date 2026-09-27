@@ -71,10 +71,10 @@ fn fixture(workers: usize) -> Fixture {
                 setup.add_commands::<Probe>()?;
                 setup.register_startup_script(
                     "startup",
-                    "function setup() canopy.set_mode('ready') end",
+                    "function setup() canopy.enter_mode('ready') end",
                 )
             })
-            .script("bindings", "canopy.set_mode('building')")
+            .script("bindings", "canopy.enter_mode('building')")
             .assemble(move |canopy| canopy.replace_root(probe).map(|_| ()))
             .build()?)
     });

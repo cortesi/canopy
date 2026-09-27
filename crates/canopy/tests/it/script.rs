@@ -733,12 +733,20 @@ mod tests {
 
         harness.canopy.eval_script(
             r#"
-            canopy.set_mode("insert")
-            canopy.assert(canopy.mode() == "insert", "mode should switch")
-            canopy.push_mode("palette")
-            canopy.assert(canopy.mode() == "palette", "push should activate top mode")
-            canopy.assert(canopy.pop_mode() == "insert", "pop should restore previous mode")
-            canopy.assert(canopy.pop_mode() == "", "pop should return to default mode")
+            canopy.enter_mode("insert")
+            canopy.assert(canopy.mode() == "insert", "entering should switch the mode")
+            canopy.enter_mode("palette")
+            canopy.assert(canopy.mode() == "palette", "the newest mode is on top")
+            canopy.enter_mode("insert")
+            canopy.assert(canopy.mode() == "insert", "entering an active mode moves it to the top")
+            local modes = canopy.active_modes()
+            canopy.assert(#modes == 2, "one name appears once")
+            canopy.assert(modes[1] == "insert" and modes[2] == "palette", "the newest mode comes first")
+            canopy.leave_mode("palette")
+            canopy.leave_mode("palette")
+            canopy.assert(canopy.mode() == "insert", "leaving works from any position, and twice")
+            canopy.leave_mode("insert")
+            canopy.assert(canopy.mode() == "", "leaving the last mode returns to the default")
         "#,
         )?;
 

@@ -167,7 +167,7 @@ fn canopy_with_binding_order(inputs: [char; 2]) -> Result<Canopy> {
     let mut canopy = app();
     for input in inputs {
         canopy.eval_script(&format!(
-            "canopy.bind({input:?}, {{ description = \"Change mode\" }}, function() canopy.set_mode(\"next\") end)"
+            "canopy.bind({input:?}, {{ description = \"Change mode\" }}, function() canopy.enter_mode(\"next\") end)"
         ))?;
     }
     Ok(canopy)
@@ -1143,7 +1143,7 @@ fn binding_failures_become_notices_and_still_restore_the_event_scope() -> Result
 #[test]
 fn mode_binding_target_switches_modes() -> Result<()> {
     let mut canopy = app();
-    canopy.eval_script(r#"canopy.bind("i", { description = "Insert mode" }, function() canopy.set_mode("insert") end)"#)?;
+    canopy.eval_script(r#"canopy.bind("i", { description = "Insert mode" }, function() canopy.enter_mode("insert") end)"#)?;
 
     canopy.key(None, 'i')?;
 
@@ -1162,12 +1162,16 @@ fn a_transient_mode_takes_the_next_key_before_widgets() -> Result<()> {
     let mut canopy = app();
     canopy.eval_script(
         r#"
-        canopy.bind("z", { description = "Default z" }, function() canopy.set_mode("default") end)
+        canopy.bind("z", { description = "Default z" }, function() canopy.enter_mode("default") end)
         canopy.keymap({
             mode = "prefix",
-            { key = "y", description = "Prefix y", action = function() canopy.push_mode("after") end },
+            { key = "y", description = "Prefix y", action = function() canopy.enter_mode("after") end },
         })
-        canopy.push_mode("prefix", { transient = true })
+        "#,
+    )?;
+    open_menu(&mut canopy, "prefix")?;
+    canopy.eval_script(
+        r#"
         local snapshot = canopy.available_bindings()
         canopy.assert(snapshot.transient_mode == "prefix", "the snapshot names the transient mode")
         "#,
@@ -1187,8 +1191,8 @@ fn a_transient_mode_takes_the_next_key_before_widgets() -> Result<()> {
     assert!(!phases(&canopy).contains(&RouteTraceKind::Widget));
 
     // A key the mode does not bind only pops it.
-    canopy.set_mode("");
-    canopy.push_transient_mode("prefix");
+    clear_modes(&mut canopy)?;
+    open_menu(&mut canopy, "prefix")?;
     canopy.key(None, 'z')?;
     assert_eq!(canopy.mode(), "");
     assert!(!phases(&canopy).contains(&RouteTraceKind::RunBinding));
@@ -1214,12 +1218,12 @@ fn mode_hooks_run_once_for_each_mode_change() -> Result<()> {
     canopy.render(&mut backend)?;
     assert_eq!(RUNS.load(Ordering::Relaxed), 0, "no mode change yet");
 
-    canopy.push_transient_mode("prefix");
+    open_menu(&mut canopy, "prefix")?;
     canopy.render(&mut backend)?;
     canopy.render(&mut backend)?;
     assert_eq!(RUNS.load(Ordering::Relaxed), 1);
 
-    canopy.pop_mode();
+    canopy.core.input_map.close_menu();
     canopy.render(&mut backend)?;
     assert_eq!(RUNS.load(Ordering::Relaxed), 2);
     Ok(())
@@ -1898,7 +1902,7 @@ fn send_key_checked_delivers_a_matching_binding_from_a_script() -> Result<()> {
     // source repeats it.
     canopy.eval_script(
         r#"
-        canopy.bind("x", { description = "Switch" }, function() canopy.set_mode("ran") end)
+        canopy.bind("x", { description = "Switch" }, function() canopy.enter_mode("ran") end)
         local active = canopy.available_bindings()
         canopy.send_key_checked("x", { kind = "binding", binding = active.bindings[1].id })
         "#,
@@ -1960,14 +1964,32 @@ fn modal_leaf(canopy: &mut Canopy, bindings: ModalBindings) -> Result<NodeId> {
     Ok(modal)
 }
 
-/// Bind a default-tier `z` and a `prefix` mode `y`, each pushing a mode.
+/// Open `mode` as a menu that waits for one key, as a menu binding does.
+fn open_menu(canopy: &mut Canopy, mode: &str) -> Result<()> {
+    canopy.core.input_map.open_menu(mode)
+}
+
+/// Leave every active mode.
+fn clear_modes(canopy: &mut Canopy) -> Result<()> {
+    let modes: Vec<String> = canopy
+        .active_modes()
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    for mode in modes {
+        canopy.leave_mode(&mode)?;
+    }
+    Ok(())
+}
+
+/// Bind a default-tier `z` and a `prefix` mode `y`, each entering a mode.
 fn bind_prefix_mode(canopy: &mut Canopy) -> Result<()> {
     canopy.eval_script(
         r#"
-        canopy.bind("z", { description = "Default z" }, function() canopy.push_mode("default_ran") end)
+        canopy.bind("z", { description = "Default z" }, function() canopy.enter_mode("default_ran") end)
         canopy.keymap({
             mode = "prefix",
-            { key = "y", description = "Prefix y", action = function() canopy.push_mode("after") end },
+            { key = "y", description = "Prefix y", action = function() canopy.enter_mode("after") end },
         })
         "#,
     )?;
@@ -1981,7 +2003,7 @@ fn a_transient_mode_under_an_application_modal_takes_the_next_key() -> Result<()
     bind_prefix_mode(&mut canopy)?;
 
     // Discovery, analysis, and routing agree that the mode takes the key.
-    canopy.push_transient_mode("prefix");
+    open_menu(&mut canopy, "prefix")?;
     let snapshot = canopy.available_bindings(None)?;
     assert_eq!(snapshot.transient_mode.as_deref(), Some("prefix"));
     assert_eq!(
@@ -2004,8 +2026,8 @@ fn a_transient_mode_under_an_application_modal_takes_the_next_key() -> Result<()
     );
 
     // A key the mode does not bind pops it without reaching the default tier.
-    canopy.set_mode("");
-    canopy.push_transient_mode("prefix");
+    clear_modes(&mut canopy)?;
+    open_menu(&mut canopy, "prefix")?;
     assert_eq!(
         canopy.explain_key(None, 'z'.into())?.outcome,
         RouteOutcome::TransientDismiss
@@ -2031,7 +2053,7 @@ fn a_checked_transient_key_under_an_application_modal_matches_its_analysis() -> 
     let mut canopy = app();
     modal_leaf(&mut canopy, ModalBindings::Application)?;
     bind_prefix_mode(&mut canopy)?;
-    canopy.push_transient_mode("prefix");
+    open_menu(&mut canopy, "prefix")?;
     let RouteOutcome::Transient(winner) = canopy.explain_key(None, 'y'.into())?.outcome else {
         panic!("expected a transient binding");
     };
@@ -2039,7 +2061,7 @@ fn a_checked_transient_key_under_an_application_modal_matches_its_analysis() -> 
     canopy.send_key_checked('y', KeyExpectation::Transient(winner.binding))?;
     assert_eq!(canopy.core.input_map.active_modes(), ["after"]);
 
-    canopy.push_transient_mode("prefix");
+    open_menu(&mut canopy, "prefix")?;
     canopy.send_key_checked('q', KeyExpectation::TransientDismiss)?;
     assert_eq!(canopy.core.input_map.active_modes(), ["after"]);
     Ok(())
@@ -2058,7 +2080,7 @@ fn a_framework_modal_suspends_a_transient_mode() -> Result<()> {
         },
     )?;
     bind_prefix_mode(&mut canopy)?;
-    canopy.push_transient_mode("prefix");
+    open_menu(&mut canopy, "prefix")?;
 
     let snapshot = canopy.available_bindings(None)?;
     assert_eq!(snapshot.transient_mode, None);
@@ -2103,7 +2125,7 @@ fn explain_key_reports_before_widget_and_unhandled_outcomes() -> Result<()> {
 fn explain_key_matches_the_actual_route() -> Result<()> {
     let mut canopy = app();
     canopy.eval_script(
-        r#"canopy.bind("q", { description = "Switch" }, function() canopy.set_mode("ran") end)"#,
+        r#"canopy.bind("q", { description = "Switch" }, function() canopy.enter_mode("ran") end)"#,
     )?;
     let id = canopy
         .core
@@ -2144,11 +2166,11 @@ fn explain_key_reports_transient_binding_and_dismissal() -> Result<()> {
         r#"
         canopy.keymap({
             mode = "prefix",
-            { key = "y", description = "Prefix y", action = function() canopy.set_mode("after") end },
+            { key = "y", description = "Prefix y", action = function() canopy.enter_mode("after") end },
         })
-        canopy.push_mode("prefix", { transient = true })
         "#,
     )?;
+    open_menu(&mut canopy, "prefix")?;
     let id = canopy
         .core
         .input_map
@@ -2184,7 +2206,7 @@ fn explain_key_reports_transient_binding_and_dismissal() -> Result<()> {
 fn send_key_checked_rechecks_between_calls() -> Result<()> {
     let mut canopy = app();
     canopy.eval_script(
-        r#"canopy.bind("x", { description = "Switch" }, function() canopy.set_mode("ran") end)"#,
+        r#"canopy.bind("x", { description = "Switch" }, function() canopy.enter_mode("ran") end)"#,
     )?;
     let id = canopy
         .core
@@ -2234,7 +2256,7 @@ fn send_key_checked_rechecks_focus_and_tree_changes() -> Result<()> {
 fn send_key_checked_rejects_a_mismatched_expectation_without_delivery() -> Result<()> {
     let mut canopy = app();
     canopy.eval_script(
-        r#"canopy.bind("x", { description = "Switch" }, function() canopy.set_mode("ran") end)"#,
+        r#"canopy.bind("x", { description = "Switch" }, function() canopy.enter_mode("ran") end)"#,
     )?;
     let error = canopy
         .send_key_checked('x', KeyExpectation::Unhandled)
@@ -2408,7 +2430,7 @@ fn a_dormant_action_does_not_shadow_the_next_candidate() -> Result<()> {
         r#"
         canopy.bind("ctrl-x", {description = "Clear", path = "intent_leaf/"}, "test.clear")
         canopy.bind("ctrl-x", {description = "Fallback"}, function()
-            canopy.set_mode("fallback")
+            canopy.enter_mode("fallback")
         end)
         "#,
     )?;
@@ -2452,7 +2474,7 @@ fn a_dormant_global_action_falls_through_to_the_default_tier() -> Result<()> {
             path = "/root/**/",
         }, "test.clear")
         canopy.bind("ctrl-x", {description = "Default fallback"}, function()
-            canopy.set_mode("default_won")
+            canopy.enter_mode("default_won")
         end)
         "#,
     )?;
@@ -2486,9 +2508,9 @@ fn a_transient_mode_offers_its_action_before_the_raw_key() -> Result<()> {
             mode = "prefix",
             { key = "ctrl-x", description = "Clear", action = "test.clear" },
         })
-        canopy.push_mode("prefix", {transient = true})
         "#,
     )?;
+    open_menu(&mut canopy, "prefix")?;
     let key = key::Key::parse_spec("ctrl-x")?;
     let explanation = canopy.core.explain_key(None, key)?;
     assert!(
@@ -2530,11 +2552,11 @@ fn a_transient_mode_dismisses_a_dormant_action() -> Result<()> {
             { key = "ctrl-x", description = "Clear", action = "test.clear" },
         })
         canopy.bind("ctrl-x", {description = "Default"}, function()
-            canopy.set_mode("default_won")
+            canopy.enter_mode("default_won")
         end)
-        canopy.push_mode("prefix", {transient = true})
         "#,
     )?;
+    open_menu(&mut canopy, "prefix")?;
     canopy.key(None, key::Key::parse_spec("ctrl-x")?)?;
     assert_eq!(canopy.mode(), "", "the transient mode dismisses");
     assert_eq!(
@@ -2984,5 +3006,38 @@ fn widget_styles_follow_theme_switches() -> Result<()> {
         "the rule set is reapplied from the new palette"
     );
     assert_eq!(canopy.palette().accent, themes::dracula().accent);
+    Ok(())
+}
+
+#[test]
+fn a_menu_action_checks_its_name_when_it_opens() -> Result<()> {
+    let mut canopy = app();
+    // The action is built while no mode named "go" is active, and it runs
+    // only when its key arrives.
+    canopy.eval_script(r#"canopy.bind("g", { description = "Go" }, canopy.menu("go"))"#)?;
+    canopy.enter_mode("go")?;
+    let generation = canopy.core.input_map.mode_generation();
+
+    canopy.key(None, 'g')?;
+    let notice = canopy
+        .notices()
+        .last()
+        .expect("the failed menu is a notice");
+    assert!(notice.message.contains("go"), "{}", notice.message);
+    assert_eq!(canopy.active_modes(), ["go"], "the modes stay as they were");
+    assert_eq!(canopy.core.input_map.mode_generation(), generation);
+    Ok(())
+}
+
+#[test]
+fn the_script_api_declares_named_mode_operations_only() -> Result<()> {
+    let canopy = app();
+    let api = canopy.script_api()?;
+    for name in ["enter_mode", "leave_mode", "active_modes", "menu"] {
+        assert!(api.contains(name), "the API declares {name}");
+    }
+    for name in ["set_mode", "push_mode", "pop_mode", "PushModeOptions"] {
+        assert!(!api.contains(name), "the API omits {name}");
+    }
     Ok(())
 }

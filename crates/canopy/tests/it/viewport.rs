@@ -247,11 +247,11 @@ end)
             r#"
 canopy.keymap({
     path = "inner/",
-    { mouse = "ScrollDown", description = "Inner", action = function() canopy.set_mode("inner") end },
+    { mouse = "ScrollDown", description = "Inner", action = function() canopy.enter_mode("inner") end },
 })
 canopy.keymap({
     path = "outer/",
-    { mouse = "ScrollUp", description = "Outer", action = function() canopy.set_mode("outer") end },
+    { mouse = "ScrollUp", description = "Outer", action = function() canopy.enter_mode("outer") end },
 })
 "#,
         )?;
@@ -260,7 +260,7 @@ canopy.keymap({
         assert_eq!(scroll(&harness, inner), Point::ZERO);
 
         // The outer binding waits until the inner pane declines.
-        harness.canopy.set_mode("");
+        harness.canopy.leave_mode("inner")?;
         harness.canopy.with_root_context(|context| {
             context.scroll_node(inner, ScrollOp::To(Point { x: 0, y: 9 }))
         })?;

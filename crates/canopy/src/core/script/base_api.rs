@@ -276,22 +276,26 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         handler: Handler::Sync(host_mode),
     },
     BaseFunction {
-        name: "set_mode",
+        name: "enter_mode",
         docs: Some(
-            "Replace the active modes with one mode. Passing the empty string returns to the default mode.",
+            "Make `mode` the newest active mode. A mode that is already active moves to the top. An empty name is an error, and so is entering a mode while a menu waits for its key.",
         ),
         signature: || FunctionSignature::new().param(("mode", Type::String)),
-        handler: Handler::Sync(host_set_mode),
+        handler: Handler::Sync(host_enter_mode),
     },
     BaseFunction {
-        name: "push_mode",
-        docs: Some("Push a mode above the active modes. A transient mode takes only the next key."),
-        signature: || {
-            FunctionSignature::new()
-                .param(("mode", Type::String))
-                .param(("options", Type::named("PushModeOptions").optional()))
-        },
-        handler: Handler::Sync(host_push_mode),
+        name: "leave_mode",
+        docs: Some(
+            "Remove `mode` from the active modes, wherever it is in the stack. Leaving a mode that is not active changes nothing. An empty name is an error, and so is the name of a menu that waits for its key.",
+        ),
+        signature: || FunctionSignature::new().param(("mode", Type::String)),
+        handler: Handler::Sync(host_leave_mode),
+    },
+    BaseFunction {
+        name: "active_modes",
+        docs: Some("Return the active modes, newest first. The default mode is not listed."),
+        signature: || FunctionSignature::new().ret(Type::String.array()),
+        handler: Handler::Sync(host_active_modes),
     },
     BaseFunction {
         name: "menu",
@@ -304,12 +308,6 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
                 .ret(Type::named("MenuAction"))
         },
         handler: Handler::Sync(host_menu),
-    },
-    BaseFunction {
-        name: "pop_mode",
-        docs: Some("Pop the newest mode and return the newest active mode after the pop."),
-        signature: || FunctionSignature::new().ret(Type::String),
-        handler: Handler::Sync(host_pop_mode),
     },
     BaseFunction {
         name: "set_cursor_look",
@@ -638,23 +636,6 @@ fn parse_unbind_selector<'s>(
         mode: field("mode")?.filter(|mode| !mode.is_empty()),
         path: field("path")?.filter(|path| !path.is_empty()),
     })
-}
-
-/// Parse `PushModeOptions` and return whether the mode is transient.
-fn parse_push_mode_options<'s>(
-    scope: &Scope<'s>,
-    options: Option<Table<'s>>,
-) -> StdResult<bool, RuntimeError> {
-    let Some(options) = options else {
-        return Ok(false);
-    };
-    match options.get::<_, ScopedValue>(scope, "transient")? {
-        ScopedValue::Nil => Ok(false),
-        ScopedValue::Boolean(transient) => Ok(transient),
-        _ => Err(RuntimeError::runtime(
-            "push_mode option `transient` must be a boolean",
-        )),
-    }
 }
 
 /// Check that an options table has only known fields, and return them.
@@ -1547,37 +1528,42 @@ fn host_mode<'s>(
     Ok(ret_one(ScopedValue::String(scope.create_string(&mode)?)))
 }
 
-/// `canopy.set_mode`: replace the active modes with one mode.
-fn host_set_mode<'s>(
+/// `canopy.enter_mode`: make a mode the newest active mode.
+fn host_enter_mode<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = HostArgCursor::new(scope, args);
     let mode = args.required::<String>("mode")?;
-    with_current_canopy(scope, |canopy, _| {
-        canopy.set_mode(&mode);
-        Ok(())
-    })?;
+    with_current_canopy(scope, |canopy, _| canopy.enter_mode(&mode))?;
     Ok(ret_none())
 }
 
-/// `canopy.push_mode`: push a mode above the active modes.
-fn host_push_mode<'s>(
+/// `canopy.leave_mode`: remove a mode from the active modes.
+fn host_leave_mode<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = HostArgCursor::new(scope, args);
     let mode = args.required::<String>("mode")?;
-    let transient = parse_push_mode_options(scope, args.optional::<Table<'_>>("options")?)?;
-    with_current_canopy(scope, |canopy, _| {
-        if transient {
-            canopy.push_transient_mode(&mode);
-        } else {
-            canopy.push_mode(&mode);
-        }
-        Ok(())
-    })?;
+    with_current_canopy(scope, |canopy, _| canopy.leave_mode(&mode))?;
     Ok(ret_none())
+}
+
+/// `canopy.active_modes`: return the active modes, newest first.
+fn host_active_modes<'s>(
+    scope: &Scope<'s>,
+    _args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    host_value(scope, |canopy, _| {
+        Ok(ArgValue::Array(
+            canopy
+                .active_modes()
+                .into_iter()
+                .map(|mode| ArgValue::String(mode.to_string()))
+                .collect(),
+        ))
+    })
 }
 
 /// `canopy.menu`: an action that opens a mode as a menu.
@@ -1593,15 +1579,6 @@ fn host_menu<'s>(
     Ok(ret_one(ScopedValue::Userdata(
         scope.create_userdata(ScriptMenu(mode))?,
     )))
-}
-
-/// `canopy.pop_mode`: pop the newest mode and return the newest active mode.
-fn host_pop_mode<'s>(
-    scope: &Scope<'s>,
-    _args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mode = with_current_canopy(scope, |canopy, _| Ok(canopy.pop_mode().to_string()))?;
-    Ok(ret_one(ScopedValue::String(scope.create_string(&mode)?)))
 }
 
 /// A binding action read from a script: a stored target, or a callback the

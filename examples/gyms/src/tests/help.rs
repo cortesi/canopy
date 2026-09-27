@@ -36,7 +36,7 @@ fn add_scroll_rows(canopy: &mut canopy::Canopy) -> Result<()> {
             path = "/root/**/",
             tier = "global",
         }, function()
-            canopy.set_mode("accepted")
+            canopy.enter_mode("accepted")
         end)
         "#,
     );

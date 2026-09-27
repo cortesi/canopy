@@ -291,14 +291,6 @@ pub(super) fn register_framework_declarations(
         ]),
     ));
     builder.alias(declaration::Alias::new(
-        "PushModeOptions",
-        declaration::Type::table([declaration::Field::new(
-            "transient",
-            declaration::Type::Boolean.optional(),
-        )
-        .doc("Take only the next key, then pop the mode.")]),
-    ));
-    builder.alias(declaration::Alias::new(
         "MouseSpec",
         declaration::Type::String,
     ));
