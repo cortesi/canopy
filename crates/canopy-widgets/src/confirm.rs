@@ -28,8 +28,8 @@ const BUTTON_GAP: u32 = 2;
 const BUTTON_PADDING: u32 = 4;
 /// Rows a button occupies, border included.
 const BUTTON_ROWS: u32 = 3;
-/// Rows the body keeps above the buttons: the message and a blank line.
-const MESSAGE_ROWS: u32 = 2;
+/// Rows the body keeps below the message, above the buttons.
+const MESSAGE_GAP_ROWS: u32 = 1;
 
 /// What a dialog asks, and what each answer runs.
 #[derive(Clone, Debug)]
@@ -170,7 +170,7 @@ impl Confirm {
         let title = title.to_owned();
         let message = message.to_owned();
         context.with_widget_mut(body, |body: &mut ConfirmBody, _context| {
-            body.show(message);
+            body.show(&message);
             Ok(())
         })?;
         let frame = context
@@ -429,8 +429,9 @@ impl Widget for Confirm {
 
 /// The question a dialog asks, above the row that answers it.
 struct ConfirmBody {
-    /// What the question is about.
-    message: String,
+    /// What the question is about, one entry for each line. A message has at
+    /// least one line.
+    lines: Vec<String>,
     /// Content width that shows the message and the answers unclipped.
     fitted_width: u32,
 }
@@ -439,19 +440,36 @@ impl ConfirmBody {
     /// Build an empty question.
     fn new() -> Self {
         Self {
-            message: String::new(),
+            lines: vec![String::new()],
             fitted_width: 0,
         }
     }
 
-    /// Show `message` as the question.
-    fn show(&mut self, message: String) {
-        let widest = text::width(&message);
+    /// Show `message` as the question. Each line of the message takes one
+    /// row.
+    fn show(&mut self, message: &str) {
+        let mut lines = message.lines().map(ToOwned::to_owned).collect::<Vec<_>>();
+        if lines.is_empty() {
+            lines.push(String::new());
+        }
+        let widest = lines
+            .iter()
+            .map(|line| text::width(line))
+            .max()
+            .unwrap_or(0);
         // This is the body's content box. The blank columns beside it are the
         // body's own padding, which layout adds around whatever is measured
         // here, so counting them again would spend them twice.
         self.fitted_width = widest.max(buttons_width());
-        self.message = message;
+        self.lines = lines;
+    }
+
+    /// Rows the body keeps above the buttons: each line of the message and a
+    /// blank line.
+    fn message_rows(&self) -> u32 {
+        u32::try_from(self.lines.len())
+            .unwrap_or(u32::MAX)
+            .saturating_add(MESSAGE_GAP_ROWS)
     }
 }
 
@@ -461,7 +479,12 @@ impl Widget for ConfirmBody {
         // the padding keeps the answers below them.
         Layout::fill()
             .direction(Direction::Column)
-            .padding(Edges::new(MESSAGE_ROWS, SIDE_PADDING, 0, SIDE_PADDING))
+            .padding(Edges::new(
+                self.message_rows(),
+                SIDE_PADDING,
+                0,
+                SIDE_PADDING,
+            ))
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
@@ -492,11 +515,14 @@ impl Widget for ConfirmBody {
         if area.w == 0 || area.h == 0 {
             return Ok(());
         }
-        // A message is identified by its tail, which is what a path needs, so
+        // A line is identified by its tail, which is what a path needs, so
         // one too wide loses its head.
         let budget = (area.w as usize).saturating_sub(ROW_PADDING as usize);
-        let message = text::truncate_start(&self.message, budget);
-        render.text("message", area.line(0)?, &format!(" {message}"))
+        for (row, line) in (0..area.h).zip(&self.lines) {
+            let line = text::truncate_start(line, budget);
+            render.text("message", area.line(row)?, &format!(" {line}"))?;
+        }
+        Ok(())
     }
 
     fn name(&self) -> NodeName {
@@ -741,6 +767,30 @@ mod tests {
                 "the answers are centred, asking {message:?} in {width}"
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn a_message_of_several_lines_shows_each_line_above_the_answers() -> Result<()> {
+        let mut harness = dialog("/tmp/alpha\n- first fact\n- second fact", 50, 14)?;
+        let screen = harness.tbuf().lines();
+        let row = |needle: &str| {
+            screen
+                .iter()
+                .position(|line| line.contains(needle))
+                .unwrap_or_else(|| panic!("{needle:?} is on screen: {screen:#?}"))
+        };
+        let (first, second, third) = (row("/tmp/alpha"), row("- first fact"), row("- second fact"));
+        assert_eq!((second, third), (first + 1, first + 2), "{screen:#?}");
+        let yes = answer_node(&mut harness, Answer::Yes)?;
+        let top = harness
+            .canopy
+            .with_root_view(|context| context.view_of(yes).expect("live node").outer.tl.y);
+        assert_eq!(
+            usize::try_from(top).expect("answer row"),
+            third + 2,
+            "one blank line separates the message from the answers: {screen:#?}"
+        );
         Ok(())
     }
 
