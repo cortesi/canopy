@@ -479,6 +479,15 @@ impl ImageView {
         Ok(())
     }
 
+    /// Fit the entire image to the view and clear its pan offset.
+    #[command]
+    pub fn fit(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        self.auto_fit = true;
+        self.apply_auto_fit(ctx.view().content_size());
+        ctx.scroll(ScrollOp::To(Point::default()));
+        Ok(())
+    }
+
     /// Pan by one step in the specified direction.
     /// @param dir The pan direction.
     #[command]

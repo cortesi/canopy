@@ -504,6 +504,9 @@ impl DiffView {
 }
 
 impl DiffView {
+    /// Remove the search and its highlights without moving the view.
+    pub fn clear_search(&mut self, _ctx: &mut dyn Context);
+
     /// Return the diff being shown.
     #[must_use]
     pub fn diff(&self) -> &Diff;
@@ -525,6 +528,10 @@ impl DiffView {
     /// Scroll to the previous change.
     pub fn prev_change(&mut self, c: &mut dyn Context);
 
+    /// Return the revision of the displayed diff text.
+    #[must_use]
+    pub fn revision(&self) -> u64;
+
     /// Return the rows for the current scope.
     #[must_use]
     pub fn rows(&self) -> &[DiffRow];
@@ -532,6 +539,24 @@ impl DiffView {
     /// Return the display scope.
     #[must_use]
     pub fn scope(&self) -> Scope;
+
+    /// Return the number of displayed search matches.
+    #[must_use]
+    pub fn search_matches(&self) -> usize;
+
+    /// Move between matches, wrapping at either end, and reveal the match.
+    pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32);
+
+    /// Return the one-based current match position, or zero with no match.
+    #[must_use]
+    pub fn search_position(&self) -> usize;
+
+    /// Return the displayed source text in unified row order.
+    ///
+    /// Hidden context is omitted. Headers and gaps contribute empty lines,
+    /// so each text line has the same index as its unified display row.
+    #[must_use]
+    pub fn search_text(&self) -> String;
 
     /// Replace the highlighters for the old and new sides.
     pub fn set_highlighters(
@@ -543,6 +568,11 @@ impl DiffView {
     /// Note that a model is computing. After a short delay the view shows a
     /// spinner until [`Self::set_model`] or [`Self::set_message`] arrives.
     pub fn set_loading(&mut self);
+
+    /// Highlight matches over [`Self::search_text`] and reveal the first at
+    /// or below the top of the view. Ranges use character columns and must
+    /// stay within one source line. Side-by-side layout maps them to its rows.
+    pub fn set_matches(&mut self, ctx: &mut dyn Context, ranges: Vec<TextRange>);
 
     /// Show `message` in place of the diff, such as for a binary file.
     pub fn set_message(&mut self, message: impl Into<String>);
@@ -758,10 +788,16 @@ pub struct ImageView {/* private fields */}
 
 impl ImageView {
     /// Build a positional call with typed user arguments.
+    pub fn call_fit() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
     pub fn call_pan(dir: ScrollDirection) -> CommandCall;
 
     /// Build a positional call with typed user arguments.
     pub fn call_zoom(dir: crate::image_view::ZoomDirection) -> CommandCall;
+
+    /// Return the command spec for this command.
+    pub fn spec_fit() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_pan() -> &'static CommandSpec;
@@ -778,6 +814,9 @@ impl ImageView {
     /// before they have an image should keep it hidden until then.
     #[must_use]
     pub fn empty() -> Self;
+
+    /// Fit the entire image to the view and clear its pan offset.
+    pub fn fit(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Create a new image view widget from a file path.
     pub fn from_path(path: impl AsRef<Path>) -> canopy::error::Result<Self>;

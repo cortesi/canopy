@@ -103,6 +103,8 @@ impl Palette {
             .fg("/diff_view/separator", p.frame)
             .fg("/diff_view/message", p.faint_fg)
             .fg("/diff_view/loading", p.faint_fg)
+            .style("/diff_view/search/match", PartialStyle::new().fg(p.fg).bg(p.yellow.mix(p.bg, MATCH_FADE, Mix::Rgb)))
+            .style("/diff_view/search/current", PartialStyle::new().fg(p.bg).bg(p.yellow).attrs(AttrSet::new(Attr::Bold)))
             .fg("/blue", p.blue)
             .fg("/red", p.red)
             .fg("/magenta", p.magenta)

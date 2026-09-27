@@ -17,6 +17,7 @@
 //! - `diff/separator`: the side-by-side divider.
 
 use std::{
+    collections::BTreeMap,
     ops::Range,
     time::{Duration, Instant},
 };
@@ -25,7 +26,7 @@ use canopy::{
     Context, NodeName, Register, Setup, ViewContext, Widget, derive_commands,
     error::Result,
     geom::{Line, Point, Rect, Size},
-    layout::{CanvasContext, Constraint, MeasureConstraints, Measurement, ScrollOp},
+    layout::{CanvasContext, Constraint, MeasureConstraints, Measurement, RevealAlign, ScrollOp},
     render::Render,
     style::Style,
     text,
@@ -34,6 +35,7 @@ use canopy::{
 use crate::{
     Spinner,
     diff::{Diff, DiffRow, Scope},
+    editor::TextRange,
     highlight::{HighlightSpan, Highlighter},
     run_paint,
 };
@@ -54,7 +56,7 @@ pub enum Mode {
 }
 
 /// One side of a comparison.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Side {
     /// The old version.
     Old,
@@ -151,6 +153,18 @@ impl DiffModel {
     }
 }
 
+/// A match in one displayed source line.
+struct SearchMatch {
+    /// Version containing the match.
+    side: Side,
+    /// Zero-based source line within that version.
+    line: usize,
+    /// Character columns containing the matched text.
+    columns: Range<usize>,
+    /// Row in the active display layout.
+    row: usize,
+}
+
 /// A line diff with a display strategy, a scope, and optional highlighting.
 pub struct DiffView {
     /// The line diff being shown.
@@ -181,6 +195,15 @@ pub struct DiffView {
     loading: Option<Instant>,
     /// Index into the change heads that the last change move reached.
     change: usize,
+    /// Changes whenever the displayed text changes.
+    revision: u64,
+    /// Matches in display order, indexed by source line for painting.
+    matches: Vec<SearchMatch>,
+    /// Match indices for each source line, including both halves of context
+    /// rows.
+    match_lines: BTreeMap<(Side, usize), Vec<usize>>,
+    /// Match index selected for navigation and stronger highlighting.
+    current_match: Option<usize>,
 }
 
 #[derive_commands]
@@ -206,6 +229,10 @@ impl DiffView {
             message: None,
             loading: None,
             change: 0,
+            revision: 0,
+            matches: Vec::new(),
+            match_lines: BTreeMap::new(),
+            current_match: None,
         }
     }
 
@@ -235,6 +262,8 @@ impl DiffView {
         self.message = None;
         self.loading = None;
         self.change = 0;
+        self.revision = self.revision.wrapping_add(1);
+        self.clear_matches();
     }
 
     /// Replace the highlighters for the old and new sides.
@@ -264,6 +293,173 @@ impl DiffView {
     #[must_use]
     pub fn message(&self) -> Option<&str> {
         self.message.as_deref()
+    }
+
+    /// Return the revision of the displayed diff text.
+    #[must_use]
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    /// Return the displayed source text in unified row order.
+    ///
+    /// Hidden context is omitted. Headers and gaps contribute empty lines,
+    /// so each text line has the same index as its unified display row.
+    #[must_use]
+    pub fn search_text(&self) -> String {
+        if self.message.is_some() {
+            return String::new();
+        }
+        self.rows
+            .iter()
+            .map(|row| match row {
+                DiffRow::Unchanged { old, .. } | DiffRow::Removed { old } => {
+                    self.diff.old_line(*old)
+                }
+                DiffRow::Added { new } => self.diff.new_line(*new),
+                _ => "",
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Highlight matches over [`Self::search_text`] and reveal the first at
+    /// or below the top of the view. Ranges use character columns and must
+    /// stay within one source line. Side-by-side layout maps them to its rows.
+    pub fn set_matches(&mut self, ctx: &mut dyn Context, ranges: Vec<TextRange>) {
+        self.clear_matches();
+        let mut side_rows = BTreeMap::new();
+        if self.strategy == Mode::SideBySide {
+            for (row, pair) in self.side_rows.iter().enumerate() {
+                if let SideRow::Pair { old, new, .. } = pair {
+                    if let Some(line) = old {
+                        side_rows.insert((Side::Old, *line), row);
+                    }
+                    if let Some(line) = new {
+                        side_rows.insert((Side::New, *line), row);
+                    }
+                }
+            }
+        }
+        for range in ranges {
+            if range.start.line != range.end.line || range.start.column >= range.end.column {
+                continue;
+            }
+            let source = match self.rows.get(range.start.line) {
+                Some(DiffRow::Unchanged { old, .. } | DiffRow::Removed { old }) => {
+                    (Side::Old, *old)
+                }
+                Some(DiffRow::Added { new }) => (Side::New, *new),
+                _ => continue,
+            };
+            let row = side_rows.get(&source).copied().unwrap_or(range.start.line);
+            self.matches.push(SearchMatch {
+                side: source.0,
+                line: source.1,
+                columns: range.start.column..range.end.column,
+                row,
+            });
+        }
+        self.matches
+            .sort_by_key(|found| (found.row, found.side, found.columns.start));
+        for (index, found) in self.matches.iter().enumerate() {
+            self.match_lines
+                .entry((found.side, found.line))
+                .or_default()
+                .push(index);
+            // Context is drawn on both sides but counted once.
+            if self.strategy == Mode::SideBySide
+                && found.side == Side::Old
+                && let Some(SideRow::Pair {
+                    new: Some(new),
+                    changed: false,
+                    ..
+                }) = self.side_rows.get(found.row)
+            {
+                self.match_lines
+                    .entry((Side::New, *new))
+                    .or_default()
+                    .push(index);
+            }
+        }
+        let top = ctx.view().view_rect().tl.y as usize;
+        self.current_match = (!self.matches.is_empty()).then(|| {
+            self.matches
+                .iter()
+                .position(|found| found.row >= top)
+                .unwrap_or(0)
+        });
+        self.reveal_match(ctx);
+    }
+
+    /// Move between matches, wrapping at either end, and reveal the match.
+    pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32) {
+        let count = self.matches.len();
+        if count == 0 {
+            return;
+        }
+        let step = delta.unsigned_abs() as usize % count;
+        let current = self.current_match.unwrap_or(0);
+        self.current_match = Some(if delta < 0 {
+            (current + count - step) % count
+        } else {
+            (current + step) % count
+        });
+        self.reveal_match(ctx);
+    }
+
+    /// Remove the search and its highlights without moving the view.
+    pub fn clear_search(&mut self, _ctx: &mut dyn Context) {
+        self.clear_matches();
+    }
+
+    /// Return the number of displayed search matches.
+    #[must_use]
+    pub fn search_matches(&self) -> usize {
+        self.matches.len()
+    }
+
+    /// Return the one-based current match position, or zero with no match.
+    #[must_use]
+    pub fn search_position(&self) -> usize {
+        self.current_match.map_or(0, |index| index + 1)
+    }
+
+    /// Drop cached matches and their current position.
+    fn clear_matches(&mut self) {
+        self.matches.clear();
+        self.match_lines.clear();
+        self.current_match = None;
+    }
+
+    /// Reveal the current match with up to three preceding rows of context.
+    fn reveal_match(&self, ctx: &mut dyn Context) {
+        let Some(found) = self.current_match.and_then(|index| self.matches.get(index)) else {
+            return;
+        };
+        let geometry = self.geometry(ctx.view().content_size().w);
+        let source = match found.side {
+            Side::Old => self.diff.old_line(found.line),
+            Side::New => self.diff.new_line(found.line),
+        };
+        let prefix = source.chars().take(found.columns.start).collect::<String>();
+        let start = text::width(&text::expand_tabs(&prefix, self.tab_stop));
+        let through = source.chars().take(found.columns.end).collect::<String>();
+        let end = text::width(&text::expand_tabs(&through, self.tab_stop));
+        let half = if self.strategy == Mode::SideBySide && found.side == Side::New {
+            geometry.half + 1
+        } else {
+            0
+        };
+        ctx.reveal_area(
+            Rect::new(
+                half + geometry.gutter + start,
+                column(found.row),
+                end.saturating_sub(start).max(1),
+                1,
+            ),
+            RevealAlign::Top(3),
+        );
     }
 
     /// Scroll to the next change.
@@ -371,6 +567,8 @@ impl DiffView {
         self.rows = self.diff.rows(self.scope);
         self.side_rows = side_rows(&self.rows);
         self.prepared = false;
+        self.revision = self.revision.wrapping_add(1);
+        self.clear_matches();
     }
 
     /// Prepare both highlighters for the current texts, once.
@@ -477,6 +675,9 @@ impl DiffView {
         let scroll = view_rect.tl.x;
         let base = rndr.resolve_style(style);
         let spans = self.highlight(side, line, text);
+        let matches = self.match_lines.get(&(side, line));
+        let search_current = rndr.resolve_style("search/current");
+        let search_match = rndr.resolve_style("search/match");
         let mut span_index = 0usize;
         let mut span_style: Option<Style> = None;
         let line_rect = Rect::new(origin.x, y, width, 1);
@@ -493,6 +694,18 @@ impl DiffView {
             y,
             line_rect,
             |render, g_start, g_end| {
+                if let Some(index) = matches.and_then(|indices| {
+                    indices.iter().find(|&&index| {
+                        let found = &self.matches[index];
+                        g_start < found.columns.end && g_end > found.columns.start
+                    })
+                }) {
+                    return if Some(*index) == self.current_match {
+                        search_current.clone()
+                    } else {
+                        search_match.clone()
+                    };
+                }
                 while let Some(span) = spans.get(span_index) {
                     if span.range.end <= g_start {
                         span_index += 1;
@@ -926,7 +1139,88 @@ fn header_text(old: &Range<usize>, new: &Range<usize>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{DiffRow, SideRow, header_text, side_rows};
+    use canopy::{error::Result, geom::Point, testing::harness::Harness};
+
+    use super::{DiffModel, DiffRow, DiffView, Mode, Scope, SideRow, header_text, side_rows};
+    use crate::editor::{TextPosition, TextRange};
+
+    #[test]
+    fn search_highlights_both_versions_and_wraps_in_each_layout() -> Result<()> {
+        for mode in [Mode::Unified, Mode::SideBySide] {
+            let view = DiffView::new(DiffModel::from_texts(
+                "alpha\nold needle\nsame needle\n",
+                "alpha\nnew needle\nsame needle\n",
+            ))
+            .with_strategy(mode);
+            let mut harness = Harness::builder(view).size(50, 5).build()?;
+            harness.render()?;
+            harness.with_root_widget_context(|view: &mut DiffView, ctx| {
+                assert_eq!(
+                    view.search_text(),
+                    "alpha\nold needle\nnew needle\nsame needle"
+                );
+                view.set_matches(
+                    ctx,
+                    vec![
+                        TextRange::new(TextPosition::new(1, 4), TextPosition::new(1, 10)),
+                        TextRange::new(TextPosition::new(2, 4), TextPosition::new(2, 10)),
+                        TextRange::new(TextPosition::new(3, 5), TextPosition::new(3, 11)),
+                    ],
+                );
+                assert_eq!((view.search_matches(), view.search_position()), (3, 1));
+                Ok(())
+            })?;
+            harness.render()?;
+            let current = harness.canopy.style().resolve("diff_view/search/current");
+            let cell = harness.buf().get(Point::new(7, 1)).expect("first match");
+            assert_eq!(
+                cell.style.bg,
+                current.bg.solid_color().unwrap(),
+                "the removed text is highlighted"
+            );
+            harness.with_root_widget_context(|view: &mut DiffView, ctx| {
+                view.search_next(ctx, 1);
+                assert_eq!(view.search_position(), 2);
+                Ok(())
+            })?;
+            harness.render()?;
+            let point = match mode {
+                Mode::Unified => Point::new(7, 2),
+                Mode::SideBySide => Point::new(32, 1),
+            };
+            assert_eq!(
+                harness.buf().get(point).expect("added match").style.bg,
+                current.bg.solid_color().unwrap()
+            );
+            harness.with_root_widget_context(|view: &mut DiffView, ctx| {
+                view.search_next(ctx, -2);
+                assert_eq!(view.search_position(), 3, "backwards navigation wraps");
+                let revision = view.revision();
+                view.set_model(DiffModel::from_texts("", "replacement\n"));
+                assert_ne!(view.revision(), revision);
+                assert_eq!(
+                    view.search_matches(),
+                    0,
+                    "old matches leave with their model"
+                );
+                Ok(())
+            })?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn search_omits_hidden_context() {
+        let view = DiffView::new(DiffModel::from_texts(
+            "alpha\nold\nshared\n",
+            "alpha\nnew\nshared\n",
+        ))
+        .with_scope(Scope::Context(0));
+        let text = view.search_text();
+        assert!(text.contains("old\nnew"));
+        assert!(!text.contains("alpha"));
+        assert!(!text.contains("shared"));
+    }
 
     #[test]
     fn side_rows_pair_removed_and_added_runs() {

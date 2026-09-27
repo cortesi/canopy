@@ -29,6 +29,8 @@
 /diff_view/message fg=Some(Solid(Rgb { r: 128, g: 128, b: 128 })) bg=None attrs=None
 /diff_view/missing fg=Some(Solid(Rgb { r: 180, g: 180, b: 180 })) bg=None attrs=None
 /diff_view/removed fg=Some(Solid(Rgb { r: 224, g: 108, b: 117 })) bg=None attrs=None
+/diff_view/search/current fg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) bg=Some(Solid(Rgb { r: 229, g: 192, b: 123 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/diff_view/search/match fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 119, g: 101, b: 66 })) attrs=None
 /diff_view/separator fg=Some(Solid(Rgb { r: 72, g: 72, b: 72 })) bg=None attrs=None
 /dropdown fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=None attrs=None
 /dropdown/chosen fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=None attrs=None
@@ -112,6 +114,8 @@
 /diff_view/message fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=None attrs=None
 /diff_view/missing fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=None attrs=None
 /diff_view/removed fg=Some(Solid(Rgb { r: 220, g: 50, b: 47 })) bg=None attrs=None
+/diff_view/search/current fg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) bg=Some(Solid(Rgb { r: 181, g: 137, b: 0 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/diff_view/search/match fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 90, g: 90, b: 27 })) attrs=None
 /diff_view/separator fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=None attrs=None
 /dropdown fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=None attrs=None
 /dropdown/chosen fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
@@ -195,6 +199,8 @@
 /diff_view/message fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=None attrs=None
 /diff_view/missing fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=None attrs=None
 /diff_view/removed fg=Some(Solid(Rgb { r: 220, g: 50, b: 47 })) bg=None attrs=None
+/diff_view/search/current fg=Some(Solid(Rgb { r: 253, g: 246, b: 227 })) bg=Some(Solid(Rgb { r: 181, g: 137, b: 0 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/diff_view/search/match fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 217, g: 191, b: 113 })) attrs=None
 /diff_view/separator fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=None attrs=None
 /dropdown fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=None attrs=None
 /dropdown/chosen fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
@@ -278,6 +284,8 @@
 /diff_view/message fg=Some(Solid(Rgb { r: 98, g: 114, b: 164 })) bg=None attrs=None
 /diff_view/missing fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=None attrs=None
 /diff_view/removed fg=Some(Solid(Rgb { r: 255, g: 85, b: 85 })) bg=None attrs=None
+/diff_view/search/current fg=Some(Solid(Rgb { r: 40, g: 42, b: 54 })) bg=Some(Solid(Rgb { r: 241, g: 250, b: 140 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/diff_view/search/match fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 140, g: 146, b: 97 })) attrs=None
 /diff_view/separator fg=Some(Solid(Rgb { r: 98, g: 114, b: 164 })) bg=None attrs=None
 /dropdown fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=None attrs=None
 /dropdown/chosen fg=Some(Solid(Rgb { r: 189, g: 147, b: 249 })) bg=None attrs=None
@@ -361,6 +369,8 @@
 /diff_view/message fg=Some(Solid(Rgb { r: 146, g: 131, b: 116 })) bg=None attrs=None
 /diff_view/missing fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=None attrs=None
 /diff_view/removed fg=Some(Solid(Rgb { r: 251, g: 73, b: 52 })) bg=None attrs=None
+/diff_view/search/current fg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) bg=Some(Solid(Rgb { r: 250, g: 189, b: 47 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/diff_view/search/match fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 145, g: 114, b: 43 })) attrs=None
 /diff_view/separator fg=Some(Solid(Rgb { r: 124, g: 111, b: 100 })) bg=None attrs=None
 /dropdown fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=None attrs=None
 /dropdown/chosen fg=Some(Solid(Rgb { r: 131, g: 165, b: 152 })) bg=None attrs=None
