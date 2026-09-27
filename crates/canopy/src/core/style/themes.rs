@@ -119,8 +119,8 @@ impl Palette {
             // A button's accelerator shares the help overlay's key colour, so one
             // letter names the key without the label repeating it. The button keeps
             // whatever ground it sits on.
-            .style(
-                "/button/key",
+            .style_all(
+                &["/button/key", "/button/focused/key"],
                 PartialStyle::new().fg(p.key).attrs(AttrSet::new(Attr::Bold)),
             )
             .fg("/button/focused/border", p.frame_focused)
@@ -281,16 +281,29 @@ impl Palette {
                 ],
                 PartialStyle::new().bg(p.panel_bg),
             )
+            // An answer keeps the panel ground and its key colour whether or
+            // not it has focus, so every key stays visible. An unfocused answer
+            // is framed like an unfocused frame, and the focused answer takes
+            // the accent, so the answer that Enter gives stands out.
             .style_all(
-                &["/dialog/button/border", "/dialog/button/text"],
+                &[
+                    "/dialog/button/text",
+                    "/dialog/button/fill",
+                    "/dialog/button/focused/text",
+                    "/dialog/button/focused/fill",
+                ],
                 PartialStyle::new().fg(p.fg).bg(p.panel_bg),
             )
             .style(
-                "/dialog/button/focused/border",
-                PartialStyle::new().fg(p.frame_focused).bg(p.panel_bg),
+                "/dialog/button/border",
+                PartialStyle::new().fg(p.frame).bg(p.panel_bg),
             )
             .style(
-                "/dialog/button/key",
+                "/dialog/button/focused/border",
+                PartialStyle::new().fg(p.accent).bg(p.panel_bg),
+            )
+            .style_all(
+                &["/dialog/button/key", "/dialog/button/focused/key"],
                 PartialStyle::new()
                     .fg(p.key)
                     .bg(p.panel_bg)

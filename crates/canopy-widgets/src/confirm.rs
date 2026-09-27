@@ -826,6 +826,18 @@ mod tests {
             style_of('o'),
             "both keys stand out from their labels"
         );
+        // The dialog opens on `no`. Its key and its ground match those of the
+        // unfocused answer, so focus hides no key.
+        assert_eq!(
+            style_of('n'),
+            style_of('y'),
+            "the focused key keeps its colour"
+        );
+        assert_eq!(
+            style_of('o').1,
+            style_of('e').1,
+            "the focused answer keeps the panel ground"
+        );
         Ok(())
     }
 
@@ -855,6 +867,17 @@ mod tests {
             "every frame edge shares it"
         );
         assert_eq!(background('y'), background('B'), "a button shares it too");
+        // The blank inside a button, before its label, shares it as well.
+        let cells = snapshot.buffer.cells();
+        let label = cells
+            .iter()
+            .position(|cell| cell.ch == 'n')
+            .expect("the label of `no` renders");
+        assert_eq!(
+            cells[label - 1].style.bg,
+            background('B'),
+            "the padding of a button shares the dialog background"
+        );
         Ok(())
     }
 

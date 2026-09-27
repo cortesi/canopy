@@ -200,9 +200,11 @@ with selection. The built-in themes define every frame path.
 `Button` paints its border with `border`, its label with `text`, and the one
 label character an accelerator names with `key`, all beneath the `button` layer
 and its state layers. So `button/key` styles every accelerator, and
-`button/focused/border` the border of a focused button. The built-in themes
-give the accelerator the help overlay's key colour and leave the button on
-whatever ground it sits on.
+`button/focused/border` the border of a focused button. A state layer hides the
+plain paths beneath it, so a theme sets each part again under the state:
+`button/focused/key` styles the accelerator of a focused button. The built-in
+themes give every accelerator the help overlay's key colour, focused or not,
+and leave the button on whatever ground it sits on.
 
 ## Dialogs
 
@@ -210,9 +212,12 @@ whatever ground it sits on.
 keeps a margin clear around it, and swallows clicks there. It pushes
 `dialog`, so the frame resolves `dialog/frame` and a body's `background`
 resolves `dialog/background`, whatever host holds the dialog. Buttons in a
-dialog resolve `dialog/button/border`, `dialog/button/text`, and
-`dialog/button/key` before the plain `button` paths. The built-in themes give
-all of them the panel background, so every dialog reads as one surface.
+dialog resolve `dialog/button/border`, `dialog/button/fill`, `dialog/button/text`,
+and `dialog/button/key` before the plain `button` paths, and a focused button
+resolves the same parts under `dialog/button/focused`. The built-in themes give
+all of them the panel background, so every dialog reads as one surface. Every
+answer keeps its key colour. An unfocused answer takes the border of an
+unfocused frame, and the focused answer takes the accent.
 
 `Confirm`, `Picker`, and the help overlay are dialogs. `Confirm` also pushes
 `confirm` around its dialog, and its question paints `message`, which resolves
