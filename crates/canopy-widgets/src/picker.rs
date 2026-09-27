@@ -13,13 +13,15 @@
 //! owner: the list keeps its filter and selection under it, and takes the
 //! keyboard back when the overlay closes.
 
+use std::iter;
+
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
     ViewContextExt, Widget,
     commands::CommandCall,
     derive_commands,
     error::{Error, Result},
-    geom::{Line, Point, Size},
+    geom::{Line, Point, Rect, Size},
     input::{
         BindingAction, BindingOptions, BindingPhase, BindingTier, Event, FrameworkBindingGroup,
         IntentName, NavIntent,
@@ -30,7 +32,7 @@ use canopy::{
     },
     render::Render,
     style::roles,
-    text::Truncate,
+    text::{self, Truncate},
 };
 
 use crate::{
@@ -781,9 +783,25 @@ where
             } else {
                 "text"
             };
-            let shown = self.truncate.apply(item.label(), budget);
             let line = Line::new(area.tl.x, area.tl.y.saturating_add(offset), area.w);
-            render.text(style, line, &format!(" {shown}"))?;
+            let label = item.label();
+            match item.runs() {
+                // A label that fits paints its runs beneath the style of the
+                // row. One that must be cut paints as one run.
+                Some(runs) if text::width(label) as usize <= budget => {
+                    render.fill(style, Rect::new(line.tl.x, line.tl.y, line.w, 1), ' ')?;
+                    let styled = runs
+                        .into_iter()
+                        .map(|(role, text)| (format!("{style}/{role}"), text))
+                        .collect::<Vec<_>>();
+                    let runs = styled.iter().map(|(role, text)| (role.as_str(), *text));
+                    render.runs(line, style, iter::once((style, " ")).chain(runs))?;
+                }
+                _ => {
+                    let shown = self.truncate.apply(label, budget);
+                    render.text(style, line, &format!(" {shown}"))?;
+                }
+            }
         }
         Ok(())
     }
@@ -1359,6 +1377,107 @@ mod tests {
             foreground('x'),
             foreground('z'),
             "a muted row stands apart from a plain one"
+        );
+        Ok(())
+    }
+
+    /// An item in styled runs.
+    struct Styled {
+        /// Label.
+        label: String,
+        /// Role and text of each run.
+        runs: Vec<(&'static str, String)>,
+        /// Whether the item shows muted.
+        muted: bool,
+    }
+
+    impl Styled {
+        /// Builds an item of `runs`.
+        fn new(runs: &[(&'static str, &str)], muted: bool) -> Self {
+            Self {
+                label: runs.iter().map(|(_, text)| *text).collect(),
+                runs: runs
+                    .iter()
+                    .map(|(role, text)| (*role, (*text).to_owned()))
+                    .collect(),
+                muted,
+            }
+        }
+    }
+
+    impl ItemLabel for Styled {
+        fn label(&self) -> &str {
+            &self.label
+        }
+
+        fn muted(&self) -> bool {
+            self.muted
+        }
+
+        fn runs(&self) -> Option<Vec<(&str, &str)>> {
+            Some(
+                self.runs
+                    .iter()
+                    .map(|(role, text)| (*role, text.as_str()))
+                    .collect(),
+            )
+        }
+    }
+
+    #[test]
+    fn runs_take_their_role_beneath_the_style_of_the_row() -> Result<()> {
+        use canopy::style::Color;
+
+        let mut harness = Harness::builder(Picker::<Styled>::new())
+            .configure(|setup| {
+                setup.widget_styles(|_, rules| {
+                    rules
+                        .fg("text/tag", Color::Red)
+                        .fg("muted/tag/kept", Color::Green)
+                        .apply();
+                });
+                Ok(())
+            })
+            .size(40, 12)
+            .build()?;
+        harness.render()?;
+        let items = vec![
+            Styled::new(&[("", "aaa")], false),
+            Styled::new(&[("", "bbb "), ("tag", "Q")], false),
+            Styled::new(
+                &[("", "ccc "), ("tag", "W"), ("", " "), ("tag/kept", "K")],
+                true,
+            ),
+        ];
+        harness.with_root_widget_context(|picker: &mut Picker<Styled>, context| {
+            picker.set_items(context, "Entries", "<none>", items)
+        })?;
+        harness.render()?;
+        let snapshot = harness.canopy.snapshot().expect("published picker");
+        let cell = |needle: char| {
+            snapshot
+                .buffer
+                .cells()
+                .iter()
+                .find(|cell| cell.ch == needle)
+                .map(|cell| (cell.style.fg, cell.style.bg))
+                .unwrap_or_else(|| panic!("{needle:?} renders"))
+        };
+        assert_eq!(cell('Q').0, Color::Red, "a run takes its role");
+        assert_eq!(
+            cell('Q').1,
+            cell('b').1,
+            "a run keeps the ground of its row"
+        );
+        assert_eq!(
+            cell('W'),
+            cell('c'),
+            "a muted row mutes a run without a rule"
+        );
+        assert_eq!(
+            cell('K').0,
+            Color::Green,
+            "a rule under `muted` keeps its colour"
         );
         Ok(())
     }

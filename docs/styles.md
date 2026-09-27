@@ -140,6 +140,14 @@ takes filter text, so it resolves `picker/input/*` before the plain `input/*`
 paths. Use the standard roles instead of copying a
 second focus state into every row or resetting selection when focus moves.
 
+A `Picker` item can show its label in styled runs through `ItemLabel::runs`,
+such as a name in one colour and a badge in another. The list paints each run
+with its role beneath the style of the row: `text/<role>`, `muted/<role>`, or
+`selection/<role>`. A run takes its foreground from that path and the ground
+of the row. A role without a rule takes the style of the row, so a muted or
+selected row reads as one unless a rule such as `muted/badge` keeps a colour.
+A label too wide for the list shows cut, as one run.
+
 ## Tabs
 
 `Tabs` paints a one-row bar above its pages. The bar fill uses `tabs/bar`, each

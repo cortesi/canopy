@@ -10,6 +10,17 @@ pub trait ItemLabel {
     fn muted(&self) -> bool {
         false
     }
+
+    /// Return the label as runs of text, each with a style role, or `None`
+    /// to show it as one run. The runs join to [`ItemLabel::label`].
+    ///
+    /// A list paints each run with its role beneath the style of the row:
+    /// `text/<role>`, `muted/<role>`, or the selection role and the run role.
+    /// A role without a rule of its own takes the style of the row, so a
+    /// muted or selected row reads as one unless a theme says otherwise.
+    fn runs(&self) -> Option<Vec<(&str, &str)>> {
+        None
+    }
 }
 
 impl ItemLabel for String {

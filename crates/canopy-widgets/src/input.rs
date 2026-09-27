@@ -1,3 +1,5 @@
+use std::iter::repeat_n;
+
 use canopy::{
     Context, EventOutcome, NodeName, Register, Setup, ViewContext, Widget,
     commands::CommandCall,
@@ -222,6 +224,18 @@ pub fn register_clear_intent(setup: &mut Setup) -> Result<()> {
     )?)
 }
 
+/// Returns `text` with a dot in place of each character, as wide as the
+/// character, so the caret keeps its column.
+fn masked(text: &str) -> String {
+    let mut masked = String::with_capacity(text.len());
+    let mut buffer = [0; 4];
+    for character in text.chars() {
+        let width = text::width(character.encode_utf8(&mut buffer)) as usize;
+        masked.extend(repeat_n('•', width));
+    }
+    masked
+}
+
 /// Single-line text input widget.
 ///
 /// The whole row changes style while the field takes keys, even when empty. A
@@ -264,7 +278,8 @@ pub enum ValueExposure {
     Omit,
     /// Publish the raw single-line value.
     Public,
-    /// Mark the value as sensitive and always omit it from semantics.
+    /// Mark the value as sensitive: always omit it from semantics, and draw
+    /// a dot in place of each character on screen.
     Sensitive,
 }
 
@@ -526,6 +541,11 @@ impl Widget for Input {
         let text_x = content_origin.x.saturating_add(prompt_width);
         let line = Line::new(text_x, content_origin.y, width);
         let content = self.buffer.render_text();
+        let content = if self.value_exposure == ValueExposure::Sensitive {
+            masked(&content)
+        } else {
+            content
+        };
         r.text(roles::TEXT, line, &content)?;
         let caret = Point {
             x: text_x + self.buffer.cursor_display(),
@@ -670,6 +690,22 @@ mod tests {
                 .value,
             None
         );
+    }
+
+    #[test]
+    fn a_sensitive_value_shows_as_dots() -> Result<()> {
+        let mut harness =
+            Harness::builder(Input::new("").with_value_exposure(ValueExposure::Sensitive))
+                .size(20, 1)
+                .build()?;
+        harness.render()?;
+        harness.type_text("sk-123")?;
+        harness.render()?;
+        let screen = harness.tbuf().lines().join("");
+        assert!(screen.starts_with("••••••"), "{screen:?}");
+        assert!(!screen.contains("sk-123"), "{screen:?}");
+        assert_eq!(super::masked("a界"), "•••");
+        Ok(())
     }
 
     #[test]
