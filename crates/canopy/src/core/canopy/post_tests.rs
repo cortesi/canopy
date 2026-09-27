@@ -810,6 +810,7 @@ fn a_failed_posted_call_from_input_is_a_notice_naming_the_poster() -> Result<()>
     site.canopy.core.input_map.bind(
         InputSpec::Mouse(click.into()),
         inputmap::BindingOptions {
+            show_in_help: true,
             path: None,
             tier: inputmap::BindingTier::Default,
             description: "Fire".into(),

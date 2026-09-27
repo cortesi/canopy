@@ -151,17 +151,21 @@ pub(super) struct BindingRow {
     description: String,
 }
 
-/// Return the rows for every effective binding in `snapshot`.
+/// Return the rows for effective bindings that opt into help in `snapshot`.
 ///
 /// Mouse inputs sort after every key, so the familiar key list keeps its order
 /// and the pointer rows gather at the end. An input that shares an action with
 /// a key joins that action's row rather than repeating it.
 pub(super) fn snapshot_rows(snapshot: &BindingSnapshot) -> Vec<BindingRow> {
-    let mice = snapshot.mouse_bindings.iter().map(|binding| BindingRow {
-        sort: (MOUSE_SORT_GROUP, binding.input.to_string()),
-        label: binding.input.to_string(),
-        description: binding_description(binding),
-    });
+    let mice = snapshot
+        .mouse_bindings
+        .iter()
+        .filter(|binding| binding.show_in_help)
+        .map(|binding| BindingRow {
+            sort: (MOUSE_SORT_GROUP, binding.input.to_string()),
+            label: binding.input.to_string(),
+            description: binding_description(binding),
+        });
     key_rows_of(&snapshot.bindings)
         .into_iter()
         .chain(mice)
@@ -172,6 +176,7 @@ pub(super) fn snapshot_rows(snapshot: &BindingSnapshot) -> Vec<BindingRow> {
 pub(super) fn key_rows_of(bindings: &[AvailableBinding<Key>]) -> Vec<BindingRow> {
     bindings
         .iter()
+        .filter(|binding| binding.show_in_help)
         .map(|binding| BindingRow {
             sort: key_sort_key(binding.input),
             label: Key::label(&binding.input),

@@ -136,6 +136,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
             setup.bind(
                 Key::parse_spec(key)?,
                 BindingOptions {
+                    show_in_help: true,
                     path: Some("**/list/**/".parse()?),
                     tier: BindingTier::Framework(Self::BINDINGS),
                     description: description.to_string(),

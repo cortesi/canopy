@@ -488,6 +488,7 @@ fn framework_command_bindings_share_route_resolution_and_event_scope() -> Result
         let (binding, _) = c.core.input_map.bind(
             'h'.into(),
             inputmap::BindingOptions {
+                show_in_help: true,
                 path: Some("/r/**/".parse()?),
                 tier: inputmap::BindingTier::Framework(group),
                 description: "Framework root command".to_string(),
@@ -533,6 +534,7 @@ fn explicit_binding_phases_override_the_same_selector_and_change_route_trace() -
                 c,
                 'h',
                 inputmap::BindingOptions {
+                    show_in_help: true,
                     path: Some("/r/**/".parse()?),
                     tier: inputmap::BindingTier::Default,
                     description: "Root action".into(),
@@ -579,6 +581,7 @@ fn click_on(core: &Core, node: NodeId) -> mouse::MouseEvent {
 /// Options for one mouse binding on the test tree.
 fn mouse_options(path: &str, phase: inputmap::BindingPhase) -> Result<inputmap::BindingOptions> {
     Ok(inputmap::BindingOptions {
+        show_in_help: true,
         path: Some(path.parse()?),
         tier: inputmap::BindingTier::Default,
         description: "Click action".into(),
@@ -925,6 +928,7 @@ fn gated_runs(canopy: &mut Canopy, nodes: [NodeId; 2]) -> [usize; 2] {
 /// Options for one gated binding.
 fn gated_options(path: &str) -> Result<inputmap::BindingOptions> {
     Ok(inputmap::BindingOptions {
+        show_in_help: true,
         path: Some(path.parse()?),
         tier: inputmap::BindingTier::Default,
         description: "Act".into(),
@@ -1817,6 +1821,7 @@ fn bind_key_phase(canopy: &mut Canopy, key: char, phase: BindingPhase) -> Result
     let (id, _) = canopy.core.input_map.bind(
         InputSpec::Key(key.into()),
         BindingOptions {
+            show_in_help: true,
             path: None,
             tier: BindingTier::Default,
             description: "Test binding".to_string(),
@@ -2776,6 +2781,7 @@ fn default_options(
     phase: Option<inputmap::BindingPhase>,
 ) -> Result<inputmap::BindingOptions> {
     Ok(inputmap::BindingOptions {
+        show_in_help: true,
         path: path.map(str::parse).transpose()?,
         tier: inputmap::BindingTier::Default,
         description: description.to_string(),

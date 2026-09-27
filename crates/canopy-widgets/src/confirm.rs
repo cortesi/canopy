@@ -353,6 +353,7 @@ fn register_bindings(setup: &mut Setup) -> Result<()> {
         setup.bind(
             input,
             BindingOptions {
+                show_in_help: true,
                 path: Some(path.parse()?),
                 tier: BindingTier::Framework(Confirm::BINDINGS),
                 description: description.to_string(),

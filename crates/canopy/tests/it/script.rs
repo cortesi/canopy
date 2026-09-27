@@ -607,6 +607,7 @@ mod tests {
                 let id = setup.bind(
                     Key::parse_spec("F1")?,
                     BindingOptions {
+                        show_in_help: true,
                         path: Some("/api_root/**/".parse()?),
                         tier: BindingTier::Framework(group),
                         description: "Framework action".to_string(),

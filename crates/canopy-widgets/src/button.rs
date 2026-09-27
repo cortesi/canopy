@@ -1128,6 +1128,7 @@ mod tests {
                 setup.bind(
                     input,
                     BindingOptions {
+                        show_in_help: true,
                         path: Some("**/dialog/**/".parse()?),
                         tier: BindingTier::Framework(GUARDED),
                         description: description.to_string(),

@@ -2161,6 +2161,8 @@ pub mod input {
         pub input: I,
         /// Required user-facing description.
         pub description: String,
+        /// Whether shortcut help displays the binding. Discovery still includes it.
+        pub show_in_help: bool,
         /// Resolution tier.
         pub tier: BindingTier,
         /// Original path filter.
@@ -2255,6 +2257,8 @@ pub mod input {
         pub tier: BindingTier,
         /// Required user-facing description.
         pub description: String,
+        /// Whether shortcut help displays the binding. Routing is unaffected.
+        pub show_in_help: bool,
         /// Optional diagnostic source.
         pub source: Option<String>,
         /// Phase that sets when the binding runs relative to the widget.

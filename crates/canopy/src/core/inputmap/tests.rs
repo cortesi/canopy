@@ -44,6 +44,7 @@ fn bind_framework(
         map,
         input,
         BindingOptions {
+            show_in_help: true,
             path: Some(path.parse()?),
             tier: BindingTier::Framework(group),
             description: description.to_string(),
@@ -65,6 +66,7 @@ fn bind(
     map.bind(
         InputSpec::Key(key.into()),
         BindingOptions {
+            show_in_help: true,
             tier,
             path: if path.is_empty() {
                 None
@@ -521,6 +523,7 @@ fn diagnostics_distinguish_tier_path_insertion_route_and_framework_group_causes(
 
 fn options(path: &str, phase: BindingPhase) -> BindingOptions {
     BindingOptions {
+        show_in_help: true,
         path: if path.is_empty() {
             None
         } else {
@@ -719,6 +722,7 @@ fn bind_action(
     map.bind(
         InputSpec::Key(key.into()),
         BindingOptions {
+            show_in_help: true,
             tier,
             path: if path.is_empty() {
                 None
@@ -752,6 +756,7 @@ fn intents_validate_names_phases_and_inputs() -> Result<()> {
     );
 
     let options = BindingOptions {
+        show_in_help: true,
         tier: BindingTier::Default,
         path: None,
         description: "Clear".to_string(),

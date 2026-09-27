@@ -125,6 +125,8 @@ pub struct BindingOptions {
     pub tier: BindingTier,
     /// Required user-facing description.
     pub description: String,
+    /// Whether shortcut help displays the binding. Routing is unaffected.
+    pub show_in_help: bool,
     /// Optional diagnostic source.
     pub source: Option<String>,
     /// Phase that sets when the binding runs relative to the widget.
@@ -214,6 +216,8 @@ pub struct BindingRecord {
     pub tier: BindingTier,
     /// Required user-facing description.
     pub description: String,
+    /// Whether shortcut help displays the binding. Routing is unaffected.
+    pub show_in_help: bool,
     /// Optional diagnostic source.
     pub source: Option<String>,
     /// Phase that sets when the binding runs relative to the widget. A widget
@@ -610,6 +614,7 @@ impl InputMap {
             input,
             tier: options.tier,
             description: options.description,
+            show_in_help: options.show_in_help,
             source: options.source,
             phase,
             action: target,

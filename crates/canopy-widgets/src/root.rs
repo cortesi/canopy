@@ -37,6 +37,7 @@ canopy.bind("Ctrl+g", {
     phase = "before_widget",
     tier = "global",
     description = "Show key bindings",
+    show_in_help = false,
 }, command.root.toggle_help())
 "#;
 
@@ -466,6 +467,7 @@ fn register_help_bindings(setup: &mut Setup) -> Result<()> {
         setup.bind(
             Key::parse_spec(key)?,
             BindingOptions {
+                show_in_help: key != "Ctrl+g",
                 path: Some("/root/help/**/".parse()?),
                 tier: BindingTier::Framework(HELP_BINDINGS),
                 description: description.to_string(),
@@ -670,6 +672,7 @@ mod tests {
                 phase = "before_widget",
                 tier = "global",
                 description = "Show key bindings",
+                show_in_help = false,
             }, command.root.toggle_help())
             "#,
             )
@@ -798,6 +801,12 @@ mod tests {
         let (mut canopy, mut backend, left, _right) = setup_root_tree()?;
         install_help_trigger(&mut canopy)?;
         let before = canopy.available_bindings(Some(left))?;
+        assert!(
+            before.bindings.iter().any(|binding| {
+                binding.input == Key::parse_spec("ctrl-g").unwrap() && !binding.show_in_help
+            }),
+            "the help trigger stays available to diagnostics"
+        );
 
         canopy.eval_script("root.show_help()")?;
 
@@ -808,6 +817,12 @@ mod tests {
         );
         let live = canopy.available_bindings(None)?;
         assert_eq!(live.framework_group, Some(HELP_BINDINGS));
+        assert!(
+            live.bindings.iter().any(|binding| {
+                binding.input == Key::parse_spec("ctrl-g").unwrap() && !binding.show_in_help
+            }),
+            "the closing chord also stays active while omitted from help"
+        );
         assert!(canopy.available_bindings(Some(left))?.bindings.is_empty());
         let installed = modal_snapshot(&mut canopy)?;
         assert_eq!(

@@ -996,6 +996,56 @@ fn declarative_script_binding_exposes_arguments_phase_and_route_target() -> Resu
 }
 
 #[test]
+fn bindings_can_hide_from_help_without_changing_discovery_or_dispatch() -> Result<()> {
+    let (mut canopy, _, _) = script_call_probes()?;
+    canopy.eval_script(
+        r#"
+        canopy.bind("x", {
+            description = "Hidden command",
+            show_in_help = false,
+        }, command.script_call_probe.set_value(11))
+        canopy.keymap({
+            show_in_help = false,
+            {key = "y", description = "Hidden by keymap", action = command.script_call_probe.set_value(12)},
+            {key = "z", description = "Visible override", show_in_help = true, action = function() end},
+            {mouse = "LeftDown", description = "Hidden mouse", action = function() end},
+        })
+        canopy.keymap({
+            {key = "v", description = "Visible default", action = function() end},
+            {key = "w", description = "Hidden entry", show_in_help = false, action = function() end},
+        })
+        local expected = {x = false, y = false, z = true, v = true, w = false, LeftDown = false}
+        for _, binding in canopy.bindings() do
+            assert(binding.show_in_help == expected[binding.input])
+        end
+        local available = canopy.available_bindings()
+        assert(#available.bindings == 5)
+        assert(#available.mouse_bindings == 1)
+        for _, binding in available.bindings do
+            assert(binding.show_in_help == expected[binding.input])
+        end
+        assert(available.mouse_bindings[1].show_in_help == false)
+        local before = #canopy.bindings()
+        assert(not pcall(function()
+            canopy.keymap({
+                {key = "a", description = "First", action = function() end},
+                {key = "b", description = "Bad flag", show_in_help = ("no" :: any), action = function() end},
+            })
+        end))
+        assert(#canopy.bindings() == before, "invalid visibility must not install any entries")
+        "#,
+    )?;
+    for (key, value) in [('x', 11), ('y', 12)] {
+        canopy.key(None, key)?;
+        assert_eq!(
+            canopy.eval_script(r#"return canopy.call_focus("script_call_probe::identify")"#)?,
+            ArgValue::Int(value)
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn availability_reports_key_and_mouse_bindings_in_separate_lists() -> Result<()> {
     let (mut canopy, _, _) = script_call_probes()?;
     canopy.eval_script(

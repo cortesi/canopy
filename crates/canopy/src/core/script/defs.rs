@@ -158,6 +158,9 @@ pub(super) fn register_framework_declarations(
         declaration::Type::table([
             declaration::Field::new("description", declaration::Type::String)
                 .doc("Required user-facing binding description."),
+            declaration::Field::new("show_in_help", declaration::Type::Boolean.optional()).doc(
+                "Show this binding in shortcut help. Defaults to true; routing is unaffected.",
+            ),
             declaration::Field::new("mode", declaration::Type::String.optional())
                 .doc("Optional mode. Nil or empty uses the default mode."),
             declaration::Field::new("path", declaration::Type::String.optional())
@@ -199,6 +202,8 @@ pub(super) fn register_framework_declarations(
                 .doc("One mouse spec, or an array of mouse specs. Each spec makes one binding."),
                 declaration::Field::new("description", declaration::Type::String)
                     .doc("User-facing description of every binding the entry makes."),
+                declaration::Field::new("show_in_help", declaration::Type::Boolean.optional())
+                    .doc("Override the keymap's shortcut-help visibility for this entry."),
                 declaration::Field::new("action", action_type.clone()).doc(
                     "A CommandCall, a MenuAction from `canopy.menu`, a function, or a \
                          registered intent name. An intent entry takes keys only and runs \
@@ -224,6 +229,8 @@ pub(super) fn register_framework_declarations(
                     .doc("Dispatch phase for every entry, relative to the widget. The default is after_widget."),
                     declaration::Field::new("tier", declaration::Type::literals(["global"]).optional())
                         .doc("Use the global tier. A global keymap cannot name a mode."),
+                    declaration::Field::new("show_in_help", declaration::Type::Boolean.optional())
+                        .doc("Show every entry in shortcut help unless an entry overrides it. Defaults to true."),
                 ],
                 declaration::TableIndexer::new(
                     declaration::Type::Number,
@@ -397,6 +404,8 @@ fn register_binding_info(builder: &mut module::Builder) {
             ),
             declaration::Field::new("description", declaration::Type::String)
                 .doc("Required user-facing description."),
+            declaration::Field::new("show_in_help", declaration::Type::Boolean)
+                .doc("Whether shortcut help displays this binding. Routing is unaffected."),
             declaration::Field::new("source", declaration::Type::String.optional())
                 .doc("Diagnostic source for application bindings."),
             action_field(),
@@ -526,6 +535,8 @@ fn register_observation_info(builder: &mut module::Builder) {
                 .optional(),
             ),
             declaration::Field::new("description", declaration::Type::String),
+            declaration::Field::new("show_in_help", declaration::Type::Boolean)
+                .doc("Whether shortcut help displays this binding. Discovery still includes it."),
             tier_field(),
             declaration::Field::new("group", declaration::Type::String.optional())
                 .doc("Framework group, when the tier is framework."),

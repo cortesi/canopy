@@ -313,6 +313,10 @@ pub(super) fn binding_info_to_arg(binding: &inputmap::BindingRecord) -> ArgValue
             ArgValue::String(binding.description.clone()),
         ),
         (
+            "show_in_help".to_string(),
+            ArgValue::Bool(binding.show_in_help),
+        ),
+        (
             "action".to_string(),
             ArgValue::String(binding.action.label().to_string()),
         ),
@@ -643,6 +647,10 @@ fn available_binding_to_arg<I: ToString>(binding: input::AvailableBinding<I>) ->
         (
             "description".to_string(),
             ArgValue::String(binding.description),
+        ),
+        (
+            "show_in_help".to_string(),
+            ArgValue::Bool(binding.show_in_help),
         ),
         ("path".to_string(), ArgValue::String(binding.path_filter)),
         (

@@ -26,6 +26,7 @@ fn binding(
     phase: BindingPhase,
 ) -> AvailableBinding<key::Key> {
     AvailableBinding {
+        show_in_help: true,
         id: BindingId::from_u64(id),
         input: key.into(),
         description: description.to_string(),
@@ -55,6 +56,7 @@ fn snapshot(focus: NodeId, bindings: Vec<AvailableBinding<key::Key>>) -> Binding
 /// Build one effective mouse binding record.
 fn mouse_binding(id: u64, spec: &str, description: &str) -> AvailableBinding<mouse::Mouse> {
     AvailableBinding {
+        show_in_help: true,
         id: BindingId::from_u64(id),
         input: mouse::Mouse::parse_spec(spec).expect("valid mouse spec"),
         description: description.to_string(),
@@ -126,6 +128,30 @@ fn wide_keys_align_descriptions_by_display_columns() {
         .map(text::width)
         .collect::<Vec<_>>();
     assert_eq!(widths, [6, 6, 6]);
+}
+
+#[test]
+fn hidden_keys_and_mouse_inputs_are_omitted_before_grouping() {
+    let mut hidden = binding(1, 'x', "Activate", BindingPhase::AfterWidget);
+    hidden.show_in_help = false;
+    let mut hidden_mouse = mouse_binding(3, "LeftDown", "Activate");
+    hidden_mouse.show_in_help = false;
+    let list = list_with_mice(
+        vec![
+            hidden,
+            binding(2, 'y', "Activate", BindingPhase::AfterWidget),
+        ],
+        vec![hidden_mouse],
+    );
+    let lines = list.display_lines(60);
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0].key.as_deref().map(str::trim), Some("y"));
+    assert_eq!(lines[0].text, "Activate");
+    assert_eq!(
+        super::binding_list::key_rows_of(&list.snapshot().unwrap().bindings).len(),
+        1,
+        "transient menu help applies the same visibility option"
+    );
 }
 
 #[test]

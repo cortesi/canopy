@@ -713,6 +713,7 @@ where
             setup.bind(
                 Key::parse_spec(key)?,
                 BindingOptions {
+                    show_in_help: true,
                     path: Some("**/picker/**/".parse()?),
                     tier: BindingTier::Framework(Picker::<T>::BINDINGS),
                     description: description.to_string(),

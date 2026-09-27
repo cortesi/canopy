@@ -57,6 +57,8 @@ pub struct AvailableBinding<I> {
     pub input: I,
     /// Required user-facing description.
     pub description: String,
+    /// Whether shortcut help displays the binding. Discovery still includes it.
+    pub show_in_help: bool,
     /// Resolution tier.
     pub tier: BindingTier,
     /// Original path filter.
@@ -241,6 +243,7 @@ impl Core {
             id: record.id,
             input,
             description: record.description.clone(),
+            show_in_help: record.show_in_help,
             tier: record.tier.clone(),
             path_filter: record.path_filter().to_string(),
             route_path,
@@ -328,6 +331,7 @@ mod tests {
         core.input_map.bind(
             InputSpec::Key(key.into()),
             BindingOptions {
+                show_in_help: true,
                 tier,
                 path: Some(path.parse()?),
                 description: description.into(),
@@ -352,6 +356,7 @@ mod tests {
         core.input_map.bind(
             InputSpec::Mouse(mouse),
             BindingOptions {
+                show_in_help: true,
                 tier,
                 path: Some(path.parse()?),
                 description: description.into(),
@@ -470,6 +475,7 @@ mod tests {
         core.input_map.bind(
             Mouse::parse_spec("LeftDown")?.into(),
             BindingOptions {
+                show_in_help: true,
                 path: Some("/root/**/".parse()?),
                 tier: BindingTier::Framework(group),
                 description: "Dialog click".to_string(),
@@ -507,6 +513,7 @@ mod tests {
         core.input_map.bind(
             InputSpec::Mouse(Mouse::parse_spec("LeftDown")?),
             BindingOptions {
+                show_in_help: true,
                 path: Some("eligible_leaf/".parse()?),
                 tier: BindingTier::Default,
                 description: "Update selection".into(),
@@ -627,6 +634,7 @@ mod tests {
         core.input_map.bind(
             InputSpec::Key('u'.into()),
             BindingOptions {
+                show_in_help: true,
                 path: Some("eligible_leaf/".parse()?),
                 tier: BindingTier::Default,
                 description: "Update selection".into(),
@@ -794,6 +802,7 @@ mod tests {
         core.input_map.bind(
             InputSpec::Key(Key::parse_spec("ctrl-a")?),
             BindingOptions {
+                show_in_help: true,
                 path: Some("control_code_leaf/".parse()?),
                 tier: BindingTier::Default,
                 description: "Canonical binding".to_string(),
@@ -831,6 +840,7 @@ mod tests {
         core.input_map.bind(
             'j'.into(),
             BindingOptions {
+                show_in_help: true,
                 path: Some("/root/help/**/".parse()?),
                 tier: BindingTier::Framework(group),
                 description: "Scroll down".to_string(),

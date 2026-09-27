@@ -192,10 +192,15 @@ preview beside a list, is moved by an application command that calls
 `scroll_node`.
 
 Use `canopy.keymap` to write a keymap. The named fields of the table are the
-options shared by every entry: `mode`, `path`, `phase`, and `tier`. The array
+options shared by every entry: `mode`, `path`, `phase`, `tier`, and `show_in_help`. The array
 part holds the entries. An entry has `key` (one key spec or an array of key
 specs), `mouse` (one mouse spec or an array), a required `description`, and an
 `action`. An entry needs `key`, `mouse`, or both.
+
+Set `show_in_help = false` to omit a binding from shortcut help and menu hints.
+It defaults to `true`. A keymap entry can override its keymap's value. The
+binding still runs and appears in `canopy.bindings()` and
+`canopy.available_bindings()` with its `show_in_help` value.
 
 ```luau
 local fs = command.file_select
@@ -226,6 +231,7 @@ name a mode, and its path must be anchored at both ends.
 ```luau
 canopy.bind("Ctrl+g", {
     description = "Show key bindings",
+    show_in_help = false,
     path = "/root/**/",
     tier = "global",
     phase = "before_widget",

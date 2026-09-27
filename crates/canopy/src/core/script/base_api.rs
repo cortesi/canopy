@@ -618,6 +618,9 @@ fn parse_bind_options<'s>(
             .map(|path| path.parse())
             .transpose()?,
         description,
+        show_in_help: options
+            .get::<_, Option<bool>>(scope, "show_in_help")?
+            .unwrap_or(true),
         source: Some(script_callback_label(scope)),
         phase,
     })
@@ -1680,10 +1683,10 @@ fn host_bind<'s>(
 
 /// Keymap option fields, which are the `BindOptions` fields other than
 /// `description`.
-const KEYMAP_OPTIONS: [&str; 4] = ["mode", "path", "phase", "tier"];
+const KEYMAP_OPTIONS: [&str; 5] = ["mode", "path", "phase", "tier", "show_in_help"];
 
 /// Keymap entry fields.
-const KEYMAP_ENTRY_FIELDS: [&str; 4] = ["key", "mouse", "description", "action"];
+const KEYMAP_ENTRY_FIELDS: [&str; 5] = ["key", "mouse", "description", "action", "show_in_help"];
 
 /// One validated binding that a keymap call will install.
 struct PlannedBinding<'s> {
@@ -1841,6 +1844,9 @@ fn plan_keymap_entry<'s>(
     }
     let mut options = options.clone();
     options.description = description;
+    if let Some(show) = entry.get::<_, Option<bool>>(scope, "show_in_help")? {
+        options.show_in_help = show;
+    }
     inputmap::validate_application_binding(&options, action.intent())
         .map_err(|err| entry_error(format!("is invalid: {err}")))?;
     let mut planned = Vec::new();
