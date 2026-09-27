@@ -688,9 +688,8 @@ impl Canopy {
             RunTarget::Script(function) => canopy
                 .execute_binding_with_scope(node_id, function, scope)
                 .map(|()| None),
-            // A menu whose name is an active mode is a configuration
-            // mistake, so it becomes a notice, as a failing script binding
-            // does.
+            // A menu that conflicts with an active mode or waiting menu
+            // reports a notice, as a failing script binding does.
             RunTarget::Menu(mode) => canopy
                 .core
                 .input_map

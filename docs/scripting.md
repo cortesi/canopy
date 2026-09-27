@@ -298,6 +298,7 @@ application and dimming it as a modal does.
 
 An open menu is always the newest mode. `canopy.enter_mode` is an error while a
 menu waits for its key, and so is `canopy.leave_mode` with the menu's own name.
+A mouse binding cannot open another menu while one waits for its key.
 Opening a menu whose name is an active mode is an error, and the key that opens
 it reports the error as a notice. An empty name is an error for all three
 calls. A call that fails changes nothing, and mode hooks run only when the

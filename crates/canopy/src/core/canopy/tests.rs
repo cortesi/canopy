@@ -3041,3 +3041,35 @@ fn the_script_api_declares_named_mode_operations_only() -> Result<()> {
     }
     Ok(())
 }
+
+#[test]
+fn a_mouse_menu_cannot_bury_a_waiting_menu() -> Result<()> {
+    run_ttree(|c, mut tr, tree| {
+        c.render(&mut tr)?;
+        let click = click_on(&c.core, tree.a_a);
+        let mut options = mouse_options("/r/ba/ba_la/", BindingPhase::BeforeWidget)?;
+        options.tier = BindingTier::Global;
+        bind(
+            c,
+            InputSpec::Mouse(click.into()),
+            options,
+            inputmap::BindingAction::Menu("other".into()),
+        )?;
+        open_menu(c, "go")?;
+        let generation = c.core.input_map.mode_generation();
+
+        c.mouse(None, click)?;
+        assert_eq!(c.active_modes(), ["go"], "the waiting menu stays on top");
+        assert_eq!(c.core.input_map.mode_generation(), generation);
+        assert!(
+            c.notices()
+                .last()
+                .expect("the rejected menu reports a notice")
+                .message
+                .contains("go")
+        );
+        c.key(None, 'x')?;
+        assert!(c.active_modes().is_empty(), "one key dismisses the menu");
+        Ok(())
+    })
+}

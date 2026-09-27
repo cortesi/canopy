@@ -990,9 +990,14 @@ impl InputMap {
     /// Keys the menu does not bind never fall through to older modes or the
     /// default tier. Key routing closes the menu before it runs the binding.
     /// A mode that is already active cannot open as a menu, because one name
-    /// never names both.
+    /// never names both. A waiting menu must close before another opens.
     pub(crate) fn open_menu(&mut self, mode: &str) -> Result<()> {
         check_mode_name(mode)?;
+        if let Some(menu) = self.transient_mode() {
+            return Err(Error::Invalid(format!(
+                "menu {mode} cannot open while menu {menu} waits for its key"
+            )));
+        }
         if self.mode_stack.iter().any(|active| active.name == mode) {
             return Err(Error::Invalid(format!(
                 "menu {mode} cannot open while {mode} is an active mode"
