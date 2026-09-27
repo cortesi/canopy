@@ -9,9 +9,9 @@
 //! needs the parser state left by every line above it, so the highlighter
 //! walks forward from the last line it has seen and caches the spans it
 //! produces. A source set through
-//! [`Highlighter::prepare`](crate::highlight::Highlighter::prepare) therefore costs
-//! only the lines that are actually asked for, and multi-line constructs such
-//! as block comments keep their state.
+//! [`Highlighter::prepare`](crate::highlight::Highlighter::prepare) therefore
+//! costs only the lines that are actually asked for, and multi-line constructs
+//! such as block comments keep their state.
 
 use std::ops::Range;
 

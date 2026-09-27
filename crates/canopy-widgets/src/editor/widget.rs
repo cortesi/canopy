@@ -991,8 +991,9 @@ impl Editor {
     ///
     /// The first match at or below the top of the view becomes current, and
     /// the view scrolls to it. Ranges must arrive in ascending order without
-    /// spanning lines. An empty set clears the search. Unlike [`Self::search`], the ranges need not come from a
-    /// literal query, so callers can highlight regular-expression matches.
+    /// spanning lines. An empty set clears the search. Unlike [`Self::search`],
+    /// the ranges need not come from a literal query, so callers can
+    /// highlight regular-expression matches.
     pub fn set_matches(&mut self, ctx: &mut dyn Context, matches: Vec<TextRange>) {
         if matches.is_empty() {
             self.search = SearchState::new();
