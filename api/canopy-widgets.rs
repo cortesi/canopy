@@ -390,6 +390,10 @@ pub struct ConfirmRequest {
 /// Parents adjust how each child sizes through layout overrides. Use
 /// [`Container::with_name`] to keep a path segment that scripts or bindings
 /// match.
+///
+/// A [focusable](Container::focusable) container holds focus itself, so its
+/// children can show, hide, and swap without moving focus. Bindings with a
+/// path through the container then apply the whole time.
 pub struct Container {/* private fields */}
 
 impl Container {
@@ -405,6 +409,10 @@ impl Container {
     /// Fill the available space and stack children in a column.
     pub fn column() -> Self;
 
+    /// Accept focus as a node of its own.
+    #[must_use]
+    pub fn focusable(self) -> Self;
+
     /// Construct a container with any layout.
     pub fn new(layout: Layout) -> Self;
 
@@ -413,6 +421,15 @@ impl Container {
 
     /// Fill the available space and place children in a row.
     pub fn row() -> Self;
+
+    /// Accept focus, or stop accepting it.
+    ///
+    /// A container that stops while it holds focus keeps it until focus
+    /// repair runs at the next layout. Repair walks forward in pre-order, so
+    /// focus moves to the container's first focusable descendant when it has
+    /// one. A modal that closes over the container restores focus the same
+    /// way.
+    pub fn set_focusable(&mut self, focusable: bool);
 
     /// Fill the available space and overlap children, the last on top.
     pub fn stack() -> Self;

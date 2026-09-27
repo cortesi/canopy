@@ -56,7 +56,7 @@ Built-in widgets for canopy applications.
 - Workspace dependencies: canopy
 - Workspace dependents: gyms, hello, todo
 - Unnameable: crate::image_view::ZoomDirection
-- Items: 511
+- Items: 513
 - Exposes: canopy, image
 
 ## hello
