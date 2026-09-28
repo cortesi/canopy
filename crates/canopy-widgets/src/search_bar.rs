@@ -215,7 +215,16 @@ impl Widget for SearchBar {
             field = field.with_on_cancel(call);
         }
         let field = ctx.add_child(node, field)?;
-        ctx.set_layout_override(field.into(), LayoutOverride::new().flex_horizontal(1))?;
+        // The status measures at its natural width. Reserve the prompt, two
+        // query cells, and the caret before the status takes the remainder.
+        let field_min_width = text::width(&self.prompt).saturating_add(3);
+        ctx.set_layout_override(
+            field.into(),
+            LayoutOverride {
+                min_width: Some(Some(field_min_width)),
+                ..LayoutOverride::new()
+            },
+        )?;
         let status = ctx.add_child(node, Status::default())?;
         self.field = Some(field);
         self.status = Some(status);
@@ -434,6 +443,10 @@ mod tests {
             found,
             "no match takes its own style"
         );
+        harness.canopy.set_screen_size(Size::new(24, 3))?;
+        status(&mut harness, "invalid regex", false)?;
+        let row = harness.tbuf().lines()[0].clone();
+        assert!(row.trim_end().ends_with("invalid regex"), "{row:?}");
 
         // Closing hides the bar and forgets the query.
         harness.with_root_widget_context(|host: &mut Host, ctx| {
@@ -442,6 +455,32 @@ mod tests {
         })?;
         harness.render()?;
         assert!(!harness.tbuf().contains_text(" / "));
+        Ok(())
+    }
+
+    #[test]
+    fn a_long_status_leaves_room_for_the_query_in_a_narrow_view() -> Result<()> {
+        let mut harness = opened()?;
+        harness.with_root_widget_context(|host: &mut Host, ctx| {
+            let bar = host.bar.expect("mounted");
+            ctx.with_widget_mut(bar, |bar: &mut SearchBar, ctx| {
+                bar.set_query(ctx, "abc")?;
+                bar.set_status(ctx, "invalid regex", false)
+            })
+        })?;
+        harness.canopy.set_screen_size(Size::new(12, 3))?;
+        harness.render()?;
+        let row = &harness.tbuf().lines()[0];
+        assert!(
+            row.contains("/ bc"),
+            "the query suffix stays visible: {row:?}"
+        );
+        assert!(row.contains("in"), "the status stays visible: {row:?}");
+        let query = harness.with_root_widget_context(|host: &mut Host, ctx| {
+            let bar = host.bar.expect("mounted");
+            ctx.with_widget(bar, |bar: &SearchBar| bar.query(ctx))
+        })?;
+        assert_eq!(query, "abc", "horizontal scrolling keeps the whole query");
         Ok(())
     }
 }
