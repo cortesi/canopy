@@ -13,6 +13,7 @@
 //! user interfaces with canopy.
 
 use std::{
+    borrow::Cow,
     fmt::Debug,
     hash::Hash,
     ops::Range,
@@ -1764,6 +1765,77 @@ impl Scroll {
 
 impl Widget for Scroll {}
 
+/// A one-row bar that takes a search query: a prompt, the query field, and on
+/// the right what the search found, such as `3 of 12`.
+///
+/// The bar runs no search. Its owner runs the query on what it searches, such
+/// as the text of an [`Editor`](crate::editor::Editor) or the rows of a list,
+/// and says what it found with [`SearchBar::set_status`]. The bar posts the
+/// query after each edit through [`SearchBar::with_on_change`]. Enter and Esc
+/// post the calls set by [`SearchBar::with_on_submit`] and
+/// [`SearchBar::with_on_cancel`].
+///
+/// [`SearchBar::open`] shows the bar with a field that takes the keyboard,
+/// and [`SearchBar::close`] hides it. An owner that keeps a query
+/// after Enter gives the keyboard back to what it searches and leaves the bar
+/// open, so the query and its status stay in sight.
+///
+/// The bar pushes the `search_bar` layer, and the `focused` layer while the
+/// field has the keyboard. Its ground is `background`, the field takes the
+/// input styles, and the status paints `status`, or `status/none` when the
+/// search found nothing.
+#[derive(Default)]
+pub struct SearchBar {/* private fields */}
+
+impl SearchBar {
+    /// Hide the bar, and forget its query and its status.
+    pub fn close(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Return the query field, or an error before the bar mounts.
+    pub fn field(&self) -> canopy::error::Result<TypedId<Input>>;
+
+    /// Construct a closed bar with the prompt ` / `.
+    pub fn new() -> Self;
+
+    /// Show the bar with `query` in the field, and give the field the
+    /// keyboard. An owner that holds a query from an earlier search passes it,
+    /// so the operator can refine it; the status stays until the owner sets
+    /// it.
+    pub fn open(&mut self, ctx: &mut dyn Context, query: &str) -> canopy::error::Result<()>;
+
+    /// Return the query.
+    pub fn query(&self, ctx: &dyn Context) -> canopy::error::Result<String>;
+
+    /// Show what the search found, such as `3 of 12`. `found` says whether it
+    /// found anything, which sets the style of the status. Empty text shows
+    /// nothing.
+    pub fn set_status(
+        &mut self,
+        ctx: &mut dyn Context,
+        text: impl Into<String>,
+        found: bool,
+    ) -> canopy::error::Result<()>;
+
+    /// Post `call` when Esc is pressed in the field.
+    #[must_use]
+    pub fn with_on_cancel(self, call: CommandCall) -> Self;
+
+    /// Post `call` with the query appended after each edit, as
+    /// [`Input::with_on_change`] does.
+    #[must_use]
+    pub fn with_on_change(self, call: CommandCall) -> Self;
+
+    /// Post `call` when Enter is pressed in the field.
+    #[must_use]
+    pub fn with_on_submit(self, call: CommandCall) -> Self;
+
+    /// Replace the text before the query.
+    #[must_use]
+    pub fn with_prompt(self, prompt: impl Into<String>) -> Self;
+}
+
+impl Widget for SearchBar {}
+
 /// A single-choice widget that shows every item.
 ///
 /// The selection is the cursor that navigation moves; [`Selector::choose`]
@@ -1952,6 +2024,9 @@ impl !Sync for StatusBar {}
 /// The bar occupies the top row of padding. It paints `tabs/bar`, each label
 /// `tabs/tab`, and the active label `tabs/tab/active`, or
 /// `tabs/tab/active/focused` while focus is within the tabs.
+///
+/// An owner that follows the active tab, whether a command or a click changes
+/// it, sets [`Tabs::with_on_change`].
 #[derive(Default)]
 pub struct Tabs {/* private fields */}
 
@@ -1991,6 +2066,12 @@ impl Tabs {
 
     /// Activate the tab at `index`, clamped to the last tab.
     pub fn select(&mut self, c: &mut dyn Context, index: usize) -> canopy::error::Result<()>;
+
+    /// Post `call` with the index of the new tab appended each time the
+    /// active tab changes, by a command or a click. The index is the last
+    /// positional argument, or `index` among named ones.
+    #[must_use]
+    pub fn with_on_change(self, call: CommandCall) -> Self;
 }
 
 impl CommandNode for Tabs {}
@@ -2599,6 +2680,31 @@ pub mod font {
     }
 }
 
+pub mod fuzzy {
+    //! Fuzzy label ranking for lists that jump or filter as the operator types.
+    //! Fuzzy ranking of labels against a typed query.
+    //!
+    //! A query matches a label when its characters appear in the label in order,
+    //! ignoring case. Every alignment is scored, so the best label sorts first: a
+    //! match that starts the label or a word scores more, a run of consecutive
+    //! characters more again, and among equal alignments the shorter label wins. A
+    //! list that jumps to what the operator types, or a picker that narrows its
+    //! rows, ranks its labels with [`rank`].
+
+    /// Return the indexes of the labels that match `query`, best first.
+    ///
+    /// An empty query returns every index in order. Equally scoring labels sort
+    /// shortest first, then keep their original order.
+    pub fn rank<'a>(query: &str, labels: impl IntoIterator<Item = &'a str>) -> Vec<usize>;
+
+    /// Score `label` against `query`, ignoring case, or return `None` when the
+    /// query is no ordered subsequence of the label. An empty query scores zero.
+    ///
+    /// This is the alignment score. [`rank`] also prefers shorter labels when
+    /// alignments score equally. The score's scale means nothing on its own.
+    pub fn score(query: &str, label: &str) -> Option<i32>;
+}
+
 pub mod highlight {
     //! Syntax highlighting shared by the Editor and DiffView.
     //! Syntax highlighting helpers.
@@ -2639,7 +2745,27 @@ pub mod highlight {
         /// Character range covered by the span.
         pub range: Range<usize>,
         /// Style to apply to the span.
-        pub style: Style,
+        pub style: SpanStyle,
+    }
+
+    impl HighlightSpan {
+        /// Construct a span that paints `range` in `style`.
+        pub fn fixed(range: Range<usize>, style: Style) -> Self;
+
+        /// Construct a span that paints `range` in the style that `path` resolves
+        /// to where the span paints.
+        pub fn path(range: Range<usize>, path: impl Into<Cow<'static, str>>) -> Self;
+    }
+
+    /// How a highlight span paints.
+    #[derive(Clone, Debug)]
+    pub enum SpanStyle {
+        /// A style the highlighter chose, as a syntax theme gives it.
+        Fixed(Style),
+        /// A style path, resolved in the theme where the span paints. A span
+        /// with a path follows a theme switch, and takes the rules its host sets
+        /// for the path, such as `syntax/keyword`.
+        Path(Cow<'static, str>),
     }
 
     /// A syntect-backed highlighter.

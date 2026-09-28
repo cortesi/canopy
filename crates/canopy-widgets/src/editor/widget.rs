@@ -856,11 +856,8 @@ impl Editor {
                             continue;
                         }
                         if span.range.start < g_end && span.range.end > g_start {
-                            let resolved = span_style.get_or_insert_with(|| {
-                                let mut merged = span.style.clone();
-                                merged.bg = text_style.bg.clone();
-                                render.apply_effects(merged)
-                            });
+                            let resolved = span_style
+                                .get_or_insert_with(|| span.paint_style(render, &text_style));
                             chosen = resolved.clone();
                         }
                         break;

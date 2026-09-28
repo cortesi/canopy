@@ -13,9 +13,20 @@
 //! costs only the lines that are actually asked for, and multi-line constructs
 //! such as block comments keep their state.
 
-use std::ops::Range;
+use std::{borrow::Cow, ops::Range};
 
-use canopy::style::Style;
+use canopy::{render::Render, style::Style};
+
+/// How a highlight span paints.
+#[derive(Debug, Clone)]
+pub enum SpanStyle {
+    /// A style the highlighter chose, as a syntax theme gives it.
+    Fixed(Style),
+    /// A style path, resolved in the theme where the span paints. A span
+    /// with a path follows a theme switch, and takes the rules its host sets
+    /// for the path, such as `syntax/keyword`.
+    Path(Cow<'static, str>),
+}
 
 /// A highlighted span for a single line.
 #[derive(Debug, Clone)]
@@ -23,7 +34,43 @@ pub struct HighlightSpan {
     /// Character range covered by the span.
     pub range: Range<usize>,
     /// Style to apply to the span.
-    pub style: Style,
+    pub style: SpanStyle,
+}
+
+impl HighlightSpan {
+    /// Construct a span that paints `range` in `style`.
+    pub fn fixed(range: Range<usize>, style: Style) -> Self {
+        Self {
+            range,
+            style: SpanStyle::Fixed(style),
+        }
+    }
+
+    /// Construct a span that paints `range` in the style that `path` resolves
+    /// to where the span paints.
+    pub fn path(range: Range<usize>, path: impl Into<Cow<'static, str>>) -> Self {
+        Self {
+            range,
+            style: SpanStyle::Path(path.into()),
+        }
+    }
+
+    /// Return the style of the span over the ground of `base`, with the
+    /// render effects applied once.
+    pub(crate) fn paint_style(&self, render: &Render, base: &Style) -> Style {
+        match &self.style {
+            SpanStyle::Fixed(style) => {
+                let mut style = render.apply_effects(style.clone());
+                style.bg = base.bg.clone();
+                style
+            }
+            SpanStyle::Path(path) => {
+                let mut style = render.resolve_style(path);
+                style.bg = base.bg.clone();
+                style
+            }
+        }
+    }
 }
 
 /// Trait for providing syntax highlighting spans.
@@ -448,10 +495,7 @@ mod syntect_highlighter {
             }
             let range = offset..offset.saturating_add(len);
             offset = offset.saturating_add(len);
-            spans.push(HighlightSpan {
-                range,
-                style: map_style(*style),
-            });
+            spans.push(HighlightSpan::fixed(range, map_style(*style)));
         }
         spans
     }
@@ -493,13 +537,17 @@ mod syntect_highlighter {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use crate::highlight::SpanStyle;
 
         /// Return the foreground colors of a line's spans.
         fn colors(highlighter: &SyntectHighlighter, line: usize, text: &str) -> Vec<Paint> {
             highlighter
                 .highlight_line(line, text)
                 .into_iter()
-                .map(|span| span.style.fg)
+                .map(|span| match span.style {
+                    SpanStyle::Fixed(style) => style.fg,
+                    SpanStyle::Path(path) => panic!("syntect spans are fixed, not {path}"),
+                })
                 .collect()
         }
 

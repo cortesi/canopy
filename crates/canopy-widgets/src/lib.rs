@@ -33,6 +33,8 @@ pub mod font;
 mod font_banner;
 /// Scrollable frame container.
 mod frame;
+/// Fuzzy label ranking for lists that jump or filter as the operator types.
+pub mod fuzzy;
 /// Contextual key-binding help widgets.
 mod help;
 /// Syntax highlighting shared by the Editor and DiffView.
@@ -61,6 +63,8 @@ mod run_paint;
 /// Scrolling container.
 mod scroll;
 pub mod scrollbar;
+/// One-row search field with what the search found.
+mod search_bar;
 /// Selection widget.
 mod selector;
 /// Frames for a busy indicator.
@@ -97,6 +101,7 @@ pub use list_view::{List, Selectable};
 pub use picker::{Picker, PickerList};
 pub use root::Root;
 pub use scroll::Scroll;
+pub use search_bar::SearchBar;
 pub use selector::Selector;
 pub use spinner::Spinner;
 pub use status_bar::{KeyHint, StatusBar};

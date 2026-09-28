@@ -2,6 +2,7 @@
 
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, TypedId, ViewContext, Widget,
+    commands::CommandCall,
     derive_commands,
     error::Result,
     geom::{Line, Point},
@@ -24,11 +25,16 @@ const TAB_GAP: u32 = 1;
 /// The bar occupies the top row of padding. It paints `tabs/bar`, each label
 /// `tabs/tab`, and the active label `tabs/tab/active`, or
 /// `tabs/tab/active/focused` while focus is within the tabs.
+///
+/// An owner that follows the active tab, whether a command or a click changes
+/// it, sets [`Tabs::with_on_change`].
 pub struct Tabs {
     /// Labels and page nodes, in bar order.
     tabs: Vec<(String, NodeId)>,
     /// Index of the active tab.
     active: usize,
+    /// Call posted with the index of the new tab after each change.
+    on_change: Option<CommandCall>,
 }
 
 #[derive_commands]
@@ -38,7 +44,17 @@ impl Tabs {
         Self {
             tabs: Vec::new(),
             active: 0,
+            on_change: None,
         }
+    }
+
+    /// Post `call` with the index of the new tab appended each time the
+    /// active tab changes, by a command or a click. The index is the last
+    /// positional argument, or `index` among named ones.
+    #[must_use]
+    pub fn with_on_change(mut self, call: CommandCall) -> Self {
+        self.on_change = Some(call);
+        self
     }
 
     /// Add `page` under a new tab at the end of the bar and return its node.
@@ -74,7 +90,13 @@ impl Tabs {
         };
         let previous = self.active;
         self.active = index.min(last);
-        self.sync(c, Some(previous))
+        self.sync(c, Some(previous))?;
+        if let Some(call) = &self.on_change
+            && self.active != previous
+        {
+            c.post(&call.with_arg("index", self.active))?;
+        }
+        Ok(())
     }
 
     /// Move the active tab by a signed offset, wrapping around.
@@ -196,7 +218,10 @@ impl Widget for Tabs {
 mod tests {
     use std::{cell::RefCell, rc::Rc};
 
-    use canopy::testing::harness::Harness;
+    use canopy::{
+        Register, Setup, commands::CommandTarget, geom::PointI32, input::key,
+        testing::harness::Harness,
+    };
 
     use super::*;
 
@@ -261,6 +286,86 @@ mod tests {
         harness.canopy.with_root_context(tabs(0))?;
         harness.render()?;
         assert_eq!(focused(&harness), Some(one));
+        Ok(())
+    }
+
+    /// Root that mounts tabs and records each change that they post.
+    #[derive(Default)]
+    struct Owner {
+        /// Indexes that the tabs posted, in order.
+        changes: Vec<usize>,
+    }
+
+    #[derive_commands]
+    impl Owner {
+        /// Records one change of the active tab.
+        /// @param index The new tab.
+        #[command]
+        fn changed(&mut self, index: usize) {
+            self.changes.push(index);
+        }
+    }
+
+    impl Widget for Owner {
+        fn layout(&self) -> Layout {
+            Layout::fill()
+        }
+
+        fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+            let owner = CommandTarget::Exact(c.node_id());
+            let tabs = c.add_child(
+                c.node_id(),
+                Tabs::new().with_on_change(Self::spec_changed().call().with_target(owner)),
+            )?;
+            c.set_layout_override(tabs.into(), Layout::fill().into())?;
+            c.with_widget_mut(tabs, |tabs: &mut Tabs, c| {
+                tabs.add_tab(c, "One", Page)?;
+                tabs.add_tab(c, "Two", Page)?;
+                Ok(())
+            })
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("owner")
+        }
+    }
+
+    impl Register for Owner {
+        fn register(setup: &mut Setup) -> Result<()> {
+            setup.add_commands::<Tabs>()?;
+            setup.add_commands::<Self>()
+        }
+    }
+
+    #[test]
+    fn a_change_by_command_or_by_click_posts_the_new_index() -> Result<()> {
+        let mut harness = Harness::builder(Owner::default())
+            .register::<Owner>()
+            .size(20, 5)
+            .build()?;
+        harness.render()?;
+        let changes = |harness: &mut Harness| {
+            harness.with_root_widget(|owner: &mut Owner| owner.changes.clone())
+        };
+
+        harness.script("tabs.select(1)")?;
+        assert_eq!(changes(&mut harness), [1]);
+        // A tab that already shows changes nothing.
+        harness.script("tabs.select(1)")?;
+        assert_eq!(changes(&mut harness), [1]);
+
+        harness.render()?;
+        harness.mouse(mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: PointI32 { x: 1, y: 0 },
+        })?;
+        assert_eq!(
+            changes(&mut harness),
+            [1, 0],
+            "a click on a label posts too"
+        );
         Ok(())
     }
 }

@@ -784,10 +784,7 @@ mod tests {
                 if text.is_empty() {
                     return Vec::new();
                 }
-                vec![HighlightSpan {
-                    range: 0..1,
-                    style: self.0.clone(),
-                }]
+                vec![HighlightSpan::fixed(0..1, self.0.clone())]
             }
         }
 

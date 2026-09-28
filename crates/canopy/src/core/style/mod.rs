@@ -1025,6 +1025,22 @@ mod tests {
         format!("# {name}\n{}\n", lines.join("\n"))
     }
 
+    #[test]
+    fn the_focus_ground_leans_from_the_background_toward_the_accent() {
+        for palette in [
+            themes::default_dark(),
+            themes::solarized_dark(),
+            themes::solarized_light(),
+            themes::dracula(),
+            themes::gruvbox_dark(),
+        ] {
+            let focus = palette.focus_bg();
+            assert_ne!(focus, palette.bg, "the focus ground stands out");
+            assert_ne!(focus, palette.accent, "the focus ground stays a ground");
+            assert_eq!(focus, palette.bg.mix(palette.accent, 0.13, Mix::Rgb));
+        }
+    }
+
     /// Render every built-in theme in a stable order.
     fn dump_all_themes() -> String {
         [

@@ -13,7 +13,7 @@ use canopy::{
     geom::{Point, PointI32, Size},
     input::{Event, key, mouse},
     layout::{Edges, Layout, ScrollAxis, ScrollMark, ScrollOp},
-    style::{AttrSet, Color, Paint, PartialStyle, Style},
+    style::{AttrSet, Color, Paint, PartialStyle, Style, effects, themes},
     testing::harness::Harness,
     tree::{FocusDirection, FocusScope},
 };
@@ -1192,6 +1192,87 @@ fn highlight_spans_apply_styles() {
     assert!(harness.tbuf().contains_text_style("hi", &partial));
 }
 
+#[test]
+fn fixed_highlight_effects_apply_once_to_foreground_and_ground() {
+    let config = EditorConfig::new().with_wrap(WrapMode::None);
+    let mut harness = build_harness("hi x", config, 5, 1);
+    with_editor(&mut harness, |editor| {
+        editor.buffer.set_cursor(TextPosition::new(0, 4));
+        editor.set_highlighter(Some(Box::new(TestHighlighter {
+            style: Style {
+                fg: Paint::solid(Color::Red),
+                bg: Paint::solid(Color::Black),
+                attrs: AttrSet::default(),
+            },
+        })));
+    });
+    harness.render().unwrap();
+    let plain = harness.buf().get(Point { x: 1, y: 0 }).unwrap().style;
+    let plain_ground = harness.buf().get(Point { x: 3, y: 0 }).unwrap().style.bg;
+    assert_eq!(plain.bg, plain_ground, "the span inherits the text ground");
+
+    harness
+        .with_root_widget_context(|_: &mut EditorHost, ctx| {
+            ctx.push_effect(ctx.node_id(), effects::brightness(0.5))
+        })
+        .unwrap();
+    harness.render().unwrap();
+    let dimmed = harness.buf().get(Point { x: 1, y: 0 }).unwrap().style;
+    let dimmed_ground = harness.buf().get(Point { x: 3, y: 0 }).unwrap().style.bg;
+    assert_eq!(dimmed.fg, plain.fg.scale_brightness(0.5));
+    assert_eq!(dimmed.bg, plain_ground.scale_brightness(0.5));
+    assert_eq!(dimmed.bg, dimmed_ground);
+}
+
+/// Paints the first word of each line through the `syntax/keyword` path.
+struct KeywordHighlighter;
+
+impl Highlighter for KeywordHighlighter {
+    fn highlight_line(&self, _line: usize, text: &str) -> Vec<HighlightSpan> {
+        let end = text.find(' ').unwrap_or(text.len());
+        vec![HighlightSpan::path(0..end, "syntax/keyword")]
+    }
+}
+
+#[test]
+fn a_span_with_a_path_takes_the_theme_where_it_paints() {
+    let host = EditorHost::new("local x", EditorConfig::new().with_wrap(WrapMode::None));
+    let mut harness = Harness::builder(host)
+        .register::<EditorHost>()
+        .configure(|setup| {
+            setup.widget_styles(|palette, rules| {
+                rules.fg("syntax/keyword", palette.red).apply();
+            });
+            Ok(())
+        })
+        .size(10, 1)
+        .build()
+        .expect("Failed to build harness");
+    with_editor(&mut harness, |editor| {
+        editor.set_highlighter(Some(Box::new(KeywordHighlighter)));
+    });
+    let colors = |harness: &mut Harness| {
+        harness.render().expect("Failed to render");
+        let snapshot = harness.canopy.snapshot().expect("frame");
+        let cells = snapshot.buffer.cells();
+        // The cursor covers the first cell.
+        (cells[1].style.fg, cells[6].style.fg, cells[1].style.bg)
+    };
+    let dark = themes::default_dark();
+    let (keyword, name, ground) = colors(&mut harness);
+    assert_eq!(keyword, dark.red, "the path resolves in the theme");
+    assert_eq!(name, dark.fg, "text outside the span keeps the text style");
+    assert_eq!(ground, dark.bg, "the span keeps the editor ground");
+
+    harness.canopy.set_theme(themes::dracula());
+    let (keyword, _, _) = colors(&mut harness);
+    assert_eq!(
+        keyword,
+        themes::dracula().red,
+        "the span follows a theme switch"
+    );
+}
+
 /// Run a search command on the harness editor and return its match count,
 /// current position, and top display row.
 fn run_search(
@@ -1704,10 +1785,7 @@ struct TestHighlighter {
 impl Highlighter for TestHighlighter {
     fn highlight_line(&self, line: usize, text: &str) -> Vec<HighlightSpan> {
         if line == 0 && text.len() >= 2 {
-            vec![HighlightSpan {
-                range: 0..2,
-                style: self.style.clone(),
-            }]
+            vec![HighlightSpan::fixed(0..2, self.style.clone())]
         } else {
             Vec::new()
         }

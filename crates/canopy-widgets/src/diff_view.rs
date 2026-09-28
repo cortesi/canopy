@@ -713,11 +713,8 @@ impl DiffView {
                         continue;
                     }
                     if span.range.start < g_end && span.range.end > g_start {
-                        let merged = span_style.get_or_insert_with(|| {
-                            let mut styled = span.style.clone();
-                            styled.bg = base.bg.clone();
-                            render.apply_effects(styled)
-                        });
+                        let merged =
+                            span_style.get_or_insert_with(|| span.paint_style(render, &base));
                         return merged.clone();
                     }
                     break;

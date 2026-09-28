@@ -10,6 +10,9 @@ use crate::rgb;
 
 /// How far a scrollbar thumb leans from the theme's base toward the accent.
 const THUMB_ACCENT: f32 = 0.4;
+/// How far the ground of a focused pane leans from the background toward the
+/// accent.
+const FOCUS_TINT: f32 = 0.13;
 /// How far a search match that is not current fades from yellow toward the
 /// ground, so the current match stands out in the same hue.
 const MATCH_FADE: f32 = 0.5;
@@ -68,6 +71,13 @@ pub struct Palette {
 }
 
 impl Palette {
+    /// Return the ground of a pane that holds focus: the background tinted
+    /// toward the accent, so the pane that takes keys stands out among panes
+    /// side by side without a border.
+    pub fn focus_bg(&self) -> Color {
+        self.bg.mix(self.accent, FOCUS_TINT, Mix::Rgb)
+    }
+
     /// Build the shared rule set for this palette.
     pub fn style_map(&self) -> StyleMap {
         let p = self;
@@ -264,6 +274,25 @@ impl Palette {
                     .fg(p.key)
                     .bg(p.selection_bg)
                     .attrs(AttrSet::new(Attr::Bold)),
+            )
+            // A search bar is a field beside what it searches: its ground and
+            // what the search found match the field, and lighten with it while
+            // it takes keys. A search that found nothing says so in red.
+            .style_all(
+                &["/search_bar/background", "/search_bar/status"],
+                PartialStyle::new().fg(p.muted_fg).bg(p.element_bg),
+            )
+            .style_all(
+                &["/search_bar/focused/background", "/search_bar/focused/status"],
+                PartialStyle::new().fg(p.muted_fg).bg(p.selection_bg),
+            )
+            .style(
+                "/search_bar/status/none",
+                PartialStyle::new().fg(p.red).bg(p.element_bg),
+            )
+            .style(
+                "/search_bar/focused/status/none",
+                PartialStyle::new().fg(p.red).bg(p.selection_bg),
             )
             // Every dialog is one panel surface: its ground, its frame, and
             // its buttons take the panel rather than the view behind it.

@@ -5140,6 +5140,11 @@ pub mod style {
         }
 
         impl Palette {
+            /// Return the ground of a pane that holds focus: the background tinted
+            /// toward the accent, so the pane that takes keys stands out among panes
+            /// side by side without a border.
+            pub fn focus_bg(&self) -> Color;
+
             /// Build the shared rule set for this palette.
             pub fn style_map(&self) -> StyleMap;
         }
