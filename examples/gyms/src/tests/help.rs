@@ -85,10 +85,13 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
     );
     assert!(harness.tbuf().contains_text("Keyboard shortcuts"));
     assert!(!harness.tbuf().contains_text("Context:"));
+    // A binding that the focused widget shadows, or one that opts out of
+    // help, such as the help trigger itself, is not listed. A global binding
+    // that runs before the widget stays listed over any widget.
     for text in hidden {
         assert!(
             !harness.tbuf().contains_text(text),
-            "{text} should be hidden by the focused widget"
+            "{text} should not be listed"
         );
     }
     for text in shown {
@@ -167,8 +170,8 @@ fn termgym_help_opens_over_a_consuming_terminal_and_restores_input() -> Result<(
     )?;
     prove_help_flow(
         harness,
-        &["Quit", "Extra help row a"],
-        &["Show key bindings"],
+        &["Quit", "Extra help row a", "Show key bindings"],
+        &["Acceptance sentinel"],
     )
 }
 
@@ -184,7 +187,7 @@ fn widget_editor_help_opens_over_a_consuming_editor_and_restores_input() -> Resu
     )?;
     prove_help_flow(
         harness,
-        &[],
-        &["Quit", "Show key bindings", "Extra help row a"],
+        &["Show key bindings"],
+        &["Quit", "Extra help row a", "Acceptance sentinel"],
     )
 }
