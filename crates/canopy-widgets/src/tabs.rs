@@ -19,8 +19,10 @@ const TAB_GAP: u32 = 1;
 /// A row of tabs over a set of pages, one page visible at a time.
 ///
 /// Each page is a child node. Tabs hides every page but the active one. When a
-/// switch hides the page that held focus, focus moves to the first focusable
-/// node of the new page.
+/// switch hides the page that held focus, the page remembers the node that
+/// held it, and focus moves into the new page: to the node that it remembers,
+/// or to its first focusable node when it remembers none, or when that node
+/// can no longer take focus.
 ///
 /// The bar occupies the top row of padding. It paints `tabs/bar`, each label
 /// `tabs/tab`, and the active label `tabs/tab/active`, or
@@ -29,12 +31,35 @@ const TAB_GAP: u32 = 1;
 /// An owner that follows the active tab, whether a command or a click changes
 /// it, sets [`Tabs::with_on_change`].
 pub struct Tabs {
-    /// Labels and page nodes, in bar order.
-    tabs: Vec<(String, NodeId)>,
+    /// The tabs, in bar order.
+    tabs: Vec<Tab>,
     /// Index of the active tab.
     active: usize,
     /// Call posted with the index of the new tab after each change.
     on_change: Option<CommandCall>,
+}
+
+/// One tab: its label, its page, and the node that held focus when the page
+/// was last left.
+struct Tab {
+    /// Text of the label in the bar.
+    label: String,
+    /// The page node.
+    page: NodeId,
+    /// The node of the page that held focus when a switch hid the page.
+    focus: Option<NodeId>,
+}
+
+/// Return whether `node` is `root` or lies below it.
+fn contains(c: &dyn Context, root: NodeId, node: NodeId) -> bool {
+    let mut current = Some(node);
+    while let Some(id) = current {
+        if id == root {
+            return true;
+        }
+        current = c.parent_of(id);
+    }
+    false
 }
 
 #[derive_commands]
@@ -72,7 +97,11 @@ impl Tabs {
             node,
             LayoutOverride::new().flex_horizontal(1).flex_vertical(1),
         )?;
-        self.tabs.push((label.into(), node));
+        self.tabs.push(Tab {
+            label: label.into(),
+            page: node,
+            focus: None,
+        });
         self.sync(c, None)?;
         Ok(id)
     }
@@ -110,19 +139,33 @@ impl Tabs {
         self.select(c, next)
     }
 
-    /// Show the active page, hide the rest, and move focus off a hidden page.
-    fn sync(&self, c: &mut dyn Context, previous: Option<usize>) -> Result<()> {
-        let focus_left = previous
+    /// Show the active page, hide the rest, and move focus off a hidden page
+    /// into the active one.
+    fn sync(&mut self, c: &mut dyn Context, previous: Option<usize>) -> Result<()> {
+        let mut focus_left = false;
+        if let Some(tab) = previous
             .filter(|previous| *previous != self.active)
-            .and_then(|previous| self.tabs.get(previous))
-            .is_some_and(|(_, page)| c.is_on_focus_path(*page));
-        for (index, (_, page)) in self.tabs.iter().enumerate() {
-            c.set_hidden(*page, index != self.active)?;
+            .and_then(|previous| self.tabs.get_mut(previous))
+        {
+            tab.focus = c.focused_within(tab.page);
+            focus_left = tab.focus.is_some();
+        }
+        for (index, tab) in self.tabs.iter().enumerate() {
+            c.set_hidden(tab.page, index != self.active)?;
         }
         // A page that was hidden has no view until the next layout, so the
         // target must not depend on one.
-        if focus_left && let Some((_, page)) = self.tabs.get(self.active) {
-            c.focus_first(FocusScope::Node(*page))?;
+        if focus_left && let Some(tab) = self.tabs.get(self.active) {
+            let restored = match tab
+                .focus
+                .filter(|node| c.is_attached(*node) && contains(c, tab.page, *node))
+            {
+                Some(node) => c.focus_first(FocusScope::Node(node))?.changed(),
+                None => false,
+            };
+            if !restored {
+                c.focus_first(FocusScope::Node(tab.page))?;
+            }
         }
         Ok(())
     }
@@ -133,7 +176,7 @@ impl Tabs {
         self.tabs
             .iter()
             .enumerate()
-            .map(move |(index, (label, _))| {
+            .map(move |(index, Tab { label, .. })| {
                 let text = format!(" {label} ");
                 let width = text::width(&text);
                 let start = next;
@@ -224,6 +267,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::Container;
 
     /// A page that accepts focus.
     struct Page;
@@ -286,6 +330,72 @@ mod tests {
         harness.canopy.with_root_context(tabs(0))?;
         harness.render()?;
         assert_eq!(focused(&harness), Some(one));
+        Ok(())
+    }
+
+    /// Root that mounts tabs over a page of two focusable fields and a
+    /// focusable page.
+    struct Fields {
+        /// The tabs node, the two fields of the first page, and the second
+        /// page.
+        nodes: Rc<RefCell<Vec<NodeId>>>,
+    }
+
+    impl Widget for Fields {
+        fn layout(&self) -> Layout {
+            Layout::fill()
+        }
+
+        fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+            let tabs = c.add_child(c.node_id(), Tabs::new())?;
+            c.set_layout_override(tabs.into(), Layout::fill().into())?;
+            let nodes = c.with_widget_mut(tabs, |tabs: &mut Tabs, c| {
+                let one = tabs.add_tab(c, "One", Container::new(Layout::column()))?;
+                let first = c.add_child(NodeId::from(one), Page)?;
+                let second = c.add_child(NodeId::from(one), Page)?;
+                let two = tabs.add_tab(c, "Two", Page)?;
+                Ok([first.into(), second.into(), two.into()])
+            })?;
+            *self.nodes.borrow_mut() = vec![tabs.into(), nodes[0], nodes[1], nodes[2]];
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_page_gets_back_the_focus_that_it_had_when_it_was_left() -> Result<()> {
+        let nodes = Rc::new(RefCell::new(Vec::new()));
+        let mut harness = Harness::builder(Fields {
+            nodes: Rc::clone(&nodes),
+        })
+        .size(20, 5)
+        .build()?;
+        harness.render()?;
+        let [tabs, first, second, two] = nodes.borrow().clone()[..] else {
+            panic!("the scene mounts tabs, two fields, and a page");
+        };
+        let focused = |harness: &Harness| harness.canopy.with_root_view(|c| c.focused_node());
+        let select = |harness: &mut Harness, index| -> Result<()> {
+            harness.canopy.with_root_context(|c| {
+                c.with_widget_mut(tabs, |tabs: &mut Tabs, c| tabs.select(c, index))
+            })?;
+            harness.render()
+        };
+        harness
+            .canopy
+            .with_root_context(|c| c.set_focus(second).map(|_| ()))?;
+        select(&mut harness, 1)?;
+        assert_eq!(focused(&harness), Some(two));
+        select(&mut harness, 0)?;
+        assert_eq!(focused(&harness), Some(second), "the field that was left");
+
+        // A remembered node that can no longer take focus gives way to the
+        // first focusable node of the page.
+        select(&mut harness, 1)?;
+        harness
+            .canopy
+            .with_root_context(|c| c.set_hidden(second, true).map(|_| ()))?;
+        select(&mut harness, 0)?;
+        assert_eq!(focused(&harness), Some(first));
         Ok(())
     }
 

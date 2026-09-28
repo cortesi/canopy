@@ -1806,6 +1806,10 @@ impl SearchBar {
     /// Return the query.
     pub fn query(&self, ctx: &dyn Context) -> canopy::error::Result<String>;
 
+    /// Put `query` in the field without posting a change, as an owner does
+    /// when the query comes from elsewhere.
+    pub fn set_query(&mut self, ctx: &mut dyn Context, query: &str) -> canopy::error::Result<()>;
+
     /// Show what the search found, such as `3 of 12`. `found` says whether it
     /// found anything, which sets the style of the status. Empty text shows
     /// nothing.
@@ -1815,6 +1819,16 @@ impl SearchBar {
         text: impl Into<String>,
         found: bool,
     ) -> canopy::error::Result<()>;
+
+    /// Replace the label of the field in semantic snapshots, `Search` by
+    /// default.
+    #[must_use]
+    pub fn with_label(self, label: impl Into<String>) -> Self;
+
+    /// Name the node, so bindings and automation can tell bars apart. The
+    /// style layer stays `search_bar`.
+    #[must_use]
+    pub fn with_name(self, name: &str) -> Self;
 
     /// Post `call` when Esc is pressed in the field.
     #[must_use]
@@ -2018,8 +2032,10 @@ impl !Sync for StatusBar {}
 /// A row of tabs over a set of pages, one page visible at a time.
 ///
 /// Each page is a child node. Tabs hides every page but the active one. When a
-/// switch hides the page that held focus, focus moves to the first focusable
-/// node of the new page.
+/// switch hides the page that held focus, the page remembers the node that
+/// held it, and focus moves into the new page: to the node that it remembers,
+/// or to its first focusable node when it remembers none, or when that node
+/// can no longer take focus.
 ///
 /// The bar occupies the top row of padding. It paints `tabs/bar`, each label
 /// `tabs/tab`, and the active label `tabs/tab/active`, or

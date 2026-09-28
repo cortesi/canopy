@@ -15,6 +15,8 @@ use crate::input::{Input, ValueExposure};
 
 /// Prompt of a search bar that names none.
 const PROMPT: &str = " / ";
+/// Label of the field of a search bar that names none.
+const LABEL: &str = "Search";
 
 /// A one-row bar that takes a search query: a prompt, the query field, and on
 /// the right what the search found, such as `3 of 12`.
@@ -36,8 +38,12 @@ const PROMPT: &str = " / ";
 /// input styles, and the status paints `status`, or `status/none` when the
 /// search found nothing.
 pub struct SearchBar {
+    /// Node name, which bindings and automation match.
+    name: NodeName,
     /// Text before the query.
     prompt: String,
+    /// Label of the field in semantic snapshots.
+    label: String,
     /// Call posted with the query after each edit.
     on_change: Option<CommandCall>,
     /// Call posted by Enter.
@@ -60,13 +66,31 @@ impl SearchBar {
     /// Construct a closed bar with the prompt ` / `.
     pub fn new() -> Self {
         Self {
+            name: NodeName::convert("search_bar"),
             prompt: PROMPT.to_owned(),
+            label: LABEL.to_owned(),
             on_change: None,
             on_submit: None,
             on_cancel: None,
             field: None,
             status: None,
         }
+    }
+
+    /// Name the node, so bindings and automation can tell bars apart. The
+    /// style layer stays `search_bar`.
+    #[must_use]
+    pub fn with_name(mut self, name: &str) -> Self {
+        self.name = NodeName::convert(name);
+        self
+    }
+
+    /// Replace the label of the field in semantic snapshots, `Search` by
+    /// default.
+    #[must_use]
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.label = label.into();
+        self
     }
 
     /// Replace the text before the query.
@@ -109,16 +133,22 @@ impl SearchBar {
         ctx.with_widget(self.field()?, |field: &Input| Ok(field.value().to_owned()))
     }
 
+    /// Put `query` in the field without posting a change, as an owner does
+    /// when the query comes from elsewhere.
+    pub fn set_query(&mut self, ctx: &mut dyn Context, query: &str) -> Result<()> {
+        ctx.with_widget_mut(self.field()?, |field: &mut Input, _| {
+            field.set_value(query);
+            Ok(())
+        })
+    }
+
     /// Show the bar with `query` in the field, and give the field the
     /// keyboard. An owner that holds a query from an earlier search passes it,
     /// so the operator can refine it; the status stays until the owner sets
     /// it.
     pub fn open(&mut self, ctx: &mut dyn Context, query: &str) -> Result<()> {
         let field = self.field()?;
-        ctx.with_widget_mut(field, |field: &mut Input, _| {
-            field.set_value(query);
-            Ok(())
-        })?;
+        self.set_query(ctx, query)?;
         ctx.set_hidden(ctx.node_id(), false)?;
         ctx.set_focus(field.into())?;
         Ok(())
@@ -126,11 +156,7 @@ impl SearchBar {
 
     /// Hide the bar, and forget its query and its status.
     pub fn close(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let field = self.field()?;
-        ctx.with_widget_mut(field, |field: &mut Input, _| {
-            field.set_value("");
-            Ok(())
-        })?;
+        self.set_query(ctx, "")?;
         self.set_status(ctx, "", true)?;
         ctx.set_hidden(ctx.node_id(), true)?;
         Ok(())
@@ -177,7 +203,7 @@ impl Widget for SearchBar {
         let node = ctx.node_id();
         let mut field = Input::new("")
             .with_prompt(self.prompt.clone())
-            .with_label("Search")
+            .with_label(self.label.clone())
             .with_value_exposure(ValueExposure::Public);
         if let Some(call) = self.on_change.take() {
             field = field.with_on_change(call);
@@ -198,7 +224,7 @@ impl Widget for SearchBar {
     }
 
     fn name(&self) -> NodeName {
-        NodeName::convert("search_bar")
+        self.name.clone()
     }
 }
 
@@ -290,6 +316,7 @@ mod tests {
             let bar = ctx.add_child(
                 ctx.node_id(),
                 SearchBar::new()
+                    .with_name("find_bar")
                     .with_on_change(Self::spec_changed().call().with_target(owner))
                     .with_on_submit(Self::call_submitted().with_target(owner))
                     .with_on_cancel(Self::call_cancelled().with_target(owner)),
@@ -332,6 +359,11 @@ mod tests {
             harness.tbuf().contains_text(" / "),
             "an open bar shows its prompt"
         );
+        assert_eq!(
+            harness.find_nodes("**/find_bar")?.len(),
+            1,
+            "the bar takes its name"
+        );
         harness.type_text("ab")?;
         harness.key(KeyCode::Enter)?;
         harness.key(KeyCode::Esc)?;
@@ -355,6 +387,16 @@ mod tests {
         harness.type_text("c")?;
         let events = harness.with_root_widget(|host: &mut Host| host.events.clone());
         assert_eq!(events, ["change abc"], "typing continues the held query");
+
+        // A query set from elsewhere posts no change.
+        harness.with_root_widget_context(|host: &mut Host, ctx| {
+            let bar = host.bar.expect("mounted");
+            ctx.with_widget_mut(bar, |bar: &mut SearchBar, ctx| bar.set_query(ctx, "xyz"))
+        })?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text(" / xyz"));
+        let events = harness.with_root_widget(|host: &mut Host| host.events.clone());
+        assert_eq!(events, ["change abc"]);
         Ok(())
     }
 
