@@ -3,6 +3,7 @@ use std::{
     iter,
     ops::Deref,
     result::Result as StdResult,
+    time::Instant,
 };
 
 use super::{
@@ -107,6 +108,17 @@ pub mod sealed {
 pub trait ViewContext: sealed::ViewContext {
     /// The node currently being rendered.
     fn node_id(&self) -> NodeId;
+
+    /// Return the time of the driver clock. A test that installs a
+    /// [`ManualClock`](crate::testing::ManualClock) moves it.
+    fn now(&self) -> Instant;
+
+    /// Return whether cells move: the motion settings allow motion, and the
+    /// adapter shows it. Headless runs and the test harness return false
+    /// unless the test turns motion on with
+    /// [`Canopy::set_motion_live`](crate::Canopy::set_motion_live). A widget
+    /// that animates by itself shows its state at rest when this is false.
+    fn motion_active(&self) -> bool;
 
     /// The root node of the tree.
     fn root_id(&self) -> NodeId;
@@ -579,6 +591,20 @@ pub trait Context: ViewContext + sealed::Context {
     /// region. Returns an error when the node does not exist.
     fn reveal_node(&mut self, node: NodeId, align: RevealAlign) -> Result<ChangeOutcome>;
 
+    /// Reveal one rectangle of a node in its ancestor views once layout
+    /// settles.
+    ///
+    /// `area` is in the node's outer coordinates, from its top left, and the
+    /// part outside the node does not count. Otherwise this behaves as
+    /// [`Context::reveal_node`], so a node can show one part of itself, such
+    /// as a row, in the views around it. Empty areas do nothing.
+    fn reveal_node_area(
+        &mut self,
+        node: NodeId,
+        area: Rect,
+        align: RevealAlign,
+    ) -> Result<ChangeOutcome>;
+
     /// Replace persistent parent constraints without replacing widget layout
     /// fields.
     fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()>;
@@ -921,6 +947,14 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.node_id
     }
 
+    fn now(&self) -> Instant {
+        self.core.clock.now()
+    }
+
+    fn motion_active(&self) -> bool {
+        self.core.motion_active
+    }
+
     fn root_id(&self) -> NodeId {
         self.core.root
     }
@@ -1105,6 +1139,15 @@ impl Context for NodeCtx<&mut Core> {
 
     fn reveal_node(&mut self, node: NodeId, align: RevealAlign) -> Result<ChangeOutcome> {
         self.core.reveal_node(node, align)
+    }
+
+    fn reveal_node_area(
+        &mut self,
+        node: NodeId,
+        area: Rect,
+        align: RevealAlign,
+    ) -> Result<ChangeOutcome> {
+        self.core.reveal_node_area(node, area, align)
     }
 
     fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()> {

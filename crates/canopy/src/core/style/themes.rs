@@ -135,6 +135,12 @@ impl Palette {
             .fg("/meter/track", p.faint_fg.mix(p.bg, TRACK_FADE, Mix::Rgb))
             .fg("/meter/label", p.muted_fg)
             .fg("/big_text/text", p.fg)
+            // A column chart keeps its axis and scale quiet, so the columns
+            // carry the data, and its cursor takes the accent.
+            .fg("/column_chart/axis", p.frame)
+            .fg("/column_chart/label", p.muted_fg)
+            .fg("/column_chart/reference", p.faint_fg)
+            .style("/column_chart/cursor", PartialStyle::new().fg(p.accent).attrs(AttrSet::new(Attr::Bold)))
             .attr("/text/bold", Attr::Bold)
             .attr("/text/italic", Attr::Italic)
             .attr("/text/underline", Attr::Underline)
@@ -306,6 +312,9 @@ impl Palette {
                 "/search_bar/focused/status/none",
                 PartialStyle::new().fg(p.red).bg(p.selection_bg),
             )
+            // The row under search results reads quietly, on the ground of
+            // the pane that holds it.
+            .fg("/search_progress/text", p.muted_fg)
             // Every dialog is one panel surface: its ground, its frame, and
             // its buttons take the panel rather than the view behind it.
             .style_all(

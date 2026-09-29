@@ -244,6 +244,40 @@ impl Color {
         }
     }
 
+    /// Rotate the hue by `degrees` in OKLCH, and keep the perceived
+    /// lightness and as much chroma as sRGB can show.
+    ///
+    /// Rotation changes the hue while preserving OKLab lightness. A color
+    /// that leaves the sRGB gamut loses chroma until it fits, so opposite
+    /// rotations can have different chroma. A gray has no hue and stays as
+    /// it is.
+    #[must_use]
+    pub fn rotate_hue_oklch(self, degrees: f32) -> Self {
+        let lch = Oklab::from_color(self).to_lch();
+        if lch.c < ACHROMATIC {
+            return self;
+        }
+        let rotated = Oklch {
+            h: (lch.h + degrees).rem_euclid(360.0),
+            ..lch
+        };
+        if rotated.to_oklab().in_gamut() {
+            return rotated.to_oklab().to_color();
+        }
+        // Halve the interval between a chroma that fits and one that does
+        // not, which settles well within one step of 8-bit color.
+        let (mut fits, mut over) = (0.0, lch.c);
+        for _ in 0..16 {
+            let c = (fits + over) / 2.0;
+            if (Oklch { c, ..rotated }).to_oklab().in_gamut() {
+                fits = c;
+            } else {
+                over = c;
+            }
+        }
+        Oklch { c: fits, ..rotated }.to_oklab().to_color()
+    }
+
     /// Shift hue by degrees (0-360).
     #[must_use]
     pub fn shift_hue(self, degrees: f32) -> Self {
@@ -338,17 +372,36 @@ impl Oklab {
         }
     }
 
-    /// Convert to the nearest sRGB color.
+    /// Return the linear sRGB channels, which can fall outside 0 to 1.
     #[allow(clippy::many_single_char_names)]
-    fn to_color(self) -> Color {
+    fn linear(self) -> [f32; 3] {
         let l = self.l + 0.396_337_78 * self.a + 0.215_803_76 * self.b;
         let m = self.l - 0.105_561_346 * self.a - 0.063_854_17 * self.b;
         let s = self.l - 0.089_484_18 * self.a - 1.291_485_5 * self.b;
         let (l, m, s) = (l * l * l, m * m * m, s * s * s);
+        [
+            4.076_741_7 * l - 3.307_711_6 * m + 0.230_969_94 * s,
+            -1.268_438 * l + 2.609_757_4 * m - 0.341_319_38 * s,
+            -0.004_196_086_3 * l - 0.703_418_6 * m + 1.707_614_7 * s,
+        ]
+    }
+
+    /// Return whether sRGB shows the color without clipping.
+    fn in_gamut(self) -> bool {
+        /// Slack for rounding at the edge of the gamut.
+        const EDGE: f32 = 1e-4;
+        self.linear()
+            .iter()
+            .all(|channel| (-EDGE..=1.0 + EDGE).contains(channel))
+    }
+
+    /// Convert to the nearest sRGB color.
+    fn to_color(self) -> Color {
+        let [r, g, b] = self.linear();
         Color::Rgb {
-            r: linear_to_srgb(4.076_741_7 * l - 3.307_711_6 * m + 0.230_969_94 * s),
-            g: linear_to_srgb(-1.268_438 * l + 2.609_757_4 * m - 0.341_319_38 * s),
-            b: linear_to_srgb(-0.004_196_086_3 * l - 0.703_418_6 * m + 1.707_614_7 * s),
+            r: linear_to_srgb(r),
+            g: linear_to_srgb(g),
+            b: linear_to_srgb(b),
         }
     }
 
@@ -631,6 +684,54 @@ mod tests {
         // An achromatic end keeps the hue of the other end.
         let (r, g, b) = Color::Grey.mix(Color::Red, 0.5, Mix::Oklch).rgb();
         assert!(r > g && r > b, "expected a red, got ({r}, {g}, {b})");
+    }
+
+    #[test]
+    fn an_oklch_rotation_keeps_lightness_and_turns_the_hue() {
+        let lch = |color: Color| Oklab::from_color(color).to_lch();
+        let base = Color::Rgb {
+            r: 0x5f,
+            g: 0x87,
+            b: 0xd7,
+        };
+        let before = lch(base);
+        for degrees in [28.0, -28.0, 180.0] {
+            let after = lch(base.rotate_hue_oklch(degrees));
+            assert!((after.l - before.l).abs() < 0.01, "{degrees}: lightness");
+            let turned = (after.h - before.h - degrees).rem_euclid(360.0);
+            assert!(
+                turned < 1.0 || turned > 359.0,
+                "{degrees}: turned by {}",
+                (after.h - before.h).rem_euclid(360.0)
+            );
+        }
+        assert_eq!(base.rotate_hue_oklch(0.0), base);
+        assert_eq!(base.rotate_hue_oklch(360.0), base);
+    }
+
+    #[test]
+    fn an_oklch_rotation_stays_in_gamut_and_keeps_grays() {
+        // Saturated primaries leave sRGB when they turn, and lose chroma.
+        for color in [
+            Color::Rgb { r: 255, g: 0, b: 0 },
+            Color::Rgb { r: 0, g: 0, b: 255 },
+        ] {
+            for degrees in [-90.0, -28.0, 28.0, 90.0] {
+                let turned = color.rotate_hue_oklch(degrees);
+                let lab = Oklab::from_color(turned);
+                assert!(lab.in_gamut(), "{color:?} {degrees}");
+                assert!(
+                    (lab.l - Oklab::from_color(color).l).abs() < 0.02,
+                    "{color:?} {degrees}: lightness"
+                );
+            }
+        }
+        let gray = Color::Rgb {
+            r: 128,
+            g: 128,
+            b: 128,
+        };
+        assert_eq!(gray.rotate_hue_oklch(45.0), gray);
     }
 
     #[test]

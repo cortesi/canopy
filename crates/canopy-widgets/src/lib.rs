@@ -13,6 +13,8 @@ mod button;
 pub mod chart;
 /// Multi-click tracker shared by editor and terminal.
 mod click;
+/// Stacked columns above and below an axis, with a cursor.
+mod column_chart;
 /// Panes side by side with scroll position dividers.
 mod columns;
 /// Modal yes or no question.
@@ -60,6 +62,8 @@ mod list_view;
 mod meter;
 /// Modal filtered list of items.
 mod picker;
+/// Regular expressions that match as ripgrep does, and their ranges in text.
+pub mod regex_search;
 /// Application root widget.
 mod root;
 /// Shared row cursor and label helpers for Selector, Dropdown, and PickerList.
@@ -71,6 +75,8 @@ mod scroll;
 pub mod scrollbar;
 /// One-row search field with what the search found.
 mod search_bar;
+/// One row under search results that says what the search found.
+mod search_progress;
 /// Selection widget.
 mod selector;
 /// Small series of values as bars or a braille line.
@@ -92,6 +98,7 @@ mod text_buffer;
 pub use big_text::BigText;
 pub use border::{Border, BoxGlyphs};
 pub use button::Button;
+pub use column_chart::ColumnChart;
 pub use columns::Columns;
 pub use confirm::{Answer, Confirm, ConfirmRequest};
 pub use container::Container;
@@ -112,6 +119,7 @@ pub use picker::{Picker, PickerList};
 pub use root::Root;
 pub use scroll::Scroll;
 pub use search_bar::SearchBar;
+pub use search_progress::SearchProgress;
 pub use selector::Selector;
 pub use sparkline::Sparkline;
 pub use spinner::Spinner;

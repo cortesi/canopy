@@ -32,6 +32,7 @@ use canopy::{
     text::Truncate,
     tree::FocusDirection,
 };
+use grep_regex::{error::Error, matcher::RegexMatcher};
 use image::RgbaImage;
 
 /// Intent that clears the focused field, or resets what the focused widget
@@ -104,6 +105,15 @@ pub enum Answer {
 /// The text is a list of runs, each with the style path that paints it, so
 /// one value can show a number and a dimmer unit. `BigText` pushes the
 /// `big_text` layer, and a plain run paints the `text` part.
+///
+/// When the text changes and [`ViewContext::motion_active`] is true, the
+/// changed characters roll over 200 ms: the old glyph moves up out of its
+/// cells, and the new glyph moves in from below. The position of the roll
+/// comes from [`ViewContext::now`], so a slow repaint skips frames and never
+/// slows the roll. A change during a roll starts a new roll from the glyphs
+/// on screen. Old and new text align on the right, so a number that gains a
+/// digit rolls it in on the left. A hidden widget, or motion that turns off,
+/// ends the roll at rest.
 pub struct BigText {/* private fields */}
 
 impl BigText {
@@ -271,6 +281,174 @@ pub enum CanvasWidth {
     /// Use a fixed canvas width.
     Fixed(u32),
 }
+
+/// Stacked columns above and below one axis.
+///
+/// Each [`Column`] has a stack that grows up from the axis on the upper scale
+/// and a stack that grows down from it on the lower scale. A dotted reference
+/// line marks a value above the axis, such as a limit, in the cells that the
+/// stack leaves empty. A lane above the chart holds a marker glyph for each
+/// column. The axis row holds labels at the columns that they name, `▲` at the
+/// cursor, and `△` at the hover. A gutter on the left shows the scale.
+///
+/// The chart shows one column a cell. When the columns outnumber the cells,
+/// it scrolls to keep the cursor in view, and it shows the newest columns
+/// when it has no cursor. With [`ColumnChart::set_fit`], it instead fits every
+/// column to the width: each cell shows a run of consecutive columns. The
+/// upper area of the cell draws the member with the largest upper stack, and
+/// the lower area the member with the largest lower stack, both from the
+/// members that are not muted when the run has any. The marker is the member
+/// marker of the highest rank, and the cell is muted when every member is.
+/// [`ColumnChart::group`] returns the run of a column, and
+/// [`ColumnChart::drawn_upper`] the member whose upper stack draws.
+///
+/// The cursor column draws lighter, and a muted column draws toward the
+/// ground. A click sets the cursor. A pointer move sets the hover, and the
+/// pointer leaving the chart clears it. A key move,
+/// [`ColumnChart::set_columns`], and a change of the fit clear it too. The
+/// wheel moves the cursor. Moving the cursor to the newest column turns on
+/// following: after [`ColumnChart::set_columns`], the cursor stays on the
+/// newest column. [`ColumnChart::with_command`] sets a call that runs after
+/// each change of the cursor or the hover by input or by a cursor command.
+///
+/// `ColumnChart` pushes the `column_chart` layer. It paints the `axis`,
+/// `label`, `reference`, and `cursor` parts, and each marker and segment in
+/// its own style path.
+#[derive(Default)]
+pub struct ColumnChart {/* private fields */}
+
+impl ColumnChart {
+    /// Build a positional call with typed user arguments.
+    pub fn call_cursor_by(delta: i32) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_cursor_first() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_cursor_label(delta: i32) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_cursor_newest() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_cursor_to(column: usize) -> CommandCall;
+
+    /// Return the command spec for this command.
+    pub fn spec_cursor_by() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_cursor_first() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_cursor_label() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_cursor_newest() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_cursor_to() -> &'static CommandSpec;
+}
+
+impl ColumnChart {
+    /// Clears the hover.
+    pub fn clear_hover(&mut self);
+
+    /// Returns the columns.
+    pub fn columns(&self) -> &[Column];
+
+    /// Returns the cursor column.
+    pub fn cursor(&self) -> Option<usize>;
+
+    /// Moves the cursor by `delta` cells: one column, or one run of columns
+    /// when they fit the width. A chart without a cursor starts from the
+    /// newest column.
+    pub fn cursor_by(&mut self, ctx: &mut dyn Context, delta: i32) -> canopy::error::Result<()>;
+
+    /// Moves the cursor to the first column.
+    pub fn cursor_first(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Moves the cursor to the next label, or to the previous one when
+    /// `delta` is negative.
+    pub fn cursor_label(&mut self, ctx: &mut dyn Context, delta: i32) -> canopy::error::Result<()>;
+
+    /// Moves the cursor to the newest column, which it then follows.
+    pub fn cursor_newest(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Moves the cursor to one column, and clears the hover.
+    pub fn cursor_to(&mut self, ctx: &mut dyn Context, column: usize) -> canopy::error::Result<()>;
+
+    /// Returns the column whose upper stack the cell of `column` draws: the
+    /// column itself, or one member of its run when the columns fit the
+    /// width.
+    pub fn drawn_upper(&self, column: usize) -> Option<usize>;
+
+    /// Returns whether every column fits the width.
+    pub fn fit(&self) -> bool;
+
+    /// Returns whether the cursor follows the newest column.
+    pub fn following(&self) -> bool;
+
+    /// Returns the columns that share the cell of `column`: the column alone,
+    /// or its run when the columns fit the width. Before the first render has
+    /// established the cell width, there is no group yet.
+    pub fn group(&self, column: usize) -> Option<Range<usize>>;
+
+    /// Returns the hover column.
+    pub fn hover(&self) -> Option<usize>;
+
+    /// Constructs a chart without columns, with three rows below the axis.
+    pub fn new() -> Self;
+
+    /// Replaces the columns and their scales, and clears the hover. With
+    /// following on, the cursor moves to the newest column. Otherwise it
+    /// stays at its index, within the new columns.
+    pub fn set_columns(&mut self, columns: Vec<Column>, upper: Scale, lower: Scale);
+
+    /// Places the cursor on a column, or removes it. Following turns on when
+    /// the cursor is on the newest column.
+    pub fn set_cursor(&mut self, cursor: Option<usize>);
+
+    /// Fits every column to the width, or shows one column a cell and
+    /// scrolls. A change of the fit clears the hover, whose cell now shows
+    /// other columns.
+    pub fn set_fit(&mut self, fit: bool);
+
+    /// Replaces the axis labels: the column that each names, and its text.
+    pub fn set_labels(&mut self, labels: Vec<(usize, String)>);
+
+    /// Sets the rows below the axis. Zero rows leave only the upper stacks.
+    pub fn set_lower_rows(&mut self, rows: u32);
+
+    /// Shows or hides the scale in the gutter.
+    pub fn set_scale_labels(&mut self, shown: bool);
+
+    /// Sets a call that runs after each change of the cursor or the hover by
+    /// input or by a cursor command. The setters do not post it. The chart
+    /// posts the call, so it runs once the handler of the chart returns.
+    #[must_use]
+    pub fn with_command(self, call: CommandCall) -> Self;
+
+    /// Sets the text of the values in the gutter.
+    #[must_use]
+    pub fn with_format(self, format: impl 'static + Fn(f64) -> String) -> Self;
+
+    /// Sets the rows below the axis. Zero rows leave only the upper stacks.
+    #[must_use]
+    pub fn with_lower_rows(self, rows: u32) -> Self;
+
+    /// Shows or hides the scale in the gutter.
+    #[must_use]
+    pub fn with_scale_labels(self, shown: bool) -> Self;
+}
+
+impl CommandNode for ColumnChart {}
+
+impl Register for ColumnChart {}
+
+impl Widget for ColumnChart {}
+
+impl !Send for ColumnChart {}
+impl !Sync for ColumnChart {}
 
 /// Panes side by side, each followed by a divider.
 ///
@@ -1920,6 +2098,12 @@ impl SearchBar {
         found: bool,
     ) -> canopy::error::Result<()>;
 
+    /// Show the bar with `query` in the field, and leave the keyboard where it
+    /// is. An owner shows a query that it runs from elsewhere this way, such
+    /// as the expression of a search over many documents that also
+    /// highlights the one in view.
+    pub fn show(&mut self, ctx: &mut dyn Context, query: &str) -> canopy::error::Result<()>;
+
     /// Replace the label of the field in semantic snapshots, `Search` by
     /// default.
     #[must_use]
@@ -1949,6 +2133,42 @@ impl SearchBar {
 }
 
 impl Widget for SearchBar {}
+
+/// One row under a list of search results: a spinner while the search runs,
+/// and what the search found, such as `12 matches`.
+///
+/// The row runs no search. Its owner says what the search found, and whether
+/// it runs on, with [`SearchProgress::set`]. A host puts the row under the
+/// results, outside their scrolling, so the count stays in sight while the
+/// results move. While the search runs, the spinner turns before the text,
+/// and the row repaints itself as long as motion is active. At rest, as in
+/// headless runs, the spinner shows its first frame.
+///
+/// The row pushes the `search_progress` layer and paints `text`.
+#[derive(Default)]
+pub struct SearchProgress {/* private fields */}
+
+impl SearchProgress {
+    /// Construct an empty row for a search that does not run.
+    pub fn new() -> Self;
+
+    /// Return whether the search runs.
+    pub fn running(&self) -> bool;
+
+    /// Show `text`, and turn the spinner while `running` says that the
+    /// search runs.
+    pub fn set(&mut self, text: impl Into<String>, running: bool);
+
+    /// Return the text, without the spinner.
+    pub fn text(&self) -> &str;
+
+    /// Name the node, so bindings and automation can tell rows apart. The
+    /// style layer stays `search_progress`.
+    #[must_use]
+    pub fn with_name(self, name: &str) -> Self;
+}
+
+impl Widget for SearchProgress {}
 
 /// A single-choice widget that shows every item.
 ///
@@ -2372,6 +2592,45 @@ pub mod chart {
         pub fn set(&mut self, point: Point);
     }
 
+    /// One column of a [`ColumnChart`](crate::ColumnChart): a stack above the
+    /// axis, a stack below it, and the marks of the column.
+    #[derive(Clone, Debug, Default, PartialEq)]
+    pub struct Column {
+        /// The stack above the axis, which grows up.
+        pub upper: Vec<Segment>,
+        /// The stack below the axis, which grows down.
+        pub lower: Vec<Segment>,
+        /// A value above the axis that a dotted line marks, such as a limit. The
+        /// line shows in the cells that the stack leaves empty, and hides when
+        /// the value is past the top of the scale.
+        pub reference: Option<f64>,
+        /// A glyph in the marker lane above the chart.
+        pub marker: Option<Marker>,
+        /// Whether the column draws muted, behind the others.
+        pub muted: bool,
+    }
+
+    /// A glyph in the marker lane of a column, with the style path of its color.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct Marker {
+        /// The glyph.
+        pub glyph: char,
+        /// The style path of its color.
+        pub style: String,
+        /// Rank among the markers of one cell when columns fit the width: the
+        /// marker of the highest rank shows.
+        pub rank: u8,
+    }
+
+    impl Marker {
+        /// Returns a marker of `glyph` in the color of `style`, of rank zero.
+        pub fn new(glyph: char, style: impl Into<String>) -> Self;
+
+        /// Sets the rank of the marker.
+        #[must_use]
+        pub fn with_rank(self, rank: u8) -> Self;
+    }
+
     /// A linear map from values onto cells, at an eighth of a cell.
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub struct Scale {/* private fields */}
@@ -2415,20 +2674,34 @@ pub mod chart {
         pub fn new(value: f64, style: impl Into<String>) -> Self;
     }
 
+    /// A change of the segment colors of a column: toward the ground to set it
+    /// back, or toward the text color to bring it forward. The ground does not
+    /// change, so the empty cells of the column and the empty part of a cell stay
+    /// as they are. A tinted segment resolves its paint at rest, so it does not
+    /// move.
+    #[derive(Clone, Copy, Debug, Default, PartialEq)]
+    pub enum Tint {
+        /// The colors as they are.
+        #[default]
+        None,
+        /// Mix toward the ground, from 0.0, which keeps the colors, to 1.0, which
+        /// hides the column.
+        Mute(f32),
+        /// Mix toward the foreground of the empty style path, from 0.0, which
+        /// keeps the colors, to 1.0, which draws the column in that color.
+        Light(f32),
+    }
+
     /// Paints a stacked column in `rect`, growing from `base`. Each column of
     /// cells in `rect` shows the same stack, and the cells beyond the stack show
-    /// the ground.
-    ///
-    /// `mute` mixes every color toward the ground, from 0.0, which keeps the
-    /// colors, to 1.0, which hides the column. A muted column resolves its paints
-    /// at rest, so it does not move.
+    /// the ground. `tint` changes every color of the column.
     pub fn column(
         render: &mut Render<'_>,
         rect: Rect,
         base: Base,
         scale: &Scale,
         segments: &[Segment],
-        mute: f32,
+        tint: Tint,
     ) -> canopy::error::Result<()>;
 
     /// Paints a stacked bar in `line`, from left to right.
@@ -3123,6 +3396,37 @@ pub mod list {
     pub struct AutoKey(_);
 
     impl ToArgValue for AutoKey {}
+}
+
+pub mod regex_search {
+    //! Regular expressions that match as ripgrep does, and their ranges in text.
+    //! Regular expressions that match text as ripgrep does, and the ranges that
+    //! they highlight.
+    //!
+    //! An application that searches files or documents with a typed expression,
+    //! and then highlights what it found in an [`Editor`](crate::editor::Editor)
+    //! or a [`DiffView`](crate::DiffView), compiles the expression once with
+    //! [`smart_matcher`]. The same matcher can drive `grep-searcher` over files,
+    //! so a result list and the text that shows a result match alike.
+    //! [`match_ranges`] turns its matches in shown text into the ranges that
+    //! [`Editor::set_matches`](crate::editor::Editor::set_matches) takes.
+
+    pub use grep_regex::{Error, RegexMatcher};
+    /// Return the ranges of the matches of `matcher` in `text`, one line at a
+    /// time.
+    ///
+    /// Columns count characters, and no range spans lines, as the editor's own
+    /// matches do. The ranges arrive in ascending order. Empty matches are
+    /// skipped: they mark positions rather than text worth highlighting.
+    pub fn match_ranges(matcher: &RegexMatcher, text: &str) -> Vec<TextRange>;
+
+    /// Compile a ripgrep expression that matches case smartly.
+    ///
+    /// The expression uses `grep-regex` syntax. An expression with an uppercase
+    /// letter matches case, and one without ignores it, as ripgrep's smart case
+    /// does. Only literal letters count, so an escape such as `\S` leaves a
+    /// lowercase expression ignoring case.
+    pub fn smart_matcher(pattern: &str) -> Result<RegexMatcher, Error>;
 }
 
 pub mod scrollbar {

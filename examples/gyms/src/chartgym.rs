@@ -1,7 +1,7 @@
 //! Chart gym: the chart widgets and primitives of `canopy_widgets`, live, in
 //! every theme.
 //!
-//! Three pages share one live model:
+//! Four pages share one live model:
 //!
 //! - The widgets page shows stats tiles of `BigText`, `Meter`, and `Sparkline`,
 //!   and more sparklines and meters below them.
@@ -10,16 +10,24 @@
 //! - The primitives page paints stacked bars, eighth-block ramps, gradient
 //!   bars, a mirrored column chart, and a braille line with
 //!   `canopy_widgets::chart`.
+//! - The columns page shows a `ColumnChart` of the attempts, with markers, a
+//!   context window line, a cursor, and a hover, and a line that inspects the
+//!   attempt under them.
 //!
 //! `Tab` shows the next page, `p` pauses, `t` shows the next theme, and `m`
-//! mutes every other attempt of the column chart. Each page scrolls with the
+//! mutes every other attempt of the column charts. On the columns page, `h`
+//! and `l` move the cursor, `H` and `L` move it between labels, `[` and `]`
+//! move it to the first and the newest attempt, and `z` fits every attempt
+//! to the width or shows one a cell. Each page scrolls with the
 //! navigation keys and the wheel, so a short terminal reaches all of it.
 
 use std::{collections::VecDeque, f64::consts::TAU, time::Duration};
 
 use canopy::{
     CanopyBuilder, Context, ContextExt, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
-    Widget, derive_commands,
+    Widget,
+    commands::CommandTarget,
+    derive_commands,
     error::{Error, Result},
     geom::{Line, Point, Rect, Size},
     layout::{Align, Direction, Edges, Layout, LayoutOverride, MeasureConstraints, Measurement},
@@ -30,8 +38,8 @@ use canopy::{
     },
 };
 use canopy_widgets::{
-    BigText, BoxGlyphs, Container, Frame, Meter, Scroll, Sparkline, Tabs, Text,
-    chart::{self, Base, Braille, Scale, Segment},
+    BigText, BoxGlyphs, ColumnChart, Container, Frame, Meter, Scroll, Sparkline, Tabs, Text,
+    chart::{self, Base, Braille, Column, Marker, Scale, Segment, Tint},
 };
 
 use crate::{fixed_row, flex_row};
@@ -84,6 +92,10 @@ const LOWER_ROWS: u32 = 2;
 const BRAILLE_ROWS: u32 = 3;
 /// Rows of a stats tile: a border, big text, a meter, a sparkline, a border.
 const TILE_ROWS: u32 = 7;
+/// Rows of the chart of the columns page.
+const TIMELINE_ROWS: u32 = 16;
+/// Attempts between two labels of the chart of the columns page.
+const LABEL_EVERY: u64 = 40;
 /// Rows of the primitives page: its top margin, the two groups of bars, the
 /// ramps, the gradient bars, the column chart, and the braille line, each
 /// with its heading and the blank row after it.
@@ -326,6 +338,10 @@ struct Nodes {
     clock: TypedId<BigText>,
     /// The primitives page.
     primitives: TypedId<Primitives>,
+    /// The column chart of the attempts.
+    timeline: TypedId<ColumnChart>,
+    /// The line that inspects the attempt under the cursor or the hover.
+    inspector: TypedId<Text>,
 }
 
 /// The chart gym: the pages and the live data that drives them.
@@ -338,6 +354,8 @@ pub struct ChartGym {
     paused: bool,
     /// The live data.
     live: Live,
+    /// First attempt in the columns last given to the timeline.
+    charted_first: Option<u64>,
     /// The widgets that the live data updates, once mounted.
     nodes: Option<Nodes>,
 }
@@ -357,6 +375,7 @@ impl ChartGym {
             muted: false,
             paused: false,
             live: Live::new(),
+            charted_first: None,
             nodes: None,
         }
     }
@@ -369,11 +388,71 @@ impl ChartGym {
         self.show(c)
     }
 
-    /// Mute or unmute every other attempt of the column chart.
+    /// Mute or unmute every other attempt of the column charts.
     #[command]
     pub fn toggle_mute(&mut self, c: &mut dyn Context) -> Result<()> {
         self.muted = !self.muted;
+        self.timeline(c)?;
         self.show(c)
+    }
+
+    /// Move the cursor of the column chart by `delta` attempts.
+    /// @param delta Attempts to move, negative for older ones.
+    #[command]
+    pub fn timeline_by(&self, c: &mut dyn Context, delta: i32) -> Result<()> {
+        let chart = self.nodes()?.timeline;
+        c.with_widget_mut(chart, |chart: &mut ColumnChart, ctx| {
+            chart.cursor_by(ctx, delta)
+        })
+    }
+
+    /// Move the cursor of the column chart to the next label, or to the
+    /// previous one when `delta` is negative.
+    /// @param delta Direction of the move.
+    #[command]
+    pub fn timeline_label(&self, c: &mut dyn Context, delta: i32) -> Result<()> {
+        let chart = self.nodes()?.timeline;
+        c.with_widget_mut(chart, |chart: &mut ColumnChart, ctx| {
+            chart.cursor_label(ctx, delta)
+        })
+    }
+
+    /// Move the cursor of the column chart to the first attempt.
+    #[command]
+    pub fn timeline_first(&self, c: &mut dyn Context) -> Result<()> {
+        let chart = self.nodes()?.timeline;
+        c.with_widget_mut(chart, |chart: &mut ColumnChart, ctx| {
+            chart.cursor_first(ctx)
+        })
+    }
+
+    /// Move the cursor of the column chart to the newest attempt, which it
+    /// then follows.
+    #[command]
+    pub fn timeline_newest(&self, c: &mut dyn Context) -> Result<()> {
+        let chart = self.nodes()?.timeline;
+        c.with_widget_mut(chart, |chart: &mut ColumnChart, ctx| {
+            chart.cursor_newest(ctx)
+        })
+    }
+
+    /// Fit every attempt of the column chart to its width, or show one
+    /// attempt a cell.
+    #[command]
+    pub fn toggle_fit(&self, c: &mut dyn Context) -> Result<()> {
+        let chart = self.nodes()?.timeline;
+        c.with_widget_mut(chart, |chart: &mut ColumnChart, _| {
+            chart.set_fit(!chart.fit());
+            Ok(())
+        })?;
+        self.inspect(c)
+    }
+
+    /// Describe the attempt under the cursor or the hover of the column
+    /// chart, which posts this after each move.
+    #[command]
+    pub fn timeline_moved(&self, c: &mut dyn Context) -> Result<()> {
+        self.inspect(c)
     }
 
     /// Pause or resume the live data.
@@ -393,7 +472,8 @@ impl ChartGym {
         c.with_widget_mut(tabs, |tabs: &mut Tabs, ctx| tabs.cycle(ctx, 1))
     }
 
-    /// Show one page: 0 for widgets, 1 for text, and 2 for primitives.
+    /// Show one page: 0 for widgets, 1 for text, 2 for primitives, and 3
+    /// for columns.
     /// @param index Index of the page.
     #[command]
     pub fn show_page(&self, c: &mut dyn Context, index: usize) -> Result<()> {
@@ -438,7 +518,7 @@ impl ChartGym {
     }
 
     /// Adds the values of one step to the sparklines, then shows the state.
-    fn feed(&self, c: &mut dyn Context, attempt: Option<Sample>) -> Result<()> {
+    fn feed(&mut self, c: &mut dyn Context, attempt: Option<Sample>) -> Result<()> {
         let nodes = self.nodes()?;
         let step = self.live.step;
         let (rate, bar, wave) = step_values(step);
@@ -450,8 +530,108 @@ impl ChartGym {
             push(c, nodes.output.spark, sample.output())?;
             push(c, nodes.context.spark, sample.input())?;
             push(c, nodes.tall, sample.input())?;
+            self.timeline(c)?;
         }
         self.show(c)
+    }
+
+    /// Shows the attempts in the column chart. A new set of columns clears
+    /// the hover, so the chart changes only when an attempt arrives.
+    fn timeline(&mut self, c: &mut dyn Context) -> Result<()> {
+        let timeline = self.nodes()?.timeline;
+        let attempts = &self.live.attempts;
+        let first = attempts.front().map(|sample| sample.index);
+        let previous_first = self.charted_first;
+        let columns = attempts
+            .iter()
+            .map(|sample| Column {
+                upper: composition([sample.read, sample.write, sample.fresh]),
+                lower: vec![
+                    Segment::new(sample.reasoning, "hue/0/reasoning"),
+                    Segment::new(sample.other, "hue/0/fresh"),
+                ],
+                reference: Some(WINDOW),
+                marker: marker(sample.index),
+                muted: self.muted && sample.index % 2 == 1,
+            })
+            .collect();
+        let peak = attempts.iter().map(Sample::input).fold(0.0, f64::max);
+        // The window line shows when the context comes near it.
+        let upper = if peak >= WINDOW / 2.0 {
+            Scale::linear(peak.max(WINDOW))
+        } else {
+            Scale::nice(peak)
+        };
+        let lower = Scale::nice(attempts.iter().map(Sample::output).fold(0.0, f64::max));
+        let labels = attempts
+            .iter()
+            .enumerate()
+            .filter(|(_, sample)| sample.index.is_multiple_of(LABEL_EVERY))
+            .map(|(position, sample)| (position, format!("#{}", sample.index)))
+            .collect();
+        c.with_widget_mut(timeline, |chart: &mut ColumnChart, _| {
+            let selected = previous_first
+                .filter(|_| !chart.following())
+                .and_then(|previous| chart.cursor().map(|cursor| previous + cursor as u64));
+            chart.set_columns(columns, upper, lower);
+            chart.set_labels(labels);
+            if let (Some(first), Some(selected)) = (first, selected) {
+                let position = selected.saturating_sub(first) as usize;
+                chart.set_cursor(Some(position));
+            }
+            Ok(())
+        })?;
+        self.charted_first = first;
+        self.inspect(c)
+    }
+
+    /// Describes the attempt under the hover, or else under the cursor, of
+    /// the column chart.
+    fn inspect(&self, c: &mut dyn Context) -> Result<()> {
+        let nodes = self.nodes()?;
+        let (cursor, hover, fit) =
+            c.with_widget_mut(nodes.timeline, |chart: &mut ColumnChart, _| {
+                let group = |column: Option<usize>| column.and_then(|column| chart.group(column));
+                Ok((group(chart.cursor()), group(chart.hover()), chart.fit()))
+            })?;
+        let (what, group) = match (hover, cursor) {
+            (Some(hover), _) => ("hover", Some(hover)),
+            (None, Some(cursor)) => ("cursor", Some(cursor)),
+            (None, None) => ("", None),
+        };
+        let mode = if fit { "fit" } else { "one a cell" };
+        let attempts = &self.live.attempts;
+        let named = group.as_ref().and_then(|group| {
+            let first = attempts.get(group.start)?;
+            let last = attempts.get(group.end - 1)?;
+            Some(if group.len() > 1 {
+                format!("#{}–#{}", first.index, last.index)
+            } else {
+                format!("#{}", last.index)
+            })
+        });
+        let text = match group
+            .and_then(|group| attempts.get(group.end - 1))
+            .zip(named)
+        {
+            Some((sample, named)) => format!(
+                "{mode} · {what} {named} · in {:.1}k = {:.1}k read + {:.1}k written + \
+                 {:.1}k fresh · out {:.1}k = {:.1}k reasoning + {:.1}k other · {:.0}% hit",
+                sample.input(),
+                sample.read,
+                sample.write,
+                sample.fresh,
+                sample.output(),
+                sample.reasoning,
+                sample.other,
+                sample.hit(),
+            ),
+            None => format!("{mode} · no attempt under the cursor"),
+        };
+        c.with_widget_mut(nodes.inspector, |inspector: &mut Text, _| {
+            inspector.set_text(text);
+            Ok(())
+        })
     }
 
     /// Shows the state of the live data in every widget that is not a
@@ -562,6 +742,36 @@ impl ChartGym {
         })
     }
 
+    /// Adds the column chart page below `page` and returns its chart and its
+    /// inspector line. The chart posts its moves to the gym at `gym`.
+    fn columns_page(
+        c: &mut dyn Context,
+        page: NodeId,
+        gym: NodeId,
+    ) -> Result<(TypedId<ColumnChart>, TypedId<Text>)> {
+        heading(c, page, "column chart: input above the axis, output below")?;
+        let moved = Self::spec_timeline_moved()
+            .call()
+            .with_target(CommandTarget::Exact(gym));
+        let chart = ColumnChart::new()
+            .with_format(|value| {
+                if value <= 0.0 {
+                    return "0".to_owned();
+                }
+                let (number, unit) = compact(value * 1_000.0);
+                format!("{number}{}", unit.to_lowercase())
+            })
+            .with_command(moved);
+        let chart = c.add_child(page, chart)?;
+        let rows = LayoutOverride::new()
+            .flex_horizontal(1)
+            .fixed_height(TIMELINE_ROWS);
+        c.set_layout_override(chart.into(), rows)?;
+        let inspector = c.add_child(page, Text::new(""))?;
+        c.set_layout_override(inspector.into(), fixed_row(2))?;
+        Ok((chart, inspector))
+    }
+
     /// Adds the text page below `page` and returns its live clock.
     fn text_page(c: &mut dyn Context, page: NodeId) -> Result<TypedId<BigText>> {
         heading(c, page, "every glyph")?;
@@ -615,12 +825,14 @@ impl Widget for ChartGym {
         // Each page scrolls, so a short terminal reaches all of it. The page
         // inside takes focus, which puts its scroll on the focus route of the
         // navigation keys.
-        let (widgets, text, primitives) = c.with_widget_mut(tabs, |tabs: &mut Tabs, ctx| {
-            let widgets = tabs.add_tab(ctx, "widgets", Scroll::vertical())?;
-            let text = tabs.add_tab(ctx, "text", Scroll::vertical())?;
-            let primitives = tabs.add_tab(ctx, "primitives", Scroll::vertical())?;
-            Ok((widgets, text, primitives))
-        })?;
+        let (widgets, text, primitives, columns) =
+            c.with_widget_mut(tabs, |tabs: &mut Tabs, ctx| {
+                let widgets = tabs.add_tab(ctx, "widgets", Scroll::vertical())?;
+                let text = tabs.add_tab(ctx, "text", Scroll::vertical())?;
+                let primitives = tabs.add_tab(ctx, "primitives", Scroll::vertical())?;
+                let columns = tabs.add_tab(ctx, "columns", Scroll::vertical())?;
+                Ok((widgets, text, primitives, columns))
+            })?;
         let page = |name: &str| {
             Container::new(
                 Layout::column()
@@ -634,8 +846,10 @@ impl Widget for ChartGym {
         let widgets = c.add_child(widgets, page("widgets"))?;
         let text = c.add_child(text, page("text"))?;
         let primitives = c.add_child(primitives, Primitives::new())?;
+        let columns = c.add_child(columns, page("columns"))?;
         let page = Self::widgets_page(c, widgets.into())?;
         let clock = Self::text_page(c, text.into())?;
+        let (timeline, inspector) = Self::columns_page(c, columns.into(), node)?;
         let [tokens, cache, output, context] = page.tiles;
         self.nodes = Some(Nodes {
             title,
@@ -652,8 +866,11 @@ impl Widget for ChartGym {
             heat: page.heat,
             clock,
             primitives,
+            timeline,
+            inspector,
         });
         self.fill(c)?;
+        self.timeline(c)?;
         self.show(c)?;
         c.set_focus(widgets.into())?;
         Ok(())
@@ -937,7 +1154,7 @@ impl Primitives {
             chart::hbar(r, Line::new(at, y, 1), &scale, &segments, Some("track"))?;
             let at = x + 18 + (eighths - 1) * 2;
             let rect = Rect::new(at, y, 1, 1);
-            chart::column(r, rect, Base::Bottom, &scale, &segments, 0.0)?;
+            chart::column(r, rect, Base::Bottom, &scale, &segments, Tint::None)?;
         }
         let half = SWEEP_STEPS / 2;
         let phase = self.scene.step % SWEEP_STEPS;
@@ -994,13 +1211,13 @@ impl Primitives {
                 Segment::new(sample.fresh, "hue/0/fresh"),
             ];
             let rect = Rect::new(x + column, y, 1, UPPER_ROWS);
-            chart::column(r, rect, Base::Bottom, &upper, &input, mute)?;
+            chart::column(r, rect, Base::Bottom, &upper, &input, Tint::Mute(mute))?;
             let output = [
                 Segment::new(sample.reasoning, "hue/0/reasoning"),
                 Segment::new(sample.other, "hue/0/fresh"),
             ];
             let rect = Rect::new(x + column, y + UPPER_ROWS + 1, 1, LOWER_ROWS);
-            chart::column(r, rect, Base::Top, &lower, &output, mute)?;
+            chart::column(r, rect, Base::Top, &lower, &output, Tint::Mute(mute))?;
         }
         let axis = "─".repeat(width as usize);
         r.text("axis", Line::new(x, y + UPPER_ROWS, width), &axis)?;
@@ -1077,6 +1294,20 @@ fn grouped(value: f64) -> String {
     text
 }
 
+/// Returns the marker of attempt `index`: a compaction, a failure, or a
+/// retry, at steady intervals.
+fn marker(index: u64) -> Option<Marker> {
+    if index > 0 && index.is_multiple_of(COMPACTION_EVERY) {
+        Some(Marker::new('◆', "marker/compaction").with_rank(2))
+    } else if index % 29 == 11 {
+        Some(Marker::new('✕', "marker/failed").with_rank(3))
+    } else if index % 29 == 12 {
+        Some(Marker::new('↻', "marker/retry").with_rank(1))
+    } else {
+        None
+    }
+}
+
 /// Returns a steady pseudo-random number from 0 to 1 for `seed`.
 fn jitter(seed: u64) -> f64 {
     (seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 40 & 0x3ff) as f64 / 1023.0
@@ -1106,7 +1337,10 @@ fn styles(p: &Palette, rules: StyleRules<'_>) {
         .fg("axis", p.frame)
         .fg("track", tint(p.faint_fg, 0.7))
         .fg("line", p.cyan)
-        .fg("heat", Paint::gradient(heat));
+        .fg("heat", Paint::gradient(heat))
+        .fg("marker/compaction", p.violet)
+        .fg("marker/failed", p.red)
+        .fg("marker/retry", p.yellow);
     for (index, hue) in [p.violet, p.cyan, p.orange].into_iter().enumerate() {
         rules = rules
             .fg(&format!("hue/{index}/fresh"), hue)
@@ -1126,6 +1360,13 @@ canopy.keymap({
     { key = "p", description = "Pause or resume", action = command.chart_gym.toggle_pause() },
     { key = "t", description = "Next theme", action = command.chart_gym.next_theme() },
     { key = "m", description = "Mute every other attempt", action = command.chart_gym.toggle_mute() },
+    { key = { "h", "Left" }, description = "Previous attempt", action = command.chart_gym.timeline_by(-1) },
+    { key = { "l", "Right" }, description = "Next attempt", action = command.chart_gym.timeline_by(1) },
+    { key = "H", description = "Previous label", action = command.chart_gym.timeline_label(-1) },
+    { key = "L", description = "Next label", action = command.chart_gym.timeline_label(1) },
+    { key = "[", description = "First attempt", action = command.chart_gym.timeline_first() },
+    { key = "]", description = "Newest attempt", action = command.chart_gym.timeline_newest() },
+    { key = "z", description = "Fit the attempts or show one a cell", action = command.chart_gym.toggle_fit() },
     { key = { "j", "Down" }, description = "Scroll down", action = "canopy.nav.down" },
     { key = { "k", "Up" }, description = "Scroll up", action = "canopy.nav.up" },
     { key = { "PageDown", "Space" }, description = "Page down", action = "canopy.nav.page_down" },

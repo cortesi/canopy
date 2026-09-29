@@ -389,6 +389,44 @@ fn requests_queued_before_the_first_layout_wait_for_geometry() -> Result<()> {
 }
 
 #[test]
+fn a_node_area_reveal_shows_that_part_of_the_node() -> Result<()> {
+    let mut core = Core::new();
+    let viewport = root_viewport(&mut core, None)?;
+    spacer(&mut core, viewport, 30)?;
+    let target = spacer(&mut core, viewport, 20)?;
+    core.update_layout(Size::new(10, 5))?;
+
+    core.reveal_node_area(target, Rect::new(0, 12, 1, 2), RevealAlign::Nearest)?;
+    core.update_layout(Size::new(10, 5))?;
+    // Rows 42 and 43 of the canvas end the view of five rows.
+    assert_eq!(offset(&core, viewport), 39);
+
+    core.reveal_node_area(target, Rect::new(0, 18, 1, 9), RevealAlign::Nearest)?;
+    core.update_layout(Size::new(10, 5))?;
+    assert_eq!(
+        offset(&core, viewport),
+        45,
+        "the part past the node does not count"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_node_area_wholly_outside_the_node_does_not_reveal_it() -> Result<()> {
+    let mut core = Core::new();
+    let viewport = root_viewport(&mut core, None)?;
+    spacer(&mut core, viewport, 30)?;
+    let target = spacer(&mut core, viewport, 20)?;
+    core.update_layout(Size::new(10, 5))?;
+
+    core.reveal_node_area(target, Rect::new(0, 25, 1, 2), RevealAlign::Nearest)?;
+    core.update_layout(Size::new(10, 5))?;
+    assert_eq!(offset(&core, viewport), 0);
+    assert!(core.nodes[target].reveal_in_ancestors.is_none());
+    Ok(())
+}
+
+#[test]
 fn node_reveals_pass_through_padded_nested_viewports() -> Result<()> {
     let mut core = Core::new();
     let outer = core.create_detached(Viewport {

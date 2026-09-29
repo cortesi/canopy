@@ -232,3 +232,91 @@ fn muting_fades_every_other_attempt() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn the_columns_page_charts_the_attempts_with_markers_and_the_window() -> Result<()> {
+    let mut harness = chartgym(110, 44)?;
+    show_page(&mut harness, 3)?;
+    let text = text(&harness);
+    assert!(text.contains("column chart"), "{text}");
+    assert!(text.contains('◆'), "a compaction marker shows:\n{text}");
+    assert!(text.contains('✕'), "a failure marker shows:\n{text}");
+    assert!(text.contains('┄'), "the context window line shows:\n{text}");
+    assert!(text.contains("#"), "the axis labels the attempts:\n{text}");
+    assert!(
+        text.contains("272k"),
+        "the gutter shows the window:\n{text}"
+    );
+    assert!(
+        text.contains("no attempt under the cursor"),
+        "the inspector starts empty:\n{text}"
+    );
+    Ok(())
+}
+
+#[test]
+fn keys_move_the_cursor_and_the_inspector_follows() -> Result<()> {
+    let mut harness = chartgym(110, 44)?;
+    show_page(&mut harness, 3)?;
+    press(&mut harness, "p")?;
+    press(&mut harness, "h")?;
+    let first = text(&harness);
+    assert!(first.contains("cursor #"), "{first}");
+    assert!(first.contains('▲'), "the axis marks the cursor:\n{first}");
+    press(&mut harness, "h")?;
+    let second = text(&harness);
+    assert_ne!(first, second, "the cursor moved");
+    press(&mut harness, "[")?;
+    let oldest = text(&harness);
+    assert!(oldest.contains("cursor #"), "{oldest}");
+    press(&mut harness, "L")?;
+    let labelled = text(&harness);
+    assert!(labelled.contains("cursor #"), "{labelled}");
+    assert_ne!(oldest, labelled, "L moves to the next label");
+    Ok(())
+}
+
+#[test]
+fn the_cursor_follows_the_newest_attempt_as_attempts_arrive() -> Result<()> {
+    let (mut harness, clock) = clocked(110, 44)?;
+    show_page(&mut harness, 3)?;
+    press(&mut harness, "]")?;
+    let before = text(&harness);
+    step(&mut harness, &clock, 4)?;
+    let after = text(&harness);
+    let line = |text: &str| {
+        text.lines()
+            .find(|line| line.contains("cursor #"))
+            .map(str::to_owned)
+    };
+    assert!(line(&before).is_some(), "{before}");
+    assert_ne!(
+        line(&before),
+        line(&after),
+        "the inspector follows new attempts"
+    );
+    Ok(())
+}
+
+#[test]
+fn z_fits_every_attempt_to_the_width_and_names_the_runs() -> Result<()> {
+    let mut harness = chartgym(110, 44)?;
+    show_page(&mut harness, 3)?;
+    press(&mut harness, "p")?;
+    press(&mut harness, "z")?;
+    press(&mut harness, "h")?;
+    let fitted = text(&harness);
+    assert!(fitted.contains("fit · cursor #"), "{fitted}");
+    assert!(
+        fitted.contains('–'),
+        "a cell names its run of attempts:\n{fitted}"
+    );
+    press(&mut harness, "z")?;
+    let single = text(&harness);
+    let line = single
+        .lines()
+        .find(|line| line.contains("one a cell · cursor #"))
+        .unwrap_or_else(|| panic!("no inspector line:\n{single}"));
+    assert!(!line.contains('–'), "one attempt a cell: {line}");
+    Ok(())
+}

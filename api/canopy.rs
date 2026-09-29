@@ -213,6 +213,20 @@ pub trait Context: ViewContext + Context {
         align: RevealAlign,
     ) -> crate::error::Result<ChangeOutcome>;
 
+    /// Reveal one rectangle of a node in its ancestor views once layout
+    /// settles.
+    ///
+    /// `area` is in the node's outer coordinates, from its top left, and the
+    /// part outside the node does not count. Otherwise this behaves as
+    /// [`Context::reveal_node`], so a node can show one part of itself, such
+    /// as a row, in the views around it. Empty areas do nothing.
+    fn reveal_node_area(
+        &mut self,
+        node: NodeId,
+        area: Rect,
+        align: RevealAlign,
+    ) -> crate::error::Result<ChangeOutcome>;
+
     /// Scroll this node's view.
     ///
     /// Scrolling moves the view at once. It supersedes older reveal requests
@@ -454,12 +468,23 @@ pub trait ViewContext: ViewContext {
     /// Whether a modal remains open, including pending deferred closes.
     fn modal_is_open(&self, token: ModalToken) -> bool;
 
+    /// Return whether cells move: the motion settings allow motion, and the
+    /// adapter shows it. Headless runs and the test harness return false
+    /// unless the test turns motion on with
+    /// [`Canopy::set_motion_live`](crate::Canopy::set_motion_live). A widget
+    /// that animates by itself shows its state at rest when this is false.
+    fn motion_active(&self) -> bool;
+
     /// The node currently being rendered.
     fn node_id(&self) -> NodeId;
 
     /// Return the notice the application shows: the newest one, from its
     /// record until the next input event.
     fn notice(&self) -> Option<&Notice>;
+
+    /// Return the time of the driver clock. A test that installs a
+    /// [`ManualClock`](crate::testing::ManualClock) moves it.
+    fn now(&self) -> Instant;
 
     /// Return the parent of a node, or `None` if it is the root or not found.
     fn parent_of(&self, node: NodeId) -> Option<NodeId>;
@@ -2885,6 +2910,12 @@ pub mod input {
             ScrollLeft,
             /// Horizontal scroll right.
             ScrollRight,
+            /// The pointer left the node. The router sends it to the node under the
+            /// last mouse event, and to each ancestor that does not hold the node
+            /// under the new one, when the pointer moves on. A focus loss of the
+            /// terminal sends it to every node under the pointer. It does not bubble
+            /// and runs no binding.
+            Leave,
         }
 
         impl Action {
@@ -2923,7 +2954,8 @@ pub mod input {
             /// Parse a mouse specification such as `ScrollUp` or `ctrl-LeftDown`.
             ///
             /// Modifiers separate with `-` or `+`, as they do for a key, so the label
-            /// [`Display`](fmt::Display) writes parses back to the same spec.
+            /// [`Display`](fmt::Display) writes parses back to the same spec. `Leave`
+            /// runs no binding, so it is not a spec.
             pub fn parse_spec(spec: &str) -> Result<Self, ParseError>;
         }
 
@@ -4656,6 +4688,16 @@ pub mod style {
         ///
         /// Named colors and ANSI-256 values use the standard palette mappings.
         pub fn rgb(self) -> (u8, u8, u8);
+
+        /// Rotate the hue by `degrees` in OKLCH, and keep the perceived
+        /// lightness and as much chroma as sRGB can show.
+        ///
+        /// Rotation changes the hue while preserving OKLab lightness. A color
+        /// that leaves the sRGB gamut loses chroma until it fits, so opposite
+        /// rotations can have different chroma. A gray has no hue and stays as
+        /// it is.
+        #[must_use]
+        pub fn rotate_hue_oklch(self, degrees: f32) -> Self;
 
         /// Adjust saturation. 0.0 = grayscale, 1.0 = unchanged, 2.0 = double
         /// saturation.

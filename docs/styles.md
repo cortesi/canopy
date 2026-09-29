@@ -23,8 +23,8 @@ One rule names every stock widget's styles:
 | `roles::THUMB` | `thumb` | |
 
 Leaves that push their layer: `button`, `input`, `picker`, `confirm`, `help`, `dialog`,
-`status_bar`, `selector`, `dropdown`, `editor`, `diff_view`, `sparkline`, `meter`, and
-`big_text`. Containers
+`status_bar`, `search_bar`, `search_progress`, `selector`, `dropdown`, `editor`, `diff_view`,
+`sparkline`, `meter`, `big_text`, and `column_chart`. Containers
 that paint prefixed paths: `frame`, `tabs`, `columns`, and `root`.
 
 The built-in themes are captured in `crates/canopy/src/core/style/themes.golden`.
@@ -128,6 +128,12 @@ and cursor placement but does not change the value or semantic label.
 `Input::set_active` lights a field that a composite writes into while its
 focus stays elsewhere; without focus the field draws its own caret.
 
+A `SearchProgress` row under the results keeps the count in sight while the
+results scroll. It pushes `search_progress` and paints `text`: a spinner while
+the search runs, then what the search found. The built-in themes give the text
+a quiet colour and no ground, so the row takes the ground of the pane that
+holds it.
+
 Custom lists can paint their selected row with `roles::selection(active)`.
 It returns `selection` or `selection/dimmed`, both supplied by the built-in
 themes. Usually `active` is `context.is_focused()`. A composite that routes
@@ -176,10 +182,17 @@ whole bar, so its colour at a cell tells how far along the cell is.
 - `BigText` pushes `big_text`. A plain run paints `text`, and a run with its
   own path paints that path, so a value can dim its unit with a rule such as
   `big_text/unit`.
+- `ColumnChart` pushes `column_chart`. The axis rule paints `axis`, the axis
+  and gutter labels paint `label`, a reference line paints `reference`, and the
+  cursor and hover marks paint `cursor`. Segments and markers paint the style
+  paths they name. The cursor column mixes its colours toward the foreground of
+  the empty path, and a muted column mixes them toward the ground, so both keep
+  the two tones of each cell.
 
 The built-in themes paint bars, lines, and fills in the accent, tracks in a
 faint tone near the ground, gaps and labels quietly, and large text in the
-foreground.
+foreground. A column chart draws its axis in the frame colour, its reference
+lines faint, and its cursor in the accent.
 
 ## Status bars
 

@@ -133,6 +133,72 @@ impl Segment {
     }
 }
 
+/// A change of the segment colors of a column: toward the ground to set it
+/// back, or toward the text color to bring it forward. The ground does not
+/// change, so the empty cells of the column and the empty part of a cell stay
+/// as they are. A tinted segment resolves its paint at rest, so it does not
+/// move.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub enum Tint {
+    /// The colors as they are.
+    #[default]
+    None,
+    /// Mix toward the ground, from 0.0, which keeps the colors, to 1.0, which
+    /// hides the column.
+    Mute(f32),
+    /// Mix toward the foreground of the empty style path, from 0.0, which
+    /// keeps the colors, to 1.0, which draws the column in that color.
+    Light(f32),
+}
+
+/// One column of a [`ColumnChart`](crate::ColumnChart): a stack above the
+/// axis, a stack below it, and the marks of the column.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Column {
+    /// The stack above the axis, which grows up.
+    pub upper: Vec<Segment>,
+    /// The stack below the axis, which grows down.
+    pub lower: Vec<Segment>,
+    /// A value above the axis that a dotted line marks, such as a limit. The
+    /// line shows in the cells that the stack leaves empty, and hides when
+    /// the value is past the top of the scale.
+    pub reference: Option<f64>,
+    /// A glyph in the marker lane above the chart.
+    pub marker: Option<Marker>,
+    /// Whether the column draws muted, behind the others.
+    pub muted: bool,
+}
+
+/// A glyph in the marker lane of a column, with the style path of its color.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Marker {
+    /// The glyph.
+    pub glyph: char,
+    /// The style path of its color.
+    pub style: String,
+    /// Rank among the markers of one cell when columns fit the width: the
+    /// marker of the highest rank shows.
+    pub rank: u8,
+}
+
+impl Marker {
+    /// Returns a marker of `glyph` in the color of `style`, of rank zero.
+    pub fn new(glyph: char, style: impl Into<String>) -> Self {
+        Self {
+            glyph,
+            style: style.into(),
+            rank: 0,
+        }
+    }
+
+    /// Sets the rank of the marker.
+    #[must_use]
+    pub fn with_rank(mut self, rank: u8) -> Self {
+        self.rank = rank;
+        self
+    }
+}
+
 /// The side of its area that a column grows from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Base {
@@ -213,29 +279,25 @@ pub fn hbar(
         None => Rest::Ground,
     };
     let rect = Rect::new(line.tl.x, line.tl.y, line.w, 1);
-    paint_run(render, rect, Fill::Right, scale, segments, rest, 0.0)
+    paint_run(render, rect, Fill::Right, scale, segments, rest, Tint::None)
 }
 
 /// Paints a stacked column in `rect`, growing from `base`. Each column of
 /// cells in `rect` shows the same stack, and the cells beyond the stack show
-/// the ground.
-///
-/// `mute` mixes every color toward the ground, from 0.0, which keeps the
-/// colors, to 1.0, which hides the column. A muted column resolves its paints
-/// at rest, so it does not move.
+/// the ground. `tint` changes every color of the column.
 pub fn column(
     render: &mut Render<'_>,
     rect: Rect,
     base: Base,
     scale: &Scale,
     segments: &[Segment],
-    mute: f32,
+    tint: Tint,
 ) -> Result<()> {
     let fill = match base {
         Base::Bottom => Fill::Up,
         Base::Top => Fill::Down,
     };
-    paint_run(render, rect, fill, scale, segments, Rest::Ground, mute)
+    paint_run(render, rect, fill, scale, segments, Rest::Ground, tint)
 }
 
 /// Returns the ground paint: the background of the empty style path under the
@@ -253,7 +315,7 @@ fn paint_run(
     scale: &Scale,
     segments: &[Segment],
     rest: Rest,
-    mute: f32,
+    tint: Tint,
 ) -> Result<()> {
     let cells = match fill {
         Fill::Right => rect.w,
@@ -264,7 +326,11 @@ fn paint_run(
     }
     let ground = ground(render);
     let tones = tones(render, scale, segments, cells, rest, &ground);
-    let mute = mute.clamp(0.0, 1.0);
+    let tint = match tint {
+        Tint::Mute(amount) if amount > 0.0 => Some((ground, amount.min(1.0))),
+        Tint::Light(amount) if amount > 0.0 => Some((render.resolve_style("").fg, amount.min(1.0))),
+        _ => None,
+    };
     let mut cursor = 0;
     // The style of the last pair of tones, which the next cells reuse while
     // the pair stays the same.
@@ -306,19 +372,25 @@ fn paint_run(
             ),
             Fill::Down => (rect.tl.x, rect.tl.y.saturating_add(index), rect.w),
         };
+        // A tint changes the tones of the segments and leaves the ground.
+        let (fg_ground, bg_ground) = (tones[fg].ground, tones[bg].ground);
         for offset in 0..across {
             let point = Point {
                 x: x.saturating_add(offset),
                 y,
             };
-            if mute > 0.0 {
-                let toward = ground.resolve(rect, point);
-                let muted = |paint: &Paint| {
-                    Paint::solid(paint.resolve(rect, point).mix(toward, mute, Mix::Oklab))
+            if let Some((toward, amount)) = &tint {
+                let toward = toward.resolve(rect, point);
+                let tinted = |paint: &Paint, ground: bool| {
+                    if ground {
+                        paint.clone()
+                    } else {
+                        Paint::solid(paint.resolve(rect, point).mix(toward, *amount, Mix::Oklab))
+                    }
                 };
                 let style = Style {
-                    fg: muted(&style.fg),
-                    bg: muted(&style.bg),
+                    fg: tinted(&style.fg, fg_ground),
+                    bg: tinted(&style.bg, bg_ground),
                     attrs: AttrSet::default(),
                 };
                 render.put_styled(&style, rect, point, glyph)?;
@@ -956,7 +1028,7 @@ mod tests {
                 Base::Bottom,
                 &Scale::linear(24.0),
                 &[Segment::new(12.0, "a"), Segment::new(9.0, "b")],
-                0.0,
+                Tint::None,
             )
         });
         let bottom = cell(&harness, 0, 2);
@@ -980,7 +1052,7 @@ mod tests {
                 Base::Top,
                 &Scale::linear(16.0),
                 &[Segment::new(3.0, "a")],
-                0.0,
+                Tint::None,
             )
         });
         let (glyph, style) = cell(&harness, 0, 0);
@@ -1002,7 +1074,7 @@ mod tests {
                 Base::Top,
                 &Scale::linear(16.0),
                 &[Segment::new(4.0, "a"), Segment::new(4.0, "b")],
-                0.0,
+                Tint::None,
             )
         });
         let (glyph, style) = cell(&harness, 0, 0);
@@ -1015,14 +1087,57 @@ mod tests {
         let harness = painted(4, 1, |r| {
             let stack = [Segment::new(8.0, "a")];
             let scale = Scale::linear(8.0);
-            column(r, Rect::new(0, 0, 2, 1), Base::Bottom, &scale, &stack, 0.0)?;
-            column(r, Rect::new(2, 0, 2, 1), Base::Bottom, &scale, &stack, 0.5)
+            column(
+                r,
+                Rect::new(0, 0, 2, 1),
+                Base::Bottom,
+                &scale,
+                &stack,
+                Tint::None,
+            )?;
+            column(
+                r,
+                Rect::new(2, 0, 2, 1),
+                Base::Bottom,
+                &scale,
+                &stack,
+                Tint::Mute(0.5),
+            )
         });
         assert_eq!(cell(&harness, 0, 0).1.fg, A);
         assert_eq!(cell(&harness, 1, 0).1.fg, A);
         let muted = cell(&harness, 2, 0).1.fg;
         assert_ne!(muted, A, "a muted column mixes toward the ground");
         assert_eq!(cell(&harness, 3, 0).1.fg, muted);
+    }
+
+    #[test]
+    fn a_light_tint_changes_the_tones_and_leaves_the_ground() {
+        let harness = painted(2, 2, |r| {
+            let stack = [Segment::new(8.0, "a")];
+            let scale = Scale::linear(16.0);
+            column(
+                r,
+                Rect::new(0, 0, 1, 2),
+                Base::Bottom,
+                &scale,
+                &stack,
+                Tint::None,
+            )?;
+            column(
+                r,
+                Rect::new(1, 0, 1, 2),
+                Base::Bottom,
+                &scale,
+                &stack,
+                Tint::Light(0.5),
+            )
+        });
+        let (plain, lit) = (cell(&harness, 0, 1).1, cell(&harness, 1, 1).1);
+        assert_eq!(plain.fg, A);
+        assert_ne!(lit.fg, A, "the segment lightens");
+        let (ground, lit_ground) = (cell(&harness, 0, 0).1, cell(&harness, 1, 0).1);
+        assert_eq!(lit_ground.bg, ground.bg, "the ground above the stack stays");
     }
 
     #[test]
@@ -1041,7 +1156,7 @@ mod tests {
                 Base::Bottom,
                 &Scale::linear(1.0),
                 &[Segment::new(1.0, "a")],
-                0.0,
+                Tint::None,
             )
         });
         assert_ne!(cell(&harness, 0, 0).1.fg, A);

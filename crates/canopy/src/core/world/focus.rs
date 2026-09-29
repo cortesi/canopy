@@ -67,7 +67,7 @@ impl Core {
         } else {
             self.focus = target;
             if let Some(node) = target {
-                self.queue_node_reveal(node, RevealAlign::Nearest);
+                self.queue_node_reveal(node, RevealAlign::Nearest, None);
             }
             self.invalidate(crate::Invalidation::Paint);
             Ok(ChangeOutcome::Changed)

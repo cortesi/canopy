@@ -49,6 +49,9 @@ pub struct NodeReveal {
     pub align: RevealAlign,
     /// Call-order stamp.
     pub order: u64,
+    /// The part of the node to show, from its top left, or `None` for the
+    /// whole node.
+    pub area: Option<Rect>,
 }
 
 /// The slot a queued request occupies.
@@ -187,7 +190,24 @@ impl Core {
         if !self.nodes.contains_key(node_id) {
             return Err(Error::NodeNotFound(node_id));
         }
-        Ok(self.queue_node_reveal(node_id, align))
+        Ok(self.queue_node_reveal(node_id, align, None))
+    }
+
+    /// Queue a reveal of one rectangle of an existing node, from its top
+    /// left, in its ancestor viewports.
+    pub(crate) fn reveal_node_area(
+        &mut self,
+        node_id: NodeId,
+        area: Rect,
+        align: RevealAlign,
+    ) -> Result<ChangeOutcome> {
+        if !self.nodes.contains_key(node_id) {
+            return Err(Error::NodeNotFound(node_id));
+        }
+        if area.is_empty() {
+            return Ok(ChangeOutcome::Unchanged);
+        }
+        Ok(self.queue_node_reveal(node_id, align, Some(area)))
     }
 
     /// Queue a reveal of a node in its ancestor viewports, replacing a pending
@@ -196,6 +216,7 @@ impl Core {
         &mut self,
         node_id: NodeId,
         align: RevealAlign,
+        area: Option<Rect>,
     ) -> ChangeOutcome {
         let order = self.next_scroll_stamp();
         let Some(node) = self.nodes.get_mut(node_id) else {
@@ -203,8 +224,8 @@ impl Core {
         };
         let changed = node
             .reveal_in_ancestors
-            .is_none_or(|pending| pending.align != align);
-        node.reveal_in_ancestors = Some(NodeReveal { align, order });
+            .is_none_or(|pending| (pending.align, pending.area) != (align, area));
+        node.reveal_in_ancestors = Some(NodeReveal { align, order, area });
         self.invalidate(crate::Invalidation::Layout);
         outcome(changed)
     }
@@ -302,8 +323,29 @@ impl Core {
         let Some(node) = self.nodes.get(node_id) else {
             return;
         };
-        let (Some(request), mut area) = (node.reveal_in_ancestors, node.rect) else {
+        let Some(request) = node.reveal_in_ancestors else {
             return;
+        };
+        // A part of the node lies within the node. A part wholly outside it
+        // has nothing to reveal.
+        let mut area = match request.area {
+            Some(part) => {
+                let part = Rect::new(
+                    node.rect.tl.x.saturating_add(part.tl.x),
+                    node.rect.tl.y.saturating_add(part.tl.y),
+                    part.w,
+                    part.h,
+                );
+                match part.intersect(node.rect) {
+                    Some(area) => area,
+                    None if node.rect.is_empty() => return,
+                    None => {
+                        self.nodes[node_id].reveal_in_ancestors = None;
+                        return;
+                    }
+                }
+            }
+            None => node.rect,
         };
         if node_id != boundary && area.is_empty() {
             return;

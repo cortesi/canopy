@@ -67,3 +67,17 @@ for x, cell in first.cells[row] do
     end
 end
 canopy.assert(changed, "the next theme repaints the bars")
+
+-- The columns page charts the attempts. The cursor starts off, and h puts it
+-- on the attempt before the newest, which the inspector line describes.
+canopy.send_key("Tab")
+canopy.prepare()
+local columns = canopy.screen_text()
+canopy.assert(shows(columns, "column chart"), "the columns page shows its chart")
+canopy.assert(shows(columns, "┄"), "the chart marks the context window")
+canopy.assert(shows(columns, "no attempt under the cursor"), "the inspector starts empty")
+canopy.send_key("h")
+canopy.prepare()
+local inspected = canopy.screen_text()
+canopy.assert(shows(inspected, "cursor #"), "h moves the cursor onto an attempt")
+canopy.assert(shows(inspected, "▲"), "the axis marks the cursor")

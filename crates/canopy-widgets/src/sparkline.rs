@@ -10,7 +10,7 @@ use canopy::{
     render::Render,
 };
 
-use crate::chart::{self, Base, Braille, Scale, Segment};
+use crate::chart::{self, Base, Braille, Scale, Segment, Tint};
 
 /// Values a sparkline keeps by default.
 const HISTORY: usize = 1024;
@@ -179,7 +179,7 @@ impl Sparkline {
                 Some(value) => {
                     let rect = Rect::new(x, area.tl.y, 1, area.h);
                     let bar = [Segment::new(value, "bar")];
-                    chart::column(render, rect, Base::Bottom, &scale, &bar, 0.0)?;
+                    chart::column(render, rect, Base::Bottom, &scale, &bar, Tint::None)?;
                 }
                 None => render.text("gap", Line::new(x, bottom, 1), "·")?,
             }

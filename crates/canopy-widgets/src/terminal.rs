@@ -575,6 +575,9 @@ impl Widget for Terminal {
                 self.handle_paste(content);
                 Ok(EventOutcome::Handle)
             }
+            input::Event::Mouse(mouse_event) if mouse_event.action == mouse::Action::Leave => {
+                Ok(EventOutcome::Ignore)
+            }
             input::Event::Mouse(mouse_event) => {
                 ctx.set_focus(ctx.node_id())?;
                 let Some(state) = self.state() else {

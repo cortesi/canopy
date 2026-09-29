@@ -45,6 +45,12 @@ pub enum Action {
     ScrollLeft,
     /// Horizontal scroll right.
     ScrollRight,
+    /// The pointer left the node. The router sends it to the node under the
+    /// last mouse event, and to each ancestor that does not hold the node
+    /// under the new one, when the pointer moves on. A focus loss of the
+    /// terminal sends it to every node under the pointer. It does not bubble
+    /// and runs no binding.
+    Leave,
 }
 
 /// Cells one wheel step scrolls.
@@ -61,7 +67,7 @@ impl Action {
             Self::ScrollDown => (0, WHEEL_STEP),
             Self::ScrollLeft => (-WHEEL_STEP, 0),
             Self::ScrollRight => (WHEEL_STEP, 0),
-            Self::Down | Self::Up | Self::Drag | Self::Moved => return None,
+            Self::Down | Self::Up | Self::Drag | Self::Moved | Self::Leave => return None,
         };
         Some(PointI32 { x, y })
     }
@@ -77,6 +83,7 @@ impl Action {
             Self::ScrollDown => false,
             Self::ScrollLeft => false,
             Self::ScrollRight => false,
+            Self::Leave => false,
         }
     }
 }
@@ -95,12 +102,18 @@ impl Mouse {
     /// Parse a mouse specification such as `ScrollUp` or `ctrl-LeftDown`.
     ///
     /// Modifiers separate with `-` or `+`, as they do for a key, so the label
-    /// [`Display`](fmt::Display) writes parses back to the same spec.
+    /// [`Display`](fmt::Display) writes parses back to the same spec. `Leave`
+    /// runs no binding, so it is not a spec.
     pub fn parse_spec(spec: &str) -> Result<Self, ParseError> {
         let (modifiers, body) =
             key::parse_spec_parts(spec, &['-', '+']).map_err(ParseError::new)?;
 
         let lower = body.to_ascii_lowercase();
+        if lower.ends_with("leave") {
+            return Err(ParseError::new(format!(
+                "{spec}: the pointer leaving a node runs no binding"
+            )));
+        }
         let action = [
             ("scrollright", Action::ScrollRight),
             ("scrollleft", Action::ScrollLeft),

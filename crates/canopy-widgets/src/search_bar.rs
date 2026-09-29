@@ -154,6 +154,16 @@ impl SearchBar {
         Ok(())
     }
 
+    /// Show the bar with `query` in the field, and leave the keyboard where it
+    /// is. An owner shows a query that it runs from elsewhere this way, such
+    /// as the expression of a search over many documents that also
+    /// highlights the one in view.
+    pub fn show(&mut self, ctx: &mut dyn Context, query: &str) -> Result<()> {
+        self.set_query(ctx, query)?;
+        ctx.set_hidden(ctx.node_id(), false)?;
+        Ok(())
+    }
+
     /// Hide the bar, and forget its query and its status.
     pub fn close(&mut self, ctx: &mut dyn Context) -> Result<()> {
         self.set_query(ctx, "")?;
@@ -455,6 +465,27 @@ mod tests {
         })?;
         harness.render()?;
         assert!(!harness.tbuf().contains_text(" / "));
+        Ok(())
+    }
+
+    #[test]
+    fn showing_a_query_leaves_the_keyboard_where_it_is() -> Result<()> {
+        let mut harness = Harness::builder(Host::default())
+            .register::<Host>()
+            .size(30, 3)
+            .build()?;
+        harness.render()?;
+        let shown = harness.with_root_widget_context(|host: &mut Host, ctx| {
+            let bar = host.bar.expect("mounted");
+            let field = ctx.with_widget_mut(bar, |bar: &mut SearchBar, ctx| {
+                bar.show(ctx, "a.c")?;
+                bar.field()
+            })?;
+            Ok(ctx.is_on_focus_path(field.into()))
+        })?;
+        assert!(!shown, "the field does not take the keyboard");
+        harness.render()?;
+        assert!(harness.tbuf().contains_text(" / a.c"), "the bar shows");
         Ok(())
     }
 

@@ -71,7 +71,9 @@ impl Canopy {
                 "test clock must be installed before runtime initialization".into(),
             ));
         }
-        self.poller.set_clock(clock)
+        self.poller.set_clock(Arc::clone(&clock) as _)?;
+        self.core.clock = clock;
+        Ok(())
     }
 
     /// Render the tree only if a render is pending.

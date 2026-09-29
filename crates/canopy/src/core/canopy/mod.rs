@@ -25,6 +25,8 @@ pub use builder::{CanopyBuilder, ScriptTrust};
 mod motion;
 pub use motion::MotionSettings;
 #[cfg(test)]
+mod leave_tests;
+#[cfg(test)]
 mod motion_tests;
 mod rendering;
 #[cfg(test)]
@@ -59,7 +61,7 @@ use crate::{
     },
     error,
     error::Result,
-    geom::Size,
+    geom::{PointI32, Size},
     input::{Event, key::Key},
     style::{
         StyleMap, WidgetStyles,
@@ -136,6 +138,10 @@ pub struct Canopy {
     notice_hooks: Hooks,
     /// Trace for the most recent key or mouse routing pass.
     route_trace: Vec<RouteTraceEntry>,
+    /// The node under the pointer at the last mouse event and its ancestors,
+    /// from the node up to the root, and the location of that event. They
+    /// get `Leave` when the pointer moves on.
+    pointer: Option<(Vec<NodeId>, PointI32)>,
     /// Adapter-independent runtime progress.
     driver: turn::Driver,
 
@@ -259,6 +265,7 @@ impl Canopy {
             automation_rx,
             ui_thread: thread::current().id(),
             route_trace: Vec::new(),
+            pointer: None,
             frame: FrameState::default(),
             script: ScriptState::default(),
             journal: ScriptJournal::default(),

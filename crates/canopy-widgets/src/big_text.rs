@@ -1,11 +1,14 @@
 //! Large text in a built-in pixel font, three rows high.
 
+use std::time::{Duration, Instant};
+
 use canopy::{
-    NodeName, ViewContext, Widget,
+    Context, NodeName, ViewContext, Widget,
     error::Result,
     geom::{Line, Size},
     layout::{Align, Layout, MeasureConstraints, Measurement},
     render::Render,
+    runtime::{NodeWakeHandle, PollLifetime},
     style::roles,
 };
 
@@ -16,14 +19,45 @@ const PIXEL_ROWS: usize = 5;
 /// Cell rows of one line of text.
 const LINE_ROWS: u32 = 3;
 
+/// Pixel rows that the cell rows of one line show: the glyph and one blank
+/// row below it.
+const WINDOW: usize = LINE_ROWS as usize * 2;
+
 /// Blank pixel columns between two glyphs.
 const GAP: u32 = 1;
+
+/// Time that a changed character takes to roll.
+const ROLL: Duration = Duration::from_millis(200);
+
+/// Time between two frames of a roll.
+const ROLL_FRAME: Duration = Duration::from_millis(33);
 
 /// The pixel rows of one glyph, top first: `#` is a set pixel.
 type Glyph = [&'static str; PIXEL_ROWS];
 
 /// The glyph that stands in for a character the font lacks.
 const UNKNOWN: Glyph = ["##.", "..#", ".#.", "...", ".#."];
+
+/// One pixel column of a line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Column {
+    /// Run that paints the column.
+    run: usize,
+    /// Pixels, top first.
+    pixels: [bool; WINDOW],
+    /// Character of the column and the column within its glyph. A gap
+    /// between glyphs has none.
+    slot: Option<(char, u32)>,
+}
+
+/// A roll from the columns on screen to the columns of new text.
+#[derive(Debug, Clone)]
+struct Roll {
+    /// Columns of each line on screen when the text changed.
+    from: Vec<Vec<Column>>,
+    /// Start of the roll: the first render after the change.
+    started: Option<Instant>,
+}
 
 /// Large text drawn in a built-in pixel font with half blocks.
 ///
@@ -38,11 +72,26 @@ const UNKNOWN: Glyph = ["##.", "..#", ".#.", "...", ".#."];
 /// The text is a list of runs, each with the style path that paints it, so
 /// one value can show a number and a dimmer unit. `BigText` pushes the
 /// `big_text` layer, and a plain run paints the `text` part.
+///
+/// When the text changes and [`ViewContext::motion_active`] is true, the
+/// changed characters roll over 200 ms: the old glyph moves up out of its
+/// cells, and the new glyph moves in from below. The position of the roll
+/// comes from [`ViewContext::now`], so a slow repaint skips frames and never
+/// slows the roll. A change during a roll starts a new roll from the glyphs
+/// on screen. Old and new text align on the right, so a number that gains a
+/// digit rolls it in on the left. A hidden widget, or motion that turns off,
+/// ends the roll at rest.
 pub struct BigText {
     /// Runs of text: the style path that paints each run, and its text.
     runs: Vec<(String, String)>,
     /// Horizontal placement of each line in the area.
     align: Align,
+    /// Columns of each line at the last render.
+    shown: Vec<Vec<Column>>,
+    /// Roll in progress.
+    roll: Option<Roll>,
+    /// Handle that starts polling when the text changes.
+    wake: Option<NodeWakeHandle>,
 }
 
 impl BigText {
@@ -51,6 +100,9 @@ impl BigText {
         Self {
             runs: vec![(roles::TEXT.to_owned(), text.into())],
             align: Align::Start,
+            shown: Vec::new(),
+            roll: None,
+            wake: None,
         }
     }
 
@@ -74,7 +126,7 @@ impl BigText {
 
     /// Replaces the text with one run in the `text` part.
     pub fn set_text(&mut self, text: impl Into<String>) {
-        self.runs = vec![(roles::TEXT.to_owned(), text.into())];
+        self.set_runs([(roles::TEXT, text.into())]);
     }
 
     /// Replaces the text with runs, each painted by its own style path.
@@ -83,15 +135,34 @@ impl BigText {
         S: Into<String>,
         T: Into<String>,
     {
+        let before = self.text();
         self.runs = runs
             .into_iter()
             .map(|(style, text)| (style.into(), text.into()))
             .collect();
+        // Text that never showed has nothing to roll from.
+        if self.text() != before && !self.shown.is_empty() {
+            self.roll = Some(Roll {
+                from: self.shown.clone(),
+                started: None,
+            });
+            if let Some(wake) = &self.wake {
+                // An expired handle means that the widget left the tree, and
+                // its next mount takes a new one.
+                let _outcome = wake.wake();
+            }
+        }
     }
 
     /// Returns the text of all runs.
     pub fn text(&self) -> String {
         self.runs.iter().map(|(_, text)| text.as_str()).collect()
+    }
+
+    /// Returns whether a roll is in progress.
+    #[cfg(test)]
+    fn rolling(&self) -> bool {
+        self.roll.is_some()
     }
 
     /// Returns the size in cells that `text` takes.
@@ -107,21 +178,11 @@ impl BigText {
 
     /// Returns the rows of cells that draw `text`, without trailing spaces.
     pub fn rows_of(text: &str) -> Vec<String> {
-        let mut rows = Vec::new();
-        for (index, line) in text.split('\n').enumerate() {
-            if index > 0 {
-                rows.push(String::new());
-            }
-            let columns = columns(line.chars().map(|ch| (0, ch)));
-            for row in 0..LINE_ROWS as usize {
-                let text: String = columns
-                    .iter()
-                    .map(|(_, pixels)| cell(pixels, row))
-                    .collect();
-                rows.push(text.trim_end().to_owned());
-            }
-        }
-        rows
+        let lines = text
+            .split('\n')
+            .map(|line| columns(line.chars().map(|ch| (0, ch))))
+            .collect::<Vec<_>>();
+        rows_of_columns(&lines)
     }
 
     /// Returns the lines of the runs, each a list of characters with the
@@ -139,6 +200,37 @@ impl BigText {
         }
         lines
     }
+
+    /// Returns the columns to draw at `now`, and ends a roll that finished
+    /// or that motion no longer shows.
+    fn frame(&mut self, now: Instant, motion: bool) -> Vec<Vec<Column>> {
+        let target = self
+            .lines()
+            .into_iter()
+            .map(|line| columns(line.into_iter()))
+            .collect::<Vec<_>>();
+        let Some(roll) = &mut self.roll else {
+            return target;
+        };
+        let started = *roll.started.get_or_insert(now);
+        let elapsed = now.saturating_duration_since(started);
+        if !motion || elapsed >= ROLL {
+            self.roll = None;
+            return target;
+        }
+        let progress = elapsed.as_secs_f32() / ROLL.as_secs_f32();
+        target
+            .iter()
+            .enumerate()
+            .map(|(index, line)| {
+                roll_line(
+                    roll.from.get(index).map_or(&[][..], Vec::as_slice),
+                    line,
+                    progress,
+                )
+            })
+            .collect()
+    }
 }
 
 impl Widget for BigText {
@@ -152,13 +244,15 @@ impl Widget for BigText {
 
     fn render(&mut self, render: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {
         render.push_layer("big_text");
+        let frame = self.frame(ctx.now(), ctx.motion_active());
         let area = ctx.view().view_rect_local();
         if area.w == 0 || area.h == 0 {
+            self.shown = frame;
             return Ok(());
         }
         render.fill(roles::TEXT, area, ' ')?;
         let bottom = area.tl.y.saturating_add(area.h);
-        for (index, line) in self.lines().iter().enumerate() {
+        for (index, columns) in frame.iter().enumerate() {
             let top = area
                 .tl
                 .y
@@ -166,7 +260,6 @@ impl Widget for BigText {
             if top >= bottom {
                 break;
             }
-            let columns = columns(line.iter().copied());
             let width = columns.len() as u32;
             let offset = match self.align {
                 Align::Start => 0,
@@ -184,6 +277,30 @@ impl Widget for BigText {
                 paint_row(render, &self.runs, shown, x, y, row)?;
             }
         }
+        self.shown = frame;
+        Ok(())
+    }
+
+    fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
+        let Some(roll) = &mut self.roll else {
+            return Ok(None);
+        };
+        let area = ctx.view().view_rect_local();
+        let hidden = area.w == 0 || area.h == 0;
+        if hidden || !ctx.motion_active() {
+            self.roll = None;
+            return Ok(None);
+        }
+        // The poll repaints, and the render after the last frame ends the
+        // roll. A widget out of view renders no frame, so the poll starts the
+        // clock of the roll too.
+        let started = *roll.started.get_or_insert(ctx.now());
+        let ended = ctx.now().saturating_duration_since(started) >= ROLL;
+        Ok((!ended).then_some(ROLL_FRAME))
+    }
+
+    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        self.wake = Some(ctx.wake_handle(PollLifetime::Node)?);
         Ok(())
     }
 
@@ -208,30 +325,90 @@ fn line_width(line: impl Iterator<Item = char>) -> u32 {
     widths.iter().sum::<u32>() + gaps
 }
 
-/// Returns the pixel columns of one line: for each column, the run that owns
-/// it and its pixels, top first. The gap after a glyph belongs to its run.
-fn columns(line: impl Iterator<Item = (usize, char)>) -> Vec<(usize, [bool; PIXEL_ROWS])> {
-    let mut columns = Vec::new();
+/// Returns the pixel columns of one line. The gap after a glyph belongs to
+/// its run.
+fn columns(line: impl Iterator<Item = (usize, char)>) -> Vec<Column> {
+    let mut columns: Vec<Column> = Vec::new();
     for (position, (run, ch)) in line.enumerate() {
         if position > 0
-            && let Some(&(previous, _)) = columns.last()
+            && let Some(previous) = columns.last().map(|column| column.run)
         {
-            columns.extend((0..GAP).map(|_| (previous, [false; PIXEL_ROWS])));
+            columns.extend((0..GAP).map(|_| Column {
+                run: previous,
+                pixels: [false; WINDOW],
+                slot: None,
+            }));
         }
         let rows = glyph(ch);
         for x in 0..rows[0].len() {
-            let mut pixels = [false; PIXEL_ROWS];
+            let mut pixels = [false; WINDOW];
             for (y, row) in rows.iter().enumerate() {
                 pixels[y] = row.as_bytes()[x] == b'#';
             }
-            columns.push((run, pixels));
+            columns.push(Column {
+                run,
+                pixels,
+                slot: Some((ch, x as u32)),
+            });
         }
     }
     columns
 }
 
+/// Returns the cell rows of lines of columns, without trailing spaces.
+fn rows_of_columns(lines: &[Vec<Column>]) -> Vec<String> {
+    let mut rows = Vec::new();
+    for (index, line) in lines.iter().enumerate() {
+        if index > 0 {
+            rows.push(String::new());
+        }
+        for row in 0..LINE_ROWS as usize {
+            let text: String = line
+                .iter()
+                .map(|column| cell(&column.pixels, row))
+                .collect();
+            rows.push(text.trim_end().to_owned());
+        }
+    }
+    rows
+}
+
+/// Returns one line of a roll at `progress`, from 0 to 1. The old columns
+/// align with the new ones on the right. A column whose character and pixels
+/// match stays, and every other column moves the old pixels up and the new
+/// ones in from below. A column without an old column rolls in from blank.
+fn roll_line(from: &[Column], to: &[Column], progress: f32) -> Vec<Column> {
+    // Ease out, so a roll settles gently on its new glyph.
+    let eased = 1.0 - (1.0 - progress.clamp(0.0, 1.0)).powi(3);
+    let shift = ((eased * WINDOW as f32).floor() as usize).min(WINDOW);
+    let skip = from.len().saturating_sub(to.len());
+    let lead = to.len().saturating_sub(from.len());
+    to.iter()
+        .enumerate()
+        .map(|(index, new)| {
+            let old = index
+                .checked_sub(lead)
+                .and_then(|index| from.get(index + skip));
+            if old.is_some_and(|old| old.pixels == new.pixels && old.slot == new.slot) {
+                return *new;
+            }
+            let old = old.map_or([false; WINDOW], |old| old.pixels);
+            let mut pixels = [false; WINDOW];
+            for (row, pixel) in pixels.iter_mut().enumerate() {
+                let source = row + shift;
+                *pixel = if source < WINDOW {
+                    old[source]
+                } else {
+                    new.pixels[source - WINDOW]
+                };
+            }
+            Column { pixels, ..*new }
+        })
+        .collect()
+}
+
 /// Returns the half block of cell row `row` of one pixel column.
-fn cell(pixels: &[bool; PIXEL_ROWS], row: usize) -> char {
+fn cell(pixels: &[bool; WINDOW], row: usize) -> char {
     let top = pixels.get(row * 2).copied().unwrap_or(false);
     let bottom = pixels.get(row * 2 + 1).copied().unwrap_or(false);
     match (top, bottom) {
@@ -247,21 +424,21 @@ fn cell(pixels: &[bool; PIXEL_ROWS], row: usize) -> char {
 fn paint_row(
     render: &mut Render<'_>,
     runs: &[(String, String)],
-    columns: &[(usize, [bool; PIXEL_ROWS])],
+    columns: &[Column],
     x: u32,
     y: u32,
     row: u32,
 ) -> Result<()> {
     let mut start = 0;
     while start < columns.len() {
-        let run = columns[start].0;
+        let run = columns[start].run;
         let end = columns[start..]
             .iter()
-            .position(|(owner, _)| *owner != run)
+            .position(|column| column.run != run)
             .map_or(columns.len(), |offset| start + offset);
         let text: String = columns[start..end]
             .iter()
-            .map(|(_, pixels)| cell(pixels, row as usize))
+            .map(|column| cell(&column.pixels, row as usize))
             .collect();
         let line = Line::new(x.saturating_add(start as u32), y, (end - start) as u32);
         render.text(&runs[run].0, line, &text)?;
@@ -359,15 +536,18 @@ fn glyph(ch: char) -> Glyph {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use canopy::{
-        Context, ContextExt,
+        ContextExt, NodeId,
         geom::Point,
         layout::{Edges, LayoutOverride},
         style::{Color, ResolvedStyle},
-        testing::harness::Harness,
+        testing::{ManualClock, harness::Harness},
     };
 
     use super::*;
+    use crate::Scroll;
 
     /// The digits of the font, as their cell rows.
     const DIGITS: [&str; 3] = [
@@ -518,6 +698,254 @@ mod tests {
         let lines = harness.tbuf().lines();
         assert_eq!(lines[0].trim_end(), "      ▄█");
         assert_eq!(lines[4].trim_end(), "  ▄█  ▄█");
+        Ok(())
+    }
+
+    /// Returns a harness of `text` whose clock the test moves, and the clock.
+    fn clocked(text: &str, motion: bool) -> Result<(Harness, Arc<ManualClock>)> {
+        let clock = Arc::new(ManualClock::new());
+        let mut harness = Harness::builder(BigText::new(text))
+            .size(20, 3)
+            .clock(Arc::clone(&clock))
+            .motion(motion)
+            .build()?;
+        harness.render()?;
+        Ok((harness, clock))
+    }
+
+    /// Returns the rows on screen, without trailing spaces.
+    fn screen(harness: &Harness) -> Vec<String> {
+        harness
+            .tbuf()
+            .lines()
+            .iter()
+            .map(|line| line.trim_end().to_owned())
+            .collect()
+    }
+
+    /// Sets the text of the root widget.
+    fn set(harness: &mut Harness, text: &str) {
+        harness.with_root_widget(|widget: &mut BigText| widget.set_text(text));
+    }
+
+    /// Returns whether the root widget rolls.
+    fn rolls(harness: &mut Harness) -> bool {
+        harness.with_root_widget(|widget: &mut BigText| widget.rolling())
+    }
+
+    /// Moves the clock on and renders.
+    fn after(harness: &mut Harness, clock: &ManualClock, millis: u64) -> Result<()> {
+        clock.advance(Duration::from_millis(millis))?;
+        harness.render()
+    }
+
+    #[test]
+    fn a_changed_character_rolls_and_the_others_stay() -> Result<()> {
+        let (mut harness, clock) = clocked("12", true)?;
+        set(&mut harness, "13");
+        harness.render()?;
+        assert_eq!(
+            screen(&harness),
+            BigText::rows_of("12"),
+            "the roll starts at rest"
+        );
+        assert!(rolls(&mut harness));
+        after(&mut harness, &clock, 80)?;
+        let middle = screen(&harness);
+        let (old, new) = (BigText::rows_of("12"), BigText::rows_of("13"));
+        for row in 0..3 {
+            let prefix = |text: &str| text.chars().take(4).collect::<String>();
+            assert_eq!(prefix(&middle[row]), prefix(&new[row]), "the 1 stays");
+        }
+        assert_ne!(middle, old);
+        assert_ne!(middle, new);
+        after(&mut harness, &clock, 120)?;
+        assert_eq!(screen(&harness), new);
+        assert!(!rolls(&mut harness), "the roll ends at 200 ms");
+        Ok(())
+    }
+
+    #[test]
+    fn the_roll_moves_the_old_glyph_up_and_the_new_one_in_from_below() {
+        let from = columns("8".chars().map(|ch| (0, ch)));
+        let to = columns("1".chars().map(|ch| (0, ch)));
+        let rows = |progress| rows_of_columns(&[roll_line(&from, &to, progress)]);
+        assert_eq!(rows(0.0), BigText::rows_of("8"));
+        assert_eq!(rows(0.05), BigText::rows_of("8"), "less than one pixel row");
+        // One pixel row up: the top row of the eight leaves, and the top row
+        // of the one enters at the bottom.
+        let first = rows(0.1);
+        assert_eq!(first[0], "█▄█", "rows two and three of the eight");
+        assert_eq!(first[2], " ▄", "the top row of the one");
+        assert_eq!(rows(1.0), BigText::rows_of("1"));
+    }
+
+    #[test]
+    fn a_change_during_a_roll_starts_from_the_glyphs_on_screen() -> Result<()> {
+        let (mut harness, clock) = clocked("12", true)?;
+        set(&mut harness, "13");
+        harness.render()?;
+        after(&mut harness, &clock, 60)?;
+        let middle = screen(&harness);
+        set(&mut harness, "14");
+        harness.render()?;
+        assert_eq!(screen(&harness), middle, "the new roll starts on screen");
+        after(&mut harness, &clock, 150)?;
+        assert!(rolls(&mut harness), "the new roll has its own 200 ms");
+        after(&mut harness, &clock, 50)?;
+        assert_eq!(screen(&harness), BigText::rows_of("14"));
+        assert!(!rolls(&mut harness));
+        Ok(())
+    }
+
+    #[test]
+    fn a_longer_text_aligns_on_the_right_and_rolls_in_on_the_left() -> Result<()> {
+        let (mut harness, clock) = clocked("9", true)?;
+        set(&mut harness, "10");
+        harness.render()?;
+        let shifted = BigText::rows_of("9")
+            .iter()
+            .map(|row| format!("    {row}"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            screen(&harness),
+            shifted,
+            "the old digit moves to the right"
+        );
+        after(&mut harness, &clock, 200)?;
+        assert_eq!(screen(&harness), BigText::rows_of("10"));
+        Ok(())
+    }
+
+    #[test]
+    fn motion_that_turns_off_ends_the_roll_at_rest() -> Result<()> {
+        let (mut harness, clock) = clocked("12", true)?;
+        set(&mut harness, "34");
+        harness.render()?;
+        after(&mut harness, &clock, 50)?;
+        assert_ne!(screen(&harness), BigText::rows_of("34"));
+        harness.canopy.set_motion_live(false);
+        harness.render()?;
+        assert_eq!(screen(&harness), BigText::rows_of("34"));
+        assert!(!rolls(&mut harness));
+        Ok(())
+    }
+
+    #[test]
+    fn without_motion_text_changes_at_once() -> Result<()> {
+        let (mut harness, _clock) = clocked("12", false)?;
+        set(&mut harness, "13");
+        harness.render()?;
+        assert_eq!(screen(&harness), BigText::rows_of("13"));
+        assert!(!rolls(&mut harness));
+        set(&mut harness, "13");
+        assert!(!rolls(&mut harness), "the same text does not roll");
+        Ok(())
+    }
+
+    #[test]
+    fn polls_drive_a_roll_to_its_end() -> Result<()> {
+        let (mut harness, clock) = clocked("12", true)?;
+        set(&mut harness, "99");
+        let mut frames = 0;
+        harness.wait_until(Duration::from_secs(10), |harness| {
+            frames += 1;
+            clock.advance(ROLL_FRAME)?;
+            Ok(!rolls(harness))
+        })?;
+        harness.render()?;
+        assert_eq!(screen(&harness), BigText::rows_of("99"));
+        assert!(frames >= 6, "the roll took {frames} frames");
+        Ok(())
+    }
+
+    /// A blank widget.
+    struct Blank;
+
+    impl Widget for Blank {
+        fn render(&mut self, render: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {
+            render.fill("", ctx.view().view_rect_local(), ' ')
+        }
+    }
+
+    /// A root that scrolls a blank area and a text below it, so the blank
+    /// area can push the text out of view.
+    struct Below {
+        /// The text to mount.
+        text: Option<BigText>,
+        /// The blank area.
+        blank: Option<NodeId>,
+    }
+
+    impl Widget for Below {
+        fn layout(&self) -> Layout {
+            Layout::fill()
+        }
+
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            let scroll: NodeId = ctx.add_child(ctx.node_id(), Scroll::vertical())?.into();
+            let blank = ctx.add_child(scroll, Blank)?;
+            self.blank = Some(blank.into());
+            push(ctx, blank.into(), 0)?;
+            let text = self.text.take().expect("text");
+            ctx.add_child(scroll, text)?;
+            Ok(())
+        }
+    }
+
+    /// Sets the height of the blank area above the text.
+    fn push(ctx: &mut dyn Context, blank: NodeId, rows: u32) -> Result<()> {
+        ctx.set_layout_override(
+            blank,
+            LayoutOverride::new().flex_horizontal(1).fixed_height(rows),
+        )
+    }
+
+    /// Sets the height of the blank area of a harness and renders.
+    fn push_by(harness: &mut Harness, rows: u32) -> Result<()> {
+        harness.with_root_widget_context(|below: &mut Below, ctx| {
+            push(ctx, below.blank.expect("blank"), rows)
+        })?;
+        harness.render()
+    }
+
+    #[test]
+    fn a_roll_out_of_view_ends_by_the_clock() -> Result<()> {
+        let clock = Arc::new(ManualClock::new());
+        let mut harness = Harness::builder(Below {
+            text: Some(BigText::new("12")),
+            blank: None,
+        })
+        .size(20, 3)
+        .clock(Arc::clone(&clock))
+        .motion(true)
+        .build()?;
+        harness.render()?;
+        push_by(&mut harness, 3)?;
+        harness.with_unique(|text: &mut BigText, _| {
+            text.set_text("99");
+            Ok(())
+        })?;
+        // Polls move the roll past its end, though no frame shows.
+        let mut frames = 0;
+        harness.wait_until(Duration::from_secs(10), |_| {
+            frames += 1;
+            clock.advance(ROLL_FRAME)?;
+            Ok(frames >= 7)
+        })?;
+        // Then the polls stop.
+        let mut turns = 0;
+        let idle = harness.wait_until(Duration::from_millis(200), |_| {
+            turns += 1;
+            clock.advance(ROLL_FRAME)?;
+            Ok(false)
+        });
+        assert!(idle.is_err());
+        assert!(turns < 5, "{turns} turns after the end of the roll");
+        // The text comes into view at rest.
+        push_by(&mut harness, 0)?;
+        assert_eq!(screen(&harness), BigText::rows_of("99"));
+        assert!(!harness.with_unique(|text: &mut BigText, _| Ok(text.rolling()))?);
         Ok(())
     }
 }

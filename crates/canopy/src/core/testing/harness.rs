@@ -1,5 +1,6 @@
 use std::{
     any::type_name,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -20,6 +21,7 @@ use crate::{
     render::NopBackend,
     runtime::TurnInput,
     script,
+    testing::ManualClock,
     widget::Widget,
 };
 
@@ -47,6 +49,10 @@ pub struct HarnessBuilder<W> {
     size: Size,
     /// Application builder the harness completes.
     builder: CanopyBuilder,
+    /// Clock that the test moves, when it installs one.
+    clock: Option<Arc<ManualClock>>,
+    /// Whether cells move.
+    motion: bool,
 }
 
 impl<W: Widget + 'static> HarnessBuilder<W> {
@@ -56,7 +62,26 @@ impl<W: Widget + 'static> HarnessBuilder<W> {
             root,
             size: Size::new(100, 100),
             builder: CanopyBuilder::new(),
+            clock: None,
+            motion: false,
         }
+    }
+
+    /// Install a clock that the test moves, before the first frame.
+    #[must_use]
+    pub fn clock(mut self, clock: Arc<ManualClock>) -> Self {
+        self.clock = Some(clock);
+        self
+    }
+
+    /// Turn motion on, as a terminal adapter does. The harness keeps every
+    /// cell at rest otherwise, and
+    /// [`ViewContext::motion_active`](crate::ViewContext::motion_active) is
+    /// false.
+    #[must_use]
+    pub fn motion(mut self, motion: bool) -> Self {
+        self.motion = motion;
+        self
     }
 
     /// Set the size of the harness view.
@@ -95,7 +120,7 @@ impl<W: Widget + 'static> HarnessBuilder<W> {
     /// frame.
     pub fn build(self) -> Result<Harness> {
         let root = self.root;
-        let canopy = self
+        let mut canopy = self
             .builder
             .assemble(move |canopy| {
                 canopy.replace_root(root)?;
@@ -106,6 +131,10 @@ impl<W: Widget + 'static> HarnessBuilder<W> {
                 )
             })
             .build()?;
+        if let Some(clock) = self.clock {
+            canopy.set_clock_for_testing(clock)?;
+        }
+        canopy.set_motion_live(self.motion);
         Harness::from_canopy(canopy, self.size)
     }
 }
@@ -461,6 +490,62 @@ mod tests {
             clock.advance(Duration::from_secs(60))?;
             Ok(polls.load(Ordering::SeqCst) >= 3)
         })
+    }
+
+    /// Records the clock and the motion policy of its last render.
+    struct Watch {
+        /// Clock time and motion policy, shared with the test.
+        seen: Arc<Mutex<Option<(Instant, bool)>>>,
+    }
+
+    impl Widget for Watch {
+        fn render(&mut self, _r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+            *self.seen.lock().expect("seen lock") = Some((ctx.now(), ctx.motion_active()));
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_widget_reads_the_installed_clock_and_the_motion_policy() -> Result<()> {
+        let clock = Arc::new(ManualClock::new());
+        let seen = Arc::new(Mutex::new(None));
+        let mut harness = Harness::builder(Watch {
+            seen: Arc::clone(&seen),
+        })
+        .size(10, 2)
+        .clock(Arc::clone(&clock))
+        .build()?;
+        harness.render()?;
+        let start = clock.now();
+        assert_eq!(*seen.lock().expect("seen lock"), Some((start, false)));
+        clock.advance(Duration::from_millis(250))?;
+        harness.canopy.set_motion_live(true);
+        harness.render()?;
+        assert_eq!(
+            *seen.lock().expect("seen lock"),
+            Some((start + Duration::from_millis(250), true)),
+            "a policy change repaints"
+        );
+        let mut settings = harness.canopy.motion();
+        settings.enabled = false;
+        harness.canopy.set_motion(settings);
+        harness.render()?;
+        assert_eq!(
+            seen.lock().expect("seen lock").map(|(_, motion)| motion),
+            Some(false),
+            "disabled motion is off although the adapter shows it"
+        );
+        let opted = Harness::builder(Watch {
+            seen: Arc::clone(&seen),
+        })
+        .motion(true)
+        .build();
+        opted?.render()?;
+        assert_eq!(
+            seen.lock().expect("seen lock").map(|(_, motion)| motion),
+            Some(true)
+        );
+        Ok(())
     }
 
     #[test]

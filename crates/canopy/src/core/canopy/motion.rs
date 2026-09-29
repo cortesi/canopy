@@ -126,6 +126,7 @@ impl Canopy {
     pub fn set_motion(&mut self, settings: MotionSettings) {
         self.motion.settings = settings;
         self.motion.next_sample = None;
+        self.sync_motion_active();
     }
 
     /// Emit motion. The terminal adapter enables it. Headless runs and tests
@@ -133,6 +134,17 @@ impl Canopy {
     pub fn set_motion_live(&mut self, live: bool) {
         self.motion.live = live;
         self.motion.next_sample = None;
+        self.sync_motion_active();
+    }
+
+    /// Give widgets the motion policy, and repaint when it changes, so a
+    /// widget that animates by itself can settle at rest.
+    fn sync_motion_active(&mut self) {
+        let active = self.motion.active();
+        if self.core.motion_active != active {
+            self.core.motion_active = active;
+            self.core.invalidate(crate::Invalidation::Paint);
+        }
     }
 
     /// Return the clocks of the current driver time.

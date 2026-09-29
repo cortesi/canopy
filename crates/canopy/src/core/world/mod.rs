@@ -7,12 +7,14 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     rc::Rc,
+    sync::Arc,
 };
 
 use self::focus::DeferredFocusRepair;
 use super::{
     inputmap::InputMap,
     notice::Notices,
+    poll::{Clock, SystemClock},
     wake::WakeRegistry,
     widget_access::{WidgetCellGuard, WidgetMutGuard, WidgetReadGuard},
 };
@@ -98,6 +100,11 @@ pub struct Core {
     event_scope: Vec<Event>,
     /// Recoverable failures and the one the application shows.
     pub(crate) notices: Notices,
+    /// Driver clock that widgets read through [`crate::ViewContext::now`].
+    pub(crate) clock: Arc<dyn Clock>,
+    /// Whether cells move: the motion settings allow it, and the adapter
+    /// shows it.
+    pub(crate) motion_active: bool,
 }
 
 /// Journal for one outermost tree edit and all nested edits it performs.
@@ -225,6 +232,8 @@ impl Core {
             input_map: InputMap::new(),
             event_scope: Vec::new(),
             notices: Notices::default(),
+            clock: Arc::new(SystemClock),
+            motion_active: false,
         }
     }
 

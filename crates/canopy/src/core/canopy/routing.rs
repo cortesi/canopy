@@ -1,5 +1,7 @@
 //! Input routing and event dispatch for the canopy facade.
 
+use std::mem;
+
 use ruau::vm::Scope;
 
 use super::{AUTOMATION_SERVICE_BUDGET, AdapterEvent, Canopy};
@@ -733,16 +735,81 @@ impl Canopy {
     ///
     /// `scope` carries an active script scope for a script-originated event.
     pub(crate) fn mouse(&mut self, scope: Option<&Scope<'_>>, m: mouse::MouseEvent) -> Result<()> {
+        if m.action == mouse::Action::Leave {
+            return self.leave_all();
+        }
         // A bare pointer move is not a response to a notice.
         if m.action != mouse::Action::Moved {
             self.dismiss_notice()?;
         }
+        let under = self.node_at(m.location)?;
+        self.leave(under, m.location)?;
         let (target, path) = self.mouse_route_start(m.location)?;
         let changed = self.route_input(target, path, RoutedInput::Mouse(m), scope, None)?;
         if changed {
             self.core.invalidate(crate::Invalidation::Paint);
         }
         Ok(())
+    }
+
+    /// Send `Leave` to the nodes that the pointer left: the node under the
+    /// last mouse event, and each of its ancestors then that does not hold
+    /// `under`, the node under the pointer now. `None` means that the
+    /// pointer left every node. A node that was removed gets nothing, and
+    /// its ancestors still get `Leave`.
+    fn leave(&mut self, under: Option<NodeId>, location: PointI32) -> Result<()> {
+        let chain = under.map(|node| (self.chain(node), location));
+        let last = mem::replace(&mut self.pointer, chain);
+        let Some((last, _)) = last else {
+            return Ok(());
+        };
+        if last.first().copied() == under {
+            return Ok(());
+        }
+        let event = mouse::MouseEvent {
+            action: mouse::Action::Leave,
+            button: mouse::Button::None,
+            modifiers: key::Empty,
+            location,
+        };
+        for node in last {
+            // A handler can remove a node that is still in the list.
+            if !self.core.nodes.contains_key(node) {
+                continue;
+            }
+            if under.is_some_and(|under| self.core.is_ancestor_or_self(node, under)) {
+                break;
+            }
+            let local = Event::Mouse(RoutedInput::local_mouse(&self.core, node, event));
+            let sources = self.core.push_notice_source(NoticeSource::Widget);
+            let dispatched = self
+                .with_dispatch_boundary(|canopy| canopy.core.dispatch_event_on_node(node, &local));
+            self.core.pop_notice_source(sources);
+            if let Err(error) = dispatched {
+                self.notice_or_fail(error, NoticeSource::Widget, Some(node))?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Returns `node` and its ancestors, from the node up to the root.
+    fn chain(&self, node: NodeId) -> Vec<NodeId> {
+        let mut chain = Vec::new();
+        let mut current = Some(node);
+        while let Some(node) = current {
+            chain.push(node);
+            current = self.core.nodes.get(node).and_then(|record| record.parent);
+        }
+        chain
+    }
+
+    /// Send `Leave` to every node under the pointer, as when the terminal
+    /// loses focus.
+    fn leave_all(&mut self) -> Result<()> {
+        match &self.pointer {
+            Some((_, location)) => self.leave(None, *location),
+            None => Ok(()),
+        }
     }
 
     /// Propagate a key event through the focus and all its ancestors.
@@ -874,7 +941,12 @@ impl Canopy {
                 self.core.invalidate(crate::Invalidation::Paint);
                 self.set_screen_size(*s)
             }
-            Event::Paste(_) | Event::FocusGained | Event::FocusLost => {
+            Event::FocusLost => {
+                self.core.invalidate(crate::Invalidation::Paint);
+                self.leave_all()?;
+                self.dispatch_focus_event(e)
+            }
+            Event::Paste(_) | Event::FocusGained => {
                 self.core.invalidate(crate::Invalidation::Paint);
                 self.dispatch_focus_event(e)
             }
