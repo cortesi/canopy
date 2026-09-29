@@ -53,3 +53,8 @@ fn the_cursor_gym_script_passes() -> Result<()> {
 fn the_motion_gym_script_passes() -> Result<()> {
     run_gym_script(Demo::Motiongym, "motiongym.luau")
 }
+
+#[test]
+fn the_chart_gym_script_passes() -> Result<()> {
+    run_gym_script(Demo::Chartgym, "chartgym.luau")
+}

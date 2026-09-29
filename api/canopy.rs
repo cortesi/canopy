@@ -3742,6 +3742,21 @@ pub mod render {
             grapheme: &str,
         ) -> crate::error::Result<()>;
 
+        /// Write a single cell with a style whose paints are not resolved yet.
+        ///
+        /// The paints resolve at `p` within `rect`, and the cell moves when the
+        /// style moves. The effect stack does not apply here: build the style from
+        /// paints of [`Self::resolve_style`], which already carry it. So one cell
+        /// can combine the paints of several style paths, such as the end of one
+        /// bar segment over the start of the next.
+        pub fn put_styled(
+            &mut self,
+            style: &Style,
+            rect: Rect,
+            p: Point,
+            ch: char,
+        ) -> crate::error::Result<()>;
+
         /// Resolve a style by name and apply the current effect stack.
         pub fn resolve_style(&self, name: &str) -> Style;
 

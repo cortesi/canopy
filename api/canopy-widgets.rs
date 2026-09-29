@@ -24,7 +24,7 @@ use std::{
 use canopy::{
     Canopy, Context, EventOutcome, NodeId, Register, Setup, TypedId, ViewContext, Widget,
     commands::{CommandCall, CommandNode, CommandSpec, ToArgValue},
-    geom::{Rect, Size},
+    geom::{Line, Point, Rect, Size},
     input::{FrameworkBindingGroup, IntentName, ModalToken, mouse::MouseEvent},
     layout::{Align, Edges, Layout, ScrollAxis, ScrollDirection},
     render::Render,
@@ -90,6 +90,57 @@ pub enum Answer {
     #[default]
     No,
 }
+
+/// Large text drawn in a built-in pixel font with half blocks.
+///
+/// The font is five pixels high, and most glyphs are three pixels wide: M and
+/// W take five, N takes four, and narrow marks such as `.` take one. Each line
+/// of text is three rows high. Text that does not fit the area is cut at its
+/// right and bottom edges. The font has the letters A to Z, the
+/// digits, common punctuation, and basic math: `+ - × ÷ = < > ≤ ≥ % ° …`.
+/// Lowercase letters draw as capitals, and a character without a glyph draws
+/// as `?`. A newline starts a new line, one blank row below the last.
+///
+/// The text is a list of runs, each with the style path that paints it, so
+/// one value can show a number and a dimmer unit. `BigText` pushes the
+/// `big_text` layer, and a plain run paints the `text` part.
+pub struct BigText {/* private fields */}
+
+impl BigText {
+    /// Constructs large text of one run in the `text` part.
+    pub fn new(text: impl Into<String>) -> Self;
+
+    /// Returns the rows of cells that draw `text`, without trailing spaces.
+    pub fn rows_of(text: &str) -> Vec<String>;
+
+    /// Replaces the text with runs, each painted by its own style path.
+    pub fn set_runs<S, T>(&mut self, runs: impl IntoIterator<Item = (S, T)>)
+    where
+        S: Into<String>,
+        T: Into<String>;
+
+    /// Replaces the text with one run in the `text` part.
+    pub fn set_text(&mut self, text: impl Into<String>);
+
+    /// Returns the size in cells that `text` takes.
+    pub fn size_of(text: &str) -> Size;
+
+    /// Returns the text of all runs.
+    pub fn text(&self) -> String;
+
+    /// Places each line at the start, the center, or the end of the area.
+    #[must_use]
+    pub fn with_align(self, align: Align) -> Self;
+
+    /// Replaces the text with runs, each painted by its own style path.
+    #[must_use]
+    pub fn with_runs<S, T>(self, runs: impl IntoIterator<Item = (S, T)>) -> Self
+    where
+        S: Into<String>,
+        T: Into<String>;
+}
+
+impl Widget for BigText {}
 
 /// A simple box container around its children.
 #[derive(Default)]
@@ -1348,6 +1399,55 @@ impl<W: Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> CommandNode for
 
 impl<W: 'static + Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> Widget for List<W, K> {}
 
+/// A one-row gauge: a stacked bar of values over a track, drawn to an eighth
+/// of a cell, and a label at its end.
+///
+/// The values stack from the left on a scale from zero to the meter's top,
+/// which is one unless set. A value past the top fills the bar. `Meter`
+/// pushes the `meter` layer and paints `fill` for a single value, `track`
+/// for the rest of the bar, and `label` for its label. A gradient paint on
+/// `fill` spans the whole bar, track included, so the color at the end of the
+/// fill tells the level.
+#[derive(Default)]
+pub struct Meter {/* private fields */}
+
+impl Meter {
+    /// Constructs an empty meter on a scale from zero to one.
+    pub fn new() -> Self;
+
+    /// Shows a label at the end of the bar, or no label.
+    pub fn set_label(&mut self, label: Option<String>);
+
+    /// Sets the top of the scale. A top that is not a positive finite number
+    /// is one.
+    pub fn set_max(&mut self, max: f64);
+
+    /// Shows stacked values, each in the color of its style path.
+    pub fn set_segments(&mut self, segments: Vec<Segment>);
+
+    /// Shows one value in the `fill` part.
+    pub fn set_value(&mut self, value: f64);
+
+    /// Shows a label at the end of the bar.
+    #[must_use]
+    pub fn with_label(self, label: impl Into<String>) -> Self;
+
+    /// Sets the top of the scale. A top that is not a positive finite number
+    /// is one.
+    #[must_use]
+    pub fn with_max(self, max: f64) -> Self;
+
+    /// Shows stacked values, each in the color of its style path.
+    #[must_use]
+    pub fn with_segments(self, segments: Vec<Segment>) -> Self;
+
+    /// Shows one value in the `fill` part.
+    #[must_use]
+    pub fn with_value(self, value: f64) -> Self;
+}
+
+impl Widget for Meter {}
+
 /// A centred modal holding a filtered list of items.
 ///
 /// The widget draws nothing of its own. It centres its dialog and swallows
@@ -1963,6 +2063,59 @@ impl<T> CommandNode for Selector<T> where T: 'static + ItemLabel {}
 
 impl<T> Widget for Selector<T> where T: 'static + ItemLabel {}
 
+/// A series of values drawn small: bars of eighth blocks, or a braille line.
+///
+/// A value of `None` is a gap. A gap in bars draws `·` in the `gap` part, and
+/// a gap in a line breaks it. The values scale from zero to the largest finite
+/// value in view, or to a fixed top. A value past the top, infinity included,
+/// fills its column, and a value below zero or not a number draws as zero.
+/// When the view is narrower than the series, it shows the latest values, so a
+/// series that grows scrolls to the left. The sparkline keeps 1,024 values
+/// unless [`Sparkline::with_history`] sets another limit.
+///
+/// `Sparkline` pushes the `sparkline` layer and paints its bars in the `bar`
+/// part and its line in the `line` part.
+pub struct Sparkline {/* private fields */}
+
+impl Sparkline {
+    /// Constructs an empty sparkline of bars, one row high.
+    pub fn bars() -> Self;
+
+    /// Returns whether the sparkline has no values.
+    pub fn is_empty(&self) -> bool;
+
+    /// Returns the number of values.
+    pub fn len(&self) -> usize;
+
+    /// Constructs an empty sparkline that draws a braille line, one row high.
+    pub fn line() -> Self;
+
+    /// Adds a value after the latest, a number or `None` for a gap.
+    pub fn push(&mut self, value: impl Into<Option<f64>>);
+
+    /// Replaces the values. Each value is a number, or `None` for a gap.
+    pub fn set_values<V: Into<Option<f64>>>(&mut self, values: impl IntoIterator<Item = V>);
+
+    /// Sets the most values that the sparkline keeps, at least one. Older
+    /// values leave first.
+    #[must_use]
+    pub fn with_history(self, history: usize) -> Self;
+
+    /// Fixes the top of the scale, in place of the largest value in view.
+    #[must_use]
+    pub fn with_max(self, max: f64) -> Self;
+
+    /// Sets the height in rows. A height below one is one row.
+    #[must_use]
+    pub fn with_rows(self, rows: u32) -> Self;
+
+    /// Replaces the values. Each value is a number, or `None` for a gap.
+    #[must_use]
+    pub fn with_values<V: Into<Option<f64>>>(self, values: impl IntoIterator<Item = V>) -> Self;
+}
+
+impl Widget for Sparkline {}
+
 /// A sequence of glyphs that turns while work runs.
 ///
 /// A spinner holds no state: a widget that is busy picks the frame for how
@@ -2153,6 +2306,143 @@ pub enum ValueExposure {
 /// Register [`CLEAR_INTENT`]. Each widget type that accepts the intent calls
 /// this from its `Register` impl; registering it again is harmless.
 pub fn register_clear_intent(setup: &mut Setup) -> canopy::error::Result<()>;
+
+pub mod chart {
+    //! Chart primitives: scales, stacked bars and columns, and a braille canvas.
+    //! Chart primitives: value scales, stacked bars and columns drawn to an eighth
+    //! of a cell, and a braille dot canvas.
+    //!
+    //! A stacked bar or column is a run of [`Segment`]s. Each segment takes its
+    //! color from the foreground paint of its style path. Where one segment ends
+    //! inside a cell and the next begins, the cell shows a partial block: the
+    //! first segment is its foreground and the next its background, so a stack
+    //! stays smooth at an eighth of a cell. A cell shows at most two colors. When
+    //! more segments meet in one cell, the cell splits where it puts the fewest
+    //! eighths in a wrong color, and each side takes the color of its largest
+    //! part. On a tie, the larger color gets more of the cell.
+    //!
+    //! Cells that no segment fills are blank on the ground: the background of the
+    //! empty style path under the current layers. A track instead fills the rest
+    //! of a bar with its own color. A gradient paint resolves over the whole bar
+    //! or column, so its color at a cell tells how far along the cell is.
+
+    /// The side of its area that a column grows from.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum Base {
+        /// The column grows up from the bottom row.
+        Bottom,
+        /// The column grows down from the top row.
+        Top,
+    }
+
+    /// A canvas of braille dots, two dots wide and four dots high in each cell.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct Braille {/* private fields */}
+
+    impl Braille {
+        /// Clears every dot.
+        pub fn clear(&mut self);
+
+        /// Returns the size of the canvas in dots.
+        pub fn dots(&self) -> Size;
+
+        /// Sets the dots of a straight line from `from` to `to`, both included.
+        /// The parts of the line outside the canvas set nothing: the line is cut
+        /// to the canvas first, so a distant end costs no time.
+        pub fn line(&mut self, from: Point, to: Point);
+
+        /// Returns an empty canvas of `size` cells.
+        pub fn new(size: Size) -> Self;
+
+        /// Paints the canvas with its top left cell at `origin`, in the style
+        /// `style`.
+        pub fn paint(
+            &self,
+            render: &mut Render<'_>,
+            origin: Point,
+            style: &str,
+        ) -> canopy::error::Result<()>;
+
+        /// Returns the text of cell row `row`: a braille pattern for each cell
+        /// with dots, and a space for each cell without.
+        pub fn row_text(&self, row: u32) -> String;
+
+        /// Sets the dot at `point`, in dots from the top left. A point outside
+        /// the canvas sets nothing.
+        pub fn set(&mut self, point: Point);
+    }
+
+    /// A linear map from values onto cells, at an eighth of a cell.
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub struct Scale {/* private fields */}
+
+    impl Scale {
+        /// Returns the length of `value` in eighths of a cell, on a run of
+        /// `cells` cells. A value that is not above zero has no length, and a
+        /// value above the top of the scale fills the run.
+        pub fn eighths(&self, value: f64, cells: u32) -> u32;
+
+        /// Returns a scale from zero to `max`. A `max` that is not a positive
+        /// finite number gives a scale from zero to one.
+        pub fn linear(max: f64) -> Self;
+
+        /// Returns the value at the far end of the scale.
+        pub fn max(&self) -> f64;
+
+        /// Returns a scale from zero to `max` rounded up to 1, 2, or 5 times a
+        /// power of ten, so that its ends and ticks read as round numbers. At the
+        /// ends of the floating point range, where the rounded top is not a
+        /// positive finite number, the scale keeps the top of [`Self::linear`].
+        pub fn nice(max: f64) -> Self;
+
+        /// Returns `count` evenly spaced values from zero to the top of the
+        /// scale, both ends included. A count below two returns the two ends.
+        pub fn ticks(&self, count: usize) -> Vec<f64>;
+    }
+
+    /// One part of a stacked bar or column: a value and the style path whose
+    /// foreground paint colors it.
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct Segment {
+        /// The value of the part. A value that is not above zero draws nothing.
+        pub value: f64,
+        /// The style path of the part's color.
+        pub style: String,
+    }
+
+    impl Segment {
+        /// Returns a segment of `value` in the color of `style`.
+        pub fn new(value: f64, style: impl Into<String>) -> Self;
+    }
+
+    /// Paints a stacked column in `rect`, growing from `base`. Each column of
+    /// cells in `rect` shows the same stack, and the cells beyond the stack show
+    /// the ground.
+    ///
+    /// `mute` mixes every color toward the ground, from 0.0, which keeps the
+    /// colors, to 1.0, which hides the column. A muted column resolves its paints
+    /// at rest, so it does not move.
+    pub fn column(
+        render: &mut Render<'_>,
+        rect: Rect,
+        base: Base,
+        scale: &Scale,
+        segments: &[Segment],
+        mute: f32,
+    ) -> canopy::error::Result<()>;
+
+    /// Paints a stacked bar in `line`, from left to right.
+    ///
+    /// The segments stack in order. The cells after the last segment show the
+    /// foreground paint of `track` when it is given, and the ground otherwise.
+    pub fn hbar(
+        render: &mut Render<'_>,
+        line: Line,
+        scale: &Scale,
+        segments: &[Segment],
+        track: Option<&str>,
+    ) -> canopy::error::Result<()>;
+}
 
 pub mod diff {
     //! Line diffs of two full texts, and DiffView's supporting types.

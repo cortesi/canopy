@@ -23,6 +23,8 @@ pub(crate) const HELP_LABEL: &str = "help";
 
 /// Char gym example nodes.
 mod chargym;
+/// Chart gym example nodes.
+mod chartgym;
 mod cursorgym;
 /// Editor gym example nodes.
 mod editorgym;
@@ -221,6 +223,8 @@ enum Demo {
     },
     /// Browse the character and glyph rendering gym.
     Chargym,
+    /// Watch the chart primitives update live in every theme.
+    Chartgym,
     /// Compare every cursor role, motion, and shape.
     Cursorgym,
     /// Drive the experimental editor widget.
@@ -290,6 +294,9 @@ impl Demo {
                 builder.configure(widget_editor::WidgetEditor::register),
             ),
             Self::Chargym => chargym::binding_setup(builder.configure(chargym::CharGym::register)),
+            Self::Chartgym => {
+                chartgym::binding_setup(builder.configure(chartgym::ChartGym::register))
+            }
             Self::Cursorgym => cursorgym::binding_setup(builder),
             Self::Editorgym => {
                 editorgym::binding_setup(builder.configure(editorgym::EditorGym::register))
@@ -332,6 +339,7 @@ impl Demo {
                 inspector,
             ),
             Self::Chargym => install(builder, chargym::CharGym::new(), inspector),
+            Self::Chartgym => install(builder, chartgym::ChartGym::new(), inspector),
             Self::Cursorgym => install(builder, cursorgym::CursorGym::new(), inspector),
             Self::Editorgym => install(builder, editorgym::EditorGym::new(), inspector),
             Self::Focusgym => install(builder, focusgym::FocusGym::new(), inspector),

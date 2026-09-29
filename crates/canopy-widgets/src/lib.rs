@@ -3,10 +3,14 @@
 //! This crate provides a collection of reusable widgets for building terminal
 //! user interfaces with canopy.
 
+/// Large text in a built-in pixel font.
+mod big_text;
 /// Border widget with customizable glyphs.
 mod border;
 /// Button widget with command dispatch.
 mod button;
+/// Chart primitives: scales, stacked bars and columns, and a braille canvas.
+pub mod chart;
 /// Multi-click tracker shared by editor and terminal.
 mod click;
 /// Panes side by side with scroll position dividers.
@@ -52,6 +56,8 @@ mod keyed;
 mod label;
 /// Typed list container with selection.
 mod list_view;
+/// One-row gauge over a track.
+mod meter;
 /// Modal filtered list of items.
 mod picker;
 /// Application root widget.
@@ -67,6 +73,8 @@ pub mod scrollbar;
 mod search_bar;
 /// Selection widget.
 mod selector;
+/// Small series of values as bars or a braille line.
+mod sparkline;
 /// Frames for a busy indicator.
 mod spinner;
 /// Single-line status bar.
@@ -81,6 +89,7 @@ mod text;
 /// Shared text editing machinery for Input and Editor.
 mod text_buffer;
 
+pub use big_text::BigText;
 pub use border::{Border, BoxGlyphs};
 pub use button::Button;
 pub use columns::Columns;
@@ -98,11 +107,13 @@ pub use input::{CLEAR_INTENT, Input, ValueExposure, register_clear_intent};
 pub use keyed::KeyedChildren;
 pub use label::ItemLabel;
 pub use list_view::{List, Selectable};
+pub use meter::Meter;
 pub use picker::{Picker, PickerList};
 pub use root::Root;
 pub use scroll::Scroll;
 pub use search_bar::SearchBar;
 pub use selector::Selector;
+pub use sparkline::Sparkline;
 pub use spinner::Spinner;
 pub use status_bar::{KeyHint, StatusBar};
 pub use tabs::Tabs;

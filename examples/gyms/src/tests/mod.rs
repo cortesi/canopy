@@ -1,3 +1,4 @@
+mod chartgym;
 mod focusgym;
 mod framegym;
 mod help;

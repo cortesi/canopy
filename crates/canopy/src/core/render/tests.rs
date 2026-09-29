@@ -513,3 +513,185 @@ fn moving_styles_record_motion_for_the_cells_they_paint() {
         .unwrap();
     assert!(!target.buf.has_motion(), "the fill owns the cells now");
 }
+
+#[test]
+fn styled_cells_combine_paints_and_resolve_them_in_place() {
+    use crate::style::{GradientSpec, GradientStop, Paint, Style};
+
+    let mut target = TestTarget::new(geom::Rect::new(0, 0, 4, 1));
+    let black = Color::Rgb { r: 0, g: 0, b: 0 };
+    let white = Color::Rgb {
+        r: 255,
+        g: 255,
+        b: 255,
+    };
+    let ramp = GradientSpec::with_stops(
+        0.0,
+        vec![GradientStop::new(0.0, black), GradientStop::new(1.0, white)],
+    );
+    target
+        .stylemap
+        .rules()
+        .fg("low", Color::Red)
+        .fg("ramp", Paint::gradient(ramp.clone()))
+        .apply();
+    let bar = geom::Rect::new(0, 0, 4, 1);
+    target
+        .render(|r| {
+            let style = Style {
+                fg: r.resolve_style("low").fg,
+                bg: r.resolve_style("ramp").fg,
+                attrs: AttrSet::default(),
+            };
+            for x in 0..4 {
+                r.put_styled(&style, bar, geom::Point { x, y: 0 }, '▌')?;
+            }
+            // A point outside the clip writes nothing.
+            r.put_styled(&style, bar, geom::Point { x: 9, y: 0 }, '▌')
+        })
+        .unwrap();
+    target.assert_matches(buf!("▌▌▌▌"));
+    let cell = |x| target.buf.get(geom::Point { x, y: 0 }).unwrap().style;
+    assert_eq!(cell(0).fg, Color::Red, "the glyph takes the first paint");
+    assert_eq!(
+        cell(0).bg,
+        ramp.color_at(bar, geom::Point::ZERO),
+        "the ground takes the second paint, resolved in place"
+    );
+    assert_ne!(
+        cell(0).bg,
+        cell(3).bg,
+        "the gradient resolves across the bar"
+    );
+    assert!(
+        !target.buf.has_motion(),
+        "solid and still paints do not move"
+    );
+}
+
+#[test]
+fn styled_cells_move_with_their_paints() {
+    use std::time::Duration;
+
+    use crate::style::{Animation, Paint, Style};
+
+    let mut target = TestTarget::new(geom::Rect::new(0, 0, 2, 1));
+    target
+        .stylemap
+        .rules()
+        .fg(
+            "moving",
+            Paint::animated(Animation::pulse(
+                Color::Red,
+                Color::Blue,
+                Duration::from_millis(500),
+            )),
+        )
+        .apply();
+    let rect = geom::Rect::new(0, 0, 2, 1);
+    target
+        .render(|r| {
+            let style = Style {
+                fg: Paint::solid(Color::Black),
+                bg: r.resolve_style("moving").fg,
+                attrs: AttrSet::default(),
+            };
+            r.put_styled(&style, rect, geom::Point::ZERO, '▎')
+        })
+        .unwrap();
+    assert!(target.buf.has_motion(), "a moving paint moves its cell");
+}
+
+#[test]
+fn styled_cells_take_the_effect_stack_once() {
+    use crate::style::{Style, effects};
+
+    let mut target = TestTarget::new(geom::Rect::new(0, 0, 1, 1));
+    let red = Color::Rgb { r: 200, g: 0, b: 0 };
+    target.stylemap.rules().fg("low", red).apply();
+    let effects = [effects::brightness(0.5)];
+    let mut render = Render::new(
+        &target.stylemap,
+        &mut target.style,
+        &mut target.buf,
+        target.clip,
+        geom::Point::ZERO,
+    )
+    .with_effects(&effects);
+    let style = Style {
+        fg: render.resolve_style("low").fg,
+        bg: render.resolve_style("low").fg,
+        attrs: AttrSet::default(),
+    };
+    render
+        .put_styled(&style, target.clip, geom::Point::ZERO, '▌')
+        .unwrap();
+    let cell = target.buf.get(geom::Point::ZERO).unwrap().style;
+    assert_eq!(
+        cell.fg,
+        red.scale_brightness(0.5),
+        "the effect applies once"
+    );
+}
+
+#[test]
+fn a_still_styled_cell_replaces_a_moving_one() {
+    use std::time::Duration;
+
+    use crate::style::{Animation, Paint, Style};
+
+    let mut target = TestTarget::new(geom::Rect::new(0, 0, 1, 1));
+    target
+        .stylemap
+        .rules()
+        .fg(
+            "moving",
+            Paint::animated(Animation::pulse(
+                Color::Red,
+                Color::Blue,
+                Duration::from_millis(500),
+            )),
+        )
+        .apply();
+    let rect = geom::Rect::new(0, 0, 1, 1);
+    target
+        .render(|r| {
+            let moving = Style {
+                fg: r.resolve_style("moving").fg,
+                bg: Paint::solid(Color::Black),
+                attrs: AttrSet::default(),
+            };
+            r.put_styled(&moving, rect, geom::Point::ZERO, '▌')?;
+            let still = Style {
+                fg: Paint::solid(Color::Red),
+                bg: Paint::solid(Color::Black),
+                attrs: AttrSet::default(),
+            };
+            r.put_styled(&still, rect, geom::Point::ZERO, '▌')
+        })
+        .unwrap();
+    assert!(
+        !target.buf.has_motion(),
+        "the still cell owns the motion now"
+    );
+}
+
+#[test]
+fn styled_cells_land_where_the_clip_translates_them() {
+    use crate::style::{Paint, Style};
+
+    let mut target = TestTarget::new(geom::Rect::new(5, 5, 3, 2));
+    let style = Style {
+        fg: Paint::solid(Color::Red),
+        bg: Paint::solid(Color::Black),
+        attrs: AttrSet::default(),
+    };
+    let rect = geom::Rect::new(5, 5, 3, 2);
+    target
+        .render(|r| {
+            r.put_styled(&style, rect, geom::Point { x: 6, y: 6 }, '▌')?;
+            r.put_styled(&style, rect, geom::Point { x: 4, y: 4 }, '▌')
+        })
+        .unwrap();
+    target.assert_matches(buf!("XXX" "X▌X"));
+}

@@ -23,7 +23,8 @@ One rule names every stock widget's styles:
 | `roles::THUMB` | `thumb` | |
 
 Leaves that push their layer: `button`, `input`, `picker`, `confirm`, `help`, `dialog`,
-`status_bar`, `selector`, `dropdown`, `editor`, and `diff_view`. Containers
+`status_bar`, `selector`, `dropdown`, `editor`, `diff_view`, `sparkline`, `meter`, and
+`big_text`. Containers
 that paint prefixed paths: `frame`, `tabs`, `columns`, and `root`.
 
 The built-in themes are captured in `crates/canopy/src/core/style/themes.golden`.
@@ -154,6 +155,31 @@ A label too wide for the list shows cut, as one run.
 label uses `tabs/tab`, and the active label uses `tabs/tab/active`. While focus
 is within the tabs, the active label uses `tabs/tab/active/focused`, which falls
 back to `tabs/tab/active`. The built-in themes define all four paths.
+
+## Charts
+
+The `chart` module paints stacked bars and columns to an eighth of a cell, and
+the chart widgets build on it. A segment of a bar takes the foreground of its
+style path. Where two segments meet inside a cell, the cell shows the first as
+its foreground and the next as its background. A column that grows down swaps
+the two, because it draws the top of a cell with the lower block of the rest of
+the cell. Cells that no segment fills are blank on the ground: the background of
+the empty path beneath the layers. A gradient on a segment's style spans the
+whole bar, so its colour at a cell tells how far along the cell is.
+
+- `Sparkline` pushes `sparkline`. Its bars paint `bar`, and a missing value
+  paints `·` in `gap` among them. Its braille line paints `line`, and a missing
+  value breaks the line.
+- `Meter` pushes `meter`. A single value paints `fill`, the rest of the bar
+  paints `track`, and the label paints `label`. Stacked values paint the style
+  paths they name.
+- `BigText` pushes `big_text`. A plain run paints `text`, and a run with its
+  own path paints that path, so a value can dim its unit with a rule such as
+  `big_text/unit`.
+
+The built-in themes paint bars, lines, and fills in the accent, tracks in a
+faint tone near the ground, gaps and labels quietly, and large text in the
+foreground.
 
 ## Status bars
 

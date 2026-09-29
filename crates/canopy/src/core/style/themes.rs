@@ -16,6 +16,9 @@ const FOCUS_TINT: f32 = 0.13;
 /// How far a search match that is not current fades from yellow toward the
 /// ground, so the current match stands out in the same hue.
 const MATCH_FADE: f32 = 0.5;
+/// How far a meter track fades from the faint text colour toward the ground,
+/// so the track shows the length of the bar without competing with its fill.
+const TRACK_FADE: f32 = 0.6;
 
 /// The role colours a theme assigns.
 ///
@@ -123,6 +126,15 @@ impl Palette {
             .fg("/green", p.green)
             .fg("/yellow", p.yellow)
             .fg("/orange", p.orange)
+            // Charts draw in the accent over a quiet track, and a sparkline
+            // marks a missing value with a faint dot.
+            .fg("/sparkline/bar", p.accent)
+            .fg("/sparkline/line", p.accent)
+            .fg("/sparkline/gap", p.faint_fg)
+            .fg("/meter/fill", p.accent)
+            .fg("/meter/track", p.faint_fg.mix(p.bg, TRACK_FADE, Mix::Rgb))
+            .fg("/meter/label", p.muted_fg)
+            .fg("/big_text/text", p.fg)
             .attr("/text/bold", Attr::Bold)
             .attr("/text/italic", Attr::Italic)
             .attr("/text/underline", Attr::Underline)

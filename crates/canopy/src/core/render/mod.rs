@@ -388,6 +388,29 @@ impl<'a> Render<'a> {
         Ok(())
     }
 
+    /// Write a single cell with a style whose paints are not resolved yet.
+    ///
+    /// The paints resolve at `p` within `rect`, and the cell moves when the
+    /// style moves. The effect stack does not apply here: build the style from
+    /// paints of [`Self::resolve_style`], which already carry it. So one cell
+    /// can combine the paints of several style paths, such as the end of one
+    /// bar segment over the start of the next.
+    pub fn put_styled(
+        &mut self,
+        style: &Style,
+        rect: geom::Rect,
+        p: geom::Point,
+        ch: char,
+    ) -> Result<()> {
+        if !self.clip.contains_point(p) {
+            return Ok(());
+        }
+        let at = self.translate_point(p);
+        self.buf.put(at, ch, style.resolve_at(rect, p))?;
+        self.mark_motion(style, geom::Rect::new(at.x, at.y, 1, 1), rect);
+        Ok(())
+    }
+
     /// Write a single cell with a resolved style.
     pub fn put_cell(&mut self, style: ResolvedStyle, p: geom::Point, ch: char) -> Result<()> {
         if self.clip.contains_point(p) {
