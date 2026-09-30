@@ -13,7 +13,9 @@
 //! costs only the lines that are actually asked for, and multi-line constructs
 //! such as block comments keep their state. In a Markdown source, the body of
 //! a fenced code block highlights in the language its fence names, as a file
-//! in that language would.
+//! in that language would. `Grammar` resolves a fence's language to a syntect
+//! grammar for hosts that parse code themselves, and `syntect` is re-exported
+//! so they parse with the same version.
 
 use std::{borrow::Cow, ops::Range};
 
@@ -92,7 +94,9 @@ pub trait Highlighter {
 }
 
 #[cfg(feature = "syntax")]
-pub use syntect_highlighter::{DEFAULT_THEME, SyntectHighlighter};
+pub use syntect;
+#[cfg(feature = "syntax")]
+pub use syntect_highlighter::{DEFAULT_THEME, Grammar, SyntectHighlighter};
 
 /// The syntect-backed [`Highlighter`], and everything it needs.
 #[cfg(feature = "syntax")]
@@ -171,12 +175,13 @@ mod syntect_highlighter {
     /// render. Past this point lines highlight without the state above them.
     const MAX_STATEFUL_LINES: usize = 4_000;
 
-    /// A syntax, and the set that holds it.
+    /// A grammar: a syntax, and the set that holds it.
     ///
-    /// A syntax highlights only against its own set. Most syntaxes come from
-    /// the extended set, and Luau from a set of its own.
+    /// A syntax parses only against its own set, so the two travel together.
+    /// Most syntaxes come from the extended set of about 220 languages, and
+    /// Luau from a set of its own.
     #[derive(Clone, Copy)]
-    struct Grammar {
+    pub struct Grammar {
         /// The syntax.
         syntax: &'static SyntaxReference,
         /// The set that holds the syntax.
@@ -184,6 +189,83 @@ mod syntect_highlighter {
     }
 
     impl Grammar {
+        /// Return the grammar a Markdown fence's info string names, if one
+        /// covers it.
+        ///
+        /// The language is the first word of the info string, and a comma also
+        /// ends it, so `rust,ignore` names Rust. A word resolves as an
+        /// extension, then as a syntax name, and a few common names such as
+        /// `shell` and `golang` stand for others. Plain text names no grammar.
+        pub fn for_fence(info: &str) -> Option<Self> {
+            let token = info
+                .trim_start()
+                .split(|c: char| c.is_whitespace() || c == ',')
+                .next()
+                .filter(|token| !token.is_empty())?;
+            let token = FENCE_ALIASES
+                .iter()
+                .find(|(alias, _)| alias.eq_ignore_ascii_case(token))
+                .map_or(token, |(_, extension)| extension);
+            let grammar = Self::for_extension(token)
+                .or_else(|| Self::extended(|set| set.find_syntax_by_token(token)))?;
+            (!grammar.is_plain()).then_some(grammar)
+        }
+
+        /// Return the syntax.
+        pub fn syntax(self) -> &'static SyntaxReference {
+            self.syntax
+        }
+
+        /// Return the set that holds the syntax, which parsing needs.
+        pub fn syntax_set(self) -> &'static SyntaxSet {
+            self.set
+        }
+
+        /// Return the grammar for a file extension, consulting the alias table
+        /// when no grammar claims the extension itself.
+        fn for_extension(extension: &str) -> Option<Self> {
+            if extension.eq_ignore_ascii_case("luau") {
+                return Some(Self::luau());
+            }
+            Self::extended(|set| {
+                set.find_syntax_by_extension(extension).or_else(|| {
+                    SYNTAX_ALIASES
+                        .iter()
+                        .find(|(alias, _)| alias.eq_ignore_ascii_case(extension))
+                        .and_then(|(_, name)| set.find_syntax_by_name(name))
+                })
+            })
+        }
+
+        /// Return the extended grammar that `find` picks, if any.
+        fn extended(
+            find: impl FnOnce(&'static SyntaxSet) -> Option<&'static SyntaxReference>,
+        ) -> Option<Self> {
+            let set = syntax_set();
+            find(set).map(|syntax| Self { syntax, set })
+        }
+
+        /// Return the Luau grammar, loaded on first use.
+        ///
+        /// Luau adds types, interpolated strings, and more to Lua, which the
+        /// Lua grammar misreads. It stays out of the extended set because
+        /// adding a syntax there relinks every other one, which costs far more
+        /// than loading a set of one.
+        fn luau() -> Self {
+            static LUAU: OnceLock<SyntaxSet> = OnceLock::new();
+            let set = LUAU.get_or_init(|| {
+                let definition = SyntaxDefinition::load_from_str(LUAU_SYNTAX, true, None)
+                    .expect("the bundled Luau grammar loads");
+                let mut builder = SyntaxSetBuilder::new();
+                builder.add(definition);
+                builder.build()
+            });
+            Self {
+                syntax: &set.syntaxes()[0],
+                set,
+            }
+        }
+
         /// Return the grammar for text with no known type.
         fn plain() -> Self {
             let set = syntax_set();
@@ -199,6 +281,12 @@ mod syntect_highlighter {
         }
     }
 
+    impl fmt::Debug for Grammar {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.debug_tuple("Grammar").field(&self.syntax.name).finish()
+        }
+    }
+
     /// Return the syntax definitions shared by every highlighter.
     ///
     /// These are the extended definitions, which cover about three times as
@@ -208,71 +296,6 @@ mod syntect_highlighter {
     fn syntax_set() -> &'static SyntaxSet {
         static SYNTAXES: OnceLock<SyntaxSet> = OnceLock::new();
         SYNTAXES.get_or_init(extra_newlines)
-    }
-
-    /// Return the extended grammar named `f` finds, if any.
-    fn extended(
-        find: impl FnOnce(&'static SyntaxSet) -> Option<&'static SyntaxReference>,
-    ) -> Option<Grammar> {
-        let set = syntax_set();
-        find(set).map(|syntax| Grammar { syntax, set })
-    }
-
-    /// Return the Luau grammar, loaded on first use.
-    ///
-    /// Luau adds types, interpolated strings, and more to Lua, which the Lua
-    /// grammar misreads. It stays out of the extended set because adding a
-    /// syntax there relinks every other one, which costs far more than
-    /// loading a set of one.
-    fn luau() -> Grammar {
-        static LUAU: OnceLock<SyntaxSet> = OnceLock::new();
-        let set = LUAU.get_or_init(|| {
-            let definition = SyntaxDefinition::load_from_str(LUAU_SYNTAX, true, None)
-                .expect("the bundled Luau grammar loads");
-            let mut builder = SyntaxSetBuilder::new();
-            builder.add(definition);
-            builder.build()
-        });
-        Grammar {
-            syntax: &set.syntaxes()[0],
-            set,
-        }
-    }
-
-    /// Return the grammar for a file extension, consulting the alias table
-    /// when no grammar claims the extension itself.
-    fn grammar_for_extension(extension: &str) -> Option<Grammar> {
-        if extension.eq_ignore_ascii_case("luau") {
-            return Some(luau());
-        }
-        extended(|set| {
-            set.find_syntax_by_extension(extension).or_else(|| {
-                SYNTAX_ALIASES
-                    .iter()
-                    .find(|(alias, _)| alias.eq_ignore_ascii_case(extension))
-                    .and_then(|(_, name)| set.find_syntax_by_name(name))
-            })
-        })
-    }
-
-    /// Return the grammar a fence's info string names, if one covers it.
-    ///
-    /// The language is the first word of the info string, and a comma also
-    /// ends it, so `rust,ignore` names Rust. A word resolves as an extension,
-    /// then as a syntax name. Plain text names no grammar.
-    fn grammar_for_fence(info: &str) -> Option<Grammar> {
-        let token = info
-            .trim_start()
-            .split(|c: char| c.is_whitespace() || c == ',')
-            .next()
-            .filter(|token| !token.is_empty())?;
-        let token = FENCE_ALIASES
-            .iter()
-            .find(|(alias, _)| alias.eq_ignore_ascii_case(token))
-            .map_or(token, |(_, extension)| extension);
-        let grammar = grammar_for_extension(token)
-            .or_else(|| extended(|set| set.find_syntax_by_token(token)))?;
-        (!grammar.is_plain()).then_some(grammar)
     }
 
     /// Return the themes shared by every highlighter: syntect's defaults and
@@ -494,7 +517,7 @@ mod syntect_highlighter {
             Some(Self {
                 marker,
                 len,
-                engine: grammar_for_fence(info).map(|grammar| Engine::new(grammar, theme)),
+                engine: Grammar::for_fence(info).map(|grammar| Engine::new(grammar, theme)),
             })
         }
 
@@ -644,7 +667,7 @@ mod syntect_highlighter {
 
         /// Select the syntax for `extension`, discarding any prepared source.
         pub fn set_extension(&self, extension: &str) {
-            self.set_grammar(grammar_for_extension(extension).unwrap_or_else(Grammar::plain));
+            self.set_grammar(Grammar::for_extension(extension).unwrap_or_else(Grammar::plain));
         }
 
         /// Select the syntax for `path`, discarding any prepared source.
@@ -656,11 +679,11 @@ mod syntect_highlighter {
             let grammar = path
                 .file_name()
                 .and_then(|name| {
-                    extended(|set| set.find_syntax_by_extension(&name.to_string_lossy()))
+                    Grammar::extended(|set| set.find_syntax_by_extension(&name.to_string_lossy()))
                 })
                 .or_else(|| {
                     path.extension()
-                        .and_then(|ext| grammar_for_extension(&ext.to_string_lossy()))
+                        .and_then(|ext| Grammar::for_extension(&ext.to_string_lossy()))
                 })
                 .unwrap_or_else(Grammar::plain);
             self.set_grammar(grammar);
@@ -694,7 +717,7 @@ mod syntect_highlighter {
             // consult the first line before committing to it.
             let hint = self.grammar.get();
             let grammar = if hint.is_plain() {
-                extended(|set| {
+                Grammar::extended(|set| {
                     set.find_syntax_by_first_line(text.lines().next().unwrap_or_default())
                 })
                 .unwrap_or(hint)
@@ -874,14 +897,14 @@ mod syntect_highlighter {
                 ("diff", "Diff"),
             ] {
                 assert_eq!(
-                    grammar_for_fence(info).map(|grammar| grammar.syntax.name.as_str()),
+                    Grammar::for_fence(info).map(|grammar| grammar.syntax.name.as_str()),
                     Some(expected),
                     "a `{info}` fence should highlight as {expected}"
                 );
             }
             for info in ["", "nosuchlang", "text"] {
                 assert!(
-                    grammar_for_fence(info).is_none(),
+                    Grammar::for_fence(info).is_none(),
                     "a `{info}` fence has no syntax"
                 );
             }

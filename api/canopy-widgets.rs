@@ -34,6 +34,7 @@ use canopy::{
 };
 use grep_regex::{error::Error, matcher::RegexMatcher};
 use image::RgbaImage;
+use syntect::parsing::{SyntaxReference, SyntaxSet};
 
 /// Intent that clears the focused field, or resets what the focused widget
 /// shows.
@@ -3301,8 +3302,11 @@ pub mod highlight {
     //! costs only the lines that are actually asked for, and multi-line constructs
     //! such as block comments keep their state. In a Markdown source, the body of
     //! a fenced code block highlights in the language its fence names, as a file
-    //! in that language would.
+    //! in that language would. `Grammar` resolves a fence's language to a syntect
+    //! grammar for hosts that parse code themselves, and `syntect` is re-exported
+    //! so they parse with the same version.
 
+    pub use syntect;
     /// Theme used when the caller names none, matching the Canopy style theme.
     pub const DEFAULT_THEME: &str = "Canopy (dark)";
 
@@ -3318,6 +3322,31 @@ pub mod highlight {
         /// The editor calls this during rendering, before requesting spans, when
         /// its source or highlighter has changed.
         fn prepare(&self, text: &str) {}
+    }
+
+    /// A grammar: a syntax, and the set that holds it.
+    ///
+    /// A syntax parses only against its own set, so the two travel together.
+    /// Most syntaxes come from the extended set of about 220 languages, and
+    /// Luau from a set of its own.
+    #[derive(Clone, Copy, Debug)]
+    pub struct Grammar {/* private fields */}
+
+    impl Grammar {
+        /// Return the grammar a Markdown fence's info string names, if one
+        /// covers it.
+        ///
+        /// The language is the first word of the info string, and a comma also
+        /// ends it, so `rust,ignore` names Rust. A word resolves as an
+        /// extension, then as a syntax name, and a few common names such as
+        /// `shell` and `golang` stand for others. Plain text names no grammar.
+        pub fn for_fence(info: &str) -> Option<Self>;
+
+        /// Return the syntax.
+        pub fn syntax(self) -> &'static SyntaxReference;
+
+        /// Return the set that holds the syntax, which parsing needs.
+        pub fn syntax_set(self) -> &'static SyntaxSet;
     }
 
     /// A highlighted span for a single line.
