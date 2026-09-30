@@ -11,7 +11,9 @@
 //! produces. A source set through
 //! [`Highlighter::prepare`](crate::highlight::Highlighter::prepare) therefore
 //! costs only the lines that are actually asked for, and multi-line constructs
-//! such as block comments keep their state.
+//! such as block comments keep their state. In a Markdown source, the body of
+//! a fenced code block highlights in the language its fence names, as a file
+//! in that language would.
 
 use std::{borrow::Cow, ops::Range};
 
@@ -97,7 +99,7 @@ pub use syntect_highlighter::{DEFAULT_THEME, SyntectHighlighter};
 mod syntect_highlighter {
     use std::{
         cell::{Cell, RefCell},
-        fmt,
+        fmt, mem,
         path::Path,
         sync::OnceLock,
     };
@@ -133,6 +135,17 @@ mod syntect_highlighter {
         ("json5", "JSON"),
     ];
 
+    /// Fence names that no grammar claims, and the extensions they stand for.
+    const FENCE_ALIASES: &[(&str, &str)] = &[
+        ("shell", "sh"),
+        ("console", "sh"),
+        ("shell-session", "sh"),
+        ("zsh", "sh"),
+        ("c++", "cpp"),
+        ("golang", "go"),
+        ("patch", "diff"),
+    ];
+
     /// Lines a prepared source will walk before it stops carrying parser state.
     ///
     /// Walking is linear, so an unbounded jump into a large file would stall a
@@ -160,6 +173,26 @@ mod syntect_highlighter {
                 .find(|(alias, _)| alias.eq_ignore_ascii_case(extension))
                 .and_then(|(_, name)| syntaxes.find_syntax_by_name(name))
         })
+    }
+
+    /// Return the syntax a fence's info string names, if a grammar covers it.
+    ///
+    /// The language is the first word of the info string, and a comma also
+    /// ends it, so `rust,ignore` names Rust. A word resolves as an extension,
+    /// then as a syntax name. Plain text names no syntax.
+    fn syntax_for_fence(info: &str) -> Option<&'static SyntaxReference> {
+        let token = info
+            .trim_start()
+            .split(|c: char| c.is_whitespace() || c == ',')
+            .next()
+            .filter(|token| !token.is_empty())?;
+        let token = FENCE_ALIASES
+            .iter()
+            .find(|(alias, _)| alias.eq_ignore_ascii_case(token))
+            .map_or(token, |(_, extension)| extension);
+        let syntax =
+            syntax_for_extension(token).or_else(|| syntax_set().find_syntax_by_token(token))?;
+        (syntax.name != plain_text().name).then_some(syntax)
     }
 
     /// Return the themes shared by every highlighter: syntect's defaults and
@@ -303,6 +336,47 @@ mod syntect_highlighter {
             .expect("syntect ships default themes")
     }
 
+    /// A fenced code block open in a Markdown source.
+    struct Fence {
+        /// The fence character, a backtick or a tilde.
+        marker: char,
+        /// The length of the opening run. A run at least this long closes the
+        /// fence.
+        len: usize,
+        /// Highlighter for the body, when a syntax covers the fence's language.
+        engine: Option<HighlightLines<'static>>,
+    }
+
+    impl Fence {
+        /// Return the fence that `line` opens, if it opens one.
+        ///
+        /// A run of three or more backticks or tildes opens a fence. Any indent
+        /// may come before it, so a fence inside a list item opens too. The
+        /// info string after a run of backticks holds no backtick.
+        fn open(line: &str, theme: &'static Theme) -> Option<Self> {
+            let rest = line.trim_start();
+            let marker = rest.chars().next().filter(|c| matches!(c, '`' | '~'))?;
+            let len = rest.chars().take_while(|&c| c == marker).count();
+            // The marker is one byte long, so the run ends at byte `len`.
+            let info = &rest[len..];
+            if len < 3 || (marker == '`' && info.contains('`')) {
+                return None;
+            }
+            Some(Self {
+                marker,
+                len,
+                engine: syntax_for_fence(info).map(|syntax| HighlightLines::new(syntax, theme)),
+            })
+        }
+
+        /// Return whether `line` closes the fence.
+        fn closed_by(&self, line: &str) -> bool {
+            let rest = line.trim_start();
+            let run = rest.chars().take_while(|&c| c == self.marker).count();
+            run >= self.len && rest[run..].trim().is_empty()
+        }
+    }
+
     /// One source text and the highlighting walked over it so far.
     struct Source {
         /// Syntax resolved for this source, including an inferred first-line
@@ -310,13 +384,45 @@ mod syntect_highlighter {
         syntax: &'static SyntaxReference,
         /// Lines of the source, including the trailing newline syntect expects.
         lines: Vec<String>,
+        /// Theme the spans take their styles from.
+        theme: &'static Theme,
+        /// Whether the source is Markdown, whose fences highlight their bodies
+        /// in their own languages.
+        markdown: bool,
         /// Highlighter positioned after the last cached line.
         engine: HighlightLines<'static>,
+        /// The fence the walk is inside, in a Markdown source.
+        fence: Option<Fence>,
         /// Spans for every line walked so far.
         spans: Vec<Vec<HighlightSpan>>,
     }
 
     impl Source {
+        /// Hold `lines` to highlight as `syntax` in `theme`.
+        fn new(
+            syntax: &'static SyntaxReference,
+            lines: Vec<String>,
+            theme: &'static Theme,
+        ) -> Self {
+            Self {
+                syntax,
+                lines,
+                theme,
+                markdown: syntax
+                    .scope
+                    .build_string()
+                    .starts_with("text.html.markdown"),
+                engine: HighlightLines::new(syntax, theme),
+                fence: None,
+                spans: Vec::new(),
+            }
+        }
+
+        /// Highlight in `theme`, walking again from the first line.
+        fn restart(&mut self, theme: &'static Theme) {
+            *self = Self::new(self.syntax, mem::take(&mut self.lines), theme);
+        }
+
         /// Walk forward until `line` is cached, and return its spans.
         ///
         /// Returns `None` when the line lies outside the source or beyond the
@@ -326,15 +432,43 @@ mod syntect_highlighter {
                 return None;
             }
             while self.spans.len() <= line {
-                let next = self.spans.len();
-                let text = &self.lines[next];
-                let ranges = self
-                    .engine
-                    .highlight_line(text, syntax_set())
-                    .unwrap_or_default();
-                self.spans.push(spans_from(&ranges));
+                self.walk_line();
             }
             self.spans.get(line).cloned()
+        }
+
+        /// Highlight the next line, and cache its spans.
+        ///
+        /// The body of a fence goes to the fence's own highlighter, when a
+        /// syntax covers its language, and the source's highlighter never sees
+        /// it. The fence lines themselves, and a body in no known language,
+        /// stay with the source's highlighter.
+        fn walk_line(&mut self) {
+            let text = &self.lines[self.spans.len()];
+            let in_body = match &self.fence {
+                Some(fence) if fence.closed_by(text) => {
+                    self.fence = None;
+                    false
+                }
+                Some(_) => true,
+                None => {
+                    if self.markdown {
+                        self.fence = Fence::open(text, self.theme);
+                    }
+                    false
+                }
+            };
+            let engine = match &mut self.fence {
+                Some(Fence {
+                    engine: Some(engine),
+                    ..
+                }) if in_body => engine,
+                _ => &mut self.engine,
+            };
+            let ranges = engine
+                .highlight_line(text, syntax_set())
+                .unwrap_or_default();
+            self.spans.push(spans_from(&ranges));
         }
     }
 
@@ -379,8 +513,7 @@ mod syntect_highlighter {
         pub fn with_theme(mut self, name: impl AsRef<str>) -> Self {
             self.theme = theme(name.as_ref());
             if let Some(source) = self.source.get_mut().as_mut() {
-                source.engine = HighlightLines::new(source.syntax, self.theme);
-                source.spans.clear();
+                source.restart(self.theme);
             }
             self
         }
@@ -446,12 +579,7 @@ mod syntect_highlighter {
                 .take(MAX_STATEFUL_LINES)
                 .map(str::to_string)
                 .collect::<Vec<_>>();
-            *self.source.borrow_mut() = Some(Source {
-                syntax,
-                lines,
-                engine: HighlightLines::new(syntax, self.theme),
-                spans: Vec::new(),
-            });
+            *self.source.borrow_mut() = Some(Source::new(syntax, lines, self.theme));
         }
 
         fn highlight_line(&self, line: usize, text: &str) -> Vec<HighlightSpan> {
@@ -611,6 +739,101 @@ mod syntect_highlighter {
                     "{path} should highlight as {expected}"
                 );
             }
+        }
+
+        #[test]
+        fn fence_names_resolve() {
+            for (info, expected) in [
+                ("rust", "Rust"),
+                ("rust,ignore", "Rust"),
+                ("Python extra words", "Python"),
+                (" luau", "Lua"),
+                ("shell", "Bourne Again Shell (bash)"),
+                ("console", "Bourne Again Shell (bash)"),
+                ("c++", "C++"),
+                ("golang", "Go"),
+                ("toml", "TOML"),
+                ("diff", "Diff"),
+            ] {
+                assert_eq!(
+                    syntax_for_fence(info).map(|syntax| syntax.name.as_str()),
+                    Some(expected),
+                    "a `{info}` fence should highlight as {expected}"
+                );
+            }
+            for info in ["", "nosuchlang", "text"] {
+                assert!(
+                    syntax_for_fence(info).is_none(),
+                    "a `{info}` fence has no syntax"
+                );
+            }
+        }
+
+        /// Return the colors of `text` highlighted as the first line of a file
+        /// with `extension`.
+        fn file_colors(extension: &str, text: &str) -> Vec<Paint> {
+            let highlighter = SyntectHighlighter::new(extension);
+            highlighter.prepare(&format!("{text}\n"));
+            colors(&highlighter, 0, text)
+        }
+
+        #[test]
+        fn markdown_fences_highlight_in_their_language() {
+            let highlighter = SyntectHighlighter::for_path("README.md");
+            highlighter.prepare(
+                "# Notes\n\n```luau\nlocal x = \"s\" -- note\n```\n\n\
+                 ~~~rust,ignore\nfn main() { let x = y; }\n~~~\n\n\
+                 - Step:\n\n  ```toml\n  a = 1\n  ```\n",
+            );
+            for (line, text, extension) in [
+                (3, "local x = \"s\" -- note", "luau"),
+                (7, "fn main() { let x = y; }", "rs"),
+                (13, "  a = 1", "toml"),
+            ] {
+                assert_eq!(
+                    colors(&highlighter, line, text),
+                    file_colors(extension, text),
+                    "a {extension} fence should highlight as a {extension} file"
+                );
+            }
+        }
+
+        #[test]
+        fn markdown_resumes_after_a_fence() {
+            let highlighter = SyntectHighlighter::for_path("notes.md");
+            // The body leaves a string open, which must end with the fence.
+            highlighter.prepare("```rust\nlet s = \"open\n```\n# After\n");
+            assert_eq!(
+                colors(&highlighter, 3, "# After"),
+                file_colors("md", "# After")
+            );
+        }
+
+        #[test]
+        fn only_a_long_enough_run_closes_a_fence() {
+            let highlighter = SyntectHighlighter::for_path("notes.md");
+            highlighter.prepare("````rust\n```\nlet x = 1;\n````\n# After\n");
+            assert_eq!(
+                colors(&highlighter, 2, "let x = 1;"),
+                file_colors("rs", "let x = 1;"),
+                "a shorter run leaves the fence open"
+            );
+            assert_eq!(
+                colors(&highlighter, 4, "# After"),
+                file_colors("md", "# After")
+            );
+        }
+
+        #[test]
+        fn a_fence_in_no_known_language_stays_markdown() {
+            let highlighter = SyntectHighlighter::for_path("notes.md");
+            highlighter.prepare("```nosuchlang\nlet x = 1;\n```\n");
+            let raw = SyntectHighlighter::for_path("notes.md");
+            raw.prepare("```\nlet x = 1;\n```\n");
+            assert_eq!(
+                colors(&highlighter, 1, "let x = 1;"),
+                colors(&raw, 1, "let x = 1;")
+            );
         }
 
         #[test]
