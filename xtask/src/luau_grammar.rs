@@ -1,40 +1,110 @@
 //! Convert the Luau TextMate grammar into the sublime-syntax file that
-//! `canopy-widgets` bundles, since syntect loads only sublime-syntax.
+//! `canopy-widgets` bundles, since syntect loads only sublime-syntax, then
+//! check the result against upstream's baselines.
 //!
 //! A match rule becomes a match. A begin/end rule becomes a match that pushes
 //! an anonymous context: the end pattern comes first, so it wins a tie as
-//! TextMate's does, then the rule's patterns. `name` scopes the whole region
-//! and `contentName` its inside. A begin/while rule ends at the start of the
-//! first line the while pattern does not match.
+//! TextMate's does, then the rule's patterns. `name` becomes the context's
+//! meta scope, which covers the region with its begin and end, and
+//! `contentName` its meta content scope, which covers only the inside. A
+//! begin/while rule embeds its patterns and escapes, from any depth, at the
+//! start of the first line the while pattern does not match.
 
-use std::{fs, path::Path};
+use std::{fs, path::Path, process::Command};
 
 use serde_json::{Map, Value};
 
-/// The converted grammar, relative to the workspace root.
-const OUTPUT: &str = "crates/canopy-widgets/syntaxes/Luau.sublime-syntax";
+use crate::cargo_env;
 
-/// Convert the grammar at `input`, taken from upstream `commit`, and write the
-/// result into the widgets crate.
-pub fn run(workspace_root: &Path, input: &Path, commit: &str) -> bool {
-    let converted = fs::read_to_string(input)
-        .map_err(|error| format!("cannot read {}: {error}", input.display()))
-        .and_then(|text| {
-            serde_json::from_str(&text)
-                .map_err(|error| format!("{} is not JSON: {error}", input.display()))
-        })
-        .and_then(|grammar| convert(&grammar, commit));
-    let written = converted.and_then(|text| {
-        fs::write(workspace_root.join(OUTPUT), text)
-            .map_err(|error| format!("cannot write {OUTPUT}: {error}"))
-    });
-    match written {
-        Ok(()) => {
-            println!("wrote {OUTPUT}");
-            true
-        }
+/// The directory of the bundled grammar, relative to the workspace root.
+const SYNTAXES: &str = "crates/canopy-widgets/syntaxes";
+
+/// Convert the grammar in an upstream `checkout`, write it and its notice into
+/// the widgets crate, and run the conformance test against the checkout's
+/// baselines.
+pub fn run(workspace_root: &Path, checkout: &Path) -> bool {
+    match write(workspace_root, checkout) {
+        Ok(()) => check(workspace_root, checkout),
         Err(error) => {
             eprintln!("{error}");
+            false
+        }
+    }
+}
+
+/// Convert the grammar, and write it with its source and license notice.
+fn write(workspace_root: &Path, checkout: &Path) -> Result<(), String> {
+    let read = |name: &str| {
+        let path = checkout.join(name);
+        fs::read_to_string(&path)
+            .map_err(|error| format!("cannot read {}: {error}", path.display()))
+    };
+    let grammar = serde_json::from_str(&read("Luau.tmLanguage.json")?)
+        .map_err(|error| format!("Luau.tmLanguage.json is not JSON: {error}"))?;
+    let license = read("LICENSE.md")?;
+    let commit = commit(checkout)?;
+    let syntaxes = workspace_root.join(SYNTAXES);
+    let write = |name: &str, text: String| {
+        fs::write(syntaxes.join(name), text)
+            .map_err(|error| format!("cannot write {SYNTAXES}/{name}: {error}"))
+    };
+    write("Luau.sublime-syntax", convert(&grammar, &commit)?)?;
+    write("Luau.LICENSE.md", notice(&commit, &license))?;
+    println!("wrote {SYNTAXES} from {commit}");
+    Ok(())
+}
+
+/// Return the commit the checkout has out.
+fn commit(checkout: &Path) -> Result<String, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(checkout)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .map_err(|error| format!("cannot run git: {error}"))?;
+    if !output.status.success() {
+        return Err(format!("{} is not a git checkout", checkout.display()));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+/// Return the notice that records the grammar's source and carries its
+/// license.
+fn notice(commit: &str, license: &str) -> String {
+    format!(
+        "# Luau grammar\n\n\
+         `Luau.sublime-syntax` is converted from\n\
+         [Luau.tmLanguage](https://github.com/JohnnyMorganz/Luau.tmLanguage) at commit\n\
+         `{commit}`. To update it, check out that repository\nand run:\n\n\
+         ```sh\ncargo xtask luau-grammar path/to/Luau.tmLanguage\n```\n\n\
+         The command also checks the grammar against the checkout's baselines.\n\n\
+         The grammar carries its upstream license:\n\n---\n\n{license}"
+    )
+}
+
+/// Run the conformance test against the checkout's baselines.
+fn check(workspace_root: &Path, checkout: &Path) -> bool {
+    let status = cargo_env::command("cargo")
+        .current_dir(workspace_root)
+        .args([
+            "test",
+            "-p",
+            "canopy-widgets",
+            "--test",
+            "luau_grammar",
+            "--",
+            "--ignored",
+        ])
+        .env("LUAU_TMLANGUAGE", checkout)
+        .status();
+    match status {
+        Ok(status) if status.success() => true,
+        Ok(_) => {
+            eprintln!("the converted grammar does not match the upstream baselines");
+            false
+        }
+        Err(error) => {
+            eprintln!("cannot run cargo: {error}");
             false
         }
     }
@@ -109,11 +179,38 @@ impl Converter<'_> {
                 out.push(format!("{indent}  scope: {}", quote(&scope)));
             }
             numbered(captures, &format!("{indent}  "), out);
-        } else if let Some(begin) = text("begin") {
+        } else if let (Some(begin), Some(pattern)) = (text("begin"), text("while")) {
+            // TextMate checks a while pattern at the start of each line at any
+            // depth, which an escape does too.
             let captures = captures_of(rule, &["beginCaptures", "captures"]);
             out.push(format!("{indent}- match: {}", quote(begin)));
             if let Some(scope) = scope_of(&[text("name"), capture_name(captures, "0")]) {
                 out.push(format!("{indent}  scope: {}", quote(&scope)));
+            }
+            numbered(captures, &format!("{indent}  "), out);
+            out.push(format!("{indent}  embed:"));
+            let start = out.len();
+            if let Some(patterns) = rule.get("patterns") {
+                self.rules(patterns, &format!("{indent}    "), out)?;
+            }
+            if out.len() == start {
+                out.push(format!("{indent}    []"));
+            }
+            if let Some(scope) = scope_of(&[text("name"), text("contentName")]) {
+                out.push(format!("{indent}  embed_scope: {}", quote(&scope)));
+            }
+            let pattern = pattern.strip_prefix('^').unwrap_or(pattern);
+            out.push(format!(
+                "{indent}  escape: {}",
+                quote(&format!("^(?!{pattern})"))
+            ));
+        } else if let Some(begin) = text("begin") {
+            let captures = captures_of(rule, &["beginCaptures", "captures"]);
+            out.push(format!("{indent}- match: {}", quote(begin)));
+            // The pushed context's meta scope already covers the match that
+            // pushes it, so only capture 0 scopes the match itself.
+            if let Some(scope) = capture_name(captures, "0") {
+                out.push(format!("{indent}  scope: {}", quote(scope)));
             }
             numbered(captures, &format!("{indent}  "), out);
             out.push(format!("{indent}  push:"));
@@ -131,13 +228,6 @@ impl Converter<'_> {
                     out.push(format!("{inner}  scope: {}", quote(scope)));
                 }
                 numbered(ends, &format!("{inner}  "), out);
-                out.push(format!("{inner}  pop: true"));
-            } else if let Some(pattern) = text("while") {
-                let pattern = pattern.strip_prefix('^').unwrap_or(pattern);
-                out.push(format!(
-                    "{inner}- match: {}",
-                    quote(&format!("^(?!{pattern})"))
-                ));
                 out.push(format!("{inner}  pop: true"));
             }
             if let Some(patterns) = rule.get("patterns") {
@@ -234,9 +324,36 @@ mod tests {
         let text = convert(&grammar, "abc").expect("the grammar converts");
         assert!(
             text.contains(
-                "  string:\n    - match: \"\\\"\"\n      scope: \"string.quoted.demo\"\n      push:\n        \
+                "  string:\n    - match: \"\\\"\"\n      push:\n        \
                  - meta_scope: \"string.quoted.demo\"\n        - match: \"\\\"\"\n          pop: true\n        \
                  - match: \"\\\\\\\\.\"\n          scope: \"constant.character.escape.demo\"\n"
+            ),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn while_rules_escape_from_any_depth() {
+        let grammar = json!({
+            "name": "Demo",
+            "scopeName": "source.demo",
+            "patterns": [{ "include": "#block" }],
+            "repository": {
+                "block": {
+                    "name": "meta.block.demo",
+                    "begin": "(>)",
+                    "while": "^(?=>)",
+                    "beginCaptures": { "1": { "name": "punctuation.demo" } },
+                    "patterns": [{ "include": "$self" }],
+                },
+            },
+        });
+        let text = convert(&grammar, "abc").expect("the grammar converts");
+        assert!(
+            text.contains(
+                "  block:\n    - match: \"(>)\"\n      scope: \"meta.block.demo\"\n      \
+                 captures:\n        1: \"punctuation.demo\"\n      embed:\n        - include: main\n      \
+                 embed_scope: \"meta.block.demo\"\n      escape: \"^(?!(?=>))\"\n"
             ),
             "{text}"
         );

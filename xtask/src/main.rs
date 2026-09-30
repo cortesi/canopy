@@ -29,14 +29,11 @@ enum Task {
     BenchCheck,
     /// Run all smoke-test integration targets.
     Smoke,
-    /// Convert the upstream Luau grammar into the one canopy-widgets bundles.
+    /// Convert the upstream Luau grammar into the one canopy-widgets bundles,
+    /// and check it against the upstream baselines.
     LuauGrammar {
-        /// `Luau.tmLanguage.json` from JohnnyMorganz/Luau.tmLanguage.
-        input: PathBuf,
-        /// The upstream commit the grammar comes from, which the output
-        /// records.
-        #[arg(long)]
-        commit: String,
+        /// A checkout of JohnnyMorganz/Luau.tmLanguage.
+        checkout: PathBuf,
     },
 }
 
@@ -47,7 +44,7 @@ fn main() -> ExitCode {
         Task::FeatureCheck => run_feature_check(&root),
         Task::BenchCheck => run_bench_check(&root),
         Task::Smoke => run_smoke(&root),
-        Task::LuauGrammar { input, commit } => luau_grammar::run(&root, &input, &commit),
+        Task::LuauGrammar { checkout } => luau_grammar::run(&root, &checkout),
     })
 }
 

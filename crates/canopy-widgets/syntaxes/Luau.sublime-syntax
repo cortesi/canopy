@@ -37,7 +37,6 @@ contexts:
         2: "storage.type.attribute.luau"
   comment:
     - match: "--\\[(=*)\\["
-      scope: "comment.block.luau"
       push:
         - meta_scope: "comment.block.luau"
         - match: "\\]\\1\\]"
@@ -46,25 +45,22 @@ contexts:
           scope: "keyword.operator.other.luau"
           captures:
             1: "comment.luau"
-          push:
-            - meta_scope: "keyword.operator.other.luau"
-            - match: "^(?!(?!\\s*```))"
-              pop: true
+          embed:
             - include: main
+          embed_scope: "keyword.operator.other.luau"
+          escape: "^(?!(?!\\s*```))"
         - match: "(```)"
           scope: "keyword.operator.other.luau"
           captures:
             1: "comment.luau"
         - include: doc_comment_tags
     - match: "---"
-      scope: "comment.line.double-dash.documentation.luau"
       push:
         - meta_scope: "comment.line.double-dash.documentation.luau"
         - match: "\\n"
           pop: true
         - include: doc_comment_tags
     - match: "--"
-      scope: "comment.line.double-dash.luau"
       push:
         - meta_scope: "comment.line.double-dash.luau"
         - match: "\\n"
@@ -118,7 +114,6 @@ contexts:
           scope: "variable.parameter.luau"
   function-definition:
     - match: "\\b(?:(local)\\s+|(const)\\s+|(export)\\s+)?(function)\\b(?![,:])"
-      scope: "meta.function.luau"
       captures:
         1: "storage.modifier.local.luau"
         2: "storage.modifier.const.luau"
@@ -131,7 +126,6 @@ contexts:
         - include: comment
         - include: generics-declaration
         - match: "(\\()"
-          scope: "meta.parameter.luau"
           captures:
             1: "punctuation.definition.parameters.begin.luau"
           push:
@@ -189,7 +183,7 @@ contexts:
       scope: "variable.other.readwrite.luau"
   interpolated_string_expression:
     - match: "\\{"
-      scope: "meta.template.expression.luau punctuation.definition.interpolated-string-expression.begin.luau"
+      scope: "punctuation.definition.interpolated-string-expression.begin.luau"
       push:
         - meta_scope: "meta.template.expression.luau"
         - meta_content_scope: "meta.embedded.line.luau"
@@ -292,27 +286,23 @@ contexts:
       scope: "constant.language.luau"
   string:
     - match: "\""
-      scope: "string.quoted.double.luau"
       push:
         - meta_scope: "string.quoted.double.luau"
         - match: "\""
           pop: true
         - include: string_escape
     - match: "'"
-      scope: "string.quoted.single.luau"
       push:
         - meta_scope: "string.quoted.single.luau"
         - match: "'"
           pop: true
         - include: string_escape
     - match: "\\[(=*)\\["
-      scope: "string.other.multiline.luau"
       push:
         - meta_scope: "string.other.multiline.luau"
         - match: "\\]\\1\\]"
           pop: true
     - match: "`"
-      scope: "string.interpolated.luau"
       push:
         - meta_scope: "string.interpolated.luau"
         - match: "`"
@@ -355,7 +345,6 @@ contexts:
           scope: "keyword.operator.assignment.luau"
   type-function:
     - match: "(?<![^.]\\.|:)\\b(?:(export)\\s+)?(type)\\s+(function)\\b"
-      scope: "meta.function.luau"
       captures:
         1: "storage.modifier.visibility.luau"
         2: "storage.type.luau"
@@ -367,7 +356,6 @@ contexts:
         - include: comment
         - include: generics-declaration
         - match: "(\\()"
-          scope: "meta.parameter.luau"
           captures:
             1: "punctuation.definition.parameters.begin.luau"
           push:

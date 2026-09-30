@@ -1,12 +1,15 @@
 # Luau grammar
 
-`Luau.sublime-syntax` is converted from [Luau.tmLanguage](https://github.com/JohnnyMorganz/Luau.tmLanguage)
-at commit `350b8a6ef8ab7d0de843fa08f85b759ca76531dc`. To update it, download
-`Luau.tmLanguage.json` from that repository and run:
+`Luau.sublime-syntax` is converted from
+[Luau.tmLanguage](https://github.com/JohnnyMorganz/Luau.tmLanguage) at commit
+`350b8a6ef8ab7d0de843fa08f85b759ca76531dc`. To update it, check out that repository
+and run:
 
 ```sh
-cargo xtask luau-grammar path/to/Luau.tmLanguage.json --commit COMMIT
+cargo xtask luau-grammar path/to/Luau.tmLanguage
 ```
+
+The command also checks the grammar against the checkout's baselines.
 
 The grammar carries its upstream license:
 

@@ -61,6 +61,10 @@ required-features = ["syntax"]
 name = "logs_subscriber"
 required-features = ["devtools"]
 
+[[test]]
+name = "luau_grammar"
+required-features = ["syntax"]
+
 [[bench]]
 name = "keyed"
 harness = false
