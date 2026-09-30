@@ -104,22 +104,44 @@ mod syntect_highlighter {
         sync::OnceLock,
     };
 
-    use canopy::{
-        rgb,
-        style::{Attr, AttrSet, Color, Paint, Style, themes},
-    };
+    use canopy::style::{Attr, AttrSet, Color, Paint, Style, themes};
     use syntect::{
         easy::HighlightLines,
         highlighting,
         highlighting::{FontStyle, Style as SyntectStyle, Theme, ThemeSet},
-        parsing::{SyntaxReference, SyntaxSet},
+        parsing::{SyntaxDefinition, SyntaxReference, SyntaxSet, SyntaxSetBuilder},
     };
     use two_face::syntax::extra_newlines;
 
     use super::{HighlightSpan, Highlighter};
 
-    /// Function names, the one syntax colour outside the style palette.
-    const PEACH: Color = rgb!("#fab283");
+    /// Syntax colours, apart from the style palette's named colours, which are
+    /// too soft to tell code apart at a glance. The colours sit near one OKLCH
+    /// lightness at high chroma, with hues spread so no two roles look alike.
+    mod code {
+        use canopy::{rgb, style::Color};
+
+        /// Keywords and storage.
+        pub(super) const PINK: Color = rgb!("#f472dc");
+        /// Operators.
+        pub(super) const CYAN: Color = rgb!("#58e0f6");
+        /// Strings and inline code.
+        pub(super) const GREEN: Color = rgb!("#81e86a");
+        /// Escapes and regular expressions.
+        pub(super) const TEAL: Color = rgb!("#4ae6d6");
+        /// Numbers and constants.
+        pub(super) const ORANGE: Color = rgb!("#ffa666");
+        /// Functions, headings, and links.
+        pub(super) const BLUE: Color = rgb!("#6fb6fe");
+        /// Types.
+        pub(super) const YELLOW: Color = rgb!("#f9d544");
+        /// Parameters, language variables such as `self`, and tags.
+        pub(super) const CORAL: Color = rgb!("#fe8b7d");
+        /// Macros, attributes, and decorators.
+        pub(super) const AQUA: Color = rgb!("#28d6df");
+        /// Comments and fence markers, which recede.
+        pub(super) const SLATE: Color = rgb!("#7a879c");
+    }
 
     /// Theme used when the caller names none, matching the Canopy style theme.
     pub const DEFAULT_THEME: &str = "Canopy (dark)";
@@ -127,13 +149,10 @@ mod syntect_highlighter {
     /// Extensions a bundled syntax covers under another name.
     ///
     /// Each entry is a dialect close enough to its host grammar to read well.
-    const SYNTAX_ALIASES: &[(&str, &str)] = &[
-        // Luau is a Lua dialect. The Lua grammar covers everything but its type
-        // annotations.
-        ("luau", "Lua"),
-        ("jsonc", "JSON"),
-        ("json5", "JSON"),
-    ];
+    const SYNTAX_ALIASES: &[(&str, &str)] = &[("jsonc", "JSON"), ("json5", "JSON")];
+
+    /// The Luau grammar, converted from the one GitHub and editors use.
+    const LUAU_SYNTAX: &str = include_str!("../syntaxes/Luau.sublime-syntax");
 
     /// Fence names that no grammar claims, and the extensions they stand for.
     const FENCE_ALIASES: &[(&str, &str)] = &[
@@ -152,6 +171,34 @@ mod syntect_highlighter {
     /// render. Past this point lines highlight without the state above them.
     const MAX_STATEFUL_LINES: usize = 4_000;
 
+    /// A syntax, and the set that holds it.
+    ///
+    /// A syntax highlights only against its own set. Most syntaxes come from
+    /// the extended set, and Luau from a set of its own.
+    #[derive(Clone, Copy)]
+    struct Grammar {
+        /// The syntax.
+        syntax: &'static SyntaxReference,
+        /// The set that holds the syntax.
+        set: &'static SyntaxSet,
+    }
+
+    impl Grammar {
+        /// Return the grammar for text with no known type.
+        fn plain() -> Self {
+            let set = syntax_set();
+            Self {
+                syntax: set.find_syntax_plain_text(),
+                set,
+            }
+        }
+
+        /// Return whether this grammar leaves text plain.
+        fn is_plain(self) -> bool {
+            self.syntax.name == Self::plain().syntax.name
+        }
+    }
+
     /// Return the syntax definitions shared by every highlighter.
     ///
     /// These are the extended definitions, which cover about three times as
@@ -163,24 +210,57 @@ mod syntect_highlighter {
         SYNTAXES.get_or_init(extra_newlines)
     }
 
-    /// Return the syntax for a file extension, consulting the alias table when
-    /// no grammar claims the extension itself.
-    fn syntax_for_extension(extension: &str) -> Option<&'static SyntaxReference> {
-        let syntaxes = syntax_set();
-        syntaxes.find_syntax_by_extension(extension).or_else(|| {
-            SYNTAX_ALIASES
-                .iter()
-                .find(|(alias, _)| alias.eq_ignore_ascii_case(extension))
-                .and_then(|(_, name)| syntaxes.find_syntax_by_name(name))
+    /// Return the extended grammar named `f` finds, if any.
+    fn extended(
+        find: impl FnOnce(&'static SyntaxSet) -> Option<&'static SyntaxReference>,
+    ) -> Option<Grammar> {
+        let set = syntax_set();
+        find(set).map(|syntax| Grammar { syntax, set })
+    }
+
+    /// Return the Luau grammar, loaded on first use.
+    ///
+    /// Luau adds types, interpolated strings, and more to Lua, which the Lua
+    /// grammar misreads. It stays out of the extended set because adding a
+    /// syntax there relinks every other one, which costs far more than
+    /// loading a set of one.
+    fn luau() -> Grammar {
+        static LUAU: OnceLock<SyntaxSet> = OnceLock::new();
+        let set = LUAU.get_or_init(|| {
+            let definition = SyntaxDefinition::load_from_str(LUAU_SYNTAX, true, None)
+                .expect("the bundled Luau grammar loads");
+            let mut builder = SyntaxSetBuilder::new();
+            builder.add(definition);
+            builder.build()
+        });
+        Grammar {
+            syntax: &set.syntaxes()[0],
+            set,
+        }
+    }
+
+    /// Return the grammar for a file extension, consulting the alias table
+    /// when no grammar claims the extension itself.
+    fn grammar_for_extension(extension: &str) -> Option<Grammar> {
+        if extension.eq_ignore_ascii_case("luau") {
+            return Some(luau());
+        }
+        extended(|set| {
+            set.find_syntax_by_extension(extension).or_else(|| {
+                SYNTAX_ALIASES
+                    .iter()
+                    .find(|(alias, _)| alias.eq_ignore_ascii_case(extension))
+                    .and_then(|(_, name)| set.find_syntax_by_name(name))
+            })
         })
     }
 
-    /// Return the syntax a fence's info string names, if a grammar covers it.
+    /// Return the grammar a fence's info string names, if one covers it.
     ///
     /// The language is the first word of the info string, and a comma also
     /// ends it, so `rust,ignore` names Rust. A word resolves as an extension,
-    /// then as a syntax name. Plain text names no syntax.
-    fn syntax_for_fence(info: &str) -> Option<&'static SyntaxReference> {
+    /// then as a syntax name. Plain text names no grammar.
+    fn grammar_for_fence(info: &str) -> Option<Grammar> {
         let token = info
             .trim_start()
             .split(|c: char| c.is_whitespace() || c == ',')
@@ -190,9 +270,9 @@ mod syntect_highlighter {
             .iter()
             .find(|(alias, _)| alias.eq_ignore_ascii_case(token))
             .map_or(token, |(_, extension)| extension);
-        let syntax =
-            syntax_for_extension(token).or_else(|| syntax_set().find_syntax_by_token(token))?;
-        (syntax.name != plain_text().name).then_some(syntax)
+        let grammar = grammar_for_extension(token)
+            .or_else(|| extended(|set| set.find_syntax_by_token(token)))?;
+        (!grammar.is_plain()).then_some(grammar)
     }
 
     /// Return the themes shared by every highlighter: syntect's defaults and
@@ -210,87 +290,107 @@ mod syntect_highlighter {
 
     /// Build the syntax theme that matches the Canopy style theme.
     ///
-    /// Scopes follow opencode's syntax roles: keywords violet, functions peach,
-    /// strings green, numbers and constants orange, types yellow.
+    /// Keywords are pink, functions blue, strings green, numbers and constants
+    /// orange, and types yellow. The ground, text, and chrome come from the
+    /// style palette.
     fn canopy_theme() -> Theme {
         let palette = themes::default_dark();
-        let rules: [(&str, Option<Color>, Option<FontStyle>); 22] = [
+        let rules: &[(&str, Option<Color>, Option<FontStyle>)] = &[
             (
                 "comment, punctuation.definition.comment",
-                Some(palette.faint_fg),
+                Some(code::SLATE),
                 Some(FontStyle::ITALIC),
             ),
             (
                 "keyword, storage, keyword.operator.word",
-                Some(palette.violet),
+                Some(code::PINK),
                 None,
             ),
-            ("keyword.operator", Some(palette.cyan), None),
+            ("keyword.operator", Some(code::CYAN), None),
             (
                 "string, punctuation.definition.string",
-                Some(palette.green),
+                Some(code::GREEN),
                 None,
             ),
             (
                 "constant.character.escape, string.regexp",
-                Some(palette.cyan),
+                Some(code::TEAL),
                 None,
             ),
-            ("constant, support.constant", Some(palette.orange), None),
+            // Code interpolated into a string reads as code, set off by
+            // its delimiters.
+            (
+                "meta.embedded, meta.template.expression, meta.interpolation",
+                Some(palette.fg),
+                None,
+            ),
+            (
+                "punctuation.definition.interpolated-string-expression, \
+                 punctuation.definition.template-expression, \
+                 punctuation.section.interpolation",
+                Some(code::PINK),
+                None,
+            ),
+            ("constant, support.constant", Some(code::ORANGE), None),
             (
                 "entity.name.function, support.function, variable.function",
-                Some(PEACH),
+                Some(code::BLUE),
                 None,
             ),
             (
                 "entity.name.type, entity.name.class, entity.name.struct, entity.name.enum, \
                  entity.name.trait, entity.name.union, entity.other.inherited-class, \
                  support.type, support.class",
-                Some(palette.yellow),
+                Some(code::YELLOW),
                 None,
             ),
             (
                 "variable.language, variable.parameter",
-                Some(palette.red),
+                Some(code::CORAL),
                 None,
             ),
             (
                 "support.macro, entity.name.macro, meta.annotation, meta.attribute",
-                Some(palette.blue),
+                Some(code::AQUA),
                 None,
             ),
-            ("entity.name.tag", Some(palette.red), None),
-            ("entity.other.attribute-name", Some(palette.yellow), None),
+            ("entity.name.tag", Some(code::CORAL), None),
+            ("entity.other.attribute-name", Some(code::YELLOW), None),
             (
                 "markup.heading, entity.name.section",
-                Some(palette.violet),
+                Some(code::BLUE),
                 Some(FontStyle::BOLD),
             ),
             ("markup.bold", None, Some(FontStyle::BOLD)),
             ("markup.italic", None, Some(FontStyle::ITALIC)),
             (
-                "markup.underline.link, string.other.link",
-                Some(PEACH),
+                "string.other.link, meta.link.inline.description, \
+                 meta.image.inline.description",
+                Some(code::BLUE),
                 None,
             ),
-            ("markup.inserted", Some(palette.green), None),
-            ("markup.deleted, invalid", Some(palette.red), None),
-            ("markup.changed", Some(palette.yellow), None),
-            ("markup.raw", Some(palette.green), None),
+            ("markup.underline.link", Some(code::SLATE), None),
             (
-                "markup.quote",
-                Some(palette.yellow),
-                Some(FontStyle::ITALIC),
-            ),
-            (
-                "meta.diff.header, meta.diff.range",
-                Some(palette.blue),
+                "punctuation.definition.list_item, markup.list.numbered.bullet",
+                Some(code::ORANGE),
                 None,
             ),
+            ("entity.name.table", Some(code::BLUE), None),
+            ("markup.inserted", Some(code::GREEN), None),
+            ("markup.deleted, invalid", Some(code::CORAL), None),
+            ("markup.changed", Some(code::YELLOW), None),
+            ("markup.raw", Some(code::GREEN), None),
+            ("markup.quote", Some(code::YELLOW), Some(FontStyle::ITALIC)),
+            (
+                "punctuation.definition.raw.code-fence",
+                Some(code::SLATE),
+                None,
+            ),
+            ("meta.diff.header, meta.diff.range", Some(code::BLUE), None),
         ];
         let scopes = rules
-            .into_iter()
-            .map(|(scope, foreground, font_style)| highlighting::ThemeItem {
+            .iter()
+            .map(|&(scope, foreground, font_style)| highlighting::ThemeItem {
                 scope: scope.parse().expect("canopy theme scopes parse"),
                 style: highlighting::StyleModifier {
                     foreground: foreground.map(syntect_color),
@@ -336,6 +436,34 @@ mod syntect_highlighter {
             .expect("syntect ships default themes")
     }
 
+    /// A highlighter partway through a source, with the set its grammar
+    /// highlights against.
+    struct Engine {
+        /// The highlighter, positioned after the last line it saw.
+        lines: HighlightLines<'static>,
+        /// The set that holds the highlighter's syntax.
+        set: &'static SyntaxSet,
+    }
+
+    impl Engine {
+        /// Start highlighting a source in `grammar` and `theme`.
+        fn new(grammar: Grammar, theme: &'static Theme) -> Self {
+            Self {
+                lines: HighlightLines::new(grammar.syntax, theme),
+                set: grammar.set,
+            }
+        }
+
+        /// Highlight the next line.
+        fn spans(&mut self, text: &str) -> Vec<HighlightSpan> {
+            let ranges = self
+                .lines
+                .highlight_line(text, self.set)
+                .unwrap_or_default();
+            spans_from(&ranges)
+        }
+    }
+
     /// A fenced code block open in a Markdown source.
     struct Fence {
         /// The fence character, a backtick or a tilde.
@@ -343,8 +471,9 @@ mod syntect_highlighter {
         /// The length of the opening run. A run at least this long closes the
         /// fence.
         len: usize,
-        /// Highlighter for the body, when a syntax covers the fence's language.
-        engine: Option<HighlightLines<'static>>,
+        /// Highlighter for the body, when a grammar covers the fence's
+        /// language.
+        engine: Option<Engine>,
     }
 
     impl Fence {
@@ -365,7 +494,7 @@ mod syntect_highlighter {
             Some(Self {
                 marker,
                 len,
-                engine: syntax_for_fence(info).map(|syntax| HighlightLines::new(syntax, theme)),
+                engine: grammar_for_fence(info).map(|grammar| Engine::new(grammar, theme)),
             })
         }
 
@@ -379,9 +508,9 @@ mod syntect_highlighter {
 
     /// One source text and the highlighting walked over it so far.
     struct Source {
-        /// Syntax resolved for this source, including an inferred first-line
+        /// Grammar resolved for this source, including an inferred first-line
         /// hint.
-        syntax: &'static SyntaxReference,
+        grammar: Grammar,
         /// Lines of the source, including the trailing newline syntect expects.
         lines: Vec<String>,
         /// Theme the spans take their styles from.
@@ -390,7 +519,7 @@ mod syntect_highlighter {
         /// in their own languages.
         markdown: bool,
         /// Highlighter positioned after the last cached line.
-        engine: HighlightLines<'static>,
+        engine: Engine,
         /// The fence the walk is inside, in a Markdown source.
         fence: Option<Fence>,
         /// Spans for every line walked so far.
@@ -398,21 +527,18 @@ mod syntect_highlighter {
     }
 
     impl Source {
-        /// Hold `lines` to highlight as `syntax` in `theme`.
-        fn new(
-            syntax: &'static SyntaxReference,
-            lines: Vec<String>,
-            theme: &'static Theme,
-        ) -> Self {
+        /// Hold `lines` to highlight in `grammar` and `theme`.
+        fn new(grammar: Grammar, lines: Vec<String>, theme: &'static Theme) -> Self {
             Self {
-                syntax,
+                grammar,
                 lines,
                 theme,
-                markdown: syntax
+                markdown: grammar
+                    .syntax
                     .scope
                     .build_string()
                     .starts_with("text.html.markdown"),
-                engine: HighlightLines::new(syntax, theme),
+                engine: Engine::new(grammar, theme),
                 fence: None,
                 spans: Vec::new(),
             }
@@ -420,7 +546,7 @@ mod syntect_highlighter {
 
         /// Highlight in `theme`, walking again from the first line.
         fn restart(&mut self, theme: &'static Theme) {
-            *self = Self::new(self.syntax, mem::take(&mut self.lines), theme);
+            *self = Self::new(self.grammar, mem::take(&mut self.lines), theme);
         }
 
         /// Walk forward until `line` is cached, and return its spans.
@@ -465,10 +591,8 @@ mod syntect_highlighter {
                 }) if in_body => engine,
                 _ => &mut self.engine,
             };
-            let ranges = engine
-                .highlight_line(text, syntax_set())
-                .unwrap_or_default();
-            self.spans.push(spans_from(&ranges));
+            let spans = engine.spans(text);
+            self.spans.push(spans);
         }
     }
 
@@ -480,9 +604,9 @@ mod syntect_highlighter {
     pub struct SyntectHighlighter {
         /// Theme used for highlighting.
         theme: &'static Theme,
-        /// Syntax selected by the file name or extension, before source
+        /// Grammar selected by the file name or extension, before source
         /// detection.
-        syntax: Cell<&'static SyntaxReference>,
+        grammar: Cell<Grammar>,
         /// The source being highlighted, once one is prepared.
         source: RefCell<Option<Source>>,
     }
@@ -493,7 +617,7 @@ mod syntect_highlighter {
         pub fn new(extension: impl AsRef<str>) -> Self {
             let highlighter = Self {
                 theme: theme(DEFAULT_THEME),
-                syntax: Cell::new(plain_text()),
+                grammar: Cell::new(Grammar::plain()),
                 source: RefCell::new(None),
             };
             highlighter.set_extension(extension.as_ref());
@@ -520,7 +644,7 @@ mod syntect_highlighter {
 
         /// Select the syntax for `extension`, discarding any prepared source.
         pub fn set_extension(&self, extension: &str) {
-            self.set_syntax(syntax_for_extension(extension).unwrap_or_else(plain_text));
+            self.set_grammar(grammar_for_extension(extension).unwrap_or_else(Grammar::plain));
         }
 
         /// Select the syntax for `path`, discarding any prepared source.
@@ -529,35 +653,37 @@ mod syntect_highlighter {
         /// then the extension.
         pub fn set_path(&self, path: impl AsRef<Path>) {
             let path = path.as_ref();
-            let syntax = path
+            let grammar = path
                 .file_name()
-                .and_then(|name| syntax_set().find_syntax_by_extension(&name.to_string_lossy()))
+                .and_then(|name| {
+                    extended(|set| set.find_syntax_by_extension(&name.to_string_lossy()))
+                })
                 .or_else(|| {
                     path.extension()
-                        .and_then(|ext| syntax_for_extension(&ext.to_string_lossy()))
+                        .and_then(|ext| grammar_for_extension(&ext.to_string_lossy()))
                 })
-                .unwrap_or_else(plain_text);
-            self.set_syntax(syntax);
+                .unwrap_or_else(Grammar::plain);
+            self.set_grammar(grammar);
         }
 
         /// Return the name of the syntax in use.
         #[must_use]
         pub fn syntax_name(&self) -> String {
-            self.current_syntax().name.clone()
+            self.current_grammar().syntax.name.clone()
         }
 
-        /// Return the prepared source syntax, or the configured hint before
+        /// Return the prepared source grammar, or the configured hint before
         /// preparation.
-        fn current_syntax(&self) -> &'static SyntaxReference {
+        fn current_grammar(&self) -> Grammar {
             self.source
                 .borrow()
                 .as_ref()
-                .map_or(self.syntax.get(), |source| source.syntax)
+                .map_or(self.grammar.get(), |source| source.grammar)
         }
 
-        /// Install `syntax` and drop state built with the previous one.
-        fn set_syntax(&self, syntax: &'static SyntaxReference) {
-            self.syntax.set(syntax);
+        /// Install `grammar` and drop state built with the previous one.
+        fn set_grammar(&self, grammar: Grammar) {
+            self.grammar.set(grammar);
             self.source.replace(None);
         }
     }
@@ -566,11 +692,12 @@ mod syntect_highlighter {
         fn prepare(&self, text: &str) {
             // A plain-text syntax may still be a recognizable script, so
             // consult the first line before committing to it.
-            let hint = self.syntax.get();
-            let syntax = if hint.name == plain_text().name {
-                syntax_set()
-                    .find_syntax_by_first_line(text.lines().next().unwrap_or_default())
-                    .unwrap_or(hint)
+            let hint = self.grammar.get();
+            let grammar = if hint.is_plain() {
+                extended(|set| {
+                    set.find_syntax_by_first_line(text.lines().next().unwrap_or_default())
+                })
+                .unwrap_or(hint)
             } else {
                 hint
             };
@@ -579,7 +706,7 @@ mod syntect_highlighter {
                 .take(MAX_STATEFUL_LINES)
                 .map(str::to_string)
                 .collect::<Vec<_>>();
-            *self.source.borrow_mut() = Some(Source::new(syntax, lines, self.theme));
+            *self.source.borrow_mut() = Some(Source::new(grammar, lines, self.theme));
         }
 
         fn highlight_line(&self, line: usize, text: &str) -> Vec<HighlightSpan> {
@@ -589,25 +716,16 @@ mod syntect_highlighter {
                 return spans;
             }
             // No prepared source, or a line beyond it: highlight on its own.
-            let mut engine = HighlightLines::new(self.current_syntax(), self.theme);
-            let ranges = engine
-                .highlight_line(text, syntax_set())
-                .unwrap_or_default();
-            spans_from(&ranges)
+            Engine::new(self.current_grammar(), self.theme).spans(text)
         }
     }
 
     impl fmt::Debug for SyntectHighlighter {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.debug_struct("SyntectHighlighter")
-                .field("syntax", &self.current_syntax().name)
+                .field("syntax", &self.current_grammar().syntax.name)
                 .finish_non_exhaustive()
         }
-    }
-
-    /// Return the syntax used for text with no known type.
-    fn plain_text() -> &'static SyntaxReference {
-        syntax_set().find_syntax_plain_text()
     }
 
     /// Convert syntect's styled slices into character-ranged spans.
@@ -709,7 +827,7 @@ mod syntect_highlighter {
                 ("main.rs", "Rust"),
                 ("Cargo.toml", "TOML"),
                 ("Cargo.lock", "TOML"),
-                ("init.luau", "Lua"),
+                ("init.luau", "Luau"),
                 ("conf.lua", "Lua"),
                 ("app.ts", "TypeScript"),
                 ("view.tsx", "TypeScriptReact"),
@@ -747,7 +865,7 @@ mod syntect_highlighter {
                 ("rust", "Rust"),
                 ("rust,ignore", "Rust"),
                 ("Python extra words", "Python"),
-                (" luau", "Lua"),
+                (" luau", "Luau"),
                 ("shell", "Bourne Again Shell (bash)"),
                 ("console", "Bourne Again Shell (bash)"),
                 ("c++", "C++"),
@@ -756,14 +874,14 @@ mod syntect_highlighter {
                 ("diff", "Diff"),
             ] {
                 assert_eq!(
-                    syntax_for_fence(info).map(|syntax| syntax.name.as_str()),
+                    grammar_for_fence(info).map(|grammar| grammar.syntax.name.as_str()),
                     Some(expected),
                     "a `{info}` fence should highlight as {expected}"
                 );
             }
             for info in ["", "nosuchlang", "text"] {
                 assert!(
-                    syntax_for_fence(info).is_none(),
+                    grammar_for_fence(info).is_none(),
                     "a `{info}` fence has no syntax"
                 );
             }
@@ -834,6 +952,55 @@ mod syntect_highlighter {
                 colors(&highlighter, 1, "let x = 1;"),
                 colors(&raw, 1, "let x = 1;")
             );
+        }
+
+        /// Return the color of the character at `column` in `text`, as line
+        /// `line` of `highlighter`'s source.
+        fn color_at(
+            highlighter: &SyntectHighlighter,
+            line: usize,
+            text: &str,
+            column: usize,
+        ) -> Option<Paint> {
+            highlighter
+                .highlight_line(line, text)
+                .into_iter()
+                .find(|span| span.range.contains(&column))
+                .map(|span| match span.style {
+                    SpanStyle::Fixed(style) => style.fg,
+                    SpanStyle::Path(path) => panic!("syntect spans are fixed, not {path}"),
+                })
+        }
+
+        /// Return the column where `needle` starts in `text`.
+        fn column(text: &str, needle: &str) -> usize {
+            let byte = text.find(needle).expect("the needle is in the text");
+            text[..byte].chars().count()
+        }
+
+        #[test]
+        fn luau_highlights_its_own_syntax() {
+            let lines = [
+                "export type Entry = { name: string }",
+                "local count: number = 0",
+                "local s = `{count} items`",
+                "local keys = { key = \"j\" }",
+                "continue",
+            ];
+            let highlighter = SyntectHighlighter::for_path("init.luau");
+            highlighter.prepare(&(lines.join("\n") + "\n"));
+            let at = |line: usize, needle: &str| {
+                let text = lines[line];
+                color_at(&highlighter, line, text, column(text, needle))
+            };
+            let keyword = at(0, "export");
+            assert_eq!(at(0, "type"), keyword, "`type` declares a type");
+            assert_eq!(at(4, "continue"), keyword, "`continue` is a keyword");
+            let plain = at(1, "count");
+            assert_ne!(at(1, "number"), plain, "an annotation shows its type");
+            let string = at(2, "items");
+            assert_ne!(at(2, "count"), string, "interpolated code is not string");
+            assert_ne!(at(3, "key"), at(3, "\"j\""), "a table key is not string");
         }
 
         #[test]

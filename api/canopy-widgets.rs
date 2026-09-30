@@ -3299,7 +3299,9 @@ pub mod highlight {
     //! produces. A source set through
     //! [`Highlighter::prepare`](crate::highlight::Highlighter::prepare) therefore
     //! costs only the lines that are actually asked for, and multi-line constructs
-    //! such as block comments keep their state.
+    //! such as block comments keep their state. In a Markdown source, the body of
+    //! a fenced code block highlights in the language its fence names, as a file
+    //! in that language would.
 
     /// Theme used when the caller names none, matching the Canopy style theme.
     pub const DEFAULT_THEME: &str = "Canopy (dark)";

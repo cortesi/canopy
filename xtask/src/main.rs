@@ -2,6 +2,7 @@
 //! Developer workflow tasks for the canopy workspace.
 
 mod cargo_env;
+mod luau_grammar;
 
 use std::{
     path::{Path, PathBuf},
@@ -28,6 +29,15 @@ enum Task {
     BenchCheck,
     /// Run all smoke-test integration targets.
     Smoke,
+    /// Convert the upstream Luau grammar into the one canopy-widgets bundles.
+    LuauGrammar {
+        /// `Luau.tmLanguage.json` from JohnnyMorganz/Luau.tmLanguage.
+        input: PathBuf,
+        /// The upstream commit the grammar comes from, which the output
+        /// records.
+        #[arg(long)]
+        commit: String,
+    },
 }
 
 /// Run the `cargo xtask` entry point.
@@ -37,6 +47,7 @@ fn main() -> ExitCode {
         Task::FeatureCheck => run_feature_check(&root),
         Task::BenchCheck => run_bench_check(&root),
         Task::Smoke => run_smoke(&root),
+        Task::LuauGrammar { input, commit } => luau_grammar::run(&root, &input, &commit),
     })
 }
 
