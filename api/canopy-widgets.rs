@@ -4,7 +4,7 @@
 // Publish: crates.io
 // Declared features: default, devtools, graphics, syntax, terminal-widget
 // Workspace dependencies: canopy
-// Workspace dependents: gyms, hello, todo
+// Workspace dependents: canopyctl, gyms, hello, todo
 // Unnameable: crate::image_view::ZoomDirection
 
 //! Built-in widgets for canopy applications.
@@ -27,7 +27,7 @@ use canopy::{
     geom::{Line, Point, Rect, Size},
     input::{FrameworkBindingGroup, IntentName, ModalToken, mouse::MouseEvent},
     layout::{Align, Edges, Layout, ScrollAxis, ScrollDirection},
-    render::Render,
+    render::{Render, ScreenCapture},
     style::Style,
     text::Truncate,
     tree::FocusDirection,
@@ -3458,6 +3458,52 @@ pub mod regex_search {
     /// does. Only literal letters count, so an escape such as `\S` leaves a
     /// lowercase expression ignoring case.
     pub fn smart_matcher(pattern: &str) -> Result<RegexMatcher, Error>;
+}
+
+pub mod screenshot {
+    //! Frames drawn as images.
+    //! A [`Screenshot`] draws a [`ScreenCapture`] in a monospace font, one cell
+    //! to each grid square. Box drawing, block elements, braille, and triangles
+    //! are drawn from geometry, as terminals draw them, so that lines join across
+    //! cells and shapes fill their cells exactly.
+
+    /// One drawn frame.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct Png {
+        /// The PNG file.
+        pub data: Vec<u8>,
+        /// Width in pixels.
+        pub width: u32,
+        /// Height in pixels.
+        pub height: u32,
+        /// Characters that the font lacks, which show as boxes.
+        pub missing: Vec<char>,
+    }
+
+    /// Draws frames as PNG images.
+    ///
+    /// The font has one regular face: bold text widens its strokes, and italic
+    /// text leans. A character that the font lacks shows as a box.
+    pub struct Screenshot {/* private fields */}
+
+    impl Screenshot {
+        /// Create a screenshot renderer.
+        pub fn new(options: ScreenshotOptions) -> canopy::error::Result<Self>;
+
+        /// Draw a capture as a PNG image. A capture whose image would exceed
+        /// 64 megapixels fails.
+        pub fn png(&mut self, capture: &ScreenCapture) -> canopy::error::Result<Png>;
+    }
+
+    /// How a screenshot draws a frame.
+    #[derive(Clone, Copy, Debug, Default, PartialEq)]
+    pub struct ScreenshotOptions {
+        /// Font size in pixels, before the scale.
+        pub font_size: f32,
+        /// Image pixels for each pixel of the font size. A scale of 2 suits a
+        /// high density display.
+        pub scale: f32,
+    }
 }
 
 pub mod scrollbar {

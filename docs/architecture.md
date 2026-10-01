@@ -527,7 +527,8 @@ headless evaluation and the test harness keep every cell at rest unless a test
 calls `Canopy::set_motion_live`. `MotionSettings` can turn motion off, limit
 continuous samples per second, and set the idle pause: after a time without
 input, repeating motion holds at rest and sets no deadline. Repeating motion
-also rests while the terminal lacks focus.
+also rests while the terminal lacks focus. A paint with `Pause::Never` ignores
+both pauses.
 
 ## Runtime Turns
 

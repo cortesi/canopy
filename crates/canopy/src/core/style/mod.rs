@@ -7,13 +7,14 @@ pub mod themes;
 
 use std::{
     collections::HashMap,
+    f64::consts::TAU,
     iter,
     sync::Arc,
     time::{Duration, Instant},
 };
 
 pub(crate) use animation::MotionClocks;
-pub use animation::{Animation, AnimationStart, Easing, Repeat};
+pub use animation::{Animation, AnimationStart, Easing, Pause, Repeat};
 pub use color::{Color, Mix, hex_byte};
 
 use crate::geom;
@@ -154,6 +155,35 @@ impl AttrSet {
         };
         self
     }
+
+    /// Return the lowercase name of each attribute, as scripts, snapshots,
+    /// and captures name it, with whether it is on.
+    pub(crate) fn named(self) -> [(&'static str, bool); 6] {
+        [
+            ("bold", self.bold),
+            ("crossedout", self.crossedout),
+            ("dim", self.dim),
+            ("italic", self.italic),
+            ("overline", self.overline),
+            ("underline", self.underline),
+        ]
+    }
+
+    /// Turn on the attribute that `name` names, and return whether it names
+    /// one.
+    pub(crate) fn set_named(&mut self, name: &str) -> bool {
+        let attr = match name {
+            "bold" => Attr::Bold,
+            "crossedout" => Attr::CrossedOut,
+            "dim" => Attr::Dim,
+            "italic" => Attr::Italic,
+            "overline" => Attr::Overline,
+            "underline" => Attr::Underline,
+            _ => return false,
+        };
+        *self = self.with(attr);
+        true
+    }
 }
 
 /// A gradient stop in a paint specification.
@@ -175,6 +205,39 @@ impl GradientStop {
     }
 }
 
+/// How a gradient moves across its rectangle. Every drift keeps step with the
+/// motion epoch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Drift {
+    /// Slide across the rectangle once in each period, wrapping around.
+    Slide(Duration),
+    /// Swing to and fro: in each period the middle of the gradient travels
+    /// to one edge of the rectangle, to the other edge, and back. The swing
+    /// slows at each edge, like a pendulum, and a gradient whose ends match
+    /// shows a crest that runs back and forth.
+    Sweep(Duration),
+}
+
+impl Drift {
+    /// Return the period of the drift.
+    fn period(self) -> Duration {
+        match self {
+            Self::Slide(period) | Self::Sweep(period) => period,
+        }
+    }
+
+    /// Return the gradient position that shows at `ratio` after `phase` of
+    /// a period, both 0.0 to 1.0.
+    fn shift(self, ratio: f64, phase: f64) -> f64 {
+        match self {
+            Self::Slide(_) => (ratio - phase).rem_euclid(1.0),
+            // The offset starts at rest, swings half the rectangle to the
+            // right, then half to the left, and returns.
+            Self::Sweep(_) => ratio - (phase * TAU).sin() / 2.0,
+        }
+    }
+}
+
 /// A gradient paint specification.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GradientSpec {
@@ -184,9 +247,10 @@ pub struct GradientSpec {
     pub stops: Vec<GradientStop>,
     /// The space that mixes colors between stops.
     pub mix: Mix,
-    /// Time in which the gradient slides once across its rectangle, wrapping
-    /// around. `None` holds it still.
-    pub drift: Option<Duration>,
+    /// How the gradient moves across its rectangle. `None` holds it still.
+    pub drift: Option<Drift>,
+    /// When a drifting gradient holds at rest.
+    pub pause: Pause,
 }
 
 impl GradientSpec {
@@ -202,6 +266,7 @@ impl GradientSpec {
             stops,
             mix: Mix::Oklab,
             drift: None,
+            pause: Pause::Idle,
         }
     }
 
@@ -212,10 +277,17 @@ impl GradientSpec {
         self
     }
 
-    /// Slide the gradient once across its rectangle in each `period`.
+    /// Move the gradient across its rectangle.
     #[must_use]
-    pub fn with_drift(mut self, period: Duration) -> Self {
-        self.drift = Some(period);
+    pub fn with_drift(mut self, drift: Drift) -> Self {
+        self.drift = Some(drift);
+        self
+    }
+
+    /// Replace the pause.
+    #[must_use]
+    pub fn with_pause(mut self, pause: Pause) -> Self {
+        self.pause = pause;
         self
     }
 
@@ -247,18 +319,22 @@ impl GradientSpec {
         clocks: &MotionClocks,
     ) -> Color {
         let ratio = self.ratio_at(rect, point);
-        let Some(period) = self
-            .drift
-            .filter(|period| !period.is_zero() && !clocks.paused)
-        else {
+        let Some(drift) = self.moving_drift().filter(|_| !self.pause.holds(clocks)) else {
             return self.color_for_ratio(ratio);
         };
+        let period = drift.period().as_nanos();
         let elapsed = clocks
             .now
             .saturating_duration_since(clocks.epoch)
             .as_nanos();
-        let phase = (elapsed % period.as_nanos()) as f64 / period.as_nanos() as f64;
-        self.color_for_ratio((f64::from(ratio) - phase).rem_euclid(1.0) as f32)
+        let phase = (elapsed % period) as f64 / period as f64;
+        self.color_for_ratio(drift.shift(f64::from(ratio), phase) as f32)
+    }
+
+    /// Return the drift, unless the gradient holds still: it has none, or
+    /// its period is zero.
+    fn moving_drift(&self) -> Option<Drift> {
+        self.drift.filter(|drift| !drift.period().is_zero())
     }
 
     /// Return the position of a point along the gradient, 0.0 to 1.0.
@@ -372,7 +448,7 @@ impl Paint {
     pub fn moves(&self) -> bool {
         match self {
             Self::Solid(_) => false,
-            Self::Gradient(spec) => spec.drift.is_some(),
+            Self::Gradient(spec) => spec.moving_drift().is_some(),
             Self::Animated(_) => true,
         }
     }
@@ -382,7 +458,7 @@ impl Paint {
     pub(crate) fn show(&self, clocks: &MotionClocks) -> bool {
         match self {
             Self::Solid(_) => false,
-            Self::Gradient(spec) => spec.drift.is_some(),
+            Self::Gradient(spec) => spec.moving_drift().is_some(),
             Self::Animated(animation) => {
                 animation.bind_shown(clocks.now);
                 !animation.finished(clocks)
@@ -395,8 +471,8 @@ impl Paint {
         match self {
             Self::Solid(_) => None,
             Self::Gradient(spec) => spec
-                .drift
-                .filter(|_| !clocks.paused)
+                .moving_drift()
+                .filter(|_| !spec.pause.holds(clocks))
                 .map(|_| clocks.now + sample),
             Self::Animated(animation) => animation.next_change(clocks, sample),
         }
@@ -1394,7 +1470,7 @@ mod tests {
                 GradientStop::new(1.0, Color::White),
             ],
         )
-        .with_drift(Duration::from_secs(1));
+        .with_drift(Drift::Slide(Duration::from_secs(1)));
         let rect = geom::Rect::new(0, 0, 10, 1);
         let point = geom::Point { x: 7, y: 0 };
         let t0 = Instant::now();
@@ -1422,6 +1498,74 @@ mod tests {
         assert_eq!(
             spec.color_in_motion(rect, point, &paused),
             spec.color_at(rect, point)
+        );
+    }
+
+    #[test]
+    fn a_drift_of_no_period_holds_still() {
+        use std::time::{Duration, Instant};
+        let paint = Paint::gradient(
+            GradientSpec::with_stops(0.0, Vec::new())
+                .with_drift(Drift::Sweep(Duration::ZERO))
+                .with_pause(Pause::Never),
+        );
+        assert!(!paint.moves());
+        let clocks = MotionClocks::at(Instant::now());
+        assert!(!paint.show(&clocks));
+        assert_eq!(paint.next_change(&clocks, Duration::from_millis(33)), None);
+    }
+
+    #[test]
+    fn a_sweeping_gradient_swings_to_and_fro() {
+        use std::time::{Duration, Instant};
+        let spec = GradientSpec::with_stops(
+            0.0,
+            vec![
+                GradientStop::new(0.0, Color::Black),
+                GradientStop::new(1.0, Color::White),
+            ],
+        )
+        .with_drift(Drift::Sweep(Duration::from_secs(1)))
+        .with_pause(Pause::Never);
+        let rect = geom::Rect::new(0, 0, 10, 1);
+        let left = geom::Point { x: 2, y: 0 };
+        let right = geom::Point { x: 7, y: 0 };
+        let t0 = Instant::now();
+        let at = |ms: u64| MotionClocks {
+            now: t0 + Duration::from_millis(ms),
+            ..MotionClocks::at(t0)
+        };
+        assert_eq!(
+            spec.color_in_motion(rect, right, &at(0)),
+            spec.color_at(rect, right)
+        );
+        // A quarter period swings the gradient half the rectangle right, and
+        // three quarters swing it half the rectangle left.
+        assert_eq!(
+            spec.color_in_motion(rect, right, &at(250)),
+            spec.color_at(rect, left)
+        );
+        assert_eq!(
+            spec.color_in_motion(rect, left, &at(750)),
+            spec.color_at(rect, right)
+        );
+        assert_eq!(
+            spec.color_in_motion(rect, right, &at(500)),
+            spec.color_at(rect, right)
+        );
+        // A busy gradient swings on while the operator is idle.
+        let paused = MotionClocks {
+            paused: true,
+            ..at(250)
+        };
+        assert_eq!(
+            spec.color_in_motion(rect, right, &paused),
+            spec.color_at(rect, left)
+        );
+        assert!(
+            Paint::gradient(spec)
+                .next_change(&paused, Duration::from_millis(33))
+                .is_some()
         );
     }
 

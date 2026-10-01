@@ -27,7 +27,7 @@ use super::{
     dispatch_command, dispatch_explicit, error, fixtures_to_arg, host_return, host_value, inputmap,
     key, key_explanation_to_arg, luau_global_owner_name, menu_from_value, menu_type, mouse,
     node_handle_type, node_id_from_value, node_info_to_arg, node_list_to_arg, notices_to_arg,
-    owned_truthy, ret_arg, ret_none, ret_one, route_trace_to_arg, screen_text,
+    owned_truthy, ret_arg, ret_none, ret_one, route_trace_to_arg, screen_capture, screen_text,
     screen_text_for_rect, script_callback_label, script_journal_to_arg, snapshot_to_arg,
     validate_node_handle, values_to_args, with_current_canopy,
 };
@@ -357,6 +357,16 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
                 .ret(Type::String)
         },
         handler: Handler::Sync(host_screen_text),
+    },
+    BaseFunction {
+        name: "capture",
+        docs: Some(
+            "Prepare pending changes, then return the published frame as styled text: its \
+             size, its styles, and the runs of each row. Moving cells show their rest colors. \
+             A screenshot renderer, such as the canopyctl gallery, draws a capture as an image.",
+        ),
+        signature: || FunctionSignature::new().ret(Type::named("ScreenCapture")),
+        handler: Handler::Sync(host_capture),
     },
     BaseFunction {
         name: "route_trace",
@@ -1971,6 +1981,14 @@ fn host_snapshot<'s>(
             .map(|frame| snapshot_to_arg(&frame))
             .unwrap_or(ArgValue::Null))
     })
+}
+
+/// `canopy.capture`: return the published frame as styled text.
+fn host_capture<'s>(
+    scope: &Scope<'s>,
+    _args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    host_value(scope, |canopy, _| screen_capture(canopy))
 }
 
 /// `canopy.flush`: explicitly prepare pending changes at a host-call boundary.

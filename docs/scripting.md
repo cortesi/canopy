@@ -602,6 +602,14 @@ content rectangle, and a `Rect` target crops to that screen rectangle.
 `canopy.snapshot().cells` holds the styled cells. Use a snapshot for
 attachment, ancestor visibility, and clipping decisions.
 
+`canopy.capture()` prepares pending changes, then returns the published frame
+as styled text: its width and height, a list of distinct styles, and the runs
+of text of each row. A run names its style by index, from 0, and counts the
+cells it covers. A capture is compact, so a script can return many of them.
+Like a snapshot, a capture shows every cell at rest: an animation shows its
+rest color, and a drifting gradient its rest position. `TermBuf::capture` makes the same
+record in Rust, and `canopy_widgets::screenshot` draws one as a PNG image.
+
 `canopy.snapshot().cursors` holds the cursors the frame painted, the primary
 cursor first. Each record has the declaring node, the screen location, the
 role, the shape, the painted color, the motion, and whether it is primary.

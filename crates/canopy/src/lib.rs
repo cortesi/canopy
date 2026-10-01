@@ -90,7 +90,7 @@ pub mod render {
         canopy::MotionSettings,
         cursor,
         render::{NopBackend, Render, RenderBackend},
-        termbuf::{Cell, RenderLimits, TermBuf},
+        termbuf::{CaptureRun, CaptureStyle, Cell, RenderLimits, ScreenCapture, TermBuf},
     };
 }
 

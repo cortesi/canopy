@@ -530,26 +530,14 @@ fn color_to_arg(color: Color) -> ArgValue {
 
 /// Convert text attributes to stable lowercase names.
 fn attrs_to_arg(attrs: AttrSet) -> ArgValue {
-    let mut names = Vec::new();
-    if attrs.bold {
-        names.push(ArgValue::String("bold".to_string()));
-    }
-    if attrs.crossedout {
-        names.push(ArgValue::String("crossedout".to_string()));
-    }
-    if attrs.dim {
-        names.push(ArgValue::String("dim".to_string()));
-    }
-    if attrs.italic {
-        names.push(ArgValue::String("italic".to_string()));
-    }
-    if attrs.overline {
-        names.push(ArgValue::String("overline".to_string()));
-    }
-    if attrs.underline {
-        names.push(ArgValue::String("underline".to_string()));
-    }
-    ArgValue::Array(names)
+    ArgValue::Array(
+        attrs
+            .named()
+            .into_iter()
+            .filter(|(_, on)| *on)
+            .map(|(name, _)| ArgValue::String(name.to_owned()))
+            .collect(),
+    )
 }
 
 /// Return the rendered screen text inside a signed rectangle, clipped to the
@@ -571,6 +559,12 @@ pub(super) fn screen_text_for_rect(canopy: &mut Canopy, rect: RectI32) -> Result
         rows.push(row);
     }
     Ok(rows.join("\n"))
+}
+
+/// Return the rendered screen as styled text.
+pub(super) fn screen_capture(canopy: &mut Canopy) -> Result<ArgValue> {
+    let capture = rendered_buffer(canopy)?.capture();
+    Ok(commands::SerdeArg(capture).try_to_arg_value()?)
 }
 
 /// Return the rendered screen as plain text.

@@ -34,7 +34,7 @@ Canopy: A terminal UI library.
 - Workspace dependencies: canopy-derive, canopy-geom
 - Workspace dependents: canopy (dev), canopy-derive (dev), canopy-mcp, canopy-widgets, canopyctl, gyms, hello, todo
 - Unnameable: crate::core::commands::sealed::Inject, crate::core::context::sealed::Context, crate::core::context::sealed::ViewContext
-- Items: 654
+- Items: 662
 - Exposes: canopy-geom, futures-channel, ruau, ruau-declaration, schemars, serde_core, serde_json
 
 ## canopy-mcp
@@ -54,9 +54,9 @@ Built-in widgets for canopy applications.
 - Publish: crates.io
 - Declared features: default, devtools, graphics, syntax, terminal-widget
 - Workspace dependencies: canopy
-- Workspace dependents: gyms, hello, todo
+- Workspace dependents: canopyctl, gyms, hello, todo
 - Unnameable: crate::image_view::ZoomDirection
-- Items: 646
+- Items: 651
 - Exposes: canopy, grep-regex, image, syntect
 
 ## hello
@@ -83,7 +83,7 @@ Todo application used as Canopy's end-to-end example and smoke-test target.
 
 ## Binary-only packages
 
-- canopyctl: workspace dependencies: canopy, canopy-mcp
+- canopyctl: workspace dependencies: canopy, canopy-mcp, canopy-widgets
 
 - gyms: workspace dependencies: canopy, canopy-mcp, canopy-widgets
 

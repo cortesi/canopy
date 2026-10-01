@@ -14,7 +14,7 @@ use canopy::{
         cursor::{self, CursorRequest},
     },
     rgb,
-    style::{Attr, Color, GradientSpec, GradientStop, Paint, StyleMap},
+    style::{Attr, Color, Drift, GradientSpec, GradientStop, Paint, StyleMap},
     text,
 };
 use canopy_widgets::{
@@ -1007,7 +1007,7 @@ fn drifting_gradient(angle_deg: f32, colors: [Color; 4]) -> Paint {
                 GradientStop::new(1.0, colors[0]),
             ],
         )
-        .with_drift(GRADIENT_DRIFT),
+        .with_drift(Drift::Slide(GRADIENT_DRIFT)),
     )
 }
 

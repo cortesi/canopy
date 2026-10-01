@@ -3677,6 +3677,38 @@ pub mod render {
         fn text(&mut self, loc: Point, txt: &str) -> crate::error::Result<()>;
     }
 
+    /// Text in one style.
+#[derive(Clone, Debug, Deserialize<'de>, Eq, PartialEq, Serialize)]
+    pub struct CaptureRun {
+        /// The text.
+        pub text: String,
+        /// Index of the style in [`ScreenCapture::styles`], from 0.
+        pub style: usize,
+        /// Cells that the run covers. A wide grapheme covers two, so a renderer
+        /// places the next run without measuring the text.
+        pub cells: u32,
+    }
+
+    /// One style of a [`ScreenCapture`], with resolved colors.
+#[derive(Clone, Copy, Debug, Deserialize<'de>, Eq, PartialEq, Serialize)]
+    pub struct CaptureStyle {
+        /// Foreground color.
+        #[serde(serialize_with = "hex", deserialize_with = "unhex")]
+        pub fg: [u8; 3],
+        /// Background color.
+        #[serde(serialize_with = "hex", deserialize_with = "unhex")]
+        pub bg: [u8; 3],
+        /// Text attributes, as a list of the lowercase names of those that are
+        /// on.
+        #[serde(
+            default,
+            skip_serializing_if = "no_attrs",
+            serialize_with = "attr_names",
+            deserialize_with = "parse_attrs"
+        )]
+        pub attrs: AttrSet,
+    }
+
     /// A terminal cell with glyph and style.
     #[derive(Clone, Debug, PartialEq)]
     pub struct Cell {
@@ -3832,9 +3864,30 @@ pub mod render {
         pub const fn new(max_width: u32, max_height: u32, max_cells: usize) -> Self;
     }
 
+    /// The cells of a terminal buffer as styled text: each row is a list of runs
+/// of text in one style. A renderer outside the terminal, such as a
+/// screenshot, draws a frame from it.
+#[derive(Clone, Debug, Deserialize<'de>, Eq, PartialEq, Serialize)]
+    pub struct ScreenCapture {
+        /// Width in cells.
+        pub width: u32,
+        /// Height in cells.
+        pub height: u32,
+        /// The distinct styles of the frame. A run names its style by index.
+        pub styles: Vec<CaptureStyle>,
+        /// The runs of each row, top to bottom. The runs of a row fill its
+        /// width.
+        pub rows: Vec<Vec<CaptureRun>>,
+    }
+
     /// A 2D terminal buffer of styled cells.
     #[derive(Clone, Debug, PartialEq)]
     pub struct TermBuf {/* private fields */}
+
+    impl TermBuf {
+        /// Return the cells as styled text.
+        pub fn capture(&self) -> ScreenCapture;
+    }
 
     impl TermBuf {
         /// Return the cells in row-major order.
@@ -4515,6 +4568,8 @@ pub mod style {
         pub start: AnimationStart,
         /// The space that mixes colors between stops.
         pub mix: Mix,
+        /// When a repeating animation holds at rest.
+        pub pause: Pause,
         /* private fields */
     }
 
@@ -4546,6 +4601,10 @@ pub mod style {
         /// Replace the mixing space.
         #[must_use]
         pub fn with_mix(self, mix: Mix) -> Self;
+
+        /// Replace the pause.
+        #[must_use]
+        pub fn with_pause(self, pause: Pause) -> Self;
 
         /// Replace the repeat.
         #[must_use]
@@ -4731,6 +4790,19 @@ pub mod style {
         pub fn apply(self, style: ResolvedStyle) -> ResolvedStyle;
     }
 
+    /// How a gradient moves across its rectangle. Every drift keeps step with the
+    /// motion epoch.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub enum Drift {
+        /// Slide across the rectangle once in each period, wrapping around.
+        Slide(Duration),
+        /// Swing to and fro: in each period the middle of the gradient travels
+        /// to one edge of the rectangle, to the other edge, and back. The swing
+        /// slows at each edge, like a pendulum, and a gradient whose ends match
+        /// shows a crest that runs back and forth.
+        Sweep(Duration),
+    }
+
     /// How time within a run maps to the stops.
     #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub enum Easing {
@@ -4751,9 +4823,10 @@ pub mod style {
         pub stops: Vec<GradientStop>,
         /// The space that mixes colors between stops.
         pub mix: Mix,
-        /// Time in which the gradient slides once across its rectangle, wrapping
-        /// around. `None` holds it still.
-        pub drift: Option<Duration>,
+        /// How the gradient moves across its rectangle. `None` holds it still.
+        pub drift: Option<Drift>,
+        /// When a drifting gradient holds at rest.
+        pub pause: Pause,
     }
 
     impl GradientSpec {
@@ -4764,13 +4837,17 @@ pub mod style {
         #[must_use]
         pub fn map_colors(&self, f: impl Fn(Color) -> Color) -> Self;
 
-        /// Slide the gradient once across its rectangle in each `period`.
+        /// Move the gradient across its rectangle.
         #[must_use]
-        pub fn with_drift(self, period: Duration) -> Self;
+        pub fn with_drift(self, drift: Drift) -> Self;
 
         /// Replace the mixing space.
         #[must_use]
         pub fn with_mix(self, mix: Mix) -> Self;
+
+        /// Replace the pause.
+        #[must_use]
+        pub fn with_pause(self, pause: Pause) -> Self;
 
         /// Construct a gradient from explicit stops.
         pub fn with_stops(angle_deg: f32, stops: Vec<GradientStop>) -> Self;
@@ -4874,6 +4951,18 @@ pub mod style {
 
         /// Create an empty partial style, which inherits every component.
         pub fn new() -> Self;
+    }
+
+    /// When repeating motion holds at rest.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub enum Pause {
+        /// While the operator is idle or the terminal lacks focus. Decoration
+        /// pauses so, and costs nothing while nobody watches it.
+        #[default]
+        Idle,
+        /// Never. A busy indicator moves for as long as it shows, so that the
+        /// operator sees work run while they wait.
+        Never,
     }
 
     /// What follows one run of an animation.
@@ -5042,7 +5131,7 @@ pub mod style {
         //! over one run. Canopy renders every animation at rest, and evaluates it only
         //! when it emits cells to the terminal.
 
-        pub use crate::style::{Animation, AnimationStart, Easing, Repeat};
+        pub use crate::style::{Animation, AnimationStart, Easing, Pause, Repeat};
     }
 
     pub mod effects {

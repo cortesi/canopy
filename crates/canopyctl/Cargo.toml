@@ -9,6 +9,7 @@ license.workspace = true
 anyhow.workspace = true
 canopy.workspace = true
 canopy-mcp.workspace = true
+canopy-widgets = { workspace = true, features = ["graphics"] }
 clap.workspace = true
 ruau-script-api = { workspace = true, features = ["schema"] }
 serde.workspace = true

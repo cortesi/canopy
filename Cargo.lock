@@ -394,6 +394,7 @@ dependencies = [
  "anyhow",
  "canopy",
  "canopy-mcp",
+ "canopy-widgets",
  "clap",
  "futures",
  "ruau-script-api",

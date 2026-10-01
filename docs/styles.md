@@ -65,9 +65,17 @@ theme.
 stops of a gradient over space. `Repeat` sets what follows a run, `Easing` how
 time maps to the stops, and `AnimationStart` when the first run starts.
 `Easing::Hold` keeps each stop until the next one. `Animation::fade`,
-`Animation::pulse`, and `Animation::blink` build the common cases. A
-`GradientSpec::with_drift` gradient slides across its rectangle once in each
-period.
+`Animation::pulse`, and `Animation::blink` build the common cases.
+
+`GradientSpec::with_drift` moves a gradient across its rectangle. A
+`Drift::Slide` gradient slides across once in each period and wraps around. A
+`Drift::Sweep` gradient swings to and fro, and slows at each edge. A sweep of
+a gradient whose ends match shows a crest that runs back and forth, which suits
+a busy indicator.
+
+Repeating motion holds at rest while the operator is idle or the terminal lacks
+focus. A busy indicator must move while the operator waits, so its animation or
+gradient takes `with_pause(Pause::Never)`.
 
 ```rust
 setup.widget_styles(|palette, rules| {

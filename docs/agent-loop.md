@@ -229,3 +229,45 @@ Run top-level scripts through `script_eval` after applying the fixture.
 
 When a replay becomes part of the permanent workflow, move the Luau body into a
 smoke script under the relevant fixture directory and run `cargo xtask smoke`.
+
+## Gallery
+
+A gallery shows the screens of an app as images, for review by a person or an
+agent. `canopyctl gallery` runs each gallery script at each screen size against
+a fresh headless app, draws the shots that the script returns as PNG images,
+and writes a viewer, `index.html`, beside them. A script returns a list of
+shots. Each shot has an `id`, an optional `title` and `caption`, and a
+`capture` from `canopy.capture()`:
+
+```luau
+local shots = {}
+canopy.send_key("ctrl-o")
+table.insert(shots, {
+    id = "options",
+    title = "Options menu",
+    caption = "Ctrl-O opens the options menu.",
+    capture = canopy.capture(),
+})
+return shots
+```
+
+The `[gallery]` section of `.canopyctl.toml` sets the defaults:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `suite` | `gallery` | Directory of gallery scripts. |
+| `out` | `tmp/gallery` | Directory of the images and the viewer. |
+| `sizes` | `["100x30"]` | Screen sizes as `WIDTHxHEIGHT`. |
+| `timeout_ms` | none | Per-script timeout. |
+| `font_size` | `14` | Font size in pixels, before the scale. |
+| `scale` | `2` | Image pixels for each pixel of the font size. |
+| `title` | the config directory name | Title of the viewer. |
+
+`--size`, `--suite`, and `--out` replace the defaults for one run. Explicit
+script paths run only those scripts, and keep the pages of the other scripts
+from the last run, unless the font size or the scale changed. The run
+publishes into `out` only after every image is written, and only over a
+gallery or an empty directory. It publishes even when a script fails: the
+viewer lists each failure, and the command exits with a failure status. The
+viewer also names each character that the screenshot font lacks, which shows
+as a box.

@@ -5,6 +5,8 @@ mod cargo_env;
 
 /// CLI configuration and `.canopyctl.toml` resolution.
 mod config;
+/// Screenshot galleries.
+mod gallery;
 /// Replay journal types and their file IO.
 mod replay;
 /// MCP client sessions and the manager shared by the CLI and the proxy server.
@@ -55,6 +57,9 @@ enum Commands {
     Mcp,
     /// Execute a Luau smoke suite through the headless MCP server.
     Smoke(SmokeArgs),
+    /// Capture the shots of the gallery scripts as PNG images, and write a
+    /// viewer beside them.
+    Gallery(GalleryArgs),
     /// Replay a versioned envelope against an explicit live or headless target.
     Replay(ReplayArgs),
     /// Print MCP bootstrap information from a headless app instance.
@@ -113,6 +118,28 @@ struct SmokeArgs {
     #[arg(long)]
     fail_fast: bool,
     /// Optional per-script timeout override in milliseconds.
+    #[arg(long)]
+    timeout_ms: Option<u64>,
+    /// Command override passed after `--`.
+    #[arg(last = true)]
+    command: Vec<String>,
+}
+
+/// Arguments for `canopyctl gallery`.
+#[derive(Args)]
+struct GalleryArgs {
+    /// Scripts to run, relative to the suite. Every script runs by default.
+    scripts: Vec<PathBuf>,
+    /// Suite directory, in place of `[gallery].suite`.
+    #[arg(long)]
+    suite: Option<PathBuf>,
+    /// Output directory, in place of `[gallery].out`.
+    #[arg(long)]
+    out: Option<PathBuf>,
+    /// Screen sizes as WIDTHxHEIGHT, in place of `[gallery].sizes`.
+    #[arg(long = "size", value_parser = parse_screen_label)]
+    sizes: Vec<String>,
+    /// Per-script timeout in milliseconds.
     #[arg(long)]
     timeout_ms: Option<u64>,
     /// Command override passed after `--`.
@@ -250,6 +277,7 @@ async fn main() -> Result<()> {
         Commands::Run(args) => run_command(config, args).await,
         Commands::Mcp => mcp_command(config).await,
         Commands::Smoke(args) => smoke_command(config, args).await,
+        Commands::Gallery(args) => gallery_command(config, args).await,
         Commands::Replay(args) => replay_command(config, args).await,
         Commands::Bootstrap(args) => bootstrap_command(config, args).await,
         Commands::Fixtures(args) => fixtures_command(config, args).await,
@@ -325,6 +353,29 @@ async fn smoke_scripts(session: &Session, suite: &SuiteConfig) -> Result<()> {
         bail!("{failed} smoke script(s) failed");
     }
     Ok(())
+}
+
+/// Execute `canopyctl gallery`.
+async fn gallery_command(config: LoadedConfig, args: GalleryArgs) -> Result<()> {
+    let mut settings = config.gallery();
+    if let Some(suite) = &args.suite {
+        settings.suite = config.resolve_path(suite);
+    }
+    if let Some(out) = &args.out {
+        settings.out = config.resolve_path(out);
+    }
+    if !args.sizes.is_empty() {
+        settings.sizes = args.sizes;
+    }
+    settings.timeout_ms = args.timeout_ms.or(settings.timeout_ms);
+    let command = config.headless_command(&args.command)?;
+    let session = Session::spawn_headless(&command).await?;
+    gallery::run(&session, &settings, args.scripts).await
+}
+
+/// Validate a screen size and keep its text.
+fn parse_screen_label(text: &str) -> result::Result<String, String> {
+    parse_screen(text).map(|_| text.to_owned())
 }
 
 /// Parse and validate one CLI screen before an app is spawned.

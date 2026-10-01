@@ -13,7 +13,9 @@ use crate::{
     layout::Layout,
     render::Render,
     runtime::TurnInput,
-    style::{Animation, Color, GradientSpec, GradientStop, Paint, ResolvedStyle, themes},
+    style::{
+        Animation, Color, Drift, GradientSpec, GradientStop, Paint, Pause, ResolvedStyle, themes,
+    },
     testing::{ManualClock, backend::TestRender},
     text,
 };
@@ -252,6 +254,32 @@ fn repeating_motion_rests_after_the_idle_pause() -> Result<()> {
 }
 
 #[test]
+fn a_busy_loop_moves_on_through_the_idle_pause() -> Result<()> {
+    let busy = Paint::animated(
+        Animation::blink(Color::Red, Color::Blue, ms(100), ms(100)).with_pause(Pause::Never),
+    );
+    let (mut canopy, clock) = live(Spot::new("moving", "x"), 2, Some(busy))?;
+    canopy.set_motion(MotionSettings {
+        idle_pause: ms(250),
+        ..MotionSettings::default()
+    });
+    let mut backend = TestRender::new();
+    let t0 = clock.now();
+    canopy.turn(TurnInput::Prepare)?;
+    canopy.emit_frame(&mut backend)?;
+    clock.advance(ms(300))?;
+    canopy.turn(TurnInput::Wake)?;
+    canopy.emit_frame(&mut backend)?;
+    assert_eq!(emitted(&canopy, 0).fg, Color::Blue);
+    assert_eq!(canopy.next_deadline(), Some(t0 + ms(400)));
+    clock.advance(ms(100))?;
+    assert!(canopy.turn(TurnInput::Wake)?.motion);
+    canopy.emit_frame(&mut backend)?;
+    assert_eq!(emitted(&canopy, 0).fg, Color::Red);
+    Ok(())
+}
+
+#[test]
 fn a_fade_runs_once_from_the_first_frame_that_shows_it() -> Result<()> {
     let fade = Paint::animated(Animation::fade(Color::White, Color::Black, ms(100)));
     let (mut canopy, clock) = live(Spot::new("moving", "x"), 2, Some(fade))?;
@@ -452,7 +480,7 @@ fn a_drifting_gradient_moves_with_the_epoch() -> Result<()> {
                 GradientStop::new(1.0, Color::White),
             ],
         )
-        .with_drift(ms(1000)),
+        .with_drift(Drift::Slide(ms(1000))),
     );
     let (mut canopy, clock) = live(Spot::new("moving", "abcd"), 4, Some(gradient))?;
     let mut backend = TestRender::new();

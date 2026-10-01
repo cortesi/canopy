@@ -482,6 +482,41 @@ fn register_observation_info(builder: &mut module::Builder) {
         ]),
     ));
     builder.alias(declaration::Alias::new(
+        "CaptureStyle",
+        declaration::Type::table([
+            declaration::Field::new("fg", declaration::Type::String)
+                .doc("Foreground color as #rrggbb."),
+            declaration::Field::new("bg", declaration::Type::String)
+                .doc("Background color as #rrggbb."),
+            declaration::Field::new("attrs", declaration::Type::String.array().optional())
+                .doc("Text attributes such as bold or underline, absent when none is on."),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
+        "CaptureRun",
+        declaration::Type::table([
+            declaration::Field::new("text", declaration::Type::String).doc("Text in one style."),
+            declaration::Field::new("style", declaration::Type::Number)
+                .doc("Index of the style in the styles of the capture, from 0."),
+            declaration::Field::new("cells", declaration::Type::Number)
+                .doc("Cells that the run covers. A wide grapheme covers two."),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
+        "ScreenCapture",
+        declaration::Type::table([
+            declaration::Field::new("width", declaration::Type::Number).doc("Width in cells."),
+            declaration::Field::new("height", declaration::Type::Number).doc("Height in cells."),
+            declaration::Field::new("styles", declaration::Type::named("CaptureStyle").array())
+                .doc("The distinct styles of the frame."),
+            declaration::Field::new(
+                "rows",
+                declaration::Type::named("CaptureRun").array().array(),
+            )
+            .doc("The runs of each row, top to bottom. The runs of a row fill its width."),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
         "RouteTraceEntry",
         declaration::Type::table([
             declaration::Field::new(

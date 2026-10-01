@@ -792,8 +792,12 @@ fn canopy_error_info(error: &CanopyError) -> ScriptErrorInfo {
 mod tests {
     use canopy::{
         CanopyBuilder, NodeName, Register, Setup, Widget, derive_commands,
-        error::Result as CanopyResult, geom::Size, render::RenderLimits, script::Fixture,
-        testing::contracts, tree::FocusDirection,
+        error::Result as CanopyResult,
+        geom::Size,
+        render::{RenderLimits, ScreenCapture},
+        script::Fixture,
+        testing::contracts,
+        tree::FocusDirection,
     };
 
     use super::*;
@@ -1104,6 +1108,25 @@ declare command: {
 
         assert_eq!(actual.trim_end(), expected);
         Ok(())
+    }
+
+    #[test]
+    fn a_capture_returns_the_frame_as_styled_text() {
+        let factory = test_factory();
+        let request = ScriptEvalRequest {
+            screen: Some(ScreenSize {
+                width: 12,
+                height: 3,
+            }),
+            ..ScriptEvalRequest::new("return canopy.capture()")
+        };
+        let outcome = factory.evaluate(&request);
+        assert!(outcome.success, "{:?}", outcome.error);
+        let capture: ScreenCapture =
+            serde_json::from_value(outcome.value.expect("value")).expect("capture");
+        assert_eq!((capture.width, capture.height), (12, 3));
+        assert_eq!(capture.rows.len(), 3);
+        assert!(!capture.styles.is_empty());
     }
 
     #[test]

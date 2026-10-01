@@ -70,6 +70,9 @@ mod root;
 mod row_cursor;
 /// Shared line painter for Editor and DiffView.
 mod run_paint;
+/// Frames drawn as images.
+#[cfg(feature = "graphics")]
+pub mod screenshot;
 /// Scrolling container.
 mod scroll;
 pub mod scrollbar;

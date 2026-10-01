@@ -12,7 +12,8 @@ use canopy::{
     layout::Layout,
     render::Render,
     style::{
-        Animation, Color, GradientSpec, GradientStop, Mix, Paint, StyleRules, themes::Palette,
+        Animation, Color, Drift, GradientSpec, GradientStop, Mix, Paint, Pause, StyleRules,
+        themes::Palette,
     },
 };
 
@@ -22,12 +23,13 @@ const LABEL_WIDTH: u32 = 12;
 const SWATCH_WIDTH: u32 = 32;
 
 /// Rows: a label and the style path of its swatch.
-const ROWS: [(&str, &str); 6] = [
+const ROWS: [(&str, &str); 7] = [
     ("blink", "motiongym/blink"),
     ("pulse", "motiongym/pulse"),
     ("fade", "motiongym/fade"),
     ("hue loop", "motiongym/hue"),
     ("drift", "motiongym/drift"),
+    ("sweep", "motiongym/sweep"),
     ("text", "motiongym/text"),
 ];
 
@@ -97,7 +99,20 @@ fn swatches(p: &Palette, rules: StyleRules<'_>) {
             GradientStop::new(1.0, p.violet),
         ],
     )
-    .with_drift(secs(3.0));
+    .with_drift(Drift::Slide(secs(3.0)));
+    // A busy crest: it swings to and fro, and moves on while input is idle.
+    let sweep = GradientSpec::with_stops(
+        0.0,
+        vec![
+            GradientStop::new(0.0, p.element_bg),
+            GradientStop::new(0.35, p.element_bg),
+            GradientStop::new(0.5, p.blue),
+            GradientStop::new(0.65, p.element_bg),
+            GradientStop::new(1.0, p.element_bg),
+        ],
+    )
+    .with_drift(Drift::Sweep(secs(3.0)))
+    .with_pause(Pause::Never);
     rules
         .fg("motiongym/label", p.muted_fg)
         .bg(
@@ -111,6 +126,7 @@ fn swatches(p: &Palette, rules: StyleRules<'_>) {
         .bg("motiongym/fade", Animation::fade(p.bg, p.green, secs(2.0)))
         .bg("motiongym/hue", hue)
         .bg("motiongym/drift", Paint::gradient(drift))
+        .bg("motiongym/sweep", Paint::gradient(sweep))
         .fg(
             "motiongym/text",
             Animation::pulse(

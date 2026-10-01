@@ -15,8 +15,11 @@ use crate::{
     style::ResolvedStyle,
 };
 
+/// A frame as styled text, for renderers outside the terminal.
+mod capture;
 /// Motion records and cursor painting.
 mod motion;
+pub use capture::{CaptureRun, CaptureStyle, ScreenCapture};
 pub use motion::MotionStyle;
 
 /// NULL character constant.

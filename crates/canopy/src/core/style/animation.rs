@@ -48,6 +48,25 @@ pub enum AnimationStart {
     Shown,
 }
 
+/// When repeating motion holds at rest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Pause {
+    /// While the operator is idle or the terminal lacks focus. Decoration
+    /// pauses so, and costs nothing while nobody watches it.
+    #[default]
+    Idle,
+    /// Never. A busy indicator moves for as long as it shows, so that the
+    /// operator sees work run while they wait.
+    Never,
+}
+
+impl Pause {
+    /// Return whether repeating motion holds at rest at the clocks' time.
+    pub(crate) fn holds(self, clocks: &MotionClocks) -> bool {
+        self == Self::Idle && clocks.paused
+    }
+}
+
 /// The time that binds an [`AnimationStart::Shown`] animation, shared by its
 /// clones.
 #[derive(Clone, Default)]
@@ -126,6 +145,8 @@ pub struct Animation {
     pub start: AnimationStart,
     /// The space that mixes colors between stops.
     pub mix: Mix,
+    /// When a repeating animation holds at rest.
+    pub pause: Pause,
     /// Bound start of a [`AnimationStart::Shown`] animation.
     shown: ShownAt,
 }
@@ -144,6 +165,7 @@ impl Animation {
             easing: Easing::Linear,
             start: AnimationStart::Epoch,
             mix: Mix::Oklab,
+            pause: Pause::Idle,
             shown: ShownAt::default(),
         }
     }
@@ -212,6 +234,13 @@ impl Animation {
         self
     }
 
+    /// Replace the pause.
+    #[must_use]
+    pub fn with_pause(mut self, pause: Pause) -> Self {
+        self.pause = pause;
+        self
+    }
+
     /// Return the color that frames show at rest: the last stop of a single
     /// run, and the first stop of a repeating one.
     pub fn rest(&self) -> Color {
@@ -273,7 +302,7 @@ impl Animation {
 
     /// Return the color at the clocks' time.
     pub(crate) fn color(&self, clocks: &MotionClocks) -> Color {
-        if self.repeats() && clocks.paused {
+        if self.repeats() && self.pause.holds(clocks) {
             return self.rest();
         }
         let elapsed = clocks
@@ -353,7 +382,7 @@ impl Animation {
     /// A held animation changes at its stop edges. A continuous one changes
     /// at every sample, `sample` apart, until a single run ends.
     pub(crate) fn next_change(&self, clocks: &MotionClocks, sample: Duration) -> Option<Instant> {
-        if self.repeats() && clocks.paused {
+        if self.repeats() && self.pause.holds(clocks) {
             return None;
         }
         let start = self.start_time(clocks);
@@ -508,6 +537,19 @@ mod tests {
         };
         assert_eq!(blink.color(&paused), Color::White);
         assert_eq!(blink.next_change(&paused, MS(33)), None);
+    }
+
+    #[test]
+    fn a_busy_loop_moves_while_paused() {
+        let t0 = Instant::now();
+        let blink =
+            Animation::blink(Color::White, Color::Black, MS(600), MS(400)).with_pause(Pause::Never);
+        let paused = MotionClocks {
+            paused: true,
+            ..clocks(t0, 700)
+        };
+        assert_eq!(blink.color(&paused), Color::Black);
+        assert_eq!(blink.next_change(&paused, MS(33)), Some(t0 + MS(1000)));
     }
 
     #[test]
