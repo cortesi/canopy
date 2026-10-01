@@ -68,9 +68,15 @@ impl TerminalOperations for Stderr {
         self.execute(ccursor::Show).map(|_| ())
     }
 
+    /// Ask a kitty keyboard protocol terminal to report every key as an escape
+    /// code. A key that types text then keeps its modifiers, so shift+space
+    /// differs from space. The shifted alternate gives the character a shifted
+    /// key types, which the base key alone does not say.
     fn push_keyboard_enhancements(&mut self) -> io::Result<()> {
         self.execute(cevent::PushKeyboardEnhancementFlags(
-            cevent::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES,
+            cevent::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                | cevent::KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
+                | cevent::KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES,
         ))
         .map(|_| ())
     }

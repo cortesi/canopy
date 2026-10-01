@@ -222,6 +222,22 @@ fn translate_button(b: cevent::MouseButton) -> mouse::Button {
     }
 }
 
+/// Return the character a key types under caps lock.
+///
+/// A terminal that reports every key as an escape code sends a letter's base
+/// key and reports caps lock as key state, so the letter is raised here. A
+/// letter typed with shift already arrives as its shifted key.
+fn caps_locked(c: char, state: cevent::KeyEventState) -> char {
+    if !state.contains(cevent::KeyEventState::CAPS_LOCK) {
+        return c;
+    }
+    let mut upper = c.to_uppercase();
+    match (upper.next(), upper.next()) {
+        (Some(upper), None) => upper,
+        _ => c,
+    }
+}
+
 /// Translate a crossterm event into a canopy event.
 fn translate_event(e: cevent::Event) -> Event {
     match e {
@@ -243,7 +259,7 @@ fn translate_event(e: cevent::Event) -> Event {
                 cevent::KeyCode::Delete => key::KeyCode::Delete,
                 cevent::KeyCode::Insert => key::KeyCode::Insert,
                 cevent::KeyCode::F(x) => key::KeyCode::F(x),
-                cevent::KeyCode::Char(c) => key::KeyCode::Char(c),
+                cevent::KeyCode::Char(c) => key::KeyCode::Char(caps_locked(c, k.state)),
                 cevent::KeyCode::Null => key::KeyCode::Null,
                 cevent::KeyCode::Esc => key::KeyCode::Esc,
                 cevent::KeyCode::CapsLock => key::KeyCode::CapsLock,
@@ -608,6 +624,55 @@ mod tests {
         let mut events = EventSource::new(terminal, rx);
         assert!(matches!(block_on(events.next())?, AdapterEvent::Wake));
         Ok(())
+    }
+
+    #[test]
+    fn typed_keys_keep_shift_on_space_and_take_caps_lock() {
+        let translate = |code, modifiers, state| {
+            let event = translate_event(cevent::Event::Key(
+                cevent::KeyEvent::new_with_kind_and_state(
+                    code,
+                    modifiers,
+                    cevent::KeyEventKind::Press,
+                    state,
+                ),
+            ));
+            let Event::Key(key) = event else {
+                panic!("expected a key, got {event:?}");
+            };
+            key
+        };
+        let char_key = |c, shift| key::Key {
+            mods: key::Mods {
+                shift,
+                ..key::Mods::default()
+            },
+            key: key::KeyCode::Char(c),
+        };
+        assert_eq!(
+            translate(
+                cevent::KeyCode::Char(' '),
+                cevent::KeyModifiers::SHIFT,
+                cevent::KeyEventState::NONE
+            ),
+            char_key(' ', true)
+        );
+        assert_eq!(
+            translate(
+                cevent::KeyCode::Char('a'),
+                cevent::KeyModifiers::NONE,
+                cevent::KeyEventState::CAPS_LOCK
+            ),
+            char_key('A', false)
+        );
+        assert_eq!(
+            translate(
+                cevent::KeyCode::Char('1'),
+                cevent::KeyModifiers::NONE,
+                cevent::KeyEventState::CAPS_LOCK
+            ),
+            char_key('1', false)
+        );
     }
 
     #[test]
