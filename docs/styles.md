@@ -204,7 +204,8 @@ whole bar, so its colour at a cell tells how far along the cell is.
   paths they name.
 - `BigText` pushes `big_text`. A plain run paints `text`, and a run with its
   own path paints that path, so a value can dim its unit with a rule such as
-  `big_text/unit`.
+  `big_text/unit`. The `text` part also paints the rest of the area, and a
+  gradient spans the whole block of text. See [Big text](#big-text).
 - `ColumnChart` pushes `column_chart`. The axis rule paints `axis`, the axis
   and gutter labels paint `label`, a reference line paints `reference`, and the
   cursor and hover marks paint `cursor`. Segments and markers paint the style
@@ -254,6 +255,64 @@ rows green, removed rows red, headers with the accent, and gaps muted.
 painted with `root/notice`. The built-in themes give it the red role on the
 panel ground, so a failure the application survived reads as an error without
 hiding what the row covers for long: the row goes at the next input.
+
+## Images
+
+`ImageView` keeps the alpha of its image. Each half of a cell lays the image
+over the ground of the `background` style, so a transparent image, such as a
+logo, shows the ground of whatever holds it, and so does the area around an
+image that does not fill its view. `ImageView::from_bytes` decodes an image an
+application embeds, and `with_focus(false)` keeps a decorative image out of
+keyboard traversal.
+
+## Big text
+
+`BigText` draws text in bitmap faces with half blocks. The faces form a
+ladder: `BigFace::Compact`, Canopy's own numerals five pixels high with the
+letters of Tamzen 5×9, then the seven sizes of Tamzen, from 5×9 to 10×20. Each
+face draws at any integer scale, where one font pixel is that many columns by
+that many half rows. Every face and weight draws printable ASCII, the Latin-1
+letters, the light box-drawing lines, and `× ÷ ≤ ≥ ° · — … ↑ ↓ ▲ ▼ ± µ €`.
+
+`BigSize` chooses the size:
+
+- `Fit`, the default, takes the rendering with the largest capitals that fits
+  the offered area: the highest cap height at its scale. At equal size it
+  takes the fewer rows, then the lower scale, then the narrower text, then the
+  smaller face.
+- `MaxRows(n)` fits within at most `n` rows.
+- `Exact { face, scale }` takes one face at one scale.
+
+A fit measures the text itself. A line box runs from the cap height down to the
+baseline and grows for the ascenders and descenders that the text has, so a
+dash or a space fits like a digit. A strut, set with `with_strut`, adds the
+glyphs of more characters to the line box without drawing them. Tiles that
+show different values with one strut and one rendering then stand on one
+baseline, and a value that gains a taller glyph still rolls. Without a bound
+on the height, as in a scrolling area, a fit takes the compact face at
+scale 1. `BigWeight::Bold` is
+the default weight, and `BigWeight::Regular` draws one-pixel strokes. Lines
+align with `with_align`, and the block of lines with `with_vertical_align`, in
+half rows. The Tamzen sources and their converter are in
+`crates/canopy-widgets/assets/fonts/tamzen`. The big text gym,
+`cargo run -p gyms -- biggym`, draws custom text with every setting, and in
+every face.
+
+## Font banners
+
+`FontBanner` draws text from a font in quadrant blocks, scaled to its height,
+and shrinks the text to its width when the text is wider. `LayoutOptions`
+sets how the text draws:
+
+- `fit: Fit::Ink` fits the ink of the text to the height instead of the font's
+  line box, so a short word fills its rows.
+- `crisp: true` draws each quadrant fully or not at all, so edges are hard and
+  there are no shades between the text and the ground.
+- `tall_cells: true` keeps the glyphs in their proportions on cells twice as
+  tall as wide. Without it a glyph draws at twice its height.
+
+A wordmark reads clearest with all three. A banner whose width a layout
+override measures is as wide as its text at its height.
 
 ## Frames
 

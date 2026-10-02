@@ -58,6 +58,7 @@ fn the_gallery_scripts_run() -> Result<()> {
     let scripts = [
         (Demo::Stylegym, "stylegym.luau"),
         (Demo::Chartgym, "chartgym.luau"),
+        (Demo::Biggym, "biggym.luau"),
         (
             Demo::Cedit {
                 file: root.join("../../crates/canopy-widgets/src/spinner.rs"),

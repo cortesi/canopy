@@ -93,36 +93,110 @@ pub enum Answer {
     No,
 }
 
-/// Large text drawn in a built-in pixel font with half blocks.
+/// A face of the big text ladder, smallest first.
 ///
-/// The font is five pixels high, and most glyphs are three pixels wide: M and
-/// W take five, N takes four, and narrow marks such as `.` take one. Each line
-/// of text is three rows high. Text that does not fit the area is cut at its
-/// right and bottom edges. The font has the letters A to Z, the
-/// digits, common punctuation, and basic math: `+ - × ÷ = < > ≤ ≥ % ° …`.
-/// Lowercase letters draw as capitals, and a character without a glyph draws
-/// as `?`. A newline starts a new line, one blank row below the last.
+/// Every face and weight draws one repertoire: printable ASCII, the Latin-1
+/// letters and most of its symbols, the light box-drawing lines, and
+/// `× ÷ ≤ ≥ ° · — … ↑ ↓ ▲ ▼ ± µ €`.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum BigFace {
+    /// Digits and capitals 5 pixels high: Canopy's own numerals and symbols,
+    /// with the letters of Tamzen 5×9.
+    Compact,
+    /// Tamzen 5×9: digits and capitals 5 pixels high.
+    Tamzen5x9,
+    /// Tamzen 6×12: digits and capitals 7 pixels high.
+    Tamzen6x12,
+    /// Tamzen 7×13: digits and capitals 7 pixels high, wider than 6×12.
+    Tamzen7x13,
+    /// Tamzen 7×14: digits and capitals 8 pixels high.
+    Tamzen7x14,
+    /// Tamzen 8×15: digits and capitals 8 pixels high, wider than 7×14.
+    Tamzen8x15,
+    /// Tamzen 8×16: digits and capitals 9 pixels high.
+    Tamzen8x16,
+    /// Tamzen 10×20: digits and capitals 10 pixels high.
+    Tamzen10x20,
+}
+
+impl BigFace {
+    /// Every face, smallest first. A fit that ties takes the earlier face.
+    pub const ALL: [Self; 8] = _;
+    /// Returns the pixel height of the digits and capitals.
+    pub fn cap_height(self) -> u32;
+}
+
+/// How big text chooses its size.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum BigSize {
+    /// The rendering with the largest capitals that fits the area: the
+    /// highest cap height at its scale. At equal size it takes the fewer
+    /// rows, then the lower scale, which keeps more of the design, then the
+    /// narrower text, then the earlier face of [`BigFace::ALL`].
+    #[default]
+    Fit,
+    /// The rendering that [`BigSize::Fit`] would choose in an area of at most
+    /// this many rows.
+    MaxRows(u32),
+    /// One face at one integer scale. A scale of 0 draws at scale 1.
+    Exact {
+        /// The face.
+        face: BigFace,
+        /// Columns and half rows of one font pixel.
+        scale: u32,
+    },
+}
+
+/// Large text in bitmap faces, drawn with half blocks.
+///
+/// The faces form a ladder: [`BigFace::Compact`], with Canopy's own numerals
+/// five pixels high, then the seven sizes of Tamzen. Each draws at any
+/// integer scale, where one font pixel is that many columns by that many half
+/// rows. [`BigSize::Fit`], the default, takes the face and scale that draw
+/// the largest capitals in the area; [`BigSize::MaxRows`] caps the rows, and
+/// [`BigSize::Exact`] takes one face at one scale. The fit measures the text
+/// itself: a line box runs from the cap height down to the baseline, and
+/// grows for the ascenders and descenders that the text has. A strut, set
+/// with [`BigText::with_strut`], grows the line box for more glyphs, so texts
+/// that share a strut share a baseline. When nothing fits, the text takes the
+/// smallest rendering and is cut at the right and bottom edges.
+/// [`BigWeight::Bold`] is the default weight.
+///
+/// A newline starts a new line, one blank row below the last. Each line
+/// aligns on its own with [`BigText::with_align`], and the block of lines
+/// aligns with [`BigText::with_vertical_align`], in half rows.
 ///
 /// The text is a list of runs, each with the style path that paints it, so
 /// one value can show a number and a dimmer unit. `BigText` pushes the
-/// `big_text` layer, and a plain run paints the `text` part.
+/// `big_text` layer, and a plain run paints the `text` part. The `text` part
+/// also paints the rest of the area. Gradients span the whole block of text.
 ///
 /// When the text changes and [`ViewContext::motion_active`] is true, the
 /// changed characters roll over 200 ms: the old glyph moves up out of its
-/// cells, and the new glyph moves in from below. The position of the roll
-/// comes from [`ViewContext::now`], so a slow repaint skips frames and never
-/// slows the roll. A change during a roll starts a new roll from the glyphs
-/// on screen. Old and new text align on the right, so a number that gains a
-/// digit rolls it in on the left. A hidden widget, or motion that turns off,
-/// ends the roll at rest.
+/// cells, and the new glyph moves in from below. Text rolls only when the old
+/// and the new text share a face, weight, scale, and line box; any other
+/// change shows at once. The position of the roll comes from
+/// [`ViewContext::now`], so a slow repaint skips frames and never slows the
+/// roll. A change during a roll starts a new roll from the glyphs on screen.
+/// Old and new text align on the right, so a number that gains a digit rolls
+/// it in on the left. A hidden widget, or motion that turns off, ends the
+/// roll at rest.
 pub struct BigText {/* private fields */}
 
 impl BigText {
-    /// Constructs large text of one run in the `text` part.
+    /// Returns the face and scale that draw the text in an area of `area`.
+    pub fn face_in(&self, area: Size) -> (BigFace, u32);
+
+    /// Constructs big text of one run in the `text` part. It fits its area,
+    /// in bold, at the start of the area.
     pub fn new(text: impl Into<String>) -> Self;
 
-    /// Returns the rows of cells that draw `text`, without trailing spaces.
-    pub fn rows_of(text: &str) -> Vec<String>;
+    /// Returns the cell rows that draw the text in an area of `area`, placed
+    /// at the start of the area, without trailing spaces.
+    pub fn rows_in(&self, area: Size) -> Vec<String>;
+
+    /// Places each line at the start, the center, or the end of the area.
+    pub fn set_align(&mut self, align: Align);
 
     /// Replaces the text with runs, each painted by its own style path.
     pub fn set_runs<S, T>(&mut self, runs: impl IntoIterator<Item = (S, T)>)
@@ -130,11 +204,24 @@ impl BigText {
         S: Into<String>,
         T: Into<String>;
 
+    /// Sets how the text chooses its size.
+    pub fn set_size(&mut self, size: BigSize);
+
+    /// Sets a strut: characters whose glyphs the line box holds.
+    pub fn set_strut(&mut self, strut: impl Into<String>);
+
     /// Replaces the text with one run in the `text` part.
     pub fn set_text(&mut self, text: impl Into<String>);
 
-    /// Returns the size in cells that `text` takes.
-    pub fn size_of(text: &str) -> Size;
+    /// Places the block of lines at the top, the middle, or the bottom of the
+    /// area.
+    pub fn set_vertical_align(&mut self, align: Align);
+
+    /// Sets the weight.
+    pub fn set_weight(&mut self, weight: BigWeight);
+
+    /// Returns the size in cells that the text takes in an area of `area`.
+    pub fn size_in(&self, area: Size) -> Size;
 
     /// Returns the text of all runs.
     pub fn text(&self) -> String;
@@ -149,9 +236,40 @@ impl BigText {
     where
         S: Into<String>,
         T: Into<String>;
+
+    /// Sets how the text chooses its size.
+    #[must_use]
+    pub fn with_size(self, size: BigSize) -> Self;
+
+    /// Sets a strut: characters whose glyphs the line box holds, as if the
+    /// text had them. The strut draws nothing and takes no width. Texts
+    /// that share a strut and a rendering share a line box, so they stand on
+    /// one baseline, and a change between them can roll.
+    #[must_use]
+    pub fn with_strut(self, strut: impl Into<String>) -> Self;
+
+    /// Places the block of lines at the top, the middle, or the bottom of the
+    /// area. A middle that falls between two half rows takes the upper one.
+    #[must_use]
+    pub fn with_vertical_align(self, align: Align) -> Self;
+
+    /// Sets the weight.
+    #[must_use]
+    pub fn with_weight(self, weight: BigWeight) -> Self;
 }
 
 impl Widget for BigText {}
+
+/// The weight of big text.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum BigWeight {
+    /// Strokes two pixels wide where the face has them. Numbers read best
+    /// bold at these sizes, so this is the default.
+    #[default]
+    Bold,
+    /// Strokes one pixel wide. The compact face keeps its numerals.
+    Regular,
+}
 
 /// A simple box container around its children.
 #[derive(Default)]
@@ -674,6 +792,8 @@ pub struct ConfirmRequest {
 /// A [focusable](Container::focusable) container holds focus itself, so its
 /// children can show, hide, and swap without moving focus. Bindings with a
 /// path through the container then apply the whole time.
+///
+/// A container draws nothing unless it is [filled](Container::with_fill).
 pub struct Container {/* private fields */}
 
 impl Container {
@@ -713,6 +833,12 @@ impl Container {
 
     /// Fill the available space and overlap children, the last on top.
     pub fn stack() -> Self;
+
+    /// Paint the whole area with the `background` style before the children
+    /// draw. An effect on the container, such as the dim behind a modal,
+    /// then reaches every cell of it, the cells that no child paints too.
+    #[must_use]
+    pub fn with_fill(self) -> Self;
 
     /// Name this node's path segment.
     #[must_use]
@@ -996,6 +1122,10 @@ impl<T> CommandNode for Dropdown<T> where T: 'static + ItemLabel {}
 impl<T> Widget for Dropdown<T> where T: 'static + ItemLabel {}
 
 /// Render large ASCII-font text into a bounded region.
+///
+/// The text scales to the height of the banner. A banner fills its area, and
+/// a layout override that measures its width gives it the width of its text
+/// at its height instead.
 pub struct FontBanner {/* private fields */}
 
 impl FontBanner {
@@ -1025,6 +1155,8 @@ impl FontBanner {
 }
 
 impl Widget for FontBanner {}
+
+impl !Sync for FontBanner {}
 
 /// A frame around an element with an optional title and scroll positions.
 ///
@@ -1098,8 +1230,15 @@ impl ImageView {
     /// Fit the entire image to the view and clear its pan offset.
     pub fn fit(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Create a new image view widget from encoded image bytes, such as a
+    /// PNG that an application embeds. The format comes from the bytes.
+    pub fn from_bytes(bytes: &[u8]) -> canopy::error::Result<Self>;
+
     /// Create a new image view widget from a file path.
     pub fn from_path(path: impl AsRef<Path>) -> canopy::error::Result<Self>;
+
+    /// Return the size of the image in pixels.
+    pub fn image_size(&self) -> Size;
 
     /// Create a new image view widget.
     pub fn new(image: &RgbaImage) -> Self;
@@ -1135,6 +1274,11 @@ impl ImageView {
         path: impl AsRef<Path>,
         bounds: Size,
     ) -> canopy::error::Result<()>;
+
+    /// Set whether the view takes focus, which its zoom and pan keys need.
+    /// A decorative image, such as a logo, stays out of keyboard traversal.
+    #[must_use]
+    pub fn with_focus(self, focusable: bool) -> Self;
 
     /// Zoom around the view center.
     /// @param dir The zoom direction.
@@ -3253,6 +3397,18 @@ pub mod editor {
 pub mod font {
     //! ASCII font rasterization helpers.
 
+    /// What the height of a font layout fits.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub enum Fit {
+        /// The line box of the font, its ascent and descent, so lines of any
+        /// text stand alike.
+        #[default]
+        Line,
+        /// The ink of the text, from its highest mark to its lowest, so a short
+        /// word fills the height.
+        Ink,
+    }
+
     /// Rasterized font data for terminal rendering.
     #[derive(Clone)]
     pub struct Font {/* private fields */}
@@ -3290,13 +3446,23 @@ pub mod font {
         pub fn new(font: Font) -> Self;
     }
 
-    /// Alignment configuration for font layouts.
+    /// Layout configuration for font layouts.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub struct LayoutOptions {
         /// Horizontal alignment within the target canvas.
         pub h_align: Align,
         /// Vertical alignment within the target canvas.
         pub v_align: Align,
+        /// What the height fits.
+        pub fit: Fit,
+        /// Draw each quadrant of a cell fully or not at all, instead of blending
+        /// partial coverage into the colors of the cell. Crisp text has hard
+        /// edges and no shades between the text and the ground.
+        pub crisp: bool,
+        /// Treat a cell as twice as tall as it is wide, as terminal fonts draw
+        /// it, so glyphs keep their proportions. Otherwise a cell is square, and
+        /// a glyph draws at twice its height.
+        pub tall_cells: bool,
     }
 }
 

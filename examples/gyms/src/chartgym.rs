@@ -38,7 +38,8 @@ use canopy::{
     },
 };
 use canopy_widgets::{
-    BigText, BoxGlyphs, ColumnChart, Container, Frame, Meter, Scroll, Sparkline, Tabs, Text,
+    BigFace, BigSize, BigText, BigWeight, BoxGlyphs, ColumnChart, Container, Frame, Meter, Scroll,
+    Sparkline, Tabs, Text,
     chart::{self, Base, Braille, Column, Marker, Scale, Segment, Tint},
 };
 
@@ -47,6 +48,9 @@ use crate::{fixed_row, flex_row};
 /// A theme: its name and the function that builds its palette.
 type Theme = (&'static str, fn() -> Palette);
 
+/// Sample of each face of the ladder on the text page: digits, letters with
+/// ascenders and descenders, and symbols.
+pub const LADDER_SAMPLE: &str = "12.5K Agy ≥%↑▲";
 /// Themes that `t` moves through, in order.
 const THEMES: [Theme; 5] = [
     ("default dark", themes::default_dark),
@@ -774,10 +778,36 @@ impl ChartGym {
 
     /// Adds the text page below `page` and returns its live clock.
     fn text_page(c: &mut dyn Context, page: NodeId) -> Result<TypedId<BigText>> {
-        heading(c, page, "every glyph")?;
-        big(c, page, BigText::new("ABCDEFGHIJKLM\nNOPQRSTUVWXYZ"))?;
-        big(c, page, BigText::new("0123456789 +-×÷=%<>≤≥"))?;
-        big(c, page, BigText::new(".,:;!?'\"()[]/\\_#^~|°·—…"))?;
+        for (weight, name) in [(BigWeight::Bold, "bold"), (BigWeight::Regular, "regular")] {
+            for face in BigFace::ALL {
+                heading(c, page, &format!("{face:?}, {name}, scale 1"))?;
+                let sample = BigText::new(LADDER_SAMPLE)
+                    .with_size(BigSize::Exact { face, scale: 1 })
+                    .with_weight(weight);
+                big(c, page, sample)?;
+            }
+        }
+        heading(c, page, "every glyph, compact")?;
+        for text in [
+            "ABCDEFGHIJKLM\nNOPQRSTUVWXYZ",
+            "abcdefghijklm\nnopqrstuvwxyz",
+            "0123456789 +-×÷=%<>≤≥±",
+            ".,:;!?'\"()[]/\\_#^~|°·—…",
+            "↑↓▲▼ µ€£¥¢© «»¿¡ ÀÉÎÕÜßñ",
+            "─│┌┐└┘├┤┬┴┼▒",
+        ] {
+            let compact = BigSize::Exact {
+                face: BigFace::Compact,
+                scale: 1,
+            };
+            big(c, page, BigText::new(text).with_size(compact))?;
+        }
+        heading(c, page, "a value fitted to 9 rows, centered")?;
+        let fitted = BigText::new("12.5K")
+            .with_align(Align::Center)
+            .with_vertical_align(Align::Center);
+        let node = c.add_child(page, fitted)?;
+        c.set_layout_override(node.into(), fixed_row(9))?;
         heading(c, page, "runs in their own styles")?;
         let runs = BigText::new("").with_runs([
             ("text", "4.40"),
@@ -787,9 +817,12 @@ impl ChartGym {
             ("text", "  131"),
             ("unit", "K"),
         ]);
-        big(c, page, runs)?;
+        let node = c.add_child(page, runs)?;
+        c.set_layout_override(node.into(), fixed_row(3))?;
         heading(c, page, "a live clock, centered")?;
-        big(c, page, BigText::new("00:00:00").with_align(Align::Center))
+        let clock = c.add_child(page, BigText::new("00:00:00").with_align(Align::Center))?;
+        c.set_layout_override(clock.into(), fixed_row(3))?;
+        Ok(clock)
     }
 }
 
@@ -927,9 +960,9 @@ fn heading(c: &mut dyn Context, page: NodeId, text: &str) -> Result<()> {
     c.set_layout_override(heading.into(), fixed_row(1))
 }
 
-/// Adds large text below `page`, as tall as its lines.
+/// Adds big text of an exact size below `page`, as tall as its lines.
 fn big(c: &mut dyn Context, page: NodeId, text: BigText) -> Result<TypedId<BigText>> {
-    let rows = BigText::size_of(&text.text()).h;
+    let rows = text.size_in(Size::new(u32::MAX, u32::MAX)).h;
     let node = c.add_child(page, text)?;
     c.set_layout_override(node.into(), fixed_row(rows))?;
     Ok(node)

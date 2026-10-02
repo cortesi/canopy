@@ -808,7 +808,16 @@ fn constraint_for_axis(
     overflow: bool,
 ) -> Constraint {
     match sizing {
-        Sizing::Flex(_) => Constraint::Exact(available_content),
+        // A flex axis takes the space available within its bounds, so a
+        // measure sees the size the node gets.
+        Sizing::Flex(_) => Constraint::Exact(
+            clamp_axis(
+                available_content.saturating_add(pad_axis),
+                min_outer,
+                max_outer,
+            )
+            .saturating_sub(pad_axis),
+        ),
         Sizing::Measure => {
             if overflow && max_outer.is_none() {
                 return Constraint::Unbounded;

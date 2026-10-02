@@ -2,7 +2,9 @@
 
 use canopy::{
     NodeName, ViewContext, Widget,
+    error::Result,
     layout::{Align, Direction, Edges, Layout},
+    render::Render,
 };
 
 /// A widget that lays out its children and has no other behavior.
@@ -14,6 +16,8 @@ use canopy::{
 /// A [focusable](Container::focusable) container holds focus itself, so its
 /// children can show, hide, and swap without moving focus. Bindings with a
 /// path through the container then apply the whole time.
+///
+/// A container draws nothing unless it is [filled](Container::with_fill).
 pub struct Container {
     /// Layout applied to the children.
     layout: Layout,
@@ -21,6 +25,8 @@ pub struct Container {
     name: NodeName,
     /// Whether the container itself accepts focus.
     focusable: bool,
+    /// Whether the container paints its area before its children.
+    filled: bool,
 }
 
 impl Container {
@@ -30,6 +36,7 @@ impl Container {
             layout,
             name: NodeName::convert("container"),
             focusable: false,
+            filled: false,
         }
     }
 
@@ -77,6 +84,15 @@ impl Container {
         self
     }
 
+    /// Paint the whole area with the `background` style before the children
+    /// draw. An effect on the container, such as the dim behind a modal,
+    /// then reaches every cell of it, the cells that no child paints too.
+    #[must_use]
+    pub fn with_fill(mut self) -> Self {
+        self.filled = true;
+        self
+    }
+
     /// Accept focus as a node of its own.
     #[must_use]
     pub fn focusable(mut self) -> Self {
@@ -103,6 +119,13 @@ impl Widget for Container {
 
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         self.focusable
+    }
+
+    fn render(&mut self, render: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        if self.filled {
+            render.fill("background", ctx.view().outer_rect_local(), ' ')?;
+        }
+        Ok(())
     }
 
     fn name(&self) -> NodeName {

@@ -136,8 +136,10 @@ fn remeasure_when_min_width_expands_measured() -> Result<()> {
     Ok(())
 }
 
+/// A flex axis measures at the size its bounds give it, not at the space
+/// available before them.
 #[test]
-fn remeasure_when_min_width_expands_flex() -> Result<()> {
+fn a_flex_axis_measures_at_its_clamped_size() -> Result<()> {
     let mut core = Core::new();
     let (widget, calls) = TestWidget::new(|c| {
         let width = match c.width {
@@ -157,8 +159,40 @@ fn remeasure_when_min_width_expands_flex() -> Result<()> {
     )?;
     core.update_layout(Size::new(10, 10))?;
     let calls = calls.lock().unwrap();
-    assert!(calls.iter().any(|c| c.width == Constraint::Exact(8)));
     assert!(calls.iter().any(|c| c.width == Constraint::Exact(28)));
+    assert!(!calls.iter().any(|c| c.width == Constraint::Exact(8)));
+    Ok(())
+}
+
+/// A measured width beside a fixed height on a flex axis sees the fixed
+/// height, as text that scales to its height needs.
+#[test]
+fn a_measured_width_sees_a_fixed_height() -> Result<()> {
+    let mut core = Core::new();
+    let (widget, calls) = TestWidget::new(|c| {
+        let height = match c.height {
+            Constraint::Exact(n) | Constraint::AtMost(n) => n,
+            Constraint::Unbounded => 0,
+        };
+        // Twice as wide as it is tall, as a line of text that scales.
+        Measurement::Fixed(Size::new(height * 2, height))
+    });
+    let child = core.create_detached(widget)?;
+    attach_root_child(&mut core, child)?;
+    core.set_layout_of(
+        child,
+        Layout::fill()
+            .width(Sizing::Measure)
+            .min_height(6)
+            .max_height(6),
+    )?;
+    core.update_layout(Size::new(40, 20))?;
+    let calls = calls.lock().unwrap();
+    assert!(
+        calls.iter().all(|c| c.height == Constraint::Exact(6)),
+        "{calls:?}"
+    );
+    assert_eq!(core.nodes[child].rect.w, 12);
     Ok(())
 }
 

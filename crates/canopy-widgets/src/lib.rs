@@ -98,7 +98,7 @@ mod text;
 /// Shared text editing machinery for Input and Editor.
 mod text_buffer;
 
-pub use big_text::BigText;
+pub use big_text::{BigFace, BigSize, BigText, BigWeight};
 pub use border::{Border, BoxGlyphs};
 pub use button::{Button, ButtonLook};
 pub use column_chart::ColumnChart;

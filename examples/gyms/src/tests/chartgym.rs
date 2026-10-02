@@ -10,11 +10,11 @@ use canopy::{
     geom::{Point, Size},
     testing::{ManualClock, harness::Harness},
 };
-use canopy_widgets::{BigText, Root};
+use canopy_widgets::{BigFace, BigSize, BigText, Root};
 
 use super::{Mount, root_harness};
 use crate::{
-    chartgym::{ChartGym, binding_setup},
+    chartgym::{ChartGym, LADDER_SAMPLE, binding_setup},
     demo_canopy,
 };
 
@@ -116,15 +116,17 @@ fn the_widgets_page_shows_tiles_sparklines_and_meters() -> Result<()> {
 }
 
 #[test]
-fn the_text_page_draws_every_glyph() -> Result<()> {
+fn the_text_page_draws_the_ladder() -> Result<()> {
     let mut harness = chartgym(110, 44)?;
     show_page(&mut harness, 1)?;
     let text = text(&harness);
-    for line in ["ABCDEFGHIJKLM", "NOPQRSTUVWXYZ", "0123456789 +-×÷=%<>≤≥"] {
-        let rows = BigText::rows_of(line);
+    // The page opens on the bold ladder, smallest first.
+    for face in [BigFace::Compact, BigFace::Tamzen5x9, BigFace::Tamzen6x12] {
+        let sample = BigText::new(LADDER_SAMPLE).with_size(BigSize::Exact { face, scale: 1 });
+        let rows = sample.rows_in(Size::new(110, 44));
         assert!(
             rows.iter().all(|row| text.contains(row.as_str())),
-            "{line} draws in big text:\n{text}"
+            "{face:?} draws in big text:\n{text}"
         );
     }
     Ok(())

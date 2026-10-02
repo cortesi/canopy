@@ -1,12 +1,54 @@
 {
   "title": "Canopy widgets",
-  "generated": 1790902655,
+  "generated": 1790923088,
   "font_size": 14.0,
   "scale": 2.0,
   "sizes": [
     "110x36"
   ],
   "pages": [
+    {
+      "id": "biggym",
+      "title": "Big text gym",
+      "caption": "Custom text in BigText, fitted to its area, with every setting beside it.",
+      "script": "biggym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "biggym-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "biggym-area",
+      "title": "Big text in an area",
+      "caption": "A smaller area, centered, in a gradient: the fit takes a smaller face.",
+      "script": "biggym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "biggym-area-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "biggym-ladder",
+      "title": "Big text ladder",
+      "caption": "The text in every face, at the scale of the settings.",
+      "script": "biggym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "biggym-ladder-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
     {
       "id": "cedit",
       "title": "Code editor",
@@ -30,6 +72,20 @@
         {
           "size": "110x36",
           "file": "chartgym-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "big-text",
+      "title": "Big text",
+      "caption": "The faces of BigText at scale 1: Canopy's compact numerals, then the sizes of Tamzen.",
+      "script": "chartgym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "big-text-110x36.png",
           "width": 1870,
           "height": 1332
         }

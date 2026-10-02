@@ -140,6 +140,7 @@ impl Widget for FontGym {
             let centered = LayoutOptions {
                 h_align: Align::Center,
                 v_align: Align::Center,
+                ..LayoutOptions::default()
             };
             for spec in &BANNERS {
                 let font = Font::from_bytes(spec.font).expect("embedded font loads");

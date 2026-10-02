@@ -21,6 +21,8 @@ use clap::{Parser, Subcommand};
 /// Label every demo footer gives the help key.
 pub(crate) const HELP_LABEL: &str = "help";
 
+/// Big text gym example nodes.
+mod biggym;
 /// Char gym example nodes.
 mod chargym;
 /// Chart gym example nodes.
@@ -221,6 +223,8 @@ enum Demo {
         /// File to edit.
         file: PathBuf,
     },
+    /// Try custom text in every face, size, and setting of big text.
+    Biggym,
     /// Browse the character and glyph rendering gym.
     Chargym,
     /// Watch the chart primitives update live in every theme.
@@ -293,6 +297,7 @@ impl Demo {
             Self::Cedit { .. } => widget_editor::binding_setup(
                 builder.configure(widget_editor::WidgetEditor::register),
             ),
+            Self::Biggym => biggym::binding_setup(builder.configure(biggym::BigGym::register)),
             Self::Chargym => chargym::binding_setup(builder.configure(chargym::CharGym::register)),
             Self::Chartgym => {
                 chartgym::binding_setup(builder.configure(chartgym::ChartGym::register))
@@ -338,6 +343,7 @@ impl Demo {
                 ),
                 inspector,
             ),
+            Self::Biggym => install(builder, biggym::BigGym::new(), inspector),
             Self::Chargym => install(builder, chargym::CharGym::new(), inspector),
             Self::Chartgym => install(builder, chartgym::ChartGym::new(), inspector),
             Self::Cursorgym => install(builder, cursorgym::CursorGym::new(), inspector),

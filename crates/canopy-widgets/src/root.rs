@@ -300,9 +300,11 @@ impl Root {
         canopy.with_root_context(|context| {
             let app_id = context.create_detached(app)?;
             let app_node = NodeId::from(app_id);
-            // Main pane holds the app beside the inspector.
+            // Main pane holds the app beside the inspector. It paints its
+            // ground, so the dim behind a modal reaches the cells the app
+            // leaves blank.
             let main_pane: NodeId = context
-                .create_detached(Container::row().with_name("main_pane"))?
+                .create_detached(Container::row().with_name("main_pane").with_fill())?
                 .into();
             context.attach_slot(main_pane, KEY_APP, app_node)?;
             #[cfg(feature = "devtools")]

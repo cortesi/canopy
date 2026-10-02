@@ -40,6 +40,16 @@ images in [`docs/gallery`](./docs/gallery), beside a viewer.
     </tr>
     <tr>
         <td align="center" width="50%">
+            <img src="./docs/gallery/big-text-110x36.png" />
+            <p><b>Big text</b>: The faces of <code>BigText</code> at scale 1: Canopy's compact numerals, then the sizes of Tamzen.</p>
+        </td>
+        <td align="center" width="50%">
+            <img src="./docs/gallery/fontgym-110x36.png" />
+            <p><b>Font banners</b>: TrueType fonts drawn as large text for banners and headers.</p>
+        </td>
+    </tr>
+    <tr>
+        <td align="center" width="50%">
             <img src="./docs/gallery/cedit-110x36.png" />
             <p><b>Code editor</b>: A source file with syntax colours and vi keys.</p>
         </td>
@@ -50,22 +60,22 @@ images in [`docs/gallery`](./docs/gallery), beside a viewer.
     </tr>
     <tr>
         <td align="center" width="50%">
-            <img src="./docs/gallery/fontgym-110x36.png" />
-            <p><b>Font banners</b>: TrueType fonts drawn as large text for banners and headers.</p>
-        </td>
-        <td align="center" width="50%">
             <img src="./docs/gallery/imgview-110x36.png" />
             <p><b>Image viewer</b>: An image drawn in the terminal.</p>
         </td>
-    </tr>
-    <tr>
         <td align="center" width="50%">
             <img src="./docs/gallery/palette-110x36.png" />
             <p><b>Themes</b>: The palette of a theme, and the roles that its rules colour.</p>
         </td>
+    </tr>
+    <tr>
         <td align="center" width="50%">
             <img src="./docs/gallery/syntax-110x36.png" />
             <p><b>Syntax</b>: Code in the syntax colours of the theme.</p>
+        </td>
+        <td align="center" width="50%">
+            <img src="./docs/gallery/biggym-area-110x36.png" />
+            <p><b>Big text gym</b>: Custom text in <code>BigText</code>, with every face, size, and setting to try.</p>
         </td>
     </tr>
 </table>

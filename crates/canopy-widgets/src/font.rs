@@ -14,13 +14,35 @@ use fontdue::{Font as FontdueFont, FontSettings, LineMetrics, Metrics};
 /// Supersampling scale factor used to rasterize glyphs before downsampling.
 const COVERAGE_SCALE: u32 = 8;
 
-/// Alignment configuration for font layouts.
+/// What the height of a font layout fits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Fit {
+    /// The line box of the font, its ascent and descent, so lines of any
+    /// text stand alike.
+    #[default]
+    Line,
+    /// The ink of the text, from its highest mark to its lowest, so a short
+    /// word fills the height.
+    Ink,
+}
+
+/// Layout configuration for font layouts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct LayoutOptions {
     /// Horizontal alignment within the target canvas.
     pub h_align: Align,
     /// Vertical alignment within the target canvas.
     pub v_align: Align,
+    /// What the height fits.
+    pub fit: Fit,
+    /// Draw each quadrant of a cell fully or not at all, instead of blending
+    /// partial coverage into the colors of the cell. Crisp text has hard
+    /// edges and no shades between the text and the ground.
+    pub crisp: bool,
+    /// Treat a cell as twice as tall as it is wide, as terminal fonts draw
+    /// it, so glyphs keep their proportions. Otherwise a cell is square, and
+    /// a glyph draws at twice its height.
+    pub tall_cells: bool,
 }
 
 /// Rendering effects applied to font output.
@@ -241,52 +263,27 @@ impl FontRenderer {
             };
         }
 
+        let (scale_x, scale_y) = cell_scale(options);
         let lines: Vec<&str> = text.split('\n').collect();
-        let line_count = lines.len();
-        let px = self.scale_for_height(size.h, line_count, COVERAGE_SCALE);
-        let metrics = self.line_metrics(px);
-        let ascent = metrics.ascent.round() as i32;
-        let descent = metrics.descent.abs().round() as i32;
-        let baseline = ascent;
-        let mut line_advance = metrics.new_line_size.max(1.0).round() as i32;
+        let Placed {
+            ascent,
+            descent,
+            line_advance,
+            lines: layout_lines,
+            width_px: content_width_px,
+            height_px: content_height_px,
+        } = self.place(&lines, size, options, effects);
 
-        let mut layout_lines = Vec::with_capacity(lines.len());
-        let mut content_width_px = 0u32;
-        let mut max_line_height_px = 0u32;
-
-        for line in lines {
-            let layout = self.layout_line(line, px, baseline, ascent, descent);
-            content_width_px = content_width_px.max(layout.width);
-            max_line_height_px = max_line_height_px.max(layout.height);
-            layout_lines.push(layout);
-        }
-
-        if max_line_height_px > 0 {
-            line_advance = line_advance.max(max_line_height_px as i32);
-        }
-
-        let line_advance_px = max(line_advance, 0) as u32;
-        let content_height_px = line_advance_px.saturating_mul(layout_lines.len() as u32);
-        if content_width_px > 0 {
-            if effects.italic {
-                let slant = italic_slant(line_advance).max(0) as u32;
-                content_width_px = content_width_px.saturating_add(slant);
-            }
-            if effects.bold {
-                content_width_px = content_width_px.saturating_add(1);
-            }
-        }
-
-        let content_width = content_width_px.div_ceil(COVERAGE_SCALE);
-        let content_height = content_height_px.div_ceil(COVERAGE_SCALE);
+        let content_width = content_width_px.div_ceil(scale_x);
+        let content_height = content_height_px.div_ceil(scale_y);
         let offset_x = align_offset(content_width, size.w, options.h_align) as i32;
         let offset_y = align_offset(content_height, size.h, options.v_align) as i32;
 
-        let buffer_width = size.w.saturating_mul(COVERAGE_SCALE);
-        let buffer_height = size.h.saturating_mul(COVERAGE_SCALE);
+        let buffer_width = size.w.saturating_mul(scale_x);
+        let buffer_height = size.h.saturating_mul(scale_y);
         let mut buffer = vec![0u8; (buffer_width * buffer_height) as usize];
-        let offset_x_px = offset_x * COVERAGE_SCALE as i32;
-        let offset_y_px = offset_y * COVERAGE_SCALE as i32;
+        let offset_x_px = offset_x * scale_x as i32;
+        let offset_y_px = offset_y * scale_y as i32;
 
         for (line_idx, line) in layout_lines.iter().enumerate() {
             let line_y = offset_y_px + line_idx as i32 * line_advance;
@@ -348,6 +345,7 @@ impl FontRenderer {
                 ascent,
                 descent,
                 effects,
+                thickness: max((scale_y / 4) as i32, 1),
             };
             draw_effect_lines(&mut line_ctx);
         }
@@ -357,22 +355,23 @@ impl FontRenderer {
         }
 
         let mut cells = Vec::with_capacity(size.h as usize);
-        let quad = (COVERAGE_SCALE / 2).max(1);
-        let quad_area = quad.saturating_mul(quad);
+        let quad_x = (scale_x / 2).max(1);
+        let quad_y = (scale_y / 2).max(1);
+        let quad_area = quad_x.saturating_mul(quad_y);
         for cell_y in 0..size.h {
             let mut row_cells = Vec::with_capacity(size.w as usize);
-            let start_y = cell_y * COVERAGE_SCALE;
+            let start_y = cell_y * scale_y;
             for cell_x in 0..size.w {
-                let start_x = cell_x * COVERAGE_SCALE;
+                let start_x = cell_x * scale_x;
                 let mut sums = [0u32; 4];
-                for sub_y in 0..COVERAGE_SCALE {
+                for sub_y in 0..scale_y {
                     let y = start_y + sub_y;
                     let row_start = y as usize * buffer_width as usize;
-                    let y_band = if sub_y < quad { 0 } else { 2 };
-                    for sub_x in 0..COVERAGE_SCALE {
+                    let y_band = if sub_y < quad_y { 0 } else { 2 };
+                    for sub_x in 0..scale_x {
                         let x = start_x + sub_x;
                         let idx = row_start + x as usize;
-                        let x_band = if sub_x < quad { 0 } else { 1 };
+                        let x_band = if sub_x < quad_x { 0 } else { 1 };
                         let quadrant = (y_band + x_band) as usize;
                         sums[quadrant] += buffer[idx] as u32;
                     }
@@ -383,13 +382,27 @@ impl FontRenderer {
                     (sums[2] / quad_area) as u8,
                     (sums[3] / quad_area) as u8,
                 ];
-                let choice = self.ramp.sample(coverage);
-                let (fg_coverage, bg_coverage) = coverage_weights(coverage, choice.mask);
-                row_cells.push(FontCell {
-                    ch: choice.ch,
-                    fg_coverage,
-                    bg_coverage,
-                });
+                let cell = if options.crisp {
+                    // A quadrant at least half covered draws whole.
+                    let choice = self
+                        .ramp
+                        .sample(coverage.map(|value| if value >= 128 { 255 } else { 0 }));
+                    let fg_coverage = if choice.ch == ' ' { 0 } else { 255 };
+                    FontCell {
+                        ch: choice.ch,
+                        fg_coverage,
+                        bg_coverage: 0,
+                    }
+                } else {
+                    let choice = self.ramp.sample(coverage);
+                    let (fg_coverage, bg_coverage) = coverage_weights(coverage, choice.mask);
+                    FontCell {
+                        ch: choice.ch,
+                        fg_coverage,
+                        bg_coverage,
+                    }
+                };
+                row_cells.push(cell);
             }
             cells.push(row_cells);
         }
@@ -398,6 +411,111 @@ impl FontRenderer {
             size,
             content_size: Size::new(content_width, content_height),
             cells,
+        }
+    }
+
+    /// Return the size of `text` laid out in `size`, in cells, without
+    /// drawing it.
+    pub(crate) fn content_size(
+        &mut self,
+        text: &str,
+        size: Size,
+        options: LayoutOptions,
+        effects: FontEffects,
+    ) -> Size {
+        let (scale_x, scale_y) = cell_scale(options);
+        let lines: Vec<&str> = text.split('\n').collect();
+        let placed = self.place(&lines, size, options, effects);
+        Size::new(
+            placed.width_px.div_ceil(scale_x),
+            placed.height_px.div_ceil(scale_y),
+        )
+    }
+
+    /// Place `lines` at the scale that fits the height of `size`, shrunk
+    /// until the text fits its width too, so wide text shrinks rather than
+    /// clips.
+    fn place(
+        &mut self,
+        lines: &[&str],
+        size: Size,
+        options: LayoutOptions,
+        effects: FontEffects,
+    ) -> Placed {
+        /// Most shrinks before the text settles; each one aims at the room
+        /// left, so rounding is all that remains after the first.
+        const SHRINKS: usize = 4;
+        let (scale_x, scale_y) = cell_scale(options);
+        let mut px = match options.fit {
+            Fit::Line => self.scale_for_height(size.h, lines.len(), scale_y),
+            Fit::Ink => self.scale_for_ink(lines, size.h, scale_y),
+        };
+        let room = size.w.saturating_mul(scale_x);
+        let mut placed = self.place_at(lines, px, options, effects);
+        for _ in 0..SHRINKS {
+            if placed.width_px <= room || placed.width_px == 0 {
+                break;
+            }
+            px = (px * room as f32 / placed.width_px as f32 * 0.99).max(1.0);
+            placed = self.place_at(lines, px, options, effects);
+        }
+        placed
+    }
+
+    /// Place `lines` at a scale of `px`.
+    fn place_at(
+        &mut self,
+        lines: &[&str],
+        px: f32,
+        options: LayoutOptions,
+        effects: FontEffects,
+    ) -> Placed {
+        let metrics = self.line_metrics(px);
+        let ascent = metrics.ascent.round() as i32;
+        let descent = metrics.descent.abs().round() as i32;
+        let baseline = ascent;
+        // A line that fits its ink is as tall as its ink, so the line box
+        // of the font adds nothing to it.
+        let (line_ascent, line_descent, mut line_advance) = match options.fit {
+            Fit::Line => (
+                ascent,
+                descent,
+                metrics.new_line_size.max(1.0).round() as i32,
+            ),
+            Fit::Ink => (0, 0, 0),
+        };
+
+        let mut layout_lines = Vec::with_capacity(lines.len());
+        let mut width_px = 0u32;
+        let mut max_line_height_px = 0u32;
+        for line in lines {
+            let layout = self.layout_line(line, px, baseline, line_ascent, line_descent);
+            width_px = width_px.max(layout.width);
+            max_line_height_px = max_line_height_px.max(layout.height);
+            layout_lines.push(layout);
+        }
+        if max_line_height_px > 0 {
+            line_advance = line_advance.max(max_line_height_px as i32);
+        }
+
+        let line_advance_px = max(line_advance, 0) as u32;
+        let height_px = line_advance_px.saturating_mul(layout_lines.len() as u32);
+        if width_px > 0 {
+            if effects.italic {
+                let slant = italic_slant(line_advance).max(0) as u32;
+                width_px = width_px.saturating_add(slant);
+            }
+            if effects.bold {
+                width_px = width_px.saturating_add(1);
+            }
+        }
+        Placed {
+            ascent,
+            descent,
+            line_advance,
+            lines: layout_lines,
+            width_px,
+            height_px,
         }
     }
 
@@ -499,6 +617,35 @@ impl FontRenderer {
         px.max(1.0)
     }
 
+    /// Compute a scale in pixels that fits the ink of `lines` to the target
+    /// height, each line as tall as the tallest ink of any line. Text with
+    /// no ink fits the line box instead.
+    fn scale_for_ink(&self, lines: &[&str], height: u32, sample_scale: u32) -> f32 {
+        /// Scale at which the ink is measured. Ink scales with the font, so
+        /// any scale gives the same proportion.
+        const PROBE: f32 = 64.0;
+        let ink = lines
+            .iter()
+            .map(|line| {
+                let (top, bottom) = line
+                    .chars()
+                    .map(|ch| self.font.font.metrics(ch, PROBE))
+                    .filter(|metrics| metrics.height > 0)
+                    .fold((f32::MIN, f32::MAX), |(top, bottom), metrics| {
+                        let low = metrics.ymin as f32;
+                        (top.max(low + metrics.height as f32), bottom.min(low))
+                    });
+                (top - bottom).max(0.0)
+            })
+            .fold(0.0, f32::max);
+        if ink <= 0.0 {
+            return self.scale_for_height(height, lines.len(), sample_scale);
+        }
+        let target_height = max(height, 1) as f32 * sample_scale as f32;
+        let px = target_height / (ink / PROBE * max(lines.len(), 1) as f32);
+        px.max(1.0)
+    }
+
     /// Resolve line metrics at the requested scale.
     fn line_metrics(&self, px: f32) -> LineMetrics {
         self.font
@@ -517,6 +664,32 @@ impl FontRenderer {
             new_line_size: metrics.height as f32,
         }
     }
+}
+
+/// Return how many pixels wide and tall each cell rasterizes.
+fn cell_scale(options: LayoutOptions) -> (u32, u32) {
+    let scale_y = if options.tall_cells {
+        COVERAGE_SCALE * 2
+    } else {
+        COVERAGE_SCALE
+    };
+    (COVERAGE_SCALE, scale_y)
+}
+
+/// Lines of text placed at one scale, before they are drawn.
+struct Placed {
+    /// Ascent of the font in pixels.
+    ascent: i32,
+    /// Descent of the font in pixels.
+    descent: i32,
+    /// Advance between lines in pixels.
+    line_advance: i32,
+    /// Each line, placed.
+    lines: Vec<LineLayout>,
+    /// Width of the text in pixels, effects included.
+    width_px: u32,
+    /// Height of the text in pixels.
+    height_px: u32,
 }
 
 /// Compute an offset for aligning content inside a span.
@@ -686,6 +859,8 @@ struct EffectLineContext<'a> {
     descent: i32,
     /// Active font effects.
     effects: FontEffects,
+    /// Thickness of each line in pixels.
+    thickness: i32,
 }
 
 /// Draw underline, overline, and strike-through lines into the buffer.
@@ -694,7 +869,7 @@ fn draw_effect_lines(ctx: &mut EffectLineContext<'_>) {
         return;
     }
     let line_height = ctx.line_advance.max(1);
-    let thickness = max((COVERAGE_SCALE / 4) as i32, 1);
+    let thickness = ctx.thickness;
     let slant = if ctx.effects.italic {
         italic_slant(line_height)
     } else {

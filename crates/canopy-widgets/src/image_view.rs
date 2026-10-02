@@ -8,7 +8,7 @@ use canopy::{
     geom::{Point, Rect, Size},
     layout::{CanvasContext, Layout, ScrollDirection, ScrollOp},
     render::Render,
-    style::{AttrSet, Color, Style},
+    style::{AttrSet, Color, Mix, ResolvedStyle, Style},
 };
 use image::{DynamicImage, ImageDecoder, RgbaImage};
 
@@ -44,12 +44,14 @@ const PREVIEW_MAX_EDGE: u32 = 1024;
 struct IntegralImage {
     /// Row stride in the summed-area tables.
     stride: usize,
-    /// Summed red channel values (premultiplied by alpha).
+    /// Summed red channel values, each multiplied by its alpha.
     red: Vec<u64>,
-    /// Summed green channel values (premultiplied by alpha).
+    /// Summed green channel values, each multiplied by its alpha.
     green: Vec<u64>,
-    /// Summed blue channel values (premultiplied by alpha).
+    /// Summed blue channel values, each multiplied by its alpha.
     blue: Vec<u64>,
+    /// Summed alpha values.
+    alpha: Vec<u64>,
 }
 
 impl IntegralImage {
@@ -62,23 +64,27 @@ impl IntegralImage {
         let mut red = vec![0u64; size];
         let mut green = vec![0u64; size];
         let mut blue = vec![0u64; size];
+        let mut alpha = vec![0u64; size];
 
         for y in 0..height {
             let mut row_red = 0u64;
             let mut row_green = 0u64;
             let mut row_blue = 0u64;
+            let mut row_alpha = 0u64;
             for x in 0..width {
                 let pixel = image.get_pixel(x, y);
-                let alpha = pixel[3] as u64;
-                row_red += (pixel[0] as u64 * alpha) / 255;
-                row_green += (pixel[1] as u64 * alpha) / 255;
-                row_blue += (pixel[2] as u64 * alpha) / 255;
+                let opacity = pixel[3] as u64;
+                row_red += pixel[0] as u64 * opacity;
+                row_green += pixel[1] as u64 * opacity;
+                row_blue += pixel[2] as u64 * opacity;
+                row_alpha += opacity;
 
                 let idx = (y as usize + 1) * stride + (x as usize + 1);
                 let above = idx - stride;
                 red[idx] = red[above] + row_red;
                 green[idx] = green[above] + row_green;
                 blue[idx] = blue[above] + row_blue;
+                alpha[idx] = alpha[above] + row_alpha;
             }
         }
 
@@ -87,6 +93,7 @@ impl IntegralImage {
             red,
             green,
             blue,
+            alpha,
         }
     }
 
@@ -104,14 +111,30 @@ impl IntegralImage {
         a + b - c - d
     }
 
-    /// Sum all RGB channels over a region.
-    fn sum_rgb(&self, left: u32, top: u32, right: u32, bottom: u32) -> (u64, u64, u64) {
-        (
-            self.sum_channel(&self.red, left, top, right, bottom),
-            self.sum_channel(&self.green, left, top, right, bottom),
-            self.sum_channel(&self.blue, left, top, right, bottom),
-        )
+    /// Sum the RGB channels, each multiplied by its alpha, and the alpha over
+    /// a region.
+    fn sum_rgba(&self, left: u32, top: u32, right: u32, bottom: u32) -> [u64; 4] {
+        [&self.red, &self.green, &self.blue, &self.alpha]
+            .map(|channel| self.sum_channel(channel, left, top, right, bottom))
     }
+}
+
+/// The average of a region of an image.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Sample {
+    /// Color of the covered part of the region, not premultiplied.
+    color: Color,
+    /// Share of the region the image covers: 0.0 for transparent, and 1.0
+    /// for opaque.
+    alpha: f32,
+}
+
+impl Sample {
+    /// A region the image does not cover.
+    const CLEAR: Self = Self {
+        color: Color::Black,
+        alpha: 0.0,
+    };
 }
 
 /// Decode an image file into RGBA pixels.
@@ -153,27 +176,34 @@ fn read_preview(path: &Path, bounds: Size) -> Result<RgbaImage> {
     Ok(thumbnail(image, bounds))
 }
 
-/// Downsample colors already composited onto the viewer's black background.
+/// Downsample with premultiplied colors, so a transparent pixel's color does
+/// not bleed into its neighbours, and keep the alpha.
 fn thumbnail(image: DynamicImage, bounds: Size) -> RgbaImage {
     if image.width() <= bounds.w && image.height() <= bounds.h {
         return image.into_rgba8();
     }
-    let image = if image.has_alpha() {
-        let mut rgba = image.into_rgba8();
-        for pixel in rgba.pixels_mut() {
-            let alpha = u16::from(pixel[3]);
-            if alpha != 255 {
-                for channel in &mut pixel.0[..3] {
-                    *channel = (u16::from(*channel) * alpha / 255) as u8;
-                }
-                pixel[3] = 255;
+    if !image.has_alpha() {
+        return image.thumbnail(bounds.w, bounds.h).into_rgba8();
+    }
+    let mut rgba = image.into_rgba8();
+    for pixel in rgba.pixels_mut() {
+        let alpha = u16::from(pixel[3]);
+        for channel in &mut pixel.0[..3] {
+            *channel = (u16::from(*channel) * alpha / 255) as u8;
+        }
+    }
+    let mut reduced = DynamicImage::ImageRgba8(rgba)
+        .thumbnail(bounds.w, bounds.h)
+        .into_rgba8();
+    for pixel in reduced.pixels_mut() {
+        let alpha = u16::from(pixel[3]);
+        for channel in &mut pixel.0[..3] {
+            if let Some(value) = (u16::from(*channel) * 255).checked_div(alpha) {
+                *channel = value.min(255) as u8;
             }
         }
-        DynamicImage::ImageRgba8(rgba)
-    } else {
-        image
-    };
-    image.thumbnail(bounds.w, bounds.h).into_rgba8()
+    }
+    reduced
 }
 
 /// Widget that renders an image into terminal cells.
@@ -188,6 +218,8 @@ pub struct ImageView {
     zoom: f32,
     /// Whether the view should auto-fit the image to the terminal.
     auto_fit: bool,
+    /// Whether the view takes focus, which its zoom and pan keys need.
+    focusable: bool,
 }
 
 #[derive_commands]
@@ -292,8 +324,9 @@ impl ImageView {
         (left, top, right, bottom)
     }
 
-    /// Sample a color from the image for a display subpixel.
-    fn sample_color(&self, zoom: f32, subpixel_column: f32, subpixel_row: f32) -> Color {
+    /// Sample the image for a display subpixel. A subpixel outside the
+    /// image is clear.
+    fn sample_color(&self, zoom: f32, subpixel_column: f32, subpixel_row: f32) -> Sample {
         let (left, top, right, bottom) = self.subpixel_bounds(zoom, subpixel_column, subpixel_row);
         let center_column = (left + right) * 0.5;
         let center_row = (top + bottom) * 0.5;
@@ -302,18 +335,10 @@ impl ImageView {
             || center_column >= self.image_width_f32()
             || center_row >= self.image_height_f32()
         {
-            return Color::Black;
+            return Sample::CLEAR;
         }
-
-        let Some((red, green, blue)) = self.sample_region(left, top, right, bottom) else {
-            return Color::Black;
-        };
-
-        Color::Rgb {
-            r: red,
-            g: green,
-            b: blue,
-        }
+        self.sample_region(left, top, right, bottom)
+            .unwrap_or(Sample::CLEAR)
     }
 
     /// Compute the display subpixel offset to center the image in the view.
@@ -329,8 +354,8 @@ impl ImageView {
         (offset_x, offset_y)
     }
 
-    /// Sample a rectangular region in image space and return the average color.
-    fn sample_region(&self, left: f32, top: f32, right: f32, bottom: f32) -> Option<(u8, u8, u8)> {
+    /// Sample a rectangular region in image space and return its average.
+    fn sample_region(&self, left: f32, top: f32, right: f32, bottom: f32) -> Option<Sample> {
         if self.image_width == 0 || self.image_height == 0 {
             return None;
         }
@@ -350,18 +375,28 @@ impl ImageView {
         }
 
         let area = (right_clamped - left_clamped) as u64 * (bottom_clamped - top_clamped) as u64;
-        let (red_total, green_total, blue_total) =
+        let [red, green, blue, alpha] =
             self.integral
-                .sum_rgb(left_clamped, top_clamped, right_clamped, bottom_clamped);
-
-        let red = (red_total / area) as u8;
-        let green = (green_total / area) as u8;
-        let blue = (blue_total / area) as u8;
-
-        Some((red, green, blue))
+                .sum_rgba(left_clamped, top_clamped, right_clamped, bottom_clamped);
+        if alpha == 0 {
+            return Some(Sample::CLEAR);
+        }
+        // Each color sum weighs its pixels by their alpha, so dividing by
+        // the alpha sum gives the color of the covered part alone.
+        let channel = |total: u64| (total / alpha).min(255) as u8;
+        Some(Sample {
+            color: Color::Rgb {
+                r: channel(red),
+                g: channel(green),
+                b: channel(blue),
+            },
+            alpha: alpha as f32 / (area * 255) as f32,
+        })
     }
 
-    /// Render the image into the provided view rectangle.
+    /// Render the image into the provided view rectangle. Each half of a
+    /// cell lays its sample over the ground of the `background` style, so a
+    /// transparent image shows the ground of whatever holds it.
     fn render_cells(
         &self,
         render: &mut Render,
@@ -372,6 +407,7 @@ impl ImageView {
     ) -> Result<()> {
         let (offset_x, offset_y) = offset;
         let bounds = Rect::new(origin.x, origin.y, view.w, view.h);
+        let ground = render.resolve_style("background");
 
         for row_index in 0..view.h {
             let top_subpixel_row = view.tl.y.saturating_add(row_index).saturating_mul(2);
@@ -381,18 +417,35 @@ impl ImageView {
 
             for column_index in 0..view.w {
                 let column = (view.tl.x + column_index) as f32 - offset_x;
-                let top_color = self.sample_color(zoom, column, top_row);
-                let bottom_color = self.sample_color(zoom, column, bottom_row);
-                let style = render.apply_effects(Style {
-                    fg: top_color.into(),
-                    bg: bottom_color.into(),
-                    attrs: AttrSet::default(),
-                });
+                let top = self.sample_color(zoom, column, top_row);
+                let bottom = self.sample_color(zoom, column, bottom_row);
                 let point = Point {
                     x: origin.x + column_index,
                     y: origin.y + row_index,
                 };
-                render.put_cell(style.resolve_at(bounds, point), point, HALF_BLOCK)?;
+                let shown = render
+                    .apply_effects(Style {
+                        fg: top.color.into(),
+                        bg: bottom.color.into(),
+                        attrs: AttrSet::default(),
+                    })
+                    .resolve_at(bounds, point);
+                let under = ground.resolve_at(bounds, point).bg;
+                let over = |color: Color, alpha: f32| {
+                    if alpha >= 1.0 {
+                        color
+                    } else if alpha <= 0.0 {
+                        under
+                    } else {
+                        under.mix(color, alpha, Mix::Rgb)
+                    }
+                };
+                let style = ResolvedStyle {
+                    fg: over(shown.fg, top.alpha),
+                    bg: over(shown.bg, bottom.alpha),
+                    attrs: shown.attrs,
+                };
+                render.put_cell(style, point, HALF_BLOCK)?;
             }
         }
 
@@ -410,12 +463,34 @@ impl ImageView {
             integral,
             zoom: 1.0,
             auto_fit: true,
+            focusable: true,
         }
+    }
+
+    /// Set whether the view takes focus, which its zoom and pan keys need.
+    /// A decorative image, such as a logo, stays out of keyboard traversal.
+    #[must_use]
+    pub fn with_focus(mut self, focusable: bool) -> Self {
+        self.focusable = focusable;
+        self
     }
 
     /// Create a new image view widget from a file path.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {
         Ok(Self::new(&read_rgba(path.as_ref())?))
+    }
+
+    /// Return the size of the image in pixels.
+    pub fn image_size(&self) -> Size {
+        Size::new(self.image_width, self.image_height)
+    }
+
+    /// Create a new image view widget from encoded image bytes, such as a
+    /// PNG that an application embeds. The format comes from the bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let image = image::load_from_memory(bytes)
+            .map_err(|err| Error::Invalid(format!("image error: {err}")))?;
+        Ok(Self::new(&image.into_rgba8()))
     }
 
     /// Create an image view with nothing to show yet.
@@ -531,9 +606,10 @@ impl Widget for ImageView {
         self.render_cells(render, view_rect, view.content_origin(), offset, self.zoom)
     }
 
-    /// Accept focus so key bindings apply to this widget.
+    /// Accept focus so key bindings apply to this widget, unless the view
+    /// is decorative.
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
-        true
+        self.focusable
     }
 }
 
@@ -547,7 +623,7 @@ impl Register for ImageView {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, sync::Arc};
+    use std::{fs, io::Cursor, sync::Arc};
 
     use canopy::{
         CanopyBuilder, ContextExt,
@@ -588,7 +664,9 @@ mod tests {
                 "{extension}"
             );
             assert_eq!(view.integral.red.len(), 65 * 33);
-            let (r, g, b) = view.sample_region(0.0, 0.0, 64.0, 32.0).unwrap();
+            let sample = view.sample_region(0.0, 0.0, 64.0, 32.0).unwrap();
+            assert!((sample.alpha - 1.0).abs() < 0.01, "{extension}: opaque");
+            let (r, g, b) = sample.color.rgb();
             assert!(
                 r.abs_diff(80) <= 2 && g.abs_diff(160) <= 2 && b.abs_diff(40) <= 2,
                 "{extension}: {r}, {g}, {b}"
@@ -602,7 +680,7 @@ mod tests {
     }
 
     #[test]
-    fn thumbnails_preserve_small_images_and_composite_before_averaging() {
+    fn thumbnails_preserve_small_images_and_keep_alpha_while_averaging() {
         let source = RgbaImage::from_fn(4, 2, |x, _| match x {
             0 => image::Rgba([255, 0, 0, 255]),
             1 => image::Rgba([0, 0, 255, 0]),
@@ -628,9 +706,11 @@ mod tests {
             let actual = preview
                 .sample_region(x as f32, 0.0, (x + 1) as f32, 1.0)
                 .unwrap();
-            assert!(actual.0.abs_diff(expected.0) <= 1);
-            assert!(actual.1.abs_diff(expected.1) <= 1);
-            assert!(actual.2.abs_diff(expected.2) <= 1);
+            let (actual_rgb, expected_rgb) = (actual.color.rgb(), expected.color.rgb());
+            assert!(actual_rgb.0.abs_diff(expected_rgb.0) <= 2);
+            assert!(actual_rgb.1.abs_diff(expected_rgb.1) <= 2);
+            assert!(actual_rgb.2.abs_diff(expected_rgb.2) <= 2);
+            assert!((actual.alpha - expected.alpha).abs() < 0.01);
         }
     }
 
@@ -662,7 +742,7 @@ mod tests {
             assert!(view.set_preview_path(path, bounds).is_err());
             assert_eq!((view.image_width, view.image_height), (3, 2));
             assert_eq!(
-                view.sample_color(1.0, 0.0, 0.0),
+                view.sample_color(1.0, 0.0, 0.0).color,
                 Color::Rgb { r: 255, g: 0, b: 0 }
             );
             assert!(!view.auto_fit);
@@ -712,6 +792,12 @@ mod tests {
             }
         });
         let mut canopy = CanopyBuilder::new().build()?;
+        // A black ground leaves the half-covered pixel at half its color.
+        canopy
+            .style_mut()
+            .rules()
+            .bg("background", Color::Black)
+            .apply();
         canopy.with_root_context(|ctx| {
             ctx.set_layout_override(ctx.node_id(), Layout::fill().into())?;
             let _ = ctx.add_child(ctx.node_id(), ImageView::new(&image))?;
@@ -810,7 +896,13 @@ mod tests {
         for x in 0..2 {
             let cell = buf.get(Point { x, y: 0 }).expect("pixel cell");
             assert_eq!(cell.ch, HALF_BLOCK);
-            assert_eq!(cell.style.fg, Color::Blue);
+            // The half-covered pixel lays the effect's color over the ground.
+            let fg = if x == 0 {
+                Color::Blue
+            } else {
+                Color::Black.mix(Color::Blue, 128.0 / 255.0, Mix::Rgb)
+            };
+            assert_eq!(cell.style.fg, fg);
             assert_eq!(
                 cell.style.bg,
                 Color::Rgb {
@@ -851,13 +943,71 @@ mod tests {
     }
 
     #[test]
-    fn sample_color_returns_black_outside_image() {
+    fn an_image_decodes_from_bytes_with_its_alpha() -> Result<()> {
+        let source = RgbaImage::from_fn(2, 1, |x, _| Rgba([10, 20, 30, [0, 255][x as usize]]));
+        let mut png = Vec::new();
+        DynamicImage::ImageRgba8(source)
+            .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        let view = ImageView::from_bytes(&png)?;
+        assert_eq!(view.image_size(), Size::new(2, 1));
+        assert_eq!(view.sample_color(1.0, 0.0, 0.0), Sample::CLEAR);
+        assert_eq!(view.sample_color(1.0, 1.0, 0.0).alpha, 1.0);
+        assert!(ImageView::from_bytes(b"not an image").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn a_sample_outside_the_image_is_clear() {
         let image = RgbaImage::from_pixel(4, 4, Rgba([255, 0, 0, 255]));
         let view = ImageView::new(&image);
-        assert_eq!(view.sample_color(1.0, -1.0, 0.0), Color::Black);
+        assert_eq!(view.sample_color(1.0, -1.0, 0.0), Sample::CLEAR);
         assert_eq!(
             view.sample_color(1.0, 0.0, 0.0),
-            Color::Rgb { r: 255, g: 0, b: 0 }
+            Sample {
+                color: Color::Rgb { r: 255, g: 0, b: 0 },
+                alpha: 1.0,
+            }
         );
+    }
+
+    #[test]
+    fn transparent_pixels_show_the_ground_of_the_view() -> Result<()> {
+        // A clear pixel, a half-covered one, and an opaque one.
+        let image =
+            RgbaImage::from_fn(3, 2, |x, _| Rgba([200, 100, 40, [0, 128, 255][x as usize]]));
+        let ground = Color::Rgb { r: 0, g: 0, b: 200 };
+        let mut canopy = CanopyBuilder::new().build()?;
+        canopy.style_mut().rules().bg("background", ground).apply();
+        canopy.with_root_context(|ctx| {
+            ctx.set_layout_override(ctx.node_id(), Layout::fill().into())?;
+            let _ = ctx.add_child(ctx.node_id(), ImageView::new(&image))?;
+            Ok(())
+        })?;
+        let mut harness = Harness::from_canopy(canopy, Size::new(3, 1))?;
+        harness.render()?;
+        let cell = |x| harness.buf().get(Point { x, y: 0 }).expect("cell").style;
+        assert_eq!((cell(0).fg, cell(0).bg), (ground, ground));
+        assert_eq!(
+            cell(1).fg,
+            ground.mix(
+                Color::Rgb {
+                    r: 200,
+                    g: 100,
+                    b: 40
+                },
+                128.0 / 255.0,
+                Mix::Rgb
+            )
+        );
+        assert_eq!(
+            cell(2).fg,
+            Color::Rgb {
+                r: 200,
+                g: 100,
+                b: 40
+            }
+        );
+        Ok(())
     }
 }

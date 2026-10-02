@@ -1,6 +1,7 @@
 #![deny(unsafe_code)]
 //! Developer workflow tasks for the canopy workspace.
 
+mod big_text;
 mod cargo_env;
 mod luau_grammar;
 
@@ -39,6 +40,14 @@ enum Task {
         /// A checkout of JohnnyMorganz/Luau.tmLanguage.
         checkout: PathBuf,
     },
+    /// Convert the bitmap faces of `BigText` from `assets/fonts` into the
+    /// module that canopy-widgets compiles.
+    BigText {
+        /// Fail when the module differs from what the sources give, and
+        /// write nothing.
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 /// Run the `cargo xtask` entry point.
@@ -50,6 +59,7 @@ fn main() -> ExitCode {
         Task::Smoke => run_smoke(&root),
         Task::Gallery => run_gallery(&root),
         Task::LuauGrammar { checkout } => luau_grammar::run(&root, &checkout),
+        Task::BigText { check } => big_text::run(&root, check),
     })
 }
 
@@ -89,9 +99,10 @@ fn run_smoke(workspace_root: &Path) -> bool {
 /// The gallery of the README: each gallery script of `examples/gyms/gallery`,
 /// and the arguments of the gym that it runs against. Paths are relative to
 /// `examples/gyms`, where the gyms run.
-const GALLERY: [(&str, &[&str]); 6] = [
+const GALLERY: [(&str, &[&str]); 7] = [
     ("stylegym.luau", &["stylegym"]),
     ("chartgym.luau", &["chartgym"]),
+    ("biggym.luau", &["biggym"]),
     (
         "cedit.luau",
         &["cedit", "../../crates/canopy-widgets/src/spinner.rs"],

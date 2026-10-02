@@ -38,10 +38,11 @@ for _, part in { "tokens", "cache hit", "output", "context", "sparklines", "mete
     canopy.assert(shows(widgets, part), "the widgets page shows " .. part)
 end
 
--- The text page draws the alphabet in big text: this is the top row of A.
+-- The text page opens on the ladder of big text: this is the top row of
+-- "12" in the compact face.
 canopy.send_key("Tab")
 canopy.prepare()
-canopy.assert(shows(canopy.screen_text(), "▄▀▄ █▀▄ ▄▀▀"), "the text page draws big letters")
+canopy.assert(shows(canopy.screen_text(), "▄█  ▀▀█"), "the text page draws big digits")
 
 canopy.send_key("Tab")
 canopy.prepare()
