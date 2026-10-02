@@ -62,9 +62,9 @@ enum TextMove {
     Left,
     /// Move right.
     Right,
-    /// Move up.
+    /// Move up a display row.
     Up,
-    /// Move down.
+    /// Move down a display row.
     Down,
     /// Move to the line start.
     Home,
@@ -84,6 +84,9 @@ pub struct Editor {
     pub(super) cursor_view_point: Option<Point>,
     /// Preferred display column for vertical movement.
     pub(super) preferred_column: usize,
+    /// Column in the display row that consecutive row moves keep, from the
+    /// first of them until the cursor moves another way.
+    pub(super) row_goal: Option<usize>,
     /// Vi mode state when enabled.
     pub(super) vi: ViState,
     /// Yank register for vi operations.
@@ -218,6 +221,7 @@ impl Editor {
             layout: LayoutCache::new(),
             cursor_view_point: None,
             preferred_column,
+            row_goal: None,
             vi: ViState::new(),
             yank: String::new(),
             yank_linewise: false,
@@ -422,10 +426,12 @@ impl Editor {
         self.preferred_column = self
             .buffer
             .column_for_position(self.buffer.cursor(), self.config.tab_stop);
+        self.row_goal = None;
     }
 
     /// Move vertically by logical lines, preserving preferred column.
     pub(super) fn move_vertical(&mut self, delta: isize) {
+        self.row_goal = None;
         let cursor = self.buffer.cursor();
         let line_count = self.buffer.line_count().max(1);
         let mut line = cursor.line as isize + delta;
@@ -438,34 +444,38 @@ impl Editor {
         self.buffer.set_cursor(target);
     }
 
-    /// Move vertically by display lines using the layout cache.
-    pub(super) fn move_display_line(&mut self, delta: isize, ctx: &dyn Context) {
-        let view = ctx.view();
-        let view_rect = view.view_rect();
-        let gutter_width = self.gutter_width();
-        self.update_layout(view_rect, gutter_width);
-        let point = self.layout.point_for_position(
-            &self.buffer,
-            self.buffer.cursor(),
-            self.config.tab_stop,
-        );
-        let mut y = point.y as isize + delta;
-        if y < 0 {
-            y = 0;
-        }
-        let max_y = self.layout.total_lines().saturating_sub(1) as isize;
-        if y > max_y {
-            y = max_y;
-        }
-        let new_point = Point {
-            x: point.x,
-            y: y as u32,
-        };
-        let pos = self
+    /// Move the cursor by display rows. Consecutive row moves keep the
+    /// column of the first one, also through rows too short for it.
+    pub(super) fn move_row(&mut self, delta: isize, ctx: &dyn Context) {
+        let view_rect = ctx.view().view_rect();
+        self.update_layout(view_rect, self.gutter_width());
+        let tab_stop = self.config.tab_stop;
+        let point = self
             .layout
-            .position_for_point(&self.buffer, new_point, self.config.tab_stop);
-        self.buffer.set_cursor(pos);
-        self.update_preferred_column();
+            .point_for_position(&self.buffer, self.buffer.cursor(), tab_stop);
+        let goal = *self.row_goal.get_or_insert(point.x as usize);
+        let last = self.layout.total_lines().saturating_sub(1);
+        let row = (point.y as usize).saturating_add_signed(delta).min(last);
+        let target = self
+            .layout
+            .position_in_row(&self.buffer, row, goal, tab_stop);
+        self.buffer.set_cursor(target);
+        self.preferred_column = self.buffer.column_for_position(target, tab_stop);
+    }
+
+    /// Return whether a history takes a row move by `delta` for a content
+    /// `width`: with history arrows, Up on the top row and Down on the
+    /// bottom row leave the text.
+    fn history_takes_row_move(&self, delta: isize, width: u32) -> bool {
+        if !self.config.history_arrows {
+            return false;
+        }
+        let row = self.cursor_point(width).y as usize;
+        if delta < 0 {
+            return row == 0;
+        }
+        let wrap_width = width.saturating_sub(self.gutter_width()).max(1) as usize;
+        row.saturating_add(1) >= self.display_metrics(wrap_width).0
     }
 
     /// Insert text at the cursor, respecting read-only state. Returns the
@@ -554,8 +564,9 @@ impl Editor {
         )
     }
 
-    /// Classify one text-entry key without running its edit.
-    fn text_command(&self, key: key::Key) -> Option<TextCommand> {
+    /// Classify one text-entry key for a content `width` without running its
+    /// edit.
+    fn text_command(&self, key: key::Key, width: u32) -> Option<TextCommand> {
         if self.config.interaction.read_only() && Self::is_text_edit_key(key) {
             return None;
         }
@@ -567,8 +578,12 @@ impl Editor {
             key::KeyCode::Delete => TextCommand::Delete,
             key::KeyCode::Left => TextCommand::Move(TextMove::Left),
             key::KeyCode::Right => TextCommand::Move(TextMove::Right),
-            key::KeyCode::Up => TextCommand::Move(TextMove::Up),
-            key::KeyCode::Down => TextCommand::Move(TextMove::Down),
+            key::KeyCode::Up if !self.history_takes_row_move(-1, width) => {
+                TextCommand::Move(TextMove::Up)
+            }
+            key::KeyCode::Down if !self.history_takes_row_move(1, width) => {
+                TextCommand::Move(TextMove::Down)
+            }
             key::KeyCode::Home => TextCommand::Move(TextMove::Home),
             key::KeyCode::End => TextCommand::Move(TextMove::End),
             key::KeyCode::Enter if self.enter_adds_line(key) => TextCommand::Newline,
@@ -588,7 +603,7 @@ impl Editor {
     /// A read-only editor ignores edit input, so application bindings see it.
     fn handle_text_entry_event(&mut self, event: &Event, ctx: &mut dyn Context) -> EventOutcome {
         match event {
-            Event::Key(key) => match self.text_command(*key) {
+            Event::Key(key) => match self.text_command(*key, ctx.view().view_rect().w) {
                 Some(TextCommand::Insert(character)) => {
                     self.begin_text_entry_transaction();
                     self.handle_insert_text(character.encode_utf8(&mut [0; 4]));
@@ -629,13 +644,13 @@ impl Editor {
                 }
                 Some(TextCommand::Move(TextMove::Up)) => {
                     self.commit_text_entry_transaction();
-                    self.move_vertical(-1);
+                    self.move_row(-1, ctx);
                     self.ensure_cursor_visible(ctx);
                     EventOutcome::Handle
                 }
                 Some(TextCommand::Move(TextMove::Down)) => {
                     self.commit_text_entry_transaction();
-                    self.move_vertical(1);
+                    self.move_row(1, ctx);
                     self.ensure_cursor_visible(ctx);
                     EventOutcome::Handle
                 }
@@ -913,6 +928,19 @@ impl Editor {
                 self.vi.push_inserted(&inserted);
             }
         }
+        self.ensure_cursor_visible(ctx);
+    }
+
+    /// Return the cursor position.
+    pub fn cursor(&self) -> TextPosition {
+        self.buffer.cursor()
+    }
+
+    /// Move the cursor to `position`, and scroll it into view. A position
+    /// past the end of its line or of the text clamps to that end.
+    pub fn set_cursor(&mut self, ctx: &mut dyn Context, position: TextPosition) {
+        self.buffer.set_cursor(position);
+        self.update_preferred_column();
         self.ensure_cursor_visible(ctx);
     }
 
@@ -1275,9 +1303,11 @@ impl Widget for Editor {
         })
     }
 
-    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> EventOutcome {
+    fn key_outcome(&self, key: key::Key, context: &dyn ViewContext) -> EventOutcome {
         let handled = match self.config.mode {
-            EditMode::Text => self.text_command(key).is_some(),
+            EditMode::Text => self
+                .text_command(key, context.view().view_rect().w)
+                .is_some(),
             EditMode::Vi => self.vi_command(key).is_some(),
         };
         if handled {

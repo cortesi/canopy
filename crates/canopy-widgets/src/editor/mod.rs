@@ -89,6 +89,13 @@ pub struct EditorConfig {
     /// own action and add lines with another key through [`Editor::insert`].
     /// A Ctrl or Alt chord of Enter never adds a line.
     pub enter_newline: bool,
+    /// Whether Up and Down reach the application's bindings where they
+    /// step through a history of the host instead of moving the cursor. In
+    /// text mode, Up on the top row and Down on the bottom row reach the
+    /// bindings. In vi normal mode, Up and Down always reach them, and j
+    /// and k still move the cursor. Vi insert and visual modes keep the
+    /// arrows.
+    pub history_arrows: bool,
     /// Wrapping mode.
     pub wrap: WrapMode,
     /// Auto-grow height to fit contents.
@@ -112,6 +119,7 @@ impl Default for EditorConfig {
         Self {
             multiline: true,
             enter_newline: true,
+            history_arrows: false,
             wrap: WrapMode::Soft,
             auto_grow: false,
             min_height: 1,
@@ -141,6 +149,14 @@ impl EditorConfig {
     #[must_use]
     pub fn with_enter_newline(mut self, enter_newline: bool) -> Self {
         self.enter_newline = enter_newline;
+        self
+    }
+
+    /// Configure whether Up and Down reach the application's bindings to
+    /// step through a history.
+    #[must_use]
+    pub fn with_history_arrows(mut self, history_arrows: bool) -> Self {
+        self.history_arrows = history_arrows;
         self
     }
 

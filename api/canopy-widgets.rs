@@ -3140,6 +3140,9 @@ pub mod editor {
         /// Return the current editor configuration.
         pub fn config(&self) -> &EditorConfig;
 
+        /// Return the cursor position.
+        pub fn cursor(&self) -> TextPosition;
+
         /// Insert `text` at the cursor, as a paste does. A vi editor takes the
         /// text only in insert mode, and a read-only editor never takes it.
         /// @param text Text to insert.
@@ -3180,6 +3183,10 @@ pub mod editor {
 
         /// Replace the editor configuration.
         pub fn set_config(&mut self, config: EditorConfig);
+
+        /// Move the cursor to `position`, and scroll it into view. A position
+        /// past the end of its line or of the text clamps to that end.
+        pub fn set_cursor(&mut self, ctx: &mut dyn Context, position: TextPosition);
 
         /// Install a syntax highlighter.
         ///
@@ -3234,6 +3241,13 @@ pub mod editor {
         /// own action and add lines with another key through [`Editor::insert`].
         /// A Ctrl or Alt chord of Enter never adds a line.
         pub enter_newline: bool,
+        /// Whether Up and Down reach the application's bindings where they
+        /// step through a history of the host instead of moving the cursor. In
+        /// text mode, Up on the top row and Down on the bottom row reach the
+        /// bindings. In vi normal mode, Up and Down always reach them, and j
+        /// and k still move the cursor. Vi insert and visual modes keep the
+        /// arrows.
+        pub history_arrows: bool,
         /// Wrapping mode.
         pub wrap: WrapMode,
         /// Auto-grow height to fit contents.
@@ -3263,6 +3277,11 @@ pub mod editor {
         /// Configure whether Enter adds a line to multi-line content.
         #[must_use]
         pub fn with_enter_newline(self, enter_newline: bool) -> Self;
+
+        /// Configure whether Up and Down reach the application's bindings to
+        /// step through a history.
+        #[must_use]
+        pub fn with_history_arrows(self, history_arrows: bool) -> Self;
 
         /// Configure whether the editor edits, views, or only displays its text.
         #[must_use]

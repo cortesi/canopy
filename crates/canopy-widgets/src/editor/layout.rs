@@ -210,6 +210,39 @@ impl LayoutCache {
         buffer.position_for_column(line_idx, display_col, tab_stop)
     }
 
+    /// Map a column of a display row to the closest text position on that
+    /// row. The column clamps to the row: to its end on the last row of a
+    /// line, and to its last grapheme on the other rows, whose end shows at
+    /// the start of the next row.
+    pub fn position_in_row(
+        &self,
+        buffer: &TextBuffer,
+        row: usize,
+        column: usize,
+        tab_stop: usize,
+    ) -> TextPosition {
+        let line = self.line_for_display(row);
+        let Some(layout) = self.lines.get(line) else {
+            return TextPosition::new(0, 0);
+        };
+        let index = row
+            .saturating_sub(self.line_offset(line))
+            .min(layout.segments.len().saturating_sub(1));
+        let Some(segment) = layout.segment(index) else {
+            return TextPosition::new(line, 0);
+        };
+        let widest = if index + 1 == layout.segments.len() {
+            segment.width()
+        } else {
+            segment.width().saturating_sub(1)
+        };
+        buffer.position_for_column(
+            line,
+            segment.start_col.saturating_add(column.min(widest)),
+            tab_stop,
+        )
+    }
+
     /// Return the logical line index for a display line.
     pub(crate) fn line_for_display(&self, y: usize) -> usize {
         if self.line_offsets.len() <= 1 {

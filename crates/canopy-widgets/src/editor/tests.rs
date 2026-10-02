@@ -608,6 +608,120 @@ fn preferred_column_survives_vertical_moves() {
 }
 
 #[test]
+fn text_arrows_move_by_display_rows() {
+    let config = EditorConfig::new().with_mode(EditMode::Text);
+    let mut harness = build_harness("abcdefghijklmnopqrstuvwxy", config, 10, 3);
+    harness.key(key::KeyCode::End).unwrap();
+    harness.key(key::KeyCode::Up).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 15));
+    harness.key(key::KeyCode::Up).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 5));
+    harness
+        .keys([key::KeyCode::Down, key::KeyCode::Down])
+        .unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 25));
+}
+
+#[test]
+fn row_moves_keep_their_column_and_their_row() {
+    let config = EditorConfig::new().with_mode(EditMode::Text);
+    let mut harness = build_harness("abcdefghijkl\nab\nabcdefghijkl", config, 10, 5);
+    for _ in 0..7 {
+        harness.key(key::KeyCode::Right).unwrap();
+    }
+    // The short rows clamp the cursor, and the next long row restores its
+    // column.
+    harness.key(key::KeyCode::Down).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 12));
+    harness.key(key::KeyCode::Down).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(1, 2));
+    harness.key(key::KeyCode::Down).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(2, 7));
+
+    // The end of a full row shows at the start of the next row, so the
+    // cursor stops on the last grapheme of the row instead.
+    let config = EditorConfig::new().with_mode(EditMode::Text);
+    let mut harness = build_harness("abcdefghijklmnopqrst", config, 10, 3);
+    harness.key(key::KeyCode::End).unwrap();
+    harness.key(key::KeyCode::Up).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 9));
+    harness.key(key::KeyCode::Down).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 20));
+}
+
+#[test]
+fn history_arrows_reach_the_bindings_at_the_edges_of_text() {
+    let config = EditorConfig::new().with_history_arrows(true);
+    let mut harness = build_harness("abcdefghijklmno\nxy", config, 10, 4);
+    bind_to_host(&mut harness, "up");
+    bind_to_host(&mut harness, "down");
+    // The first line takes two rows, so Down moves twice before it leaves
+    // the text.
+    harness.key(key::KeyCode::Down).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 10));
+    harness.key(key::KeyCode::Down).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(1, 0));
+    assert_eq!(host_binding_hits(&mut harness), 0);
+    harness.key(key::KeyCode::Down).unwrap();
+    assert_eq!(host_binding_hits(&mut harness), 1);
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(1, 0));
+    harness.keys([key::KeyCode::Up, key::KeyCode::Up]).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 0));
+    assert_eq!(host_binding_hits(&mut harness), 1);
+    harness.key(key::KeyCode::Up).unwrap();
+    assert_eq!(host_binding_hits(&mut harness), 2);
+
+    // Without history arrows, the editor keeps the arrows at the edges.
+    let mut harness = build_harness("ab", EditorConfig::new(), 10, 2);
+    bind_to_host(&mut harness, "up");
+    harness.key(key::KeyCode::Up).unwrap();
+    assert_eq!(host_binding_hits(&mut harness), 0);
+}
+
+#[test]
+fn history_arrows_reach_the_bindings_in_vi_normal_mode_only() {
+    let config = EditorConfig::new()
+        .with_mode(EditMode::Vi)
+        .with_history_arrows(true);
+    let mut harness = build_harness("one\ntwo", config, 10, 3);
+    bind_to_host(&mut harness, "up");
+    bind_to_host(&mut harness, "down");
+    // Normal mode gives the arrows to the history, and j and k move.
+    harness.key(key::KeyCode::Down).unwrap();
+    assert_eq!(host_binding_hits(&mut harness), 1);
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 0));
+    harness.key('j').unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(1, 0));
+    harness.key(key::KeyCode::Up).unwrap();
+    assert_eq!(host_binding_hits(&mut harness), 2);
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(1, 0));
+    // Insert mode keeps the arrows, also at the edges of the text.
+    harness.key('i').unwrap();
+    harness.key(key::KeyCode::Up).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 0));
+    harness.key(key::KeyCode::Up).unwrap();
+    assert_eq!(host_binding_hits(&mut harness), 2);
+}
+
+#[test]
+fn set_cursor_clamps_to_the_end_of_the_text() {
+    let mut harness = build_harness("one\ntwo", EditorConfig::new(), 10, 3);
+    harness
+        .with_root_widget_context(|_root: &mut EditorHost, ctx| {
+            ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |editor, ctx| {
+                editor.set_cursor(ctx, TextPosition::new(usize::MAX, usize::MAX));
+                Ok(())
+            })
+        })
+        .unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(1, 3));
+    assert_eq!(
+        with_editor(&mut harness, |editor| editor.cursor()),
+        TextPosition::new(1, 3)
+    );
+}
+
+#[test]
 fn visual_line_delete_removes_lines() {
     let config = EditorConfig::new().with_mode(EditMode::Vi);
     let mut harness = build_harness("one\ntwo\nthree", config, 10, 3);

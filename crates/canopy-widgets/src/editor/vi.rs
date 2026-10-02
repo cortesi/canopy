@@ -398,6 +398,8 @@ impl Editor {
     /// chord that would otherwise fall through completes the prefix. Esc
     /// clears a pending prefix. With nothing pending it has no work, so it
     /// reaches the host's bindings, which can use it to cancel or close.
+    /// With history arrows, Up and Down reach the host's bindings too, and j
+    /// and k move the cursor.
     fn normal_command(&self, key: key::Key) -> Option<NormalCommand> {
         match self.vi.pending() {
             Some(pending) => {
@@ -407,6 +409,9 @@ impl Editor {
             }
             None if key.key == key::KeyCode::Esc => return None,
             None => {}
+        }
+        if self.config.history_arrows && matches!(key.key, key::KeyCode::Up | key::KeyCode::Down) {
+            return None;
         }
         Self::plain_command(key).map(NormalCommand::Plain)
     }
@@ -707,7 +712,7 @@ impl Editor {
                 self.ensure_cursor_visible(ctx);
             }
             PendingCommand::MoveDisplay(direction) => {
-                self.move_display_line(direction, ctx);
+                self.move_row(direction, ctx);
                 self.ensure_cursor_visible(ctx);
             }
             PendingCommand::DeleteLine => {
