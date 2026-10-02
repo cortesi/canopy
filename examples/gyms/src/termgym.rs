@@ -414,7 +414,7 @@ impl Widget for TermGym {
         )?;
         let sidebar_id = c.add_child(c.node_id(), Container::column())?;
         c.set_children(sidebar_id.into(), vec![button_id.into(), list_id.into()])?;
-        c.set_layout_override(button_id.into(), fixed_row(ENTRY_HEIGHT))?;
+        c.set_layout_override(button_id.into(), fixed_row(1))?;
         c.set_layout_override(list_id.into(), flex_row(1))?;
 
         let term_frame_id = c.add_child(

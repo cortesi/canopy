@@ -14,7 +14,7 @@ One rule names every stock widget's styles:
 
 | Role constant | Paint path | Example rule |
 | --- | --- | --- |
-| `roles::TEXT` | `text` | `button/active/text` |
+| `roles::TEXT` | `text` | `button/focused/face/text` |
 | `roles::BACKGROUND` | `background` | `input/focused/background` |
 | `roles::BORDER` | `border` | `button/focused/border` |
 | `roles::KEY` | `key` | `status_bar/key` |
@@ -117,6 +117,21 @@ The rules apply over the theme at once, and again after every
 `Setup::set_theme` or `Context::set_theme`, so a switch keeps them. Edits made
 through `Canopy::style_mut` or a map installed with `Context::set_style` do not
 survive a theme switch.
+
+A rule that puts one color on another can derive the pair from the palette and
+a contrast target, so it reads in every theme. `Color::contrast_ratio` gives
+the WCAG ratio of two colors. `Color::with_contrast(others, ratio)` moves a
+color's OKLCH lightness away from `others`, just far enough that it reaches
+`ratio` on each of them. It keeps the hue, and gives up chroma only where sRGB
+cannot show it:
+
+```rust
+setup.widget_styles(|palette, rules| {
+    // The badge keeps the accent's hue, dark enough that the text reads on it.
+    let ground = palette.accent.with_contrast(&[palette.fg], 4.5);
+    rules.fg("app/badge", palette.fg).bg("app/badge", ground).apply();
+});
+```
 
 ## Fields and results
 
@@ -252,14 +267,36 @@ with selection. The built-in themes define every frame path.
 
 ## Buttons
 
-`Button` paints its border with `border`, its label with `text`, and the one
-label character an accelerator names with `key`, all beneath the `button` layer
-and its state layers. So `button/key` styles every accelerator, and
-`button/focused/border` the border of a focused button. A state layer hides the
-plain paths beneath it, so a theme sets each part again under the state:
-`button/focused/key` styles the accelerator of a focused button. The built-in
-themes give every accelerator the help overlay's key colour, focused or not,
-and leave the button on whatever ground it sits on.
+`Button` draws one of four looks, chosen with `with_look`:
+
+| Look | Rows | Shape |
+| --- | --- | --- |
+| `ButtonLook::Solid` | 1 | A filled row. The default. |
+| `ButtonLook::Inset` | 3 | A filled row inside half-block edges, so the fill has rounded ends. |
+| `ButtonLook::Bevel` | 3 | A filled block with a light hairline above and a dark one below. |
+| `ButtonLook::Bordered` | 3 | A frame of the given box glyphs around the label. |
+
+`ButtonLook::rows` gives the height of a look, and `Button::size` gives the
+size of the whole button. The label keeps two columns of padding on each side.
+
+The filled looks paint their parts under `face`: the fill with `face`, the
+label with `face/text`, and the one label character an accelerator names with
+`face/key`. Inset paints its edges with `face/edge`, whose foreground is the
+face and whose background is the ground around the button. Bevel paints its
+hairlines with `face/highlight` and `face/shadow`. The bordered look paints its
+border with `border`, the inside with `fill`, its label with `text`, and the
+accelerator with `key`.
+
+All parts resolve beneath the `button` layer and one state layer: `disabled`,
+then `active` while the button is pressed, then `focused`. A state layer hides
+the plain paths beneath it, so a theme sets each part again under each state:
+`button/focused/face/key` styles the accelerator of a focused filled button.
+The built-in themes give the face a tint of the panel. The label and the
+accelerator keep one color in every state, and the accelerator is bold. The
+focused and pressed faces keep the accent's hue at the lightness that lets the
+label and the accelerator read as well as the theme's text reads on its panel,
+up to WCAG AA, and the pressed face moves further. Inset edges in a dialog take
+the panel as their ground through `dialog/button/face/edge`.
 
 ## Dialogs
 
@@ -267,12 +304,11 @@ and leave the button on whatever ground it sits on.
 keeps a margin clear around it, and swallows clicks there. It pushes
 `dialog`, so the frame resolves `dialog/frame` and a body's `background`
 resolves `dialog/background`, whatever host holds the dialog. Buttons in a
-dialog resolve `dialog/button/border`, `dialog/button/fill`, `dialog/button/text`,
-and `dialog/button/key` before the plain `button` paths, and a focused button
-resolves the same parts under `dialog/button/focused`. The built-in themes give
-all of them the panel background, so every dialog reads as one surface. Every
-answer keeps its key colour. An unfocused answer takes the border of an
-unfocused frame, and the focused answer takes the accent.
+dialog resolve `dialog/button/...` before the plain `button` paths. The
+built-in themes give a bordered answer the panel background, so the dialog
+reads as one surface: an unfocused answer takes the border of an unfocused
+frame, and the focused answer takes the accent. A filled answer keeps its
+face, and its key keeps the key colour.
 
 `Confirm`, `Picker`, and the help overlay are dialogs. `Confirm` also pushes
 `confirm` around its dialog, and its question paints `message`, which resolves
@@ -300,11 +336,11 @@ define all three paths.
 | `Disabled` | `disabled` |
 | `Pressed` | `active` |
 
-Button pushes `button`, then `active` when active, then `focused` when focus is
-within the button, then `disabled` when its configured command is disabled.
-For example, `button/active/focused/disabled/text` targets a disabled active
-button label with focus, and `button/disabled/key` a disabled accelerator. Active state does not imply command eligibility or
-selection. Input pushes `input`, then `focused` when it holds focus. Custom
+Button pushes `button`, then at most one state layer: `disabled` when its
+configured command is disabled, else `active` while it is pressed, else
+`focused` when focus is within it. For example, `button/disabled/face/key`
+targets the accelerator of a disabled filled button. Active state does not
+imply command eligibility or selection. Input pushes `input`, then `focused` when it holds focus. Custom
 widgets can use `selected` independently of focus.
 
 The resolver searches paint-path prefixes from longest to shortest. For each
@@ -314,9 +350,7 @@ finally no layers. Each style component uses its first matching rule. So a
 widget's own rules apply wherever it is mounted: an editor under a host's
 layer still resolves `editor/text`. A context rule such as
 `dialog/button/border` still beats `button/border`, and a host rule such as
-`file_select/selection` still fills what an inner layer leaves unset. Existing
-`button/active/text` rules remain fallbacks when focused or disabled rules are
-absent.
+`file_select/selection` still fills what an inner layer leaves unset.
 
 ## Semantic values
 

@@ -10,6 +10,7 @@ use std::{
     collections::{BTreeSet, HashMap},
     io::Cursor,
     mem,
+    result::Result as StdResult,
 };
 
 use canopy::{
@@ -21,11 +22,14 @@ use fontdue::{Font, FontSettings, Metrics};
 use image::{ImageFormat, RgbImage};
 use unicode_segmentation::UnicodeSegmentation;
 
-/// The font of screenshots: Fira Mono, under the SIL Open Font License.
-const FONT: &[u8] = include_bytes!("../../assets/fonts/FiraMono-Regular.ttf");
-
-/// How far italic text leans: columns of shift for each row of height.
-const ITALIC_SLANT: f32 = 0.2;
+/// The faces of the font of screenshots, JetBrains Mono, under the SIL Open
+/// Font License: regular, bold, italic, and bold italic.
+const FACES: [&[u8]; 4] = [
+    include_bytes!("../../assets/fonts/JetBrainsMonoNL-Regular.ttf"),
+    include_bytes!("../../assets/fonts/JetBrainsMonoNL-Bold.ttf"),
+    include_bytes!("../../assets/fonts/JetBrainsMonoNL-Italic.ttf"),
+    include_bytes!("../../assets/fonts/JetBrainsMonoNL-BoldItalic.ttf"),
+];
 
 /// How far dim text fades toward its background.
 const DIM: f32 = 0.5;
@@ -66,13 +70,13 @@ pub struct Png {
     pub missing: Vec<char>,
 }
 
-/// Draws frames as PNG images.
+/// Draws frames as PNG images, in JetBrains Mono.
 ///
-/// The font has one regular face: bold text widens its strokes, and italic
-/// text leans. A character that the font lacks shows as a box.
+/// Bold and italic text take the faces of their own. A character that the
+/// font lacks shows as a box.
 pub struct Screenshot {
-    /// The font.
-    font: Font,
+    /// The faces of the font, in the order of [`FACES`].
+    faces: Vec<Font>,
     /// Font size in image pixels.
     px: f32,
     /// Cell width in pixels.
@@ -83,8 +87,8 @@ pub struct Screenshot {
     baseline: i32,
     /// Width of a light line, in pixels.
     stroke: u32,
-    /// Rasterized glyphs, by character and boldness.
-    glyphs: HashMap<(char, bool), Glyph>,
+    /// Rasterized glyphs, by character and face.
+    glyphs: HashMap<(char, usize), Glyph>,
     /// Characters that the font lacks, in the frame that is drawing.
     missing: BTreeSet<char>,
 }
@@ -93,8 +97,6 @@ pub struct Screenshot {
 struct Glyph {
     /// Placement metrics.
     metrics: Metrics,
-    /// Width of the coverage rows, which bold text widens.
-    width: usize,
     /// Coverage, row by row.
     coverage: Vec<u8>,
 }
@@ -102,8 +104,12 @@ struct Glyph {
 impl Screenshot {
     /// Create a screenshot renderer.
     pub fn new(options: ScreenshotOptions) -> Result<Self> {
-        let font = Font::from_bytes(FONT, FontSettings::default())
+        let faces = FACES
+            .iter()
+            .map(|face| Font::from_bytes(*face, FontSettings::default()))
+            .collect::<StdResult<Vec<_>, _>>()
             .map_err(|error| Error::Invalid(format!("screenshot font: {error}")))?;
+        let font = &faces[0];
         let px = options.font_size * options.scale;
         if !px.is_finite() || px < 4.0 {
             return Err(Error::Invalid(format!(
@@ -118,7 +124,7 @@ impl Screenshot {
         let baseline = ((cell_h - height) / 2.0 + lines.ascent).round();
         let cell_w = font.metrics('M', px).advance_width.round();
         Ok(Self {
-            font,
+            faces,
             px,
             cell_w: cell_w as u32,
             cell_h: cell_h as u32,
@@ -256,61 +262,30 @@ impl Screenshot {
 
     /// Draw one character of the font at the origin of a cell.
     fn draw_char(&mut self, canvas: &mut Canvas, ch: char, cell: &CellDraw<'_>) {
-        if self.font.lookup_glyph_index(ch) == 0 {
+        let styled = usize::from(cell.bold) + 2 * usize::from(cell.italic);
+        // A character that a styled face lacks takes the regular face.
+        let Some(face) = [styled, 0]
+            .into_iter()
+            .find(|face| self.faces[*face].lookup_glyph_index(ch) != 0)
+        else {
             self.missing.insert(ch);
             glyphs::tofu(canvas, cell.rect, cell.fg, self.stroke);
             return;
-        }
-        let (px, stroke) = (self.px, self.stroke);
-        let font = &self.font;
-        let glyph = self
-            .glyphs
-            .entry((ch, cell.bold))
-            .or_insert_with(|| rasterize(font, ch, px, cell.bold.then_some(stroke)));
+        };
+        let px = self.px;
+        let font = &self.faces[face];
+        let glyph = self.glyphs.entry((ch, face)).or_insert_with(|| {
+            let (metrics, coverage) = font.rasterize(ch, px);
+            Glyph { metrics, coverage }
+        });
         let metrics = glyph.metrics;
         let left = cell.rect.x + metrics.xmin;
-        let baseline = cell.rect.y + self.baseline;
-        let top = baseline - metrics.ymin - metrics.height as i32;
-        for (row, coverage) in glyph.coverage.chunks(glyph.width.max(1)).enumerate() {
-            let y = top + row as i32;
-            // Italic text leans about the baseline, so descenders lean back.
-            let lean = if cell.italic {
-                ((baseline - y) as f32 * ITALIC_SLANT).round() as i32
-            } else {
-                0
-            };
+        let top = cell.rect.y + self.baseline - metrics.ymin - metrics.height as i32;
+        for (row, coverage) in glyph.coverage.chunks(metrics.width.max(1)).enumerate() {
             for (column, alpha) in coverage.iter().enumerate() {
-                canvas.blend(left + lean + column as i32, y, cell.fg, *alpha);
+                canvas.blend(left + column as i32, top + row as i32, cell.fg, *alpha);
             }
         }
-    }
-}
-
-/// Rasterize a glyph, widening its strokes by `bold` pixels.
-fn rasterize(font: &Font, ch: char, px: f32, bold: Option<u32>) -> Glyph {
-    let (metrics, coverage) = font.rasterize(ch, px);
-    let Some(extra) = bold.map(|bold| bold as usize).filter(|_| metrics.width > 0) else {
-        return Glyph {
-            metrics,
-            width: metrics.width,
-            coverage,
-        };
-    };
-    let width = metrics.width + extra;
-    let mut widened = vec![0u8; width * metrics.height];
-    for (row, source) in coverage.chunks(metrics.width).enumerate() {
-        let target = &mut widened[row * width..(row + 1) * width];
-        for (column, alpha) in source.iter().enumerate() {
-            for shift in 0..=extra {
-                let cell = &mut target[column + shift];
-                *cell = (*cell).max(*alpha);
-            }
-        }
-    }
-    Glyph {
-        metrics,
-        width,
-        coverage: widened,
     }
 }
 

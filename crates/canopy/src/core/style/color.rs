@@ -233,6 +233,50 @@ impl Color {
         (a.max(b) + 0.05) / (a.min(b) + 0.05)
     }
 
+    /// Return this color moved away from `others` in OKLCH lightness, just far
+    /// enough that its WCAG contrast ratio with each of them reaches `ratio`.
+    ///
+    /// The hue stays, and the chroma shrinks only as far as sRGB requires at
+    /// the new lightness. The color gets lighter when its luminance is above
+    /// the mean luminance of `others`, and darker otherwise, so it never
+    /// crosses them. A color that already reaches `ratio` returns as it is.
+    /// When even white or black falls short, the end of that direction
+    /// returns, which is the best contrast the direction allows.
+    #[must_use]
+    pub fn with_contrast(self, others: &[Self], ratio: f32) -> Self {
+        /// Steps between the color and the end of its direction, which is
+        /// finer than one step of 8-bit color.
+        const STEPS: u16 = 512;
+        let reaches = |color: Self| {
+            others
+                .iter()
+                .all(|other| color.contrast_ratio(*other) >= ratio)
+        };
+        if others.is_empty() || reaches(self) {
+            return self;
+        }
+        let mean = others
+            .iter()
+            .map(|other| other.relative_luminance())
+            .sum::<f32>()
+            / others.len() as f32;
+        let lch = Oklab::from_color(self).to_lch();
+        let end = if self.relative_luminance() > mean {
+            1.0
+        } else {
+            0.0
+        };
+        let mut moved = self;
+        for step in 1..=STEPS {
+            let l = lch.l + (end - lch.l) * f32::from(step) / f32::from(STEPS);
+            moved = Oklch { l, ..lch }.fit();
+            if reaches(moved) {
+                break;
+            }
+        }
+        moved
+    }
+
     /// Invert RGB channels (255 - value for each channel).
     #[must_use]
     pub fn invert_rgb(self) -> Self {
@@ -257,25 +301,11 @@ impl Color {
         if lch.c < ACHROMATIC {
             return self;
         }
-        let rotated = Oklch {
+        Oklch {
             h: (lch.h + degrees).rem_euclid(360.0),
             ..lch
-        };
-        if rotated.to_oklab().in_gamut() {
-            return rotated.to_oklab().to_color();
         }
-        // Halve the interval between a chroma that fits and one that does
-        // not, which settles well within one step of 8-bit color.
-        let (mut fits, mut over) = (0.0, lch.c);
-        for _ in 0..16 {
-            let c = (fits + over) / 2.0;
-            if (Oklch { c, ..rotated }).to_oklab().in_gamut() {
-                fits = c;
-            } else {
-                over = c;
-            }
-        }
-        Oklch { c: fits, ..rotated }.to_oklab().to_color()
+        .fit()
     }
 
     /// Shift hue by degrees (0-360).
@@ -416,6 +446,26 @@ impl Oklab {
 }
 
 impl Oklch {
+    /// Return the nearest sRGB color that keeps this lightness and hue,
+    /// giving up chroma until it fits.
+    fn fit(self) -> Color {
+        if self.to_oklab().in_gamut() {
+            return self.to_oklab().to_color();
+        }
+        // Halve the interval between a chroma that fits and one that does
+        // not, which settles well within one step of 8-bit color.
+        let (mut fits, mut over) = (0.0, self.c);
+        for _ in 0..16 {
+            let c = (fits + over) / 2.0;
+            if (Self { c, ..self }).to_oklab().in_gamut() {
+                fits = c;
+            } else {
+                over = c;
+            }
+        }
+        Self { c: fits, ..self }.to_oklab().to_color()
+    }
+
     /// Convert to rectangular form.
     fn to_oklab(self) -> Oklab {
         let h = self.h.to_radians();
@@ -747,6 +797,43 @@ mod tests {
         };
         // #777 on white is the textbook 4.48:1.
         assert!((grey.contrast_ratio(Color::White) - 4.48).abs() < 0.01);
+    }
+
+    #[test]
+    fn contrast_moves_a_color_away_just_far_enough_and_keeps_its_hue() {
+        let lch = |color: Color| Oklab::from_color(color).to_lch();
+        let blue = rgb!("#8aadf4");
+        let text = rgb!("#eeeeee");
+        // Darker than the text, so the blue darkens until the text reads.
+        let face = blue.with_contrast(&[text], 4.5);
+        assert!(face.contrast_ratio(text) >= 4.5);
+        assert!(lch(face).l < lch(blue).l);
+        assert!((lch(face).h - lch(blue).h).abs() < 2.0, "the hue stays");
+        // One step less would fall short, so the move is the least that
+        // reaches the ratio.
+        let nearer = Oklch {
+            l: lch(face).l + 0.01,
+            ..lch(face)
+        }
+        .fit();
+        assert!(nearer.contrast_ratio(text) < 4.5);
+        // Lighter than a dark ground, so the blue lightens.
+        let ground = rgb!("#333333");
+        let key = blue.with_contrast(&[ground], 7.0);
+        assert!(key.contrast_ratio(ground) >= 7.0);
+        assert!(lch(key).l > lch(blue).l);
+        // A color that already reaches the ratio stays, and a ratio that no
+        // lightness reaches gives the end of the direction.
+        assert_eq!(blue.with_contrast(&[ground], 3.0), blue);
+        assert_eq!(blue.with_contrast(&[], 21.0), blue);
+        assert_eq!(
+            blue.with_contrast(&[ground], 21.0),
+            Color::Rgb {
+                r: 255,
+                g: 255,
+                b: 255
+            }
+        );
     }
 
     #[test]

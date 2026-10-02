@@ -1451,6 +1451,8 @@ mod tests {
     /// its terminals does.
     #[derive(Default)]
     struct ReapHost {
+        /// The terminal the host mounted.
+        terminal: Option<canopy::NodeId>,
         /// Terminals whose exit call ran, and whether each was removed.
         reaped: Vec<(canopy::NodeId, bool)>,
     }
@@ -1470,14 +1472,17 @@ mod tests {
         fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
             use canopy::{ContextExt, commands::CommandTarget};
             let owner = CommandTarget::Exact(c.node_id());
-            c.add_child(
-                c.node_id(),
-                Terminal::new(
-                    TerminalConfig::new()
-                        .with_program(["sh", "-c", "exit 0"])
-                        .with_on_exit(Self::spec_ended().call().with_target(owner)),
-                ),
-            )?;
+            self.terminal = Some(
+                c.add_child(
+                    c.node_id(),
+                    Terminal::new(
+                        TerminalConfig::new()
+                            .with_program(["sh", "-c", "exit 0"])
+                            .with_on_exit(Self::spec_ended().call().with_target(owner)),
+                    ),
+                )?
+                .into(),
+            );
             Ok(())
         }
     }
@@ -1489,7 +1494,9 @@ mod tests {
             .configure(|setup| setup.add_commands::<ReapHost>())
             .size(20, 5)
             .build()?;
-        let terminal = harness.find_nodes("**/terminal")?;
+        // The shell can exit before a lookup finds the terminal, so the host
+        // names it.
+        let terminal = harness.with_root_widget(|host: &mut ReapHost| host.terminal);
         harness.wait_until(Duration::from_secs(10), |harness| {
             Ok(harness.with_root_widget(|host: &mut ReapHost| !host.reaped.is_empty()))
         })?;
@@ -1499,7 +1506,7 @@ mod tests {
             .ok();
         let reaped = harness.with_root_widget(|host: &mut ReapHost| host.reaped.clone());
         assert_eq!(reaped.len(), 1, "one exit call");
-        assert_eq!(Some(reaped[0].0), terminal.first().copied());
+        assert_eq!(Some(reaped[0].0), terminal);
         assert!(
             reaped[0].1,
             "the host removed the terminal from its exit call"

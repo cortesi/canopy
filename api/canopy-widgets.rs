@@ -218,6 +218,14 @@ impl BoxGlyphs {
 /// posting. Calling [`Button::press`] directly posts the action as well: the
 /// action's errors surface when the outermost dispatch completes, not from the
 /// call.
+///
+/// A button measures its label, and draws in its [`ButtonLook`]. It pushes the
+/// `button` layer, then at most one state layer: `disabled`, `active`, or
+/// `focused`, in that order of precedence. A filled look paints `face`, and its
+/// label and key as `face/text` and `face/key`. A bevel adds
+/// `face/highlight` and `face/shadow`, and an inset paints its edges as
+/// `face/edge`, whose ground is the ground around the button. A bordered look
+/// paints `border`, `fill`, `text`, and `key`.
 pub struct Button {/* private fields */}
 
 impl Button {
@@ -244,6 +252,10 @@ impl Button {
     /// answer does, so the action arrives after construction.
     pub fn set_command(&mut self, command: CommandCall);
 
+    /// Return the size that the button takes: its label with padding, in the
+    /// rows of its look.
+    pub fn size(&self) -> Size;
+
     /// Mark the label character that a key reaches this button by.
     ///
     /// The first matching character takes the [`roles::KEY`] style, so
@@ -261,9 +273,9 @@ impl Button {
     #[must_use]
     pub fn with_command(self, command: CommandCall) -> Self;
 
-    /// Build a button with a specified glyph set.
+    /// Build a button that draws in `look`.
     #[must_use]
-    pub fn with_glyphs(self, glyphs: BoxGlyphs) -> Self;
+    pub fn with_look(self, look: ButtonLook) -> Self;
 }
 
 impl CommandNode for Button {}
@@ -271,6 +283,34 @@ impl CommandNode for Button {}
 impl Register for Button {}
 
 impl Widget for Button {}
+
+/// How a button draws.
+///
+/// A terminal cell has one ground, and a box drawing line runs through the
+/// middle of its cell, so a border cannot enclose a fill of another color
+/// without a ring of the ground showing inside it. The filled looks draw
+/// their edges with block elements instead, which meet the edges of the
+/// cells exactly.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ButtonLook {
+    /// The label on a filled row, one row tall.
+    #[default]
+    Solid,
+    /// A fill inset by half a cell on every side, three rows tall. Its edges
+    /// fall on the middles of the outer cells, where a box border runs.
+    Inset,
+    /// A fill three rows tall, lit along its top edge and shaded along its
+    /// bottom edge, as Textual draws its buttons.
+    Bevel,
+    /// The label inside a box border of these glyphs, on the ground of the
+    /// view, three rows tall.
+    Bordered(BoxGlyphs),
+}
+
+impl ButtonLook {
+    /// Return the rows that a button of this look takes.
+    pub const fn rows(self) -> u32;
+}
 
 /// Canvas width behavior for text widgets.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -3480,10 +3520,10 @@ pub mod screenshot {
         pub missing: Vec<char>,
     }
 
-    /// Draws frames as PNG images.
+    /// Draws frames as PNG images, in JetBrains Mono.
     ///
-    /// The font has one regular face: bold text widens its strokes, and italic
-    /// text leans. A character that the font lacks shows as a box.
+    /// Bold and italic text take the faces of their own. A character that the
+    /// font lacks shows as a box.
     pub struct Screenshot {/* private fields */}
 
     impl Screenshot {

@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gallery</title>
+<style>
+  :root {
+    --bg: #121316;
+    --panel: #1b1d22;
+    --line: #2c2f36;
+    --fg: #e6e6e6;
+    --muted: #9a9ea8;
+    --accent: #7aa2f7;
+    --bad: #f7768e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    align-items: center;
+    padding: 12px 24px;
+    background: rgba(18, 19, 22, 0.92);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+  }
+  h1 { margin: 0; font-size: 17px; font-weight: 600; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .sizes { display: flex; gap: 4px; margin-left: auto; }
+  .sizes button, .nav button {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .sizes button.on { color: var(--fg); border-color: var(--accent); }
+  main { padding: 20px 24px 48px; }
+  .notes { margin-bottom: 20px; display: grid; gap: 8px; }
+  .note {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--bad);
+    background: var(--panel);
+    border-radius: 6px;
+    padding: 10px 14px;
+  }
+  .note.warn { border-left-color: #e0af68; }
+  .note pre { margin: 4px 0 0; white-space: pre-wrap; color: var(--muted); font-size: 12px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 20px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 120ms;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card img { display: block; width: 100%; height: auto; background: #000; }
+  .card .absent {
+    aspect-ratio: 16 / 9;
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+  }
+  .card .text { padding: 10px 14px 12px; }
+  .card h2 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+  .card p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .card .script { margin-top: 6px; font-size: 11px; color: #6c707a; }
+  .empty { color: var(--muted); }
+  #detail {
+    position: fixed;
+    inset: 0;
+    z-index: 3;
+    display: none;
+    flex-direction: column;
+    background: rgba(10, 11, 13, 0.97);
+  }
+  #detail.open { display: flex; }
+  #detail .bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 20px;
+    align-items: center;
+    padding: 12px 24px;
+    border-bottom: 1px solid var(--line);
+  }
+  #detail .bar .titles { min-width: 240px; flex: 1; }
+  #detail h2 { margin: 0; font-size: 16px; }
+  #detail p { margin: 2px 0 0; color: var(--muted); }
+  #detail .nav { display: flex; gap: 4px; }
+  #detail .stage { flex: 1; overflow: auto; padding: 24px; text-align: center; }
+  #detail .stage img { box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6); }
+  #detail .hint { color: #6c707a; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1 id="title"></h1>
+    <div class="meta" id="meta"></div>
+  </div>
+  <div class="sizes" id="sizes"></div>
+</header>
+<main>
+  <div class="notes" id="notes"></div>
+  <div class="grid" id="grid"></div>
+</main>
+<div id="detail">
+  <div class="bar">
+    <div class="titles">
+      <h2 id="detail-title"></h2>
+      <p id="detail-caption"></p>
+    </div>
+    <div class="sizes" id="detail-sizes"></div>
+    <div class="nav">
+      <button id="prev" title="Previous page (←)">←</button>
+      <button id="next" title="Next page (→)">→</button>
+      <button id="close" title="Close (Esc)">✕</button>
+    </div>
+    <div class="hint">← → pages · 1–9 sizes · Esc closes</div>
+  </div>
+  <div class="stage" id="stage"></div>
+</div>
+<script>
+const GALLERY = {
+  "title": "Canopy widgets",
+  "generated": 1790902655,
+  "font_size": 14.0,
+  "scale": 2.0,
+  "sizes": [
+    "110x36"
+  ],
+  "pages": [
+    {
+      "id": "cedit",
+      "title": "Code editor",
+      "caption": "A file in the editor, with syntax colours and vi keys.",
+      "script": "cedit.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "cedit-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "chartgym",
+      "title": "Charts",
+      "caption": "Big numbers, meters, sparklines, and column charts, updating live.",
+      "script": "chartgym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "chartgym-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "editorgym",
+      "title": "Editor",
+      "caption": "The multi-line editor.",
+      "script": "editorgym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "editorgym-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "fontgym",
+      "title": "Font banners",
+      "caption": "TrueType fonts drawn as large text for banners and headers.",
+      "script": "fontgym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "fontgym-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "imgview",
+      "title": "Image viewer",
+      "caption": "An image drawn in the terminal.",
+      "script": "imgview.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "imgview-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "widgets",
+      "title": "Widgets",
+      "caption": "Buttons in each look and state, inputs, a selector, and a dropdown.",
+      "script": "stylegym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "widgets-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "palette",
+      "title": "Themes",
+      "caption": "The palette of a theme, and the roles that its rules colour.",
+      "script": "stylegym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "palette-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "syntax",
+      "title": "Syntax",
+      "caption": "Code in the syntax colours of the theme.",
+      "script": "stylegym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "syntax-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    }
+  ],
+  "failures": [],
+  "missing_glyphs": []
+};
+
+const state = { size: GALLERY.sizes[0], page: null };
+
+const el = (tag, props = {}, children = []) => {
+  const node = Object.assign(document.createElement(tag), props);
+  for (const child of children) node.append(child);
+  return node;
+};
+
+// The image of a page at the selected size, or at its first size.
+const imageOf = (page, size) =>
+  page.shots.find((shot) => shot.size === size) || page.shots[0];
+
+const sizeButtons = (container, onPick) => {
+  container.replaceChildren(
+    ...GALLERY.sizes.map((size) =>
+      el("button", {
+        textContent: size,
+        className: size === state.size ? "on" : "",
+        onclick: (event) => {
+          event.stopPropagation();
+          onPick(size);
+        },
+      }),
+    ),
+  );
+};
+
+const pickSize = (size) => {
+  state.size = size;
+  renderGrid();
+  if (state.page !== null) renderDetail();
+  remember();
+};
+
+const renderGrid = () => {
+  sizeButtons(document.getElementById("sizes"), pickSize);
+  const grid = document.getElementById("grid");
+  if (GALLERY.pages.length === 0) {
+    grid.replaceChildren(el("p", { className: "empty", textContent: "No pages." }));
+    return;
+  }
+  grid.replaceChildren(
+    ...GALLERY.pages.map((page, index) => {
+      const image = imageOf(page, state.size);
+      const picture = image
+        ? el("img", { src: image.file, loading: "lazy", alt: page.title })
+        : el("div", { className: "absent", textContent: "no image" });
+      return el("div", { className: "card", onclick: () => openPage(index) }, [
+        picture,
+        el("div", { className: "text" }, [
+          el("h2", { textContent: page.title }),
+          el("p", { textContent: page.caption || "" }),
+          el("div", { className: "script", textContent: `${page.script} · ${page.id}` }),
+        ]),
+      ]);
+    }),
+  );
+};
+
+const renderDetail = () => {
+  const page = GALLERY.pages[state.page];
+  document.getElementById("detail-title").textContent = page.title;
+  document.getElementById("detail-caption").textContent = page.caption || "";
+  sizeButtons(document.getElementById("detail-sizes"), pickSize);
+  const image = imageOf(page, state.size);
+  const stage = document.getElementById("stage");
+  stage.replaceChildren();
+  if (image) {
+    // Show each image pixel at its device pixel, so text stays crisp.
+    stage.append(
+      el("img", {
+        src: image.file,
+        alt: page.title,
+        width: image.width / GALLERY.scale,
+        height: image.height / GALLERY.scale,
+      }),
+    );
+  }
+};
+
+const openPage = (index) => {
+  state.page = index;
+  document.getElementById("detail").classList.add("open");
+  renderDetail();
+  remember();
+};
+
+const closePage = () => {
+  state.page = null;
+  document.getElementById("detail").classList.remove("open");
+  remember();
+};
+
+const step = (delta) => {
+  if (state.page === null || GALLERY.pages.length === 0) return;
+  const count = GALLERY.pages.length;
+  openPage((state.page + delta + count) % count);
+};
+
+// The location hash holds the open page and the size, so a reload or a link
+// returns to them.
+const remember = () => {
+  const page = state.page === null ? "" : GALLERY.pages[state.page].id;
+  history.replaceState(null, "", `#${page}@${state.size}`);
+};
+
+const restore = () => {
+  let hash = "";
+  try {
+    hash = decodeURIComponent(location.hash.slice(1));
+  } catch {
+    // A malformed hash names no page.
+  }
+  const [id, size] = hash.split("@");
+  if (GALLERY.sizes.includes(size)) state.size = size;
+  const index = GALLERY.pages.findIndex((page) => page.id === id);
+  renderGrid();
+  if (index >= 0) openPage(index);
+  else if (state.page !== null) closePage();
+};
+
+const renderNotes = () => {
+  const notes = [];
+  for (const failure of GALLERY.failures) {
+    notes.push(
+      el("div", { className: "note" }, [
+        el("strong", {
+          textContent: failure.size
+            ? `${failure.script} at ${failure.size} failed`
+            : `${failure.script} failed`,
+        }),
+        el("pre", { textContent: failure.message }),
+      ]),
+    );
+  }
+  if (GALLERY.missing_glyphs.length > 0) {
+    notes.push(
+      el("div", { className: "note warn", textContent:
+        `The screenshot font lacks ${GALLERY.missing_glyphs.join(" ")}, which show as boxes.` }),
+    );
+  }
+  document.getElementById("notes").replaceChildren(...notes);
+};
+
+document.title = GALLERY.title;
+document.getElementById("title").textContent = GALLERY.title;
+const images = GALLERY.pages.reduce((sum, page) => sum + page.shots.length, 0);
+document.getElementById("meta").textContent =
+  `${GALLERY.pages.length} pages · ${images} images · ${new Date(GALLERY.generated * 1000).toLocaleString()}`;
+document.getElementById("prev").onclick = () => step(-1);
+document.getElementById("next").onclick = () => step(1);
+document.getElementById("close").onclick = closePage;
+document.addEventListener("keydown", (event) => {
+  if (state.page === null) return;
+  if (event.key === "Escape") closePage();
+  else if (event.key === "ArrowLeft") step(-1);
+  else if (event.key === "ArrowRight") step(1);
+  else if (/^[1-9]$/.test(event.key)) {
+    const size = GALLERY.sizes[Number(event.key) - 1];
+    if (size) pickSize(size);
+  }
+});
+window.addEventListener("hashchange", restore);
+renderNotes();
+restore();
+</script>
+</body>
+</html>

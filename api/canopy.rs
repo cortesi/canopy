@@ -4771,6 +4771,18 @@ pub mod style {
         /// Shift hue by degrees (0-360).
         #[must_use]
         pub fn shift_hue(self, degrees: f32) -> Self;
+
+        /// Return this color moved away from `others` in OKLCH lightness, just far
+        /// enough that its WCAG contrast ratio with each of them reaches `ratio`.
+        ///
+        /// The hue stays, and the chroma shrinks only as far as sRGB requires at
+        /// the new lightness. The color gets lighter when its luminance is above
+        /// the mean luminance of `others`, and darker otherwise, so it never
+        /// crosses them. A color that already reaches `ratio` returns as it is.
+        /// When even white or black falls short, the end of that direction
+        /// returns, which is the best contrast the direction allows.
+        #[must_use]
+        pub fn with_contrast(self, others: &[Self], ratio: f32) -> Self;
     }
 
     /// How much of a cell a glyph covers, for antialiased drawing.

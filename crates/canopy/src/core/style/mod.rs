@@ -1117,6 +1117,52 @@ mod tests {
         }
     }
 
+    /// In every built-in theme, a button's key keeps one color in every state
+    /// and reads on each face as well as the theme's text reads on its panel,
+    /// up to WCAG AA. So does the label on the faces of focus and a press;
+    /// on the resting face it keeps the contrast the theme gives it.
+    #[test]
+    fn button_labels_and_keys_read_on_every_face() {
+        for (name, palette) in [
+            ("default_dark", themes::default_dark()),
+            ("solarized_dark", themes::solarized_dark()),
+            ("solarized_light", themes::solarized_light()),
+            ("dracula", themes::dracula()),
+            ("gruvbox_dark", themes::gruvbox_dark()),
+        ] {
+            let map = palette.style_map();
+            let target = palette.fg.contrast_ratio(palette.panel_bg).min(4.5);
+            let colors = |path: &str| {
+                let style = map.resolve(path);
+                (
+                    style.fg.solid_color().expect("solid fg"),
+                    style.bg.solid_color().expect("solid bg"),
+                    style.attrs,
+                )
+            };
+            let (rest_key, ..) = colors("/button/face/key");
+            for state in ["", "focused/", "active/"] {
+                let (text, face, _) = colors(&format!("/button/{state}face/text"));
+                let (key, key_face, attrs) = colors(&format!("/button/{state}face/key"));
+                assert_eq!(face, key_face, "{name} {state}: one face");
+                assert_eq!(key, rest_key, "{name} {state}: one key color");
+                assert!(attrs.bold && !attrs.underline, "{name} {state}: key marks");
+                let parts = if state.is_empty() {
+                    vec![("key", key)]
+                } else {
+                    vec![("text", text), ("key", key)]
+                };
+                for (part, color) in parts {
+                    let ratio = color.contrast_ratio(face);
+                    assert!(
+                        ratio + 0.005 >= target,
+                        "{name} {state}{part}: {ratio:.2} under {target:.2}"
+                    );
+                }
+            }
+        }
+    }
+
     /// Render every built-in theme in a stable order.
     fn dump_all_themes() -> String {
         [

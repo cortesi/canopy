@@ -5,6 +5,7 @@ mod cargo_env;
 mod luau_grammar;
 
 use std::{
+    fs,
     path::{Path, PathBuf},
     process::{Command, ExitCode, Stdio},
 };
@@ -29,6 +30,9 @@ enum Task {
     BenchCheck,
     /// Run all smoke-test integration targets.
     Smoke,
+    /// Capture the screenshots of the README: each gallery script of the
+    /// gyms against its own gym, into `docs/gallery`.
+    Gallery,
     /// Convert the upstream Luau grammar into the one canopy-widgets bundles,
     /// and check it against the upstream baselines.
     LuauGrammar {
@@ -44,6 +48,7 @@ fn main() -> ExitCode {
         Task::FeatureCheck => run_feature_check(&root),
         Task::BenchCheck => run_bench_check(&root),
         Task::Smoke => run_smoke(&root),
+        Task::Gallery => run_gallery(&root),
         Task::LuauGrammar { checkout } => luau_grammar::run(&root, &checkout),
     })
 }
@@ -79,6 +84,65 @@ fn run_smoke(workspace_root: &Path) -> bool {
     }
 
     true
+}
+
+/// The gallery of the README: each gallery script of `examples/gyms/gallery`,
+/// and the arguments of the gym that it runs against. Paths are relative to
+/// `examples/gyms`, where the gyms run.
+const GALLERY: [(&str, &[&str]); 6] = [
+    ("stylegym.luau", &["stylegym"]),
+    ("chartgym.luau", &["chartgym"]),
+    (
+        "cedit.luau",
+        &["cedit", "../../crates/canopy-widgets/src/spinner.rs"],
+    ),
+    ("editorgym.luau", &["editorgym"]),
+    ("fontgym.luau", &["fontgym"]),
+    ("imgview.luau", &["imgview", "../../.assets/shyness.jpg"]),
+];
+
+/// Capture the README gallery afresh: every script of [`GALLERY`] runs
+/// against its gym, and each run adds its pages to `docs/gallery`.
+fn run_gallery(workspace_root: &Path) -> bool {
+    let gyms = workspace_root.join("examples/gyms");
+    let out = workspace_root.join("docs/gallery");
+    if out.exists()
+        && let Err(error) = fs::remove_dir_all(&out)
+    {
+        eprintln!("Failed to remove {}: {error}", out.display());
+        return false;
+    }
+    // Canopyctl starts each gym with `cargo run`, and its first request times
+    // out while Cargo compiles, so the build comes first.
+    if !run_cargo_command(
+        workspace_root,
+        &["build", "--quiet", "-p", "gyms", "-p", "canopyctl"],
+    ) {
+        return false;
+    }
+    let mut ok = true;
+    for (script, gym) in GALLERY {
+        let mut args = vec![
+            "run",
+            "--quiet",
+            "-p",
+            "canopyctl",
+            "--",
+            "gallery",
+            script,
+            "--",
+            "cargo",
+            "run",
+            "--quiet",
+            "-p",
+            "gyms",
+            "--",
+        ];
+        args.extend_from_slice(gym);
+        args.push("--headless");
+        ok &= run_cargo_command(&gyms, &args);
+    }
+    ok
 }
 
 /// Return the workspace root for the xtask crate.

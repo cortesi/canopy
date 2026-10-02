@@ -2,10 +2,34 @@
 / fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /big_text/text fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=None attrs=None
 /blue fg=Some(Solid(Rgb { r: 92, g: 156, b: 245 })) bg=None attrs=None
+/button/active/face fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 21, g: 47, b: 107 })) attrs=None
+/button/active/face/edge fg=Some(Solid(Rgb { r: 21, g: 47, b: 107 })) bg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) attrs=None
+/button/active/face/highlight fg=Some(Solid(Rgb { r: 84, g: 106, b: 152 })) bg=Some(Solid(Rgb { r: 21, g: 47, b: 107 })) attrs=None
+/button/active/face/key fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=Some(Solid(Rgb { r: 21, g: 47, b: 107 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/active/face/shadow fg=Some(Solid(Rgb { r: 3, g: 12, b: 37 })) bg=Some(Solid(Rgb { r: 21, g: 47, b: 107 })) attrs=None
+/button/active/face/text fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 21, g: 47, b: 107 })) attrs=None
 /button/disabled/border fg=Some(Solid(Rgb { r: 180, g: 180, b: 180 })) bg=None attrs=None
+/button/disabled/face fg=Some(Solid(Rgb { r: 180, g: 180, b: 180 })) bg=Some(Solid(Rgb { r: 51, g: 51, b: 51 })) attrs=None
+/button/disabled/face/edge fg=Some(Solid(Rgb { r: 51, g: 51, b: 51 })) bg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) attrs=None
+/button/disabled/face/highlight fg=Some(Solid(Rgb { r: 106, g: 106, b: 106 })) bg=Some(Solid(Rgb { r: 51, g: 51, b: 51 })) attrs=None
+/button/disabled/face/key fg=Some(Solid(Rgb { r: 180, g: 180, b: 180 })) bg=Some(Solid(Rgb { r: 51, g: 51, b: 51 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/disabled/face/shadow fg=Some(Solid(Rgb { r: 13, g: 13, b: 13 })) bg=Some(Solid(Rgb { r: 51, g: 51, b: 51 })) attrs=None
+/button/disabled/face/text fg=Some(Solid(Rgb { r: 180, g: 180, b: 180 })) bg=Some(Solid(Rgb { r: 51, g: 51, b: 51 })) attrs=None
 /button/disabled/key fg=Some(Solid(Rgb { r: 180, g: 180, b: 180 })) bg=None attrs=None
 /button/disabled/text fg=Some(Solid(Rgb { r: 180, g: 180, b: 180 })) bg=None attrs=None
+/button/face fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 51, g: 51, b: 51 })) attrs=None
+/button/face/edge fg=Some(Solid(Rgb { r: 51, g: 51, b: 51 })) bg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) attrs=None
+/button/face/highlight fg=Some(Solid(Rgb { r: 106, g: 106, b: 106 })) bg=Some(Solid(Rgb { r: 51, g: 51, b: 51 })) attrs=None
+/button/face/key fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=Some(Solid(Rgb { r: 51, g: 51, b: 51 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/face/shadow fg=Some(Solid(Rgb { r: 13, g: 13, b: 13 })) bg=Some(Solid(Rgb { r: 51, g: 51, b: 51 })) attrs=None
+/button/face/text fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 51, g: 51, b: 51 })) attrs=None
 /button/focused/border fg=Some(Solid(Rgb { r: 128, g: 128, b: 128 })) bg=None attrs=None
+/button/focused/face fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 35, g: 63, b: 125 })) attrs=None
+/button/focused/face/edge fg=Some(Solid(Rgb { r: 35, g: 63, b: 125 })) bg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) attrs=None
+/button/focused/face/highlight fg=Some(Solid(Rgb { r: 95, g: 118, b: 165 })) bg=Some(Solid(Rgb { r: 35, g: 63, b: 125 })) attrs=None
+/button/focused/face/key fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=Some(Solid(Rgb { r: 35, g: 63, b: 125 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/focused/face/shadow fg=Some(Solid(Rgb { r: 7, g: 18, b: 44 })) bg=Some(Solid(Rgb { r: 35, g: 63, b: 125 })) attrs=None
+/button/focused/face/text fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 35, g: 63, b: 125 })) attrs=None
 /button/focused/key fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=None attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /button/key fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=None attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /column_chart/axis fg=Some(Solid(Rgb { r: 72, g: 72, b: 72 })) bg=None attrs=None
@@ -18,9 +42,13 @@
 /confirm/message fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 26, g: 26, b: 26 })) attrs=None
 /cyan fg=Some(Solid(Rgb { r: 86, g: 182, b: 194 })) bg=None attrs=None
 /dialog/background fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 26, g: 26, b: 26 })) attrs=None
+/dialog/button/active/face/edge fg=Some(Solid(Rgb { r: 21, g: 47, b: 107 })) bg=Some(Solid(Rgb { r: 26, g: 26, b: 26 })) attrs=None
 /dialog/button/border fg=Some(Solid(Rgb { r: 72, g: 72, b: 72 })) bg=Some(Solid(Rgb { r: 26, g: 26, b: 26 })) attrs=None
+/dialog/button/disabled/face/edge fg=Some(Solid(Rgb { r: 51, g: 51, b: 51 })) bg=Some(Solid(Rgb { r: 26, g: 26, b: 26 })) attrs=None
+/dialog/button/face/edge fg=Some(Solid(Rgb { r: 51, g: 51, b: 51 })) bg=Some(Solid(Rgb { r: 26, g: 26, b: 26 })) attrs=None
 /dialog/button/fill fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 26, g: 26, b: 26 })) attrs=None
 /dialog/button/focused/border fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=Some(Solid(Rgb { r: 26, g: 26, b: 26 })) attrs=None
+/dialog/button/focused/face/edge fg=Some(Solid(Rgb { r: 35, g: 63, b: 125 })) bg=Some(Solid(Rgb { r: 26, g: 26, b: 26 })) attrs=None
 /dialog/button/focused/fill fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 26, g: 26, b: 26 })) attrs=None
 /dialog/button/focused/key fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=Some(Solid(Rgb { r: 26, g: 26, b: 26 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /dialog/button/focused/text fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 26, g: 26, b: 26 })) attrs=None
@@ -110,10 +138,34 @@
 / fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /big_text/text fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=None attrs=None
 /blue fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
+/button/active/face fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 0, g: 34, b: 59 })) attrs=None
+/button/active/face/edge fg=Some(Solid(Rgb { r: 0, g: 34, b: 59 })) bg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) attrs=None
+/button/active/face/highlight fg=Some(Solid(Rgb { r: 71, g: 94, b: 114 })) bg=Some(Solid(Rgb { r: 0, g: 34, b: 59 })) attrs=None
+/button/active/face/key fg=Some(Solid(Rgb { r: 62, g: 176, b: 166 })) bg=Some(Solid(Rgb { r: 0, g: 34, b: 59 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/active/face/shadow fg=Some(Solid(Rgb { r: 0, g: 7, b: 17 })) bg=Some(Solid(Rgb { r: 0, g: 34, b: 59 })) attrs=None
+/button/active/face/text fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 0, g: 34, b: 59 })) attrs=None
 /button/disabled/border fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=None attrs=None
+/button/disabled/face fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=Some(Solid(Rgb { r: 28, g: 66, b: 77 })) attrs=None
+/button/disabled/face/edge fg=Some(Solid(Rgb { r: 28, g: 66, b: 77 })) bg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) attrs=None
+/button/disabled/face/highlight fg=Some(Solid(Rgb { r: 92, g: 118, b: 127 })) bg=Some(Solid(Rgb { r: 28, g: 66, b: 77 })) attrs=None
+/button/disabled/face/key fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=Some(Solid(Rgb { r: 28, g: 66, b: 77 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/disabled/face/shadow fg=Some(Solid(Rgb { r: 5, g: 20, b: 24 })) bg=Some(Solid(Rgb { r: 28, g: 66, b: 77 })) attrs=None
+/button/disabled/face/text fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=Some(Solid(Rgb { r: 28, g: 66, b: 77 })) attrs=None
 /button/disabled/key fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=None attrs=None
 /button/disabled/text fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=None attrs=None
+/button/face fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 28, g: 66, b: 77 })) attrs=None
+/button/face/edge fg=Some(Solid(Rgb { r: 28, g: 66, b: 77 })) bg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) attrs=None
+/button/face/highlight fg=Some(Solid(Rgb { r: 92, g: 118, b: 127 })) bg=Some(Solid(Rgb { r: 28, g: 66, b: 77 })) attrs=None
+/button/face/key fg=Some(Solid(Rgb { r: 62, g: 176, b: 166 })) bg=Some(Solid(Rgb { r: 28, g: 66, b: 77 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/face/shadow fg=Some(Solid(Rgb { r: 5, g: 20, b: 24 })) bg=Some(Solid(Rgb { r: 28, g: 66, b: 77 })) attrs=None
+/button/face/text fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 28, g: 66, b: 77 })) attrs=None
 /button/focused/border fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
+/button/focused/face fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 0, g: 51, b: 85 })) attrs=None
+/button/focused/face/edge fg=Some(Solid(Rgb { r: 0, g: 51, b: 85 })) bg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) attrs=None
+/button/focused/face/highlight fg=Some(Solid(Rgb { r: 77, g: 108, b: 134 })) bg=Some(Solid(Rgb { r: 0, g: 51, b: 85 })) attrs=None
+/button/focused/face/key fg=Some(Solid(Rgb { r: 62, g: 176, b: 166 })) bg=Some(Solid(Rgb { r: 0, g: 51, b: 85 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/focused/face/shadow fg=Some(Solid(Rgb { r: 0, g: 13, b: 28 })) bg=Some(Solid(Rgb { r: 0, g: 51, b: 85 })) attrs=None
+/button/focused/face/text fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 0, g: 51, b: 85 })) attrs=None
 /button/focused/key fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=None attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /button/key fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=None attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /column_chart/axis fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=None attrs=None
@@ -126,9 +178,13 @@
 /confirm/message fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
 /cyan fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=None attrs=None
 /dialog/background fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
+/dialog/button/active/face/edge fg=Some(Solid(Rgb { r: 0, g: 34, b: 59 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
 /dialog/button/border fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
+/dialog/button/disabled/face/edge fg=Some(Solid(Rgb { r: 28, g: 66, b: 77 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
+/dialog/button/face/edge fg=Some(Solid(Rgb { r: 28, g: 66, b: 77 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
 /dialog/button/fill fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
 /dialog/button/focused/border fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
+/dialog/button/focused/face/edge fg=Some(Solid(Rgb { r: 0, g: 51, b: 85 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
 /dialog/button/focused/fill fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
 /dialog/button/focused/key fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /dialog/button/focused/text fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
@@ -218,10 +274,34 @@
 / fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 253, g: 246, b: 227 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /big_text/text fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=None attrs=None
 /blue fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
+/button/active/face fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 255, g: 255, b: 255 })) attrs=None
+/button/active/face/edge fg=Some(Solid(Rgb { r: 255, g: 255, b: 255 })) bg=Some(Solid(Rgb { r: 253, g: 246, b: 227 })) attrs=None
+/button/active/face/highlight fg=Some(Solid(Rgb { r: 255, g: 255, b: 255 })) bg=Some(Solid(Rgb { r: 255, g: 255, b: 255 })) attrs=None
+/button/active/face/key fg=Some(Solid(Rgb { r: 0, g: 122, b: 114 })) bg=Some(Solid(Rgb { r: 255, g: 255, b: 255 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/active/face/shadow fg=Some(Solid(Rgb { r: 99, g: 99, b: 99 })) bg=Some(Solid(Rgb { r: 255, g: 255, b: 255 })) attrs=None
+/button/active/face/text fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 255, g: 255, b: 255 })) attrs=None
 /button/disabled/border fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=None attrs=None
+/button/disabled/face fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=Some(Solid(Rgb { r: 218, g: 216, b: 201 })) attrs=None
+/button/disabled/face/edge fg=Some(Solid(Rgb { r: 218, g: 216, b: 201 })) bg=Some(Solid(Rgb { r: 253, g: 246, b: 227 })) attrs=None
+/button/disabled/face/highlight fg=Some(Solid(Rgb { r: 229, g: 228, b: 217 })) bg=Some(Solid(Rgb { r: 218, g: 216, b: 201 })) attrs=None
+/button/disabled/face/key fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=Some(Solid(Rgb { r: 218, g: 216, b: 201 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/disabled/face/shadow fg=Some(Solid(Rgb { r: 84, g: 83, b: 76 })) bg=Some(Solid(Rgb { r: 218, g: 216, b: 201 })) attrs=None
+/button/disabled/face/text fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=Some(Solid(Rgb { r: 218, g: 216, b: 201 })) attrs=None
 /button/disabled/key fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=None attrs=None
 /button/disabled/text fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=None attrs=None
+/button/face fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 218, g: 216, b: 201 })) attrs=None
+/button/face/edge fg=Some(Solid(Rgb { r: 218, g: 216, b: 201 })) bg=Some(Solid(Rgb { r: 253, g: 246, b: 227 })) attrs=None
+/button/face/highlight fg=Some(Solid(Rgb { r: 229, g: 228, b: 217 })) bg=Some(Solid(Rgb { r: 218, g: 216, b: 201 })) attrs=None
+/button/face/key fg=Some(Solid(Rgb { r: 0, g: 122, b: 114 })) bg=Some(Solid(Rgb { r: 218, g: 216, b: 201 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/face/shadow fg=Some(Solid(Rgb { r: 84, g: 83, b: 76 })) bg=Some(Solid(Rgb { r: 218, g: 216, b: 201 })) attrs=None
+/button/face/text fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 218, g: 216, b: 201 })) attrs=None
 /button/focused/border fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
+/button/focused/face fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 213, g: 235, b: 255 })) attrs=None
+/button/focused/face/edge fg=Some(Solid(Rgb { r: 213, g: 235, b: 255 })) bg=Some(Solid(Rgb { r: 253, g: 246, b: 227 })) attrs=None
+/button/focused/face/highlight fg=Some(Solid(Rgb { r: 226, g: 241, b: 255 })) bg=Some(Solid(Rgb { r: 213, g: 235, b: 255 })) attrs=None
+/button/focused/face/key fg=Some(Solid(Rgb { r: 0, g: 122, b: 114 })) bg=Some(Solid(Rgb { r: 213, g: 235, b: 255 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/focused/face/shadow fg=Some(Solid(Rgb { r: 81, g: 91, b: 99 })) bg=Some(Solid(Rgb { r: 213, g: 235, b: 255 })) attrs=None
+/button/focused/face/text fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 213, g: 235, b: 255 })) attrs=None
 /button/focused/key fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=None attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /button/key fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=None attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /column_chart/axis fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=None attrs=None
@@ -234,9 +314,13 @@
 /confirm/message fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
 /cyan fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=None attrs=None
 /dialog/background fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
+/dialog/button/active/face/edge fg=Some(Solid(Rgb { r: 255, g: 255, b: 255 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
 /dialog/button/border fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
+/dialog/button/disabled/face/edge fg=Some(Solid(Rgb { r: 218, g: 216, b: 201 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
+/dialog/button/face/edge fg=Some(Solid(Rgb { r: 218, g: 216, b: 201 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
 /dialog/button/fill fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
 /dialog/button/focused/border fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
+/dialog/button/focused/face/edge fg=Some(Solid(Rgb { r: 213, g: 235, b: 255 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
 /dialog/button/focused/fill fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
 /dialog/button/focused/key fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /dialog/button/focused/text fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
@@ -326,10 +410,34 @@
 / fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 40, g: 42, b: 54 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /big_text/text fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=None attrs=None
 /blue fg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) bg=None attrs=None
+/button/active/face fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 103, g: 60, b: 154 })) attrs=None
+/button/active/face/edge fg=Some(Solid(Rgb { r: 103, g: 60, b: 154 })) bg=Some(Solid(Rgb { r: 40, g: 42, b: 54 })) attrs=None
+/button/active/face/highlight fg=Some(Solid(Rgb { r: 145, g: 118, b: 186 })) bg=Some(Solid(Rgb { r: 103, g: 60, b: 154 })) attrs=None
+/button/active/face/key fg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) bg=Some(Solid(Rgb { r: 103, g: 60, b: 154 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/active/face/shadow fg=Some(Solid(Rgb { r: 35, g: 17, b: 57 })) bg=Some(Solid(Rgb { r: 103, g: 60, b: 154 })) attrs=None
+/button/active/face/text fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 103, g: 60, b: 154 })) attrs=None
 /button/disabled/border fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=None attrs=None
+/button/disabled/face fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 90, g: 93, b: 110 })) attrs=None
+/button/disabled/face/edge fg=Some(Solid(Rgb { r: 90, g: 93, b: 110 })) bg=Some(Solid(Rgb { r: 40, g: 42, b: 54 })) attrs=None
+/button/disabled/face/highlight fg=Some(Solid(Rgb { r: 136, g: 139, b: 151 })) bg=Some(Solid(Rgb { r: 90, g: 93, b: 110 })) attrs=None
+/button/disabled/face/key fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 90, g: 93, b: 110 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/disabled/face/shadow fg=Some(Solid(Rgb { r: 30, g: 31, b: 38 })) bg=Some(Solid(Rgb { r: 90, g: 93, b: 110 })) attrs=None
+/button/disabled/face/text fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 90, g: 93, b: 110 })) attrs=None
 /button/disabled/key fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=None attrs=None
 /button/disabled/text fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=None attrs=None
+/button/face fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 90, g: 93, b: 110 })) attrs=None
+/button/face/edge fg=Some(Solid(Rgb { r: 90, g: 93, b: 110 })) bg=Some(Solid(Rgb { r: 40, g: 42, b: 54 })) attrs=None
+/button/face/highlight fg=Some(Solid(Rgb { r: 136, g: 139, b: 151 })) bg=Some(Solid(Rgb { r: 90, g: 93, b: 110 })) attrs=None
+/button/face/key fg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) bg=Some(Solid(Rgb { r: 90, g: 93, b: 110 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/face/shadow fg=Some(Solid(Rgb { r: 30, g: 31, b: 38 })) bg=Some(Solid(Rgb { r: 90, g: 93, b: 110 })) attrs=None
+/button/face/text fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 90, g: 93, b: 110 })) attrs=None
 /button/focused/border fg=Some(Solid(Rgb { r: 189, g: 147, b: 249 })) bg=None attrs=None
+/button/focused/face fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 118, g: 75, b: 171 })) attrs=None
+/button/focused/face/edge fg=Some(Solid(Rgb { r: 118, g: 75, b: 171 })) bg=Some(Solid(Rgb { r: 40, g: 42, b: 54 })) attrs=None
+/button/focused/face/highlight fg=Some(Solid(Rgb { r: 157, g: 129, b: 198 })) bg=Some(Solid(Rgb { r: 118, g: 75, b: 171 })) attrs=None
+/button/focused/face/key fg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) bg=Some(Solid(Rgb { r: 118, g: 75, b: 171 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/focused/face/shadow fg=Some(Solid(Rgb { r: 41, g: 23, b: 64 })) bg=Some(Solid(Rgb { r: 118, g: 75, b: 171 })) attrs=None
+/button/focused/face/text fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 118, g: 75, b: 171 })) attrs=None
 /button/focused/key fg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) bg=None attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /button/key fg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) bg=None attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /column_chart/axis fg=Some(Solid(Rgb { r: 98, g: 114, b: 164 })) bg=None attrs=None
@@ -342,9 +450,13 @@
 /confirm/message fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
 /cyan fg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) bg=None attrs=None
 /dialog/background fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
+/dialog/button/active/face/edge fg=Some(Solid(Rgb { r: 103, g: 60, b: 154 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
 /dialog/button/border fg=Some(Solid(Rgb { r: 98, g: 114, b: 164 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
+/dialog/button/disabled/face/edge fg=Some(Solid(Rgb { r: 90, g: 93, b: 110 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
+/dialog/button/face/edge fg=Some(Solid(Rgb { r: 90, g: 93, b: 110 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
 /dialog/button/fill fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
 /dialog/button/focused/border fg=Some(Solid(Rgb { r: 189, g: 147, b: 249 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
+/dialog/button/focused/face/edge fg=Some(Solid(Rgb { r: 118, g: 75, b: 171 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
 /dialog/button/focused/fill fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
 /dialog/button/focused/key fg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /dialog/button/focused/text fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
@@ -434,10 +546,34 @@
 / fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /big_text/text fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=None attrs=None
 /blue fg=Some(Solid(Rgb { r: 131, g: 165, b: 152 })) bg=None attrs=None
+/button/active/face fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 38, g: 69, b: 58 })) attrs=None
+/button/active/face/edge fg=Some(Solid(Rgb { r: 38, g: 69, b: 58 })) bg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) attrs=None
+/button/active/face/highlight fg=Some(Solid(Rgb { r: 98, g: 120, b: 112 })) bg=Some(Solid(Rgb { r: 38, g: 69, b: 58 })) attrs=None
+/button/active/face/key fg=Some(Solid(Rgb { r: 152, g: 203, b: 134 })) bg=Some(Solid(Rgb { r: 38, g: 69, b: 58 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/active/face/shadow fg=Some(Solid(Rgb { r: 8, g: 21, b: 16 })) bg=Some(Solid(Rgb { r: 38, g: 69, b: 58 })) attrs=None
+/button/active/face/text fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 38, g: 69, b: 58 })) attrs=None
 /button/disabled/border fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=None attrs=None
+/button/disabled/face fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=Some(Solid(Rgb { r: 82, g: 76, b: 70 })) attrs=None
+/button/disabled/face/edge fg=Some(Solid(Rgb { r: 82, g: 76, b: 70 })) bg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) attrs=None
+/button/disabled/face/highlight fg=Some(Solid(Rgb { r: 130, g: 126, b: 121 })) bg=Some(Solid(Rgb { r: 82, g: 76, b: 70 })) attrs=None
+/button/disabled/face/key fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=Some(Solid(Rgb { r: 82, g: 76, b: 70 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/disabled/face/shadow fg=Some(Solid(Rgb { r: 26, g: 24, b: 21 })) bg=Some(Solid(Rgb { r: 82, g: 76, b: 70 })) attrs=None
+/button/disabled/face/text fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=Some(Solid(Rgb { r: 82, g: 76, b: 70 })) attrs=None
 /button/disabled/key fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=None attrs=None
 /button/disabled/text fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=None attrs=None
+/button/face fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 82, g: 76, b: 70 })) attrs=None
+/button/face/edge fg=Some(Solid(Rgb { r: 82, g: 76, b: 70 })) bg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) attrs=None
+/button/face/highlight fg=Some(Solid(Rgb { r: 130, g: 126, b: 121 })) bg=Some(Solid(Rgb { r: 82, g: 76, b: 70 })) attrs=None
+/button/face/key fg=Some(Solid(Rgb { r: 152, g: 203, b: 134 })) bg=Some(Solid(Rgb { r: 82, g: 76, b: 70 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/face/shadow fg=Some(Solid(Rgb { r: 26, g: 24, b: 21 })) bg=Some(Solid(Rgb { r: 82, g: 76, b: 70 })) attrs=None
+/button/face/text fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 82, g: 76, b: 70 })) attrs=None
 /button/focused/border fg=Some(Solid(Rgb { r: 131, g: 165, b: 152 })) bg=None attrs=None
+/button/focused/face fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 52, g: 83, b: 72 })) attrs=None
+/button/focused/face/edge fg=Some(Solid(Rgb { r: 52, g: 83, b: 72 })) bg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) attrs=None
+/button/focused/face/highlight fg=Some(Solid(Rgb { r: 109, g: 131, b: 123 })) bg=Some(Solid(Rgb { r: 52, g: 83, b: 72 })) attrs=None
+/button/focused/face/key fg=Some(Solid(Rgb { r: 152, g: 203, b: 134 })) bg=Some(Solid(Rgb { r: 52, g: 83, b: 72 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/button/focused/face/shadow fg=Some(Solid(Rgb { r: 14, g: 27, b: 22 })) bg=Some(Solid(Rgb { r: 52, g: 83, b: 72 })) attrs=None
+/button/focused/face/text fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 52, g: 83, b: 72 })) attrs=None
 /button/focused/key fg=Some(Solid(Rgb { r: 142, g: 192, b: 124 })) bg=None attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /button/key fg=Some(Solid(Rgb { r: 142, g: 192, b: 124 })) bg=None attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /column_chart/axis fg=Some(Solid(Rgb { r: 124, g: 111, b: 100 })) bg=None attrs=None
@@ -450,9 +586,13 @@
 /confirm/message fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
 /cyan fg=Some(Solid(Rgb { r: 142, g: 192, b: 124 })) bg=None attrs=None
 /dialog/background fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
+/dialog/button/active/face/edge fg=Some(Solid(Rgb { r: 38, g: 69, b: 58 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
 /dialog/button/border fg=Some(Solid(Rgb { r: 124, g: 111, b: 100 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
+/dialog/button/disabled/face/edge fg=Some(Solid(Rgb { r: 82, g: 76, b: 70 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
+/dialog/button/face/edge fg=Some(Solid(Rgb { r: 82, g: 76, b: 70 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
 /dialog/button/fill fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
 /dialog/button/focused/border fg=Some(Solid(Rgb { r: 131, g: 165, b: 152 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
+/dialog/button/focused/face/edge fg=Some(Solid(Rgb { r: 52, g: 83, b: 72 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
 /dialog/button/focused/fill fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
 /dialog/button/focused/key fg=Some(Solid(Rgb { r: 142, g: 192, b: 124 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /dialog/button/focused/text fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None

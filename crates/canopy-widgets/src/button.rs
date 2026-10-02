@@ -3,11 +3,11 @@
 use std::{borrow::Cow, ops::Range};
 
 use canopy::{
-    Context, ContextExt, NodeName, Register, Setup, ViewContext, Widget,
+    Context, NodeName, Register, Setup, ViewContext, Widget,
     commands::{CommandCall, CommandStatus},
     derive_commands,
     error::Result,
-    geom::{Line, Size},
+    geom::{Line, Rect, Size},
     layout::{Layout, MeasureConstraints, Measurement},
     render::Render,
     runtime::WidgetSemantics,
@@ -16,11 +16,7 @@ use canopy::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{Border, Container, border::BoxGlyphs};
-
-canopy::slot!(LabelSlot: ButtonLabel);
-canopy::slot!(BoxSlot: Border);
-canopy::slot!(CenterSlot: Container);
+use crate::border::BoxGlyphs;
 
 /// Default activation bindings exposed through `button.default_bindings()`.
 ///
@@ -40,6 +36,51 @@ canopy.keymap({
 })
 "#;
 
+/// Columns between the label and each side of a button.
+const PADDING: u32 = 2;
+
+/// How a button draws.
+///
+/// A terminal cell has one ground, and a box drawing line runs through the
+/// middle of its cell, so a border cannot enclose a fill of another color
+/// without a ring of the ground showing inside it. The filled looks draw
+/// their edges with block elements instead, which meet the edges of the
+/// cells exactly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ButtonLook {
+    /// The label on a filled row, one row tall.
+    #[default]
+    Solid,
+    /// A fill inset by half a cell on every side, three rows tall. Its edges
+    /// fall on the middles of the outer cells, where a box border runs.
+    Inset,
+    /// A fill three rows tall, lit along its top edge and shaded along its
+    /// bottom edge, as Textual draws its buttons.
+    Bevel,
+    /// The label inside a box border of these glyphs, on the ground of the
+    /// view, three rows tall.
+    Bordered(BoxGlyphs),
+}
+
+impl ButtonLook {
+    /// Return the rows that a button of this look takes.
+    pub const fn rows(self) -> u32 {
+        match self {
+            Self::Solid => 1,
+            Self::Inset | Self::Bevel | Self::Bordered(_) => 3,
+        }
+    }
+
+    /// Return the style prefix of the label and its key: a filled look draws
+    /// them on its face.
+    const fn label_prefix(self) -> &'static str {
+        match self {
+            Self::Solid | Self::Inset | Self::Bevel => "face/",
+            Self::Bordered(_) => "",
+        }
+    }
+}
+
 /// Button widget that runs a command when it is activated.
 ///
 /// Activation is the `button::press` command, which a click, `Enter`, or
@@ -54,6 +95,14 @@ canopy.keymap({
 /// posting. Calling [`Button::press`] directly posts the action as well: the
 /// action's errors surface when the outermost dispatch completes, not from the
 /// call.
+///
+/// A button measures its label, and draws in its [`ButtonLook`]. It pushes the
+/// `button` layer, then at most one state layer: `disabled`, `active`, or
+/// `focused`, in that order of precedence. A filled look paints `face`, and its
+/// label and key as `face/text` and `face/key`. A bevel adds
+/// `face/highlight` and `face/shadow`, and an inset paints its edges as
+/// `face/edge`, whose ground is the ground around the button. A bordered look
+/// paints `border`, `fill`, `text`, and `key`.
 pub struct Button {
     /// Button label.
     label: String,
@@ -61,8 +110,8 @@ pub struct Button {
     accelerator: Option<char>,
     /// Command call to dispatch on click.
     command: Option<CommandCall>,
-    /// Glyph set for the button border.
-    glyphs: BoxGlyphs,
+    /// How the button draws.
+    look: ButtonLook,
     /// Active state for the button.
     active: bool,
 }
@@ -75,7 +124,7 @@ impl Button {
             label: label.into(),
             accelerator: None,
             command: None,
-            glyphs: BoxGlyphs::SINGLE,
+            look: ButtonLook::default(),
             active: false,
         }
     }
@@ -96,10 +145,10 @@ impl Button {
         self
     }
 
-    /// Build a button with a specified glyph set.
+    /// Build a button that draws in `look`.
     #[must_use]
-    pub fn with_glyphs(mut self, glyphs: BoxGlyphs) -> Self {
-        self.glyphs = glyphs;
+    pub fn with_look(mut self, look: ButtonLook) -> Self {
+        self.look = look;
         self
     }
 
@@ -121,6 +170,15 @@ impl Button {
     /// Set whether the button is active.
     pub fn set_active(&mut self, active: bool) {
         self.active = active;
+    }
+
+    /// Return the size that the button takes: its label with padding, in the
+    /// rows of its look.
+    pub fn size(&self) -> Size {
+        Size::new(
+            text::width(&self.label).saturating_add(PADDING * 2),
+            self.look.rows(),
+        )
     }
 
     /// Trigger the button action.
@@ -148,16 +206,6 @@ impl Button {
         Ok(self.command_status(ctx)?.unwrap_or(CommandStatus::Enabled))
     }
 
-    /// Compute the label width in terminal cells.
-    fn label_width(&self) -> u32 {
-        self.label
-            .lines()
-            .map(text::width)
-            .max()
-            .unwrap_or(0)
-            .max(1)
-    }
-
     /// Read command eligibility without conflating it with the active state.
     fn command_status(&self, ctx: &dyn ViewContext) -> Result<Option<CommandStatus>> {
         if self.command.is_some() && !ctx.is_attached(ctx.node_id()) {
@@ -169,27 +217,129 @@ impl Button {
             .transpose()
     }
 
-    /// Sync the label text widget to the current label.
-    fn sync_label(&self, ctx: &mut dyn Context) -> Result<()> {
-        let box_id = ctx.get_or_create_slot::<BoxSlot>(ctx.node_id(), || {
-            Border::new()
-                .with_glyphs(self.glyphs)
-                .with_border_style(roles::BORDER)
-                .with_fill()
-        })?;
-        let center_id = ctx.get_or_create_slot::<CenterSlot>(box_id, Container::center)?;
-        let label_id = ctx.get_or_create_slot::<LabelSlot>(center_id, ButtonLabel::default)?;
-        let label = self.label.clone();
-        let accelerator = self.accelerator;
-        ctx.with_widget_mut(label_id, |text: &mut ButtonLabel, _| {
-            text.set_label(label, accelerator);
-            Ok(())
-        })?;
-        ctx.set_layout_override(
-            label_id.into(),
-            Layout::column().max_width(self.label_width()).into(),
+    /// Return the state that the button shows, by precedence: a disabled
+    /// action, then the active state, then focus.
+    fn state(&self, ctx: &dyn ViewContext) -> Result<Option<WidgetState>> {
+        Ok(
+            if matches!(self.command_status(ctx)?, Some(CommandStatus::Disabled(_))) {
+                Some(WidgetState::Disabled)
+            } else if self.active {
+                Some(WidgetState::Pressed)
+            } else if ctx.is_on_focus_path(ctx.node_id()) {
+                Some(WidgetState::Focused)
+            } else {
+                None
+            },
+        )
+    }
+
+    /// Draw the label on the middle row of `area`, centred between the
+    /// padding, with its accelerator highlighted.
+    fn draw_label(&self, render: &mut Render, area: Rect) -> Result<()> {
+        let prefix = self.look.label_prefix();
+        let room = area.w.saturating_sub(PADDING * 2).max(1).min(area.w);
+        let shown = text::truncate_end(&self.label, room as usize);
+        let width = text::width(&shown);
+        let x = area.tl.x + area.w.saturating_sub(width) / 2;
+        let y = area.tl.y + area.h / 2;
+        render.text(
+            &format!("{prefix}{}", roles::TEXT),
+            Line::new(x, y, width),
+            &shown,
         )?;
+        let Some(range) = self
+            .accelerator
+            .and_then(|key| accelerator_range(&self.label, key))
+        else {
+            return Ok(());
+        };
+        // A clipped label spends its last column on the marker, so only the
+        // columns before it still spell the original characters.
+        let kept = width.saturating_sub(u32::from(matches!(shown, Cow::Owned(_))));
+        let column = text::width(&self.label[..range.start]);
+        let key_width = text::width(&self.label[range.clone()]);
+        if column.saturating_add(key_width) > kept {
+            return Ok(());
+        }
+        render.text(
+            &format!("{prefix}{}", roles::KEY),
+            Line::new(x.saturating_add(column), y, key_width),
+            &self.label[range],
+        )
+    }
+
+    /// Draw the inset edges: half and quarter blocks in the face color on
+    /// the ground around the button.
+    fn draw_inset(render: &mut Render, area: Rect) -> Result<()> {
+        let right = area.tl.x + area.w - 1;
+        let bottom = area.tl.y + area.h - 1;
+        let span = area.w.saturating_sub(2);
+        let row = |render: &mut Render, y: u32, left: char, middle: char, end: char| {
+            render.text("face/edge", Line::new(area.tl.x, y, 1), &left.to_string())?;
+            render.fill("face/edge", Rect::new(area.tl.x + 1, y, span, 1), middle)?;
+            render.text("face/edge", Line::new(right, y, 1), &end.to_string())
+        };
+        if area.h >= 2 {
+            row(render, area.tl.y, '▗', '▄', '▖')?;
+            row(render, bottom, '▝', '▀', '▘')?;
+        }
+        let first = if area.h >= 2 {
+            area.tl.y + 1
+        } else {
+            area.tl.y
+        };
+        let last = if area.h >= 2 { bottom } else { area.tl.y + 1 };
+        for y in first..last {
+            render.text("face/edge", Line::new(area.tl.x, y, 1), "▐")?;
+            render.text("face/edge", Line::new(right, y, 1), "▌")?;
+        }
         Ok(())
+    }
+
+    /// Draw a box border of `glyphs` around `area`.
+    fn draw_border(render: &mut Render, area: Rect, glyphs: BoxGlyphs) -> Result<()> {
+        let right = area.tl.x + area.w - 1;
+        let bottom = area.tl.y + area.h - 1;
+        let span = area.w.saturating_sub(2);
+        let border = roles::BORDER;
+        render.text(
+            border,
+            Line::new(area.tl.x, area.tl.y, 1),
+            &glyphs.topleft.to_string(),
+        )?;
+        render.fill(
+            border,
+            Rect::new(area.tl.x + 1, area.tl.y, span, 1),
+            glyphs.horizontal,
+        )?;
+        render.text(
+            border,
+            Line::new(right, area.tl.y, 1),
+            &glyphs.topright.to_string(),
+        )?;
+        for y in area.tl.y + 1..bottom {
+            render.text(
+                border,
+                Line::new(area.tl.x, y, 1),
+                &glyphs.vertical.to_string(),
+            )?;
+            render.text(border, Line::new(right, y, 1), &glyphs.vertical.to_string())?;
+        }
+        render.text(
+            border,
+            Line::new(area.tl.x, bottom, 1),
+            &glyphs.bottomleft.to_string(),
+        )?;
+        render.fill(
+            border,
+            Rect::new(area.tl.x + 1, bottom, span, 1),
+            glyphs.horizontal,
+        )?;
+        render.text(
+            border,
+            Line::new(right, bottom, 1),
+            &glyphs.bottomright.to_string(),
+        )
     }
 }
 
@@ -211,7 +361,13 @@ impl Widget for Button {
     }
 
     fn layout(&self) -> Layout {
-        Layout::fill()
+        Layout::column()
+    }
+
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        // A button is a fixed shape around one line, so a narrower offer
+        // clips the label rather than wrapping it.
+        c.clamp(self.size())
     }
 
     /// Take focus only when there is something to activate.
@@ -222,91 +378,45 @@ impl Widget for Button {
         self.command.is_some()
     }
 
-    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        self.sync_label(ctx)
-    }
-
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         rndr.push_layer("button");
-        if self.active {
-            rndr.push_layer(WidgetState::Pressed.layer());
+        if let Some(state) = self.state(ctx)? {
+            rndr.push_layer(state.layer());
         }
-        if ctx.is_on_focus_path(ctx.node_id()) {
-            rndr.push_layer(WidgetState::Focused.layer());
-        }
-        if matches!(self.command_status(ctx)?, Some(CommandStatus::Disabled(_))) {
-            rndr.push_layer(WidgetState::Disabled.layer());
-        }
-        Ok(())
-    }
-
-    fn name(&self) -> NodeName {
-        NodeName::convert("button")
-    }
-}
-
-/// The label inside a button, with at most one highlighted character.
-///
-/// [`Text`](crate::Text) paints one style across a line, and a mnemonic needs
-/// two. This stays private, so the button keeps its border and centring
-/// composition and no other widget inherits a one-off renderer.
-#[derive(Default)]
-pub struct ButtonLabel {
-    /// Text on the button.
-    label: String,
-    /// Byte range of the highlighted grapheme, when the label has one.
-    accelerator: Option<Range<usize>>,
-}
-
-impl ButtonLabel {
-    /// Show `label`, highlighting the first character `accelerator` names.
-    fn set_label(&mut self, label: String, accelerator: Option<char>) {
-        self.accelerator = accelerator.and_then(|key| accelerator_range(&label, key));
-        self.label = label;
-    }
-}
-
-impl Widget for ButtonLabel {
-    fn layout(&self) -> Layout {
-        Layout::fill()
-    }
-
-    fn measure(&self, c: MeasureConstraints) -> Measurement {
-        // One row, as wide as the label. A narrower offer clips rather than
-        // wraps, because a button is a fixed shape around one line.
-        c.clamp(Size::new(text::width(&self.label), 1))
-    }
-
-    fn render(&mut self, render: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let area = ctx.view().view_rect_local();
         if area.w == 0 || area.h == 0 {
             return Ok(());
         }
-        let budget = area.w as usize;
-        let shown = text::truncate_end(&self.label, budget);
-        let line = area.line(0)?;
-        render.text(roles::TEXT, line, &shown)?;
-
-        let Some(range) = self.accelerator.clone() else {
-            return Ok(());
-        };
-        // A clipped label spends its last column on the marker, so only the
-        // columns before it still spell the original characters.
-        let kept = text::width(&shown).saturating_sub(u32::from(matches!(shown, Cow::Owned(_))));
-        let column = text::width(&self.label[..range.start]);
-        let width = text::width(&self.label[range.clone()]);
-        if column.saturating_add(width) > kept {
-            return Ok(());
+        match self.look {
+            ButtonLook::Solid => rndr.fill("face", area, ' ')?,
+            ButtonLook::Inset => {
+                rndr.fill("face", area, ' ')?;
+                Self::draw_inset(rndr, area)?;
+            }
+            ButtonLook::Bevel => {
+                rndr.fill("face", area, ' ')?;
+                if area.h >= 3 {
+                    let bottom = area.tl.y + area.h - 1;
+                    rndr.fill(
+                        "face/highlight",
+                        Rect::new(area.tl.x, area.tl.y, area.w, 1),
+                        '▔',
+                    )?;
+                    rndr.fill("face/shadow", Rect::new(area.tl.x, bottom, area.w, 1), '▁')?;
+                }
+            }
+            ButtonLook::Bordered(glyphs) => {
+                rndr.fill("fill", area, ' ')?;
+                if area.h >= 3 && area.w >= 2 {
+                    Self::draw_border(rndr, area, glyphs)?;
+                }
+            }
         }
-        render.text(
-            roles::KEY,
-            Line::new(line.tl.x.saturating_add(column), line.tl.y, width),
-            &self.label[range],
-        )
+        self.draw_label(rndr, area)
     }
 
     fn name(&self) -> NodeName {
-        NodeName::convert("button_label")
+        NodeName::convert("button")
     }
 }
 
@@ -340,7 +450,7 @@ fn names_grapheme(grapheme: &str, accelerator: char) -> bool {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        NodeId, Register, Setup, ViewContextExt,
+        ContextExt, NodeId, Register, Setup, ViewContextExt,
         commands::{CommandError, CommandTarget},
         error::Error,
         geom::PointI32,
@@ -545,17 +655,48 @@ mod tests {
         Ok(())
     }
 
+    /// Return the rows of a button of `look`, drawn alone in its own size.
+    fn drawn(look: ButtonLook) -> Result<Vec<String>> {
+        let button = Button::new("Save").with_look(look);
+        let size = button.size();
+        let mut harness = Harness::builder(button)
+            .register::<Button>()
+            .size(size.w, size.h)
+            .build()?;
+        harness.render()?;
+        Ok(harness.tbuf().lines())
+    }
+
     #[test]
-    fn button_label_role_survives_an_extra_center() -> Result<()> {
+    fn each_look_draws_its_shape_around_the_centred_label() -> Result<()> {
+        assert_eq!(drawn(ButtonLook::Solid)?, ["  Save  "]);
+        assert_eq!(
+            drawn(ButtonLook::Inset)?,
+            ["▗▄▄▄▄▄▄▖", "▐ Save ▌", "▝▀▀▀▀▀▀▘"]
+        );
+        assert_eq!(
+            drawn(ButtonLook::Bevel)?,
+            ["▔▔▔▔▔▔▔▔", "  Save  ", "▁▁▁▁▁▁▁▁"]
+        );
+        assert_eq!(
+            drawn(ButtonLook::Bordered(BoxGlyphs::ROUND))?,
+            ["╭──────╮", "│ Save │", "╰──────╯"]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_filled_button_paints_its_face_and_its_state() -> Result<()> {
         let mut harness = activating(ActionOwner::default(), 20, 4)?;
         harness
             .canopy
             .style_mut()
             .rules()
-            .fg("button/active/text", Color::Red)
+            .bg("button/disabled/face/text", Color::Red)
+            .fg("button/disabled/face/text", Color::Blue)
             .apply();
         harness.render()?;
-        let label_style = |harness: &Harness| {
+        let cell = |ch: char| {
             harness
                 .canopy
                 .snapshot()
@@ -563,26 +704,13 @@ mod tests {
                 .buffer
                 .cells()
                 .iter()
-                .find(|cell| cell.ch == 'S')
-                .expect("Save label")
+                .find(|cell| cell.ch == ch)
+                .expect("label cell")
                 .style
         };
-        let before = label_style(&harness);
-        harness.with_root_widget_context(|_: &mut ActionOwner, ctx| {
-            ctx.with_unique_descendant::<Button, _>(|_, ctx| {
-                let border = ctx.get_slot::<BoxSlot>(ctx.node_id())?;
-                let center = ctx.get_slot::<CenterSlot>(border)?;
-                let label = ctx.get_slot::<LabelSlot>(center)?;
-                ctx.edit_structure(&mut |ctx| {
-                    let wrapper = ctx.create_detached(Container::center())?;
-                    ctx.detach(label.into())?;
-                    ctx.attach(wrapper.into(), label.into())?;
-                    ctx.attach(center.into(), wrapper.into())
-                })
-            })
-        })?;
-        harness.render()?;
-        assert_eq!(label_style(&harness), before);
+        // The action is disabled, so the label takes the face of that state.
+        assert_eq!(cell('S').fg, Color::Blue);
+        assert_eq!(cell('S').bg, Color::Red);
         Ok(())
     }
 
@@ -597,17 +725,15 @@ mod tests {
             5,
         )?;
         let button = the_button(&harness);
-        let label = harness
-            .find_nodes("**/button/**/button_label")?
-            .first()
-            .copied()
-            .expect("button label");
-
-        // The border and the label are separate nodes, so a click on either
-        // must still reach the button that contains them.
-        assert_ne!(origin(&harness, button), origin(&harness, label));
-        harness.mouse(press_at(origin(&harness, button)))?;
-        harness.mouse(press_at(origin(&harness, label)))?;
+        // The padding is the button's own, so a click beside the label and a
+        // click on it both reach the button.
+        let corner = origin(&harness, button);
+        let label = PointI32 {
+            x: corner.x + 3,
+            y: corner.y,
+        };
+        harness.mouse(press_at(corner))?;
+        harness.mouse(press_at(label))?;
         harness.with_root_widget(|owner: &mut ActionOwner| assert_eq!(owner.activations, 2));
         Ok(())
     }

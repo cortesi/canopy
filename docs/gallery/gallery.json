@@ -1,0 +1,125 @@
+{
+  "title": "Canopy widgets",
+  "generated": 1790902655,
+  "font_size": 14.0,
+  "scale": 2.0,
+  "sizes": [
+    "110x36"
+  ],
+  "pages": [
+    {
+      "id": "cedit",
+      "title": "Code editor",
+      "caption": "A file in the editor, with syntax colours and vi keys.",
+      "script": "cedit.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "cedit-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "chartgym",
+      "title": "Charts",
+      "caption": "Big numbers, meters, sparklines, and column charts, updating live.",
+      "script": "chartgym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "chartgym-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "editorgym",
+      "title": "Editor",
+      "caption": "The multi-line editor.",
+      "script": "editorgym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "editorgym-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "fontgym",
+      "title": "Font banners",
+      "caption": "TrueType fonts drawn as large text for banners and headers.",
+      "script": "fontgym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "fontgym-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "imgview",
+      "title": "Image viewer",
+      "caption": "An image drawn in the terminal.",
+      "script": "imgview.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "imgview-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "widgets",
+      "title": "Widgets",
+      "caption": "Buttons in each look and state, inputs, a selector, and a dropdown.",
+      "script": "stylegym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "widgets-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "palette",
+      "title": "Themes",
+      "caption": "The palette of a theme, and the roles that its rules colour.",
+      "script": "stylegym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "palette-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "syntax",
+      "title": "Syntax",
+      "caption": "Code in the syntax colours of the theme.",
+      "script": "stylegym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "syntax-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    }
+  ],
+  "failures": [],
+  "missing_glyphs": []
+}

@@ -7,7 +7,9 @@
 
 use canopy::{
     CanopyBuilder, Context, ContextExt, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
-    ViewContextExt, Widget, derive_commands,
+    ViewContextExt, Widget,
+    commands::{CommandStatus, CommandTarget},
+    derive_commands,
     error::Result,
     geom::{Line, Point, Rect, Size},
     layout::{CanvasContext, Direction, Edges, Layout, View},
@@ -21,7 +23,8 @@ use canopy::{
     tree::ChildSlot,
 };
 use canopy_widgets::{
-    Button, Container, Dropdown, Frame, Input, ItemLabel, Root, Scroll, Selector, Tabs,
+    BoxGlyphs, Button, ButtonLook, Container, Dropdown, Frame, Input, ItemLabel, Root, Scroll,
+    Selector, Tabs,
     editor::{Editor, EditorConfig, Interaction, LineNumbers, WrapMode},
     highlight::SyntectHighlighter,
 };
@@ -734,26 +737,58 @@ impl Widget for ModalContent {
     }
 }
 
-/// Add stock widgets under `parent`, one titled frame each.
-fn add_widget_samples(c: &mut dyn Context, parent: NodeId) -> Result<()> {
+/// The looks of the button samples, one row each.
+const BUTTON_LOOKS: [(&str, ButtonLook); 4] = [
+    ("Solid", ButtonLook::Solid),
+    ("Inset", ButtonLook::Inset),
+    ("Bevel", ButtonLook::Bevel),
+    ("Bordered", ButtonLook::Bordered(BoxGlyphs::ROUND)),
+];
+
+/// Add stock widgets under `parent`, one titled frame each. The buttons run
+/// commands of `owner`: one that does nothing, and one that is disabled.
+fn add_widget_samples(c: &mut dyn Context, parent: NodeId, owner: NodeId) -> Result<()> {
     let buttons = c.add_child(parent, Frame::new().with_title("Buttons"))?;
+    let rows: u32 = BUTTON_LOOKS.iter().map(|(_, look)| look.rows()).sum();
+    let gaps = u32::try_from(BUTTON_LOOKS.len())
+        .unwrap_or(0)
+        .saturating_sub(1);
     c.set_layout_override(
         buttons.into(),
         Layout::column()
-            .fixed_height(5)
+            .fixed_height(rows + gaps + 2)
             .flex_horizontal(1)
+            .gap(1)
             .padding(Edges::all(1))
             .into(),
     )?;
-    let row = c.add_child(buttons, Container::row())?;
-    for (label, active) in [("Normal", false), ("Pressed", true)] {
-        let mut button = Button::new(label);
-        button.set_active(active);
-        let button = c.add_child(row, button)?;
+    let target = CommandTarget::Exact(owner);
+    for (name, look) in BUTTON_LOOKS {
+        let row = c.add_child(buttons, Container::row())?;
         c.set_layout_override(
-            button.into(),
-            Layout::fill().fixed_width(14).fixed_height(3).into(),
+            row.into(),
+            Layout::fill()
+                .direction(Direction::Row)
+                .gap(2)
+                .fixed_height(look.rows())
+                .into(),
         )?;
+        for (label, state) in [
+            (name, "normal"),
+            ("Pressed", "active"),
+            ("Disabled", "disabled"),
+        ] {
+            let command = if state == "disabled" {
+                Stylegym::call_unavailable()
+            } else {
+                Stylegym::call_sample()
+            };
+            let mut button = Button::new(label)
+                .with_look(look)
+                .with_command(command.with_target(target));
+            button.set_active(state == "active");
+            c.add_child(row, button)?;
+        }
     }
 
     for (title, value) in [
@@ -835,6 +870,21 @@ impl Stylegym {
             current_theme: 0,
             rules: None,
         }
+    }
+
+    /// Do nothing: the action of the enabled button samples.
+    #[command]
+    pub fn sample(&self) {}
+
+    /// Never run: the action of the disabled button samples.
+    #[command(enabled = "never")]
+    pub fn unavailable(&self) {}
+
+    /// Report the sample action that is never available.
+    fn never(&self, _ctx: &dyn ViewContext) -> Result<CommandStatus> {
+        Ok(CommandStatus::Disabled(
+            "a sample of a disabled button".into(),
+        ))
     }
 
     /// Execute a closure with the right container widget.
@@ -1028,11 +1078,12 @@ impl Widget for Stylegym {
         // Create the styles frame and its tabbed pages
         let styles_frame_id = c.add_slot::<MainFrameSlot>(right_container_id, Frame::new())?;
         let tabs_id = c.add_slot::<TabsSlot>(styles_frame_id, Tabs::new())?;
+        let owner = c.node_id();
         let (palette, rules) = c.with_widget_mut(tabs_id, |tabs: &mut Tabs, ctx| {
             let palette = tabs.add_tab(ctx, "Palette", StyleSheet::palette())?;
             let rules = tabs.add_tab(ctx, "Rules", StyleSheet::rules())?;
             let widgets = tabs.add_tab(ctx, "Widgets", Scroll::vertical())?;
-            add_widget_samples(ctx, widgets.into())?;
+            add_widget_samples(ctx, widgets.into(), owner)?;
             let syntax = tabs.add_tab(ctx, "Syntax", Container::row())?;
             add_syntax_samples(ctx, syntax.into())?;
             tabs.add_tab(ctx, "Text", TextSamples)?;

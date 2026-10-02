@@ -22,34 +22,53 @@ All interface operations are defined cleanly as traversals of this node tree.
 
 # Widgets
 
+Canopy draws these screenshots itself, from the gyms. `cargo xtask gallery`
+captures them again: each script in `examples/gyms/gallery` drives its gym and
+returns `canopy.capture()` frames, and `canopyctl gallery` draws them as PNG
+images in [`docs/gallery`](./docs/gallery), beside a viewer.
 
 <table>
-    <tbody>
-        <tr>
-            <td align="center" width="50%">
-                <img src="./demos/font.gif" height="300" />
-                <p><b>TTF font renderer for hero banners and headers.</b></p>
-            </td>
-            <td align="center" width="50%">
-                <img src="./demos/image.gif" height="300" />
-                <p><b>Image viewer</b></p>
-            </td>
-        </tr>
-    </tbody>
-    <tbody>
-        <tr>
-            <td align="center" width="50%">
-                <img src="./demos/term.gif" height="300" />
-                <p><b>Full embedded terminals based on alacritty.</b></p>
-            </td>
-            <td align="center" width="50%">
-                <img src="./demos/editor.gif" height="300" />
-                <p><b>Editor + syntax + vi keys</b></p>
-            </td>
-        </tr>
-    </tbody>
+    <tr>
+        <td align="center" width="50%">
+            <img src="./docs/gallery/widgets-110x36.png" />
+            <p><b>Stock widgets</b>: Buttons in each look and state, inputs, a selector, and a dropdown.</p>
+        </td>
+        <td align="center" width="50%">
+            <img src="./docs/gallery/chartgym-110x36.png" />
+            <p><b>Charts</b>: Big numbers, meters, sparklines, and column charts.</p>
+        </td>
+    </tr>
+    <tr>
+        <td align="center" width="50%">
+            <img src="./docs/gallery/cedit-110x36.png" />
+            <p><b>Code editor</b>: A source file with syntax colours and vi keys.</p>
+        </td>
+        <td align="center" width="50%">
+            <img src="./docs/gallery/editorgym-110x36.png" />
+            <p><b>Editor</b>: The editor in each mode: wrapping, line numbers, tab stops, and auto grow.</p>
+        </td>
+    </tr>
+    <tr>
+        <td align="center" width="50%">
+            <img src="./docs/gallery/fontgym-110x36.png" />
+            <p><b>Font banners</b>: TrueType fonts drawn as large text for banners and headers.</p>
+        </td>
+        <td align="center" width="50%">
+            <img src="./docs/gallery/imgview-110x36.png" />
+            <p><b>Image viewer</b>: An image drawn in the terminal.</p>
+        </td>
+    </tr>
+    <tr>
+        <td align="center" width="50%">
+            <img src="./docs/gallery/palette-110x36.png" />
+            <p><b>Themes</b>: The palette of a theme, and the roles that its rules colour.</p>
+        </td>
+        <td align="center" width="50%">
+            <img src="./docs/gallery/syntax-110x36.png" />
+            <p><b>Syntax</b>: Code in the syntax colours of the theme.</p>
+        </td>
+    </tr>
 </table>
-
 
 
 # Documentation

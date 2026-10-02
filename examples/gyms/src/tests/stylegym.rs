@@ -216,7 +216,7 @@ fn palette_and_rules_follow_the_selected_theme() -> Result<()> {
     assert_off_screen(&harness, &accent);
 
     show_tab(&mut harness, RULES)?;
-    assert_on_screen(&harness, "/frame/focused");
+    assert_on_screen(&harness, "/button/focused/face");
     assert_on_screen(&harness, blue);
     Ok(())
 }

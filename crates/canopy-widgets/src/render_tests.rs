@@ -13,8 +13,8 @@ mod tests {
     };
 
     use crate::{
-        BoxGlyphs, Button, Dialog, DiffView, Dropdown, Frame, KeyHint, List, Root, Selector,
-        StatusBar, Text,
+        BoxGlyphs, Button, ButtonLook, Dialog, DiffView, Dropdown, Frame, KeyHint, List, Root,
+        Selector, StatusBar, Text,
         diff::{DiffModel, Mode, Scope},
     };
 
@@ -599,12 +599,12 @@ mod tests {
 
     #[test]
     fn button_renders_a_centred_label_in_a_box() -> Result<()> {
-        let root = SnapshotRoot::new(Button::new("OK").with_glyphs(ASCII_BOX));
-        let mut harness = Harness::builder(root).size(10, 3).build()?;
+        let root = SnapshotRoot::new(Button::new("OK").with_look(ButtonLook::Bordered(ASCII_BOX)));
+        let mut harness = Harness::builder(root).size(6, 3).build()?;
         harness.render()?;
         harness
             .tbuf()
-            .assert_matches(buf!["+--------+" "|   OK   |" "+--------+"]);
+            .assert_matches(buf!["+----+" "| OK |" "+----+"]);
         Ok(())
     }
 

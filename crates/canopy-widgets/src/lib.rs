@@ -100,7 +100,7 @@ mod text_buffer;
 
 pub use big_text::BigText;
 pub use border::{Border, BoxGlyphs};
-pub use button::Button;
+pub use button::{Button, ButtonLook};
 pub use column_chart::ColumnChart;
 pub use columns::Columns;
 pub use confirm::{Answer, Confirm, ConfirmRequest};

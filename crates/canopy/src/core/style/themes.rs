@@ -19,6 +19,18 @@ const MATCH_FADE: f32 = 0.5;
 /// How far a meter track fades from the faint text colour toward the ground,
 /// so the track shows the length of the bar without competing with its fill.
 const TRACK_FADE: f32 = 0.6;
+/// How far the face of a button leans from the panel toward the foreground.
+const BUTTON_FACE: f32 = 0.14;
+/// The WCAG AA contrast ratio for text, the most a button asks of its label
+/// and key on any of its faces.
+const TEXT_CONTRAST: f32 = 4.5;
+/// How much more contrast a pressed face gives its label than a focused face,
+/// which takes it further from the label than focus does.
+const PRESSED_CONTRAST: f32 = 1.25;
+/// How far the top edge of a bevel lightens its face.
+const BEVEL_LIGHT: f32 = 0.3;
+/// How far the bottom edge of a bevel darkens its face.
+const BEVEL_SHADE: f32 = 0.5;
 
 /// The role colours a theme assigns.
 ///
@@ -360,7 +372,80 @@ impl Palette {
                     .attrs(AttrSet::new(Attr::Bold)),
             )
             .apply();
+        p.button_rules(&mut c);
         c
+    }
+
+    /// Add the rules of a button face in each state: a face just off the
+    /// panel, the accent while focused, and a darker accent while pressed.
+    /// A disabled button keeps its face and mutes its label. The edges of an
+    /// inset take the ground around the button: the view, or the panel of a
+    /// dialog.
+    fn button_rules(&self, c: &mut StyleMap) {
+        let p = self;
+        let black = Color::Rgb { r: 0, g: 0, b: 0 };
+        let white = Color::Rgb {
+            r: 255,
+            g: 255,
+            b: 255,
+        };
+        // The label and its key keep one color in every state, so a key
+        // reads the same on every button. They read as well as the theme's
+        // text reads on its panel, up to WCAG AA: the key on every face, and
+        // the label on the faces that show focus and a press. The key moves
+        // only as far as the resting face asks, and those faces keep the
+        // accent's hue at whatever lightness lets both read. The resting face
+        // is the theme's own tint of its panel, so the label keeps the
+        // contrast the theme gives it there.
+        let target = p.fg.contrast_ratio(p.panel_bg).min(TEXT_CONTRAST);
+        let face = p.panel_bg.mix(p.fg, BUTTON_FACE, Mix::Oklab);
+        let key = p.key.with_contrast(&[face], target);
+        let focused = p.accent.with_contrast(&[p.fg, key], target);
+        let pressed = p
+            .accent
+            .with_contrast(&[p.fg, key], target * PRESSED_CONTRAST);
+        let bold = AttrSet::new(Attr::Bold);
+        let states = [
+            ("", face, p.fg, key, bold),
+            ("focused/", focused, p.fg, key, bold),
+            (
+                "disabled/",
+                face,
+                p.muted_fg,
+                p.muted_fg,
+                AttrSet::default(),
+            ),
+            ("active/", pressed, p.fg, key, bold),
+        ];
+        let mut rules = c.rules();
+        for (state, face, text, key, key_attrs) in states {
+            let path = |part: &str| format!("/button/{state}face{part}");
+            rules = rules
+                .style(&path(""), PartialStyle::new().fg(text).bg(face))
+                .style(&path("/text"), PartialStyle::new().fg(text).bg(face))
+                .style(
+                    &path("/key"),
+                    PartialStyle::new().fg(key).bg(face).attrs(key_attrs),
+                )
+                .style(
+                    &path("/highlight"),
+                    PartialStyle::new()
+                        .fg(face.mix(white, BEVEL_LIGHT, Mix::Oklab))
+                        .bg(face),
+                )
+                .style(
+                    &path("/shadow"),
+                    PartialStyle::new()
+                        .fg(face.mix(black, BEVEL_SHADE, Mix::Oklab))
+                        .bg(face),
+                )
+                .style(&path("/edge"), PartialStyle::new().fg(face).bg(p.bg))
+                .style(
+                    &format!("/dialog/button/{state}face/edge"),
+                    PartialStyle::new().fg(face).bg(p.panel_bg),
+                );
+        }
+        rules.apply();
     }
 }
 

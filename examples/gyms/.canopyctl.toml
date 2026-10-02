@@ -7,3 +7,9 @@ mcp_args = ["--mcp={socket}"]
 suite = "smoke"
 fail_fast = true
 timeout_ms = 5000
+
+[gallery]
+suite = "gallery"
+out = "../../docs/gallery"
+sizes = ["110x36"]
+title = "Canopy widgets"

@@ -16,7 +16,7 @@ use canopy::{
     tree::{FocusDirection, FocusScope},
 };
 
-use crate::{BoxGlyphs, Button, Container, Dialog, frame::Frame};
+use crate::{Button, ButtonLook, Container, Dialog, frame::Frame};
 
 /// Columns of blank between the body's text and each of its sides.
 const SIDE_PADDING: u32 = 1;
@@ -24,10 +24,10 @@ const SIDE_PADDING: u32 = 1;
 const ROW_PADDING: u32 = SIDE_PADDING * 2;
 /// Columns between the buttons.
 const BUTTON_GAP: u32 = 2;
-/// Columns a button spends on its border and the space inside it.
+/// Columns a button spends on the space beside its label.
 const BUTTON_PADDING: u32 = 4;
-/// Rows a button occupies, border included.
-const BUTTON_ROWS: u32 = 3;
+/// Rows a button occupies.
+const BUTTON_ROWS: u32 = ButtonLook::Solid.rows();
 /// Rows the body keeps below the message, above the buttons.
 const MESSAGE_GAP_ROWS: u32 = 1;
 
@@ -400,12 +400,7 @@ impl Widget for Confirm {
         // binding does not want.
         for (answer, label, key) in [(Answer::Yes, "yes", 'y'), (Answer::No, "no", 'n')] {
             let button: NodeId = context
-                .add_child(
-                    answers,
-                    Button::new(label)
-                        .with_glyphs(BoxGlyphs::ROUND)
-                        .with_accelerator(key),
-                )?
+                .add_child(answers, Button::new(label).with_accelerator(key))?
                 .into();
             context.set_layout_override(
                 button,
@@ -695,7 +690,7 @@ mod tests {
     }
 
     #[test]
-    fn the_dialog_states_its_question_and_frames_its_answers() -> Result<()> {
+    fn the_dialog_states_its_question_and_offers_its_answers() -> Result<()> {
         let harness = dialog("/tmp/alpha/notes.txt", 50, 14)?;
         let screen = harness.tbuf().lines().join("\n");
         assert!(screen.contains("Bookmark"), "the frame carries the title");
@@ -703,20 +698,12 @@ mod tests {
             screen.contains("/tmp/alpha/notes.txt"),
             "the question shows its message"
         );
-        // Each button is framed, so the button row carries its own corners
-        // besides the dialog frame's.
+        // The answers are filled rows, so only the dialog is framed.
         let corners = screen.matches('\u{256d}').count();
-        assert_eq!(
-            corners, 3,
-            "the dialog and both buttons are framed, got {screen}"
-        );
+        assert_eq!(corners, 1, "only the dialog is framed, got {screen}");
         assert!(
-            screen.contains("\u{2502} yes \u{2502}"),
-            "the affirmative button keeps both borders, got {screen}"
-        );
-        assert!(
-            screen.contains("\u{2502} no \u{2502}"),
-            "the negative button keeps both borders, got {screen}"
+            screen.contains("  yes  ") && screen.contains("  no  "),
+            "each answer pads its label on its face, got {screen}"
         );
         Ok(())
     }
@@ -827,17 +814,17 @@ mod tests {
             style_of('o'),
             "both keys stand out from their labels"
         );
-        // The dialog opens on `no`. Its key and its ground match those of the
-        // unfocused answer, so focus hides no key.
-        assert_eq!(
-            style_of('n'),
-            style_of('y'),
-            "the focused key keeps its colour"
+        // The dialog opens on `no`, whose face differs from the face of the
+        // unfocused answer.
+        assert_ne!(
+            style_of('n').1,
+            style_of('y').1,
+            "focus changes the face of the answer"
         );
-        assert_eq!(
+        assert_ne!(
             style_of('o').1,
             style_of('e').1,
-            "the focused answer keeps the panel ground"
+            "the focused answer takes a face of its own"
         );
         Ok(())
     }
@@ -855,8 +842,8 @@ mod tests {
                 .map(|cell| cell.style.bg)
                 .expect("the cell renders")
         };
-        // The frame's border and title sit on the same ground as the message,
-        // and so do the buttons.
+        // The frame's border and title sit on the same ground as the message.
+        // The buttons stand on it with faces of their own.
         assert_eq!(
             background('\u{256d}'),
             background('B'),
@@ -867,8 +854,8 @@ mod tests {
             background('B'),
             "every frame edge shares it"
         );
-        assert_eq!(background('y'), background('B'), "a button shares it too");
-        // The blank inside a button, before its label, shares it as well.
+        assert_ne!(background('y'), background('B'), "a button has its face");
+        // The padding of a button is part of its face.
         let cells = snapshot.buffer.cells();
         let label = cells
             .iter()
@@ -876,8 +863,8 @@ mod tests {
             .expect("the label of `no` renders");
         assert_eq!(
             cells[label - 1].style.bg,
-            background('B'),
-            "the padding of a button shares the dialog background"
+            cells[label].style.bg,
+            "the padding of a button takes its face"
         );
         Ok(())
     }

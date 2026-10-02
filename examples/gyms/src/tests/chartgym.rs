@@ -1,4 +1,8 @@
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeSet,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use canopy::{
     Register,
@@ -48,10 +52,15 @@ fn clocked(width: u32, height: u32) -> Result<(Harness, Arc<ManualClock>)> {
 fn step(harness: &mut Harness, clock: &ManualClock, steps: u32) -> Result<()> {
     for _ in 0..steps {
         clock.advance(STEP)?;
+        // Run one more turn after the first, within a short window. On a
+        // loaded host the first turn can outlast the window, which also
+        // settles the step.
+        let window = Duration::from_millis(50);
+        let closes = Instant::now() + window;
         let mut checks = 0;
-        harness.wait_until(Duration::from_millis(50), |_| {
+        harness.wait_until(window, |_| {
             checks += 1;
-            Ok(checks > 1)
+            Ok(checks > 1 || Instant::now() >= closes)
         })?;
     }
     harness.render()

@@ -744,8 +744,8 @@ input; see [Notices](#notices).
 
 Widget activation is a command like any other. `Button::press` runs the action a
 button was built with, and `button.default_bindings()` binds unmodified
-`LeftDown`, `Enter`, and `Space` to it under `**/button/**/`, so a click on the
-label or the border resolves to the button containing it. The records are
+`LeftDown`, `Enter`, and `Space` to it under `**/button/**/`, so a click
+anywhere on a button resolves to it. The records are
 ordinary application bindings that a configuration can replace or unbind.
 `root.default_bindings()` installs them. A modal that admits only framework
 groups admits none of them, so a widget used there ships activation in its own
