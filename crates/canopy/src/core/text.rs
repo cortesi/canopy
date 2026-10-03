@@ -52,6 +52,11 @@ pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {
 /// Return the display width of a grapheme cluster, capped at terminal cell
 /// widths.
 pub fn grapheme_width(grapheme: &str) -> usize {
+    if let [byte] = grapheme.as_bytes()
+        && (byte.is_ascii_graphic() || *byte == b' ')
+    {
+        return 1;
+    }
     if grapheme.is_empty() {
         return 0;
     }
@@ -215,7 +220,21 @@ pub fn truncate_end(s: &str, budget: usize) -> Cow<'_, str> {
 
 #[cfg(test)]
 mod tests {
+    use std::str;
+
     use super::*;
+
+    #[test]
+    fn grapheme_width_matches_unicode_width() {
+        for byte in 0..=127u8 {
+            let encoded = [byte];
+            let text = str::from_utf8(&encoded).unwrap();
+            assert_eq!(grapheme_width(text), UnicodeWidthStr::width(text).min(2));
+        }
+        for text in ["", "ab", "界", "e\u{301}", "\u{301}", "👩‍💻", "\r\n"] {
+            assert_eq!(grapheme_width(text), UnicodeWidthStr::width(text).min(2));
+        }
+    }
 
     #[test]
     fn display_width_matches_the_slow_path() {

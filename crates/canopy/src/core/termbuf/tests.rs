@@ -70,6 +70,25 @@ fn basic_fill() {
 }
 
 #[test]
+fn fill_clears_wide_glyphs_at_both_edges() -> Result<()> {
+    let mut buffer = TermBuf::new(Size::new(6, 1), '.', def_style())?;
+    buffer.text(&def_style(), Line::new(0, 0, 6), "界ab界")?;
+    let mut style = def_style();
+    style.bg = Color::Red;
+    // The fill starts on a continuation and ends on a wide base.
+    buffer.fill(&style, Rect::new(1, 0, 4, 1), 'x')?;
+    buffer.validate_canonical()?;
+    assert!(buffer.get(Point { x: 0, y: 0 }).unwrap().is_empty());
+    assert!(buffer.get(Point { x: 5, y: 0 }).unwrap().is_empty());
+    for x in 1..5 {
+        let cell = buffer.get(Point { x, y: 0 }).unwrap();
+        assert_eq!(cell.ch, 'x');
+        assert_eq!(cell.style, style);
+    }
+    Ok(())
+}
+
+#[test]
 fn allocation_limits_are_checked_before_reservation() {
     let style = def_style();
     assert!(matches!(

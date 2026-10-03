@@ -272,18 +272,30 @@ impl TermBuf {
         Some(row_start + start..row_start + end)
     }
 
-    /// Clear the complete grapheme occupying one cell index.
-    fn clear_grapheme_at(&mut self, index: usize, style: ResolvedStyle) {
+    /// Prepare a cell for writing, clearing overlapping wide glyphs and motion.
+    fn clear_for_write(&mut self, index: usize, style: ResolvedStyle) {
+        // A single-cell glyph will be replaced directly by the caller.
+        // Only a wide glyph can leave cells outside the write behind.
+        if !self.cells[index].continuation
+            && !self
+                .cells
+                .get(index + 1)
+                .is_some_and(|cell| cell.continuation)
+        {
+            self.clear_motion(index);
+            return;
+        }
         if let Some(range) = self.grapheme_span(index) {
             self.clear_motion(range.start);
             self.cells[range].fill(Cell::new(NULL, style));
         }
     }
 
-    /// Clear every complete grapheme touched by a destination cell range.
+    /// Prepare a destination range for writing, clearing overlapping wide
+    /// glyphs.
     fn clear_graphemes(&mut self, start: usize, width: usize, style: ResolvedStyle) {
         for index in start..start.saturating_add(width) {
-            self.clear_grapheme_at(index, style);
+            self.clear_for_write(index, style);
         }
     }
 
@@ -293,7 +305,7 @@ impl TermBuf {
         let Some(index) = self.idx(p) else {
             return Ok(());
         };
-        self.clear_grapheme_at(index, style);
+        self.clear_for_write(index, style);
         self.cells[index] = Cell::new(ch, style);
         Ok(())
     }
@@ -349,9 +361,13 @@ impl TermBuf {
             let end_y = isec.tl.y.saturating_add(isec.h);
             let end_x = isec.tl.x.saturating_add(isec.w);
             for y in isec.tl.y..end_y {
+                let row_start = y as usize * self.size.w as usize;
                 for x in isec.tl.x..end_x {
                     let point = Point { x, y };
-                    self.put(point, ch, style_at(point))?;
+                    let style = style_at(point);
+                    let index = row_start + x as usize;
+                    self.clear_for_write(index, style);
+                    self.cells[index] = Cell::new(ch, style);
                 }
             }
         }
