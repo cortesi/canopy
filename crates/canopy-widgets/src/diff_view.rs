@@ -19,6 +19,7 @@
 use std::{
     collections::BTreeMap,
     ops::Range,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -103,12 +104,13 @@ struct Geometry {
 ///
 /// A host that computes diffs off the UI thread builds one of these there and
 /// hands it to [`DiffView::new`] or [`DiffView::set_model`], so the UI thread
-/// only moves data.
+/// only moves data. Clones share the immutable diff and prepared rows.
+#[derive(Clone)]
 pub struct DiffModel {
     /// The line diff.
-    diff: Diff,
+    diff: Arc<Diff>,
     /// Rows for `scope`, in unified order.
-    rows: Vec<DiffRow>,
+    rows: Arc<[DiffRow]>,
     /// Display width of the widest old line, tabs expanded.
     old_width: u32,
     /// Display width of the widest new line, tabs expanded.
@@ -129,9 +131,9 @@ impl DiffModel {
         let tab_stop = tab_stop.max(1);
         let old_width = widest_line(&diff, Side::Old, tab_stop);
         let new_width = widest_line(&diff, Side::New, tab_stop);
-        let rows = diff.rows(scope);
+        let rows = diff.rows(scope).into();
         Self {
-            diff,
+            diff: Arc::new(diff),
             rows,
             old_width,
             new_width,
@@ -168,13 +170,13 @@ struct SearchMatch {
 /// A line diff with a display strategy, a scope, and optional highlighting.
 pub struct DiffView {
     /// The line diff being shown.
-    diff: Diff,
+    diff: Arc<Diff>,
     /// How the two sides are laid out.
     strategy: Mode,
     /// How much unchanged text the rows show.
     scope: Scope,
     /// Rows for the current scope, in unified order.
-    rows: Vec<DiffRow>,
+    rows: Arc<[DiffRow]>,
     /// Rows paired for side-by-side layout.
     side_rows: Vec<SideRow>,
     /// Display width of the widest old line, tabs expanded.
@@ -564,7 +566,7 @@ impl DiffView {
 
     /// Rebuild the rows for the current scope.
     fn rebuild_rows(&mut self) {
-        self.rows = self.diff.rows(self.scope);
+        self.rows = self.diff.rows(self.scope).into();
         self.side_rows = side_rows(&self.rows);
         self.prepared = false;
         self.revision = self.revision.wrapping_add(1);
@@ -1136,10 +1138,102 @@ fn header_text(old: &Range<usize>, new: &Range<usize>) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::ptr;
+
     use canopy::{error::Result, geom::Point, testing::harness::Harness};
 
     use super::{DiffModel, DiffRow, DiffView, Mode, Scope, SideRow, header_text, side_rows};
     use crate::editor::{TextPosition, TextRange};
+
+    #[test]
+    fn model_clones_share_storage_while_view_builders_replace_only_their_rows() {
+        let model = DiffModel::from_texts(
+            "alpha\tone\nold needle\nshared\n",
+            "alpha\tone\nnew needle\nshared\n",
+        );
+        let cloned = model.clone();
+        assert!(ptr::eq(model.diff(), cloned.diff()));
+
+        let mut view = DiffView::new(cloned);
+        let other = DiffView::new(model.clone()).with_strategy(Mode::SideBySide);
+        assert!(ptr::eq(view.diff(), other.diff()));
+        assert!(ptr::eq(view.rows(), other.rows()));
+        let original_rows = other.rows().to_vec();
+        let original_widths = (other.old_width, other.new_width);
+
+        view = view.with_scope(Scope::Context(0));
+        assert!(ptr::eq(view.diff(), model.diff()));
+        assert!(!ptr::eq(view.rows(), other.rows()));
+        assert!(!view.search_text().contains("shared"));
+        assert_eq!(other.rows(), original_rows);
+        assert_eq!(other.scope(), Scope::WholeFile);
+        assert_eq!(other.revision(), 0);
+
+        let scoped_rows = view.rows.clone();
+        view = view.with_tab_stop(16);
+        assert!(!ptr::eq(view.rows(), scoped_rows.as_ref()));
+        assert_eq!(view.rows(), scoped_rows.as_ref());
+        assert_ne!((view.old_width, view.new_width), original_widths);
+        assert!(ptr::eq(view.diff(), model.diff()));
+        assert_eq!(other.rows(), original_rows);
+        assert_eq!((other.old_width, other.new_width), original_widths);
+        assert_eq!(other.tab_stop, super::DEFAULT_TAB_STOP);
+
+        let original = DiffView::new(model);
+        assert!(ptr::eq(original.rows(), other.rows()));
+        assert_eq!(original.rows(), original_rows);
+        assert_eq!(original.scope(), Scope::WholeFile);
+        assert_eq!((original.old_width, original.new_width), original_widths);
+    }
+
+    #[test]
+    fn views_from_model_clones_keep_search_and_loading_state_independent() -> Result<()> {
+        let model = DiffModel::from_texts("old needle\n", "new needle\n");
+        let mut first = Harness::builder(DiffView::new(model.clone()))
+            .size(50, 5)
+            .build()?;
+        let mut second =
+            Harness::builder(DiffView::new(model.clone()).with_strategy(Mode::SideBySide))
+                .size(50, 5)
+                .build()?;
+        first.render()?;
+        second.render()?;
+        for harness in [&mut first, &mut second] {
+            harness.with_root_widget_context(|view: &mut DiffView, ctx| {
+                view.set_matches(
+                    ctx,
+                    vec![
+                        TextRange::new(TextPosition::new(0, 4), TextPosition::new(0, 10)),
+                        TextRange::new(TextPosition::new(1, 4), TextPosition::new(1, 10)),
+                    ],
+                );
+                Ok(())
+            })?;
+        }
+        first.with_root_widget_context(|view: &mut DiffView, ctx| {
+            view.search_next(ctx, 1);
+            view.set_loading();
+            assert_eq!((view.search_matches(), view.search_position()), (2, 2));
+            view.set_model(model.clone());
+            assert!(ptr::eq(view.diff(), model.diff()));
+            assert_eq!(view.revision(), 1);
+            assert_eq!((view.search_matches(), view.search_position()), (0, 0));
+            assert!(view.loading.is_none());
+            assert!(!view.prepared);
+            Ok(())
+        })?;
+        second.with_root_widget_context(|view: &mut DiffView, _| {
+            assert!(ptr::eq(view.diff(), model.diff()));
+            assert_eq!(view.strategy, Mode::SideBySide);
+            assert!(!view.side_rows.is_empty());
+            assert_eq!(view.revision(), 0);
+            assert_eq!((view.search_matches(), view.search_position()), (2, 1));
+            assert!(view.loading.is_none());
+            assert!(view.prepared);
+            Ok(())
+        })?;
+        Ok(())
+    }
 
     #[test]
     fn search_highlights_both_versions_and_wraps_in_each_layout() -> Result<()> {

@@ -2974,7 +2974,8 @@ pub mod diff {
     ///
     /// A host that computes diffs off the UI thread builds one of these there and
     /// hands it to [`DiffView::new`] or [`DiffView::set_model`], so the UI thread
-    /// only moves data.
+    /// only moves data. Clones share the immutable diff and prepared rows.
+    #[derive(Clone)]
     pub struct DiffModel {/* private fields */}
 
     impl DiffModel {
