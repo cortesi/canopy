@@ -128,8 +128,19 @@ impl Palette {
             .fg("/diff_view/separator", p.frame)
             .fg("/diff_view/message", p.faint_fg)
             .fg("/diff_view/loading", p.faint_fg)
-            .style("/diff_view/search/match", PartialStyle::new().fg(p.fg).bg(p.yellow.mix(p.bg, MATCH_FADE, Mix::Rgb)))
-            .style("/diff_view/search/current", PartialStyle::new().fg(p.bg).bg(p.yellow).attrs(AttrSet::new(Attr::Bold)))
+            .style(
+                "/diff_view/search/match",
+                PartialStyle::new()
+                    .fg(p.fg)
+                    .bg(p.yellow.mix(p.bg, MATCH_FADE, Mix::Rgb)),
+            )
+            .style(
+                "/diff_view/search/current",
+                PartialStyle::new()
+                    .fg(p.bg)
+                    .bg(p.yellow)
+                    .attrs(AttrSet::new(Attr::Bold)),
+            )
             .fg("/blue", p.blue)
             .fg("/red", p.red)
             .fg("/magenta", p.magenta)
@@ -152,7 +163,12 @@ impl Palette {
             .fg("/column_chart/axis", p.frame)
             .fg("/column_chart/label", p.muted_fg)
             .fg("/column_chart/reference", p.faint_fg)
-            .style("/column_chart/cursor", PartialStyle::new().fg(p.accent).attrs(AttrSet::new(Attr::Bold)))
+            .style(
+                "/column_chart/cursor",
+                PartialStyle::new()
+                    .fg(p.accent)
+                    .attrs(AttrSet::new(Attr::Bold)),
+            )
             .attr("/text/bold", Attr::Bold)
             .attr("/text/italic", Attr::Italic)
             .attr("/text/underline", Attr::Underline)
@@ -161,7 +177,9 @@ impl Palette {
             // whatever ground it sits on.
             .style_all(
                 &["/button/key", "/button/focused/key"],
-                PartialStyle::new().fg(p.key).attrs(AttrSet::new(Attr::Bold)),
+                PartialStyle::new()
+                    .fg(p.key)
+                    .attrs(AttrSet::new(Attr::Bold)),
             )
             .fg("/button/focused/border", p.frame_focused)
             .fg("/button/disabled/border", p.muted_fg)
@@ -193,6 +211,17 @@ impl Palette {
                     .bg(p.accent)
                     .attrs(AttrSet::new(Attr::Bold)),
             )
+            // A bordered tab sits on the ground of the view, and the active
+            // tab has its box and its label in the accent.
+            .style("/tabs/box", PartialStyle::new().fg(p.muted_fg).bg(p.bg))
+            .fg("/tabs/box/border", p.frame)
+            .style(
+                "/tabs/box/label/active",
+                PartialStyle::new()
+                    .fg(p.accent)
+                    .attrs(AttrSet::new(Attr::Bold)),
+            )
+            .fg("/tabs/box/border/active", p.accent)
             .style("/editor/text", PartialStyle::new().fg(p.fg).bg(p.bg))
             .style(
                 "/editor/selection",
@@ -225,10 +254,7 @@ impl Palette {
                 "/editor/prompt",
                 PartialStyle::new().fg(p.fg).bg(p.panel_bg),
             )
-            .style(
-                "/help/panel",
-                PartialStyle::new().fg(p.fg).bg(p.panel_bg),
-            )
+            .style("/help/panel", PartialStyle::new().fg(p.fg).bg(p.panel_bg))
             // The status bar is chrome on the panel ground: a quiet label and an
             // accented key that names what the bar can do.
             .style(
@@ -237,10 +263,7 @@ impl Palette {
             )
             // A notice reports a failure the application survived, so it takes
             // the error colour on the chrome ground of the row it covers.
-            .style(
-                "/root/notice",
-                PartialStyle::new().fg(p.red).bg(p.panel_bg),
-            )
+            .style("/root/notice", PartialStyle::new().fg(p.red).bg(p.panel_bg))
             .style(
                 "/status_bar/key",
                 PartialStyle::new()
@@ -313,7 +336,10 @@ impl Palette {
                 PartialStyle::new().fg(p.muted_fg).bg(p.element_bg),
             )
             .style_all(
-                &["/search_bar/focused/background", "/search_bar/focused/status"],
+                &[
+                    "/search_bar/focused/background",
+                    "/search_bar/focused/status",
+                ],
                 PartialStyle::new().fg(p.muted_fg).bg(p.selection_bg),
             )
             .style(
