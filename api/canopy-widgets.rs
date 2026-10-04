@@ -22,9 +22,9 @@ use std::{
 };
 
 use canopy::{
-    Canopy, Context, EventOutcome, NodeId, Register, Setup, TypedId, ViewContext, Widget,
+    Canopy, Context, EventOutcome, Line, NodeId, Point, Rect, Register, Setup, Size, TypedId,
+    ViewContext, Widget,
     commands::{CommandCall, CommandNode, CommandSpec, ToArgValue},
-    geom::{Line, Point, Rect, Size},
     input::{FrameworkBindingGroup, IntentName, ModalToken, mouse::MouseEvent},
     layout::{Align, Edges, Layout, ScrollAxis, ScrollDirection},
     render::{Render, ScreenCapture},
@@ -34,7 +34,7 @@ use canopy::{
 };
 use grep_regex::{error::Error, matcher::RegexMatcher};
 use image::RgbaImage;
-use syntect::parsing::{SyntaxReference, SyntaxSet};
+use syntect::{SyntaxReference, SyntaxSet};
 
 /// Intent that clears the focused field, or resets what the focused widget
 /// shows.
@@ -2595,9 +2595,12 @@ impl !Sync for StatusBar {}
 /// or to its first focusable node when it remembers none, or when that node
 /// can no longer take focus.
 ///
-/// The bar occupies the top row of padding. It paints `tabs/bar`, each label
-/// `tabs/tab`, and the active label `tabs/tab/active`, or
-/// `tabs/tab/active/focused` while focus is within the tabs.
+/// The bar occupies the top rows of padding, as many as its [`TabsLook`]
+/// takes. A solid bar paints `tabs/bar`, each label `tabs/tab`, and the active
+/// label `tabs/tab/active`, or `tabs/tab/active/focused` while focus is within
+/// the tabs. A bordered bar paints `tabs/box`, and each tab
+/// `tabs/box/label` and `tabs/box/border`, with the same `active` and
+/// `active/focused` suffixes.
 ///
 /// An owner that follows the active tab, whether a command or a click changes
 /// it, sets [`Tabs::with_on_change`].
@@ -2641,6 +2644,10 @@ impl Tabs {
     /// Activate the tab at `index`, clamped to the last tab.
     pub fn select(&mut self, c: &mut dyn Context, index: usize) -> canopy::error::Result<()>;
 
+    /// Draw the bar in `look`.
+    #[must_use]
+    pub fn with_look(self, look: TabsLook) -> Self;
+
     /// Post `call` with the index of the new tab appended each time the
     /// active tab changes, by a command or a click. The index is the last
     /// positional argument, or `index` among named ones.
@@ -2651,6 +2658,22 @@ impl Tabs {
 impl CommandNode for Tabs {}
 
 impl Widget for Tabs {}
+
+/// How the tab bar draws.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum TabsLook {
+    /// Each label on a filled run of cells, in a bar one row tall.
+    #[default]
+    Solid,
+    /// Each label inside a box border of these glyphs, in a bar three rows
+    /// tall.
+    Bordered(BoxGlyphs),
+}
+
+impl TabsLook {
+    /// Return the rows that the bar takes.
+    pub const fn rows(self) -> u32;
+}
 
 /// Multiline text widget with wrapping and scrolling.
 pub struct Text {/* private fields */}
@@ -3154,7 +3177,8 @@ pub mod editor {
         pub fn move_cursor(&mut self, ctx: &mut dyn Context, dir: FocusDirection);
 
         /// Return the width that shows every line without wrapping: the widest
-        /// line's display width, with tabs expanded, plus the line-number gutter.
+        /// line's display width, with tabs expanded, plus the line-number gutter
+        /// and the caret column of a soft-wrapped editor that accepts focus.
         ///
         /// A host that sizes the editor to this width shows the text as one
         /// unbroken block, such as a column centred in a wider pane.
@@ -3409,7 +3433,10 @@ pub mod editor {
     pub enum WrapMode {
         /// No wrapping; horizontal scrolling is enabled.
         None,
-        /// Soft wrapping at the view width.
+        /// Soft wrapping at the view width. Rows break between words, and a
+        /// word wider than a row breaks between graphemes. Blanks at a break stay
+        /// at the end of the upper row. An editor that accepts focus keeps the
+        /// last column of the view for the caret.
         Soft,
     }
 }

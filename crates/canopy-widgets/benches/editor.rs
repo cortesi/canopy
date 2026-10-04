@@ -5,7 +5,7 @@ use std::hint::black_box;
 use canopy::{
     Context, ContextExt, Register, Setup, Widget, derive_commands,
     error::Result,
-    geom::Point,
+    geom::{Point, Size},
     layout::{Layout, ScrollOp},
     testing::harness::Harness,
 };
@@ -116,6 +116,33 @@ impl Register for BenchmarkEditorWrapper {
     }
 }
 
+/// Lay a document out again on each render, by alternating its width. Each
+/// relayout breaks every line at its line break opportunities.
+fn benchmark_relayout(c: &mut Criterion) {
+    let text: String = (0..2_000)
+        .map(|line| format!("Line {line}: prose of ordinary words to wrap, some 漢字 text, and a-long-hyphenated-run.\n"))
+        .collect();
+    let wrapper = BenchmarkEditorWrapper { text, syntax: None };
+    let mut harness = Harness::builder(wrapper)
+        .size(80, 24)
+        .build()
+        .expect("Failed to create harness");
+    harness.render().expect("Failed to render");
+    let mut wide = true;
+    c.bench_function("editor_relayout", |b| {
+        b.iter(|| {
+            wide = !wide;
+            let width = if wide { 80 } else { 79 };
+            harness
+                .canopy
+                .set_screen_size(Size::new(width, 24))
+                .expect("resize");
+            harness.render().expect("Failed to render");
+            black_box(harness.buf());
+        });
+    });
+}
+
 /// Benchmark rendering an editor node.
 fn benchmark_editor_rendering(c: &mut Criterion) {
     let sample_text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n\
@@ -160,6 +187,6 @@ fn benchmark_highlight_preparation(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     config = Criterion::default().sample_size(10);
-    targets = benchmark_editor_rendering, benchmark_highlight_preparation, benchmark_preview_scrolling
+    targets = benchmark_editor_rendering, benchmark_highlight_preparation, benchmark_preview_scrolling, benchmark_relayout
 }
 criterion_main!(benches);

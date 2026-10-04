@@ -30,7 +30,10 @@ mod tests;
 pub enum WrapMode {
     /// No wrapping; horizontal scrolling is enabled.
     None,
-    /// Soft wrapping at the view width.
+    /// Soft wrapping at the view width. Rows break between words, and a
+    /// word wider than a row breaks between graphemes. Blanks at a break stay
+    /// at the end of the upper row. An editor that accepts focus keeps the
+    /// last column of the view for the caret.
     Soft,
 }
 

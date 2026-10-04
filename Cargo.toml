@@ -33,6 +33,8 @@ clap = { version = "4.6.7", features = ["derive"] }
 convert_case = "0.12.0"
 criterion = "0.8.2"
 futures = "0.3.34"
+# The features match those that textwrap enables, so no other crates join the build.
+icu_segmenter = { version = "2.3.0", default-features = false, features = ["compiled_data"] }
 itty-core = { version = "0.1.0", path = "../itty/crates/itty-core" }
 proptest = "1.11.0"
 rand = "0.10.2"

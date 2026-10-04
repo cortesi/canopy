@@ -49,7 +49,7 @@ use std::{
 pub use canopy_derive::{CommandArg, CommandEnum, command, derive_commands};
 pub use canopy_geom as geom;
 use canopy_geom::{Line, Point, PointI32, Rect, RectI32, Size};
-use ruau::{declaration::Type, vm::RuntimeError};
+use ruau::{RuntimeError, Type};
 use ruau_declaration::{Alias, Text};
 use schemars::JsonSchema;
 use serde_core::{

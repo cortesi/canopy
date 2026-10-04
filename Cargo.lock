@@ -374,6 +374,7 @@ dependencies = [
  "fontdue",
  "grep-matcher",
  "grep-regex",
+ "icu_segmenter",
  "image",
  "imara-diff",
  "itty-core",

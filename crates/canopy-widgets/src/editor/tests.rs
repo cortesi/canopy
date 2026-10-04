@@ -388,9 +388,90 @@ fn vi_x_deletes_forward_and_yanks_for_put() {
 #[test]
 fn soft_wrap_renders_each_segment_once() {
     let config = EditorConfig::new().with_wrap(WrapMode::Soft);
-    let mut harness = build_harness("abcdefghij", config, 4, 3);
+    // The last column of an editor that accepts focus holds the caret.
+    let mut harness = build_harness("abcdefghij", config, 5, 3);
     harness.render().unwrap();
-    harness.tbuf().assert_matches(buf!["abcd" "efgh" "ij  "]);
+    harness.tbuf().assert_matches(buf!["abcd " "efgh " "ij   "]);
+}
+
+#[test]
+fn soft_wrap_keeps_words_whole() {
+    let config = EditorConfig::new().with_wrap(WrapMode::Soft);
+    let mut harness = build_harness("the quick brown fox", config, 11, 2);
+    harness.render().unwrap();
+    harness
+        .tbuf()
+        .assert_matches(buf!["the quick  " "brown fox  "]);
+}
+
+#[test]
+fn a_display_editor_wraps_at_its_full_width() {
+    let config = EditorConfig::new().with_interaction(Interaction::Display);
+    let mut harness = build_harness("abcdefghij", config, 5, 2);
+    harness.render().unwrap();
+    harness.tbuf().assert_matches(buf!["abcde" "fghij"]);
+}
+
+#[test]
+fn the_caret_after_a_word_at_the_edge_stays_on_screen() {
+    let mut harness = build_harness("", EditorConfig::new(), 6, 3);
+    harness.keys(['h', 'e', 'l', 'l', 'o']).unwrap();
+    harness.render().unwrap();
+    assert_eq!(editor_cursor_location(&mut harness), Point { x: 5, y: 0 });
+    // The space hangs on the first row, and the caret waits where the next
+    // word goes.
+    harness.key(' ').unwrap();
+    harness.render().unwrap();
+    assert_eq!(editor_cursor_location(&mut harness), Point { x: 0, y: 1 });
+    harness.key('w').unwrap();
+    harness.render().unwrap();
+    assert_eq!(editor_cursor_location(&mut harness), Point { x: 1, y: 1 });
+    harness
+        .tbuf()
+        .assert_matches(buf!["hello " "w     " "      "]);
+}
+
+#[test]
+fn row_moves_and_clicks_stop_before_the_blank_that_ends_a_row() {
+    let config = EditorConfig::new().with_mode(EditMode::Text);
+    let mut harness = build_harness("hello world", config, 9, 2);
+    harness.key(key::KeyCode::End).unwrap();
+    harness.key(key::KeyCode::Up).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 5));
+    harness.key(key::KeyCode::Down).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 11));
+    harness
+        .mouse(mouse_event(mouse::Action::Down, 8, 0))
+        .unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 5));
+    harness.mouse(mouse_event(mouse::Action::Up, 8, 0)).unwrap();
+    harness
+        .mouse(mouse_event(mouse::Action::Down, 8, 1))
+        .unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 11));
+}
+
+#[test]
+fn vi_display_moves_follow_word_wrapped_rows() {
+    let config = EditorConfig::new().with_mode(EditMode::Vi);
+    let mut harness = build_harness("hello world foo", config, 9, 3);
+    harness.keys(['g', 'j']).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 6));
+    harness.keys(['g', 'j']).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 12));
+    harness.keys(['g', 'k']).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 6));
+}
+
+#[test]
+fn the_gutter_and_the_caret_column_narrow_the_wrap() {
+    let config = EditorConfig::new().with_line_numbers(LineNumbers::Absolute);
+    // Two gutter columns and the caret column leave five for text.
+    let mut harness = build_harness("one two three", config, 8, 3);
+    harness.render().unwrap();
+    harness
+        .tbuf()
+        .assert_matches(buf!["1 one   " "1 two   " "1 three "]);
 }
 
 #[test]
@@ -398,16 +479,16 @@ fn visual_indent_of_three_wrapped_lines_keeps_layout() {
     let config = EditorConfig::new()
         .with_mode(EditMode::Vi)
         .with_wrap(WrapMode::Soft);
-    let mut harness = build_harness("aaaaaa\nbbbbbb\ncccccc", config, 6, 6);
+    let mut harness = build_harness("aaaaaa\nbbbbbb\ncccccc", config, 7, 6);
     harness.keys(['V', 'j', 'j', '>']).unwrap();
     harness.render().unwrap();
     harness.tbuf().assert_matches(buf![
-        "    aa"
-        "aaaa  "
-        "    bb"
-        "bbbb  "
-        "    cc"
-        "cccc  "
+        "    aa "
+        "aaaa   "
+        "    bb "
+        "bbbb   "
+        "    cc "
+        "cccc   "
     ]);
 }
 
@@ -610,7 +691,7 @@ fn preferred_column_survives_vertical_moves() {
 #[test]
 fn text_arrows_move_by_display_rows() {
     let config = EditorConfig::new().with_mode(EditMode::Text);
-    let mut harness = build_harness("abcdefghijklmnopqrstuvwxy", config, 10, 3);
+    let mut harness = build_harness("abcdefghijklmnopqrstuvwxy", config, 11, 3);
     harness.key(key::KeyCode::End).unwrap();
     harness.key(key::KeyCode::Up).unwrap();
     assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 15));
@@ -625,7 +706,7 @@ fn text_arrows_move_by_display_rows() {
 #[test]
 fn row_moves_keep_their_column_and_their_row() {
     let config = EditorConfig::new().with_mode(EditMode::Text);
-    let mut harness = build_harness("abcdefghijkl\nab\nabcdefghijkl", config, 10, 5);
+    let mut harness = build_harness("abcdefghijkl\nab\nabcdefghijkl", config, 11, 5);
     for _ in 0..7 {
         harness.key(key::KeyCode::Right).unwrap();
     }
@@ -641,7 +722,7 @@ fn row_moves_keep_their_column_and_their_row() {
     // The end of a full row shows at the start of the next row, so the
     // cursor stops on the last grapheme of the row instead.
     let config = EditorConfig::new().with_mode(EditMode::Text);
-    let mut harness = build_harness("abcdefghijklmnopqrst", config, 10, 3);
+    let mut harness = build_harness("abcdefghijklmnopqrst", config, 11, 3);
     harness.key(key::KeyCode::End).unwrap();
     harness.key(key::KeyCode::Up).unwrap();
     assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 9));
@@ -652,7 +733,7 @@ fn row_moves_keep_their_column_and_their_row() {
 #[test]
 fn history_arrows_reach_the_bindings_at_the_edges_of_text() {
     let config = EditorConfig::new().with_history_arrows(true);
-    let mut harness = build_harness("abcdefghijklmno\nxy", config, 10, 4);
+    let mut harness = build_harness("abcdefghijklmno\nxy", config, 11, 4);
     bind_to_host(&mut harness, "up");
     bind_to_host(&mut harness, "down");
     // The first line takes two rows, so Down moves twice before it leaves
@@ -1447,9 +1528,10 @@ fn a_cursor_reveal_uses_the_final_soft_wrapping() {
     let text = "a".repeat(35);
     let config = EditorConfig::new().with_wrap(WrapMode::Soft);
     let mut harness = build_harness(&text, config, 20, 2);
+    // Ten columns of text and the caret column.
     harness
         .canopy
-        .set_screen_size(Size::new(10, 2))
+        .set_screen_size(Size::new(11, 2))
         .expect("resize");
     edit_in_one_turn(&mut harness, |editor, ctx| {
         editor.buffer.set_cursor(TextPosition::new(0, 35));
@@ -1689,9 +1771,8 @@ fn scroll_marks_follow_soft_wrapped_rows_on_both_layout_paths() {
         [(0, 1), (1, 2), (2, 3)]
     );
     // Syncing the cache the way a render would must not move the marks.
-    editor
-        .layout
-        .sync(&mut editor.buffer, 10, WrapMode::Soft, 4);
+    let wrap = editor.wrap(content.w);
+    editor.layout.sync(&mut editor.buffer, wrap);
     assert_eq!(editor.scroll_marks(ScrollAxis::Vertical, content), fallback);
     editor
         .search
@@ -1919,21 +2000,26 @@ impl Highlighter for CountingHighlighter {
 }
 
 #[test]
-fn natural_width_is_the_widest_unwrapped_line_and_its_gutter() {
+fn natural_width_is_the_widest_unwrapped_line_its_gutter_and_caret_column() {
     let text = "ab\n\tcd\nwrapping ignored here";
-    let plain = Editor::with_config(text, EditorConfig::new().with_tab_stop(4));
+    let display = EditorConfig::new()
+        .with_tab_stop(4)
+        .with_interaction(Interaction::Display);
+    let plain = Editor::with_config(text, display.clone());
     assert_eq!(
         plain.natural_width(),
         21,
         "the widest line sets the width, however the editor wraps"
     );
-    let tabbed = Editor::with_config("ab\n\tcd", EditorConfig::new().with_tab_stop(4));
+    let tabbed = Editor::with_config("ab\n\tcd", display.clone());
     assert_eq!(tabbed.natural_width(), 6, "a tab expands to its stop");
-    let numbered = Editor::with_config(
-        "ab\n\tcd",
-        EditorConfig::new()
-            .with_tab_stop(4)
-            .with_line_numbers(LineNumbers::Absolute),
-    );
+    let numbered =
+        Editor::with_config("ab\n\tcd", display.with_line_numbers(LineNumbers::Absolute));
     assert_eq!(numbered.natural_width(), 8, "the gutter adds its own width");
+    let editable = Editor::with_config("ab\n\tcd", EditorConfig::new().with_tab_stop(4));
+    assert_eq!(
+        editable.natural_width(),
+        7,
+        "an editor that accepts focus keeps a column for the caret"
+    );
 }

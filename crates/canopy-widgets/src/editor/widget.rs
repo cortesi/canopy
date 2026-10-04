@@ -19,7 +19,9 @@ use canopy::{
 
 use super::{
     EditMode, EditorConfig, LineNumbers, WrapMode,
-    layout::{LayoutCache, LineLayout, WrapSegment, layout_line, metrics, point_for_position},
+    layout::{
+        LayoutCache, LineLayout, Wrap, WrapSegment, layout_line, metrics, point_for_position,
+    },
     search::{PromptState, SearchDirection, SearchState},
     vi::{ViMode, ViState},
 };
@@ -327,54 +329,65 @@ impl Editor {
     }
 
     /// Return the width that shows every line without wrapping: the widest
-    /// line's display width, with tabs expanded, plus the line-number gutter.
+    /// line's display width, with tabs expanded, plus the line-number gutter
+    /// and the caret column of a soft-wrapped editor that accepts focus.
     ///
     /// A host that sizes the editor to this width shows the text as one
     /// unbroken block, such as a column centred in a wider pane.
     pub fn natural_width(&self) -> u32 {
-        // Display widths ignore wrapping, so any wrap width yields the widest
-        // unwrapped line.
-        let (_, widest) = self.display_metrics(usize::MAX);
+        let tab_stop = self.config.tab_stop;
+        // Line widths ignore wrapping, so a scan without wrapping finds the
+        // widest line.
+        let widest = self
+            .layout
+            .widest_for(&self.buffer, tab_stop)
+            .unwrap_or_else(|| {
+                metrics(&self.buffer, Wrap::new(WrapMode::None, 1, tab_stop, false)).1
+            });
         u32::try_from(widest)
             .unwrap_or(u32::MAX)
             .saturating_add(self.gutter_width())
+            .saturating_add(self.caret_column())
     }
 
-    /// Return `(display_line_count, max_line_width)` for a wrap width. The
-    /// layout cache serves the answer when it is current; otherwise the
+    /// Return the columns that a soft-wrapped row keeps after its text for
+    /// the caret: one for an editor that accepts focus, so a caret after a
+    /// word at the wrap width still shows, and none for a display.
+    fn caret_column(&self) -> u32 {
+        u32::from(self.config.wrap == WrapMode::Soft && self.config.interaction.focusable())
+    }
+
+    /// Return how the layout wraps lines for a content width. The text
+    /// fills the width less the gutter and the caret column.
+    pub(super) fn wrap(&self, width: u32) -> Wrap {
+        let caret = self.caret_column();
+        let text_width = width
+            .saturating_sub(self.gutter_width())
+            .saturating_sub(caret);
+        Wrap::new(
+            self.config.wrap,
+            text_width as usize,
+            self.config.tab_stop,
+            caret > 0,
+        )
+    }
+
+    /// Return `(display_line_count, max_line_width)` for wrap parameters.
+    /// The layout cache serves the answer when it is current; otherwise the
     /// buffer is scanned directly.
-    fn display_metrics(&self, wrap_width: usize) -> (usize, usize) {
+    fn display_metrics(&self, wrap: Wrap) -> (usize, usize) {
         self.layout
-            .metrics_for(
-                &self.buffer,
-                wrap_width,
-                self.config.wrap,
-                self.config.tab_stop,
-            )
-            .unwrap_or_else(|| {
-                metrics(
-                    &self.buffer,
-                    self.config.wrap,
-                    wrap_width,
-                    self.config.tab_stop,
-                )
-            })
+            .metrics_for(&self.buffer, wrap)
+            .unwrap_or_else(|| metrics(&self.buffer, wrap))
     }
 
     /// Synchronize layout and return the cursor position in content
     /// coordinates.
     pub(super) fn update_layout(&mut self, view_rect: Rect, gutter_width: u32) -> Point {
-        let wrap_width = view_rect.w.saturating_sub(gutter_width).max(1) as usize;
-        self.layout.sync(
-            &mut self.buffer,
-            wrap_width,
-            self.config.wrap,
-            self.config.tab_stop,
-        );
+        let wrap = self.wrap(view_rect.w);
+        self.layout.sync(&mut self.buffer, wrap);
         let cursor = self.buffer.cursor();
-        let point = self
-            .layout
-            .point_for_position(&self.buffer, cursor, self.config.tab_stop);
+        let point = self.layout.point_for_position(&self.buffer, cursor);
         let cursor_point = Point {
             x: point.x.saturating_add(gutter_width),
             y: point.y,
@@ -401,22 +414,15 @@ impl Editor {
     /// A current layout cache answers directly. Otherwise the position is
     /// computed without changing the cache.
     fn cursor_point(&self, width: u32) -> Point {
-        let gutter = self.gutter_width();
-        let wrap_width = width.saturating_sub(gutter).max(1) as usize;
-        let (wrap, tab_stop) = (self.config.wrap, self.config.tab_stop);
+        let wrap = self.wrap(width);
         let cursor = self.buffer.cursor();
-        let point = if self
-            .layout
-            .metrics_for(&self.buffer, wrap_width, wrap, tab_stop)
-            .is_some()
-        {
-            self.layout
-                .point_for_position(&self.buffer, cursor, tab_stop)
+        let point = if self.layout.metrics_for(&self.buffer, wrap).is_some() {
+            self.layout.point_for_position(&self.buffer, cursor)
         } else {
-            point_for_position(&self.buffer, cursor, wrap, wrap_width, tab_stop)
+            point_for_position(&self.buffer, cursor, wrap)
         };
         Point {
-            x: point.x.saturating_add(gutter),
+            x: point.x.saturating_add(self.gutter_width()),
             y: point.y,
         }
     }
@@ -449,18 +455,17 @@ impl Editor {
     pub(super) fn move_row(&mut self, delta: isize, ctx: &dyn Context) {
         let view_rect = ctx.view().view_rect();
         self.update_layout(view_rect, self.gutter_width());
-        let tab_stop = self.config.tab_stop;
         let point = self
             .layout
-            .point_for_position(&self.buffer, self.buffer.cursor(), tab_stop);
+            .point_for_position(&self.buffer, self.buffer.cursor());
         let goal = *self.row_goal.get_or_insert(point.x as usize);
         let last = self.layout.total_lines().saturating_sub(1);
         let row = (point.y as usize).saturating_add_signed(delta).min(last);
-        let target = self
-            .layout
-            .position_in_row(&self.buffer, row, goal, tab_stop);
+        let target = self.layout.position_in_row(&self.buffer, row, goal);
         self.buffer.set_cursor(target);
-        self.preferred_column = self.buffer.column_for_position(target, tab_stop);
+        self.preferred_column = self
+            .buffer
+            .column_for_position(target, self.config.tab_stop);
     }
 
     /// Return whether a history takes a row move by `delta` for a content
@@ -474,8 +479,7 @@ impl Editor {
         if delta < 0 {
             return row == 0;
         }
-        let wrap_width = width.saturating_sub(self.gutter_width()).max(1) as usize;
-        row.saturating_add(1) >= self.display_metrics(wrap_width).0
+        row.saturating_add(1) >= self.display_metrics(self.wrap(width)).0
     }
 
     /// Insert text at the cursor, respecting read-only state. Returns the
@@ -712,9 +716,9 @@ impl Editor {
         let content_point = view.viewport_to_content(event.location)?.clamped_point();
         let mut text_point = content_point;
         text_point.x = text_point.x.saturating_sub(gutter_width);
-        let pos = self
-            .layout
-            .position_for_point(&self.buffer, text_point, self.config.tab_stop);
+        let pos =
+            self.layout
+                .position_in_row(&self.buffer, text_point.y as usize, text_point.x as usize);
 
         Ok(match event.action {
             mouse::Action::Down if event.button == mouse::Button::Left => {
@@ -1094,14 +1098,10 @@ impl Editor {
             }
             return rows;
         }
-        let gutter = self.gutter_width();
-        let wrap_width = content.w.saturating_sub(gutter).max(1) as usize;
-        let (wrap, tab_stop) = (self.config.wrap, self.config.tab_stop);
+        let wrap = self.wrap(content.w);
         let layout = &self.layout;
         let buffer = &self.buffer;
-        let cached = layout
-            .metrics_for(buffer, wrap_width, wrap, tab_stop)
-            .is_some();
+        let cached = layout.metrics_for(buffer, wrap).is_some();
         let mut memo: Option<(usize, LineLayout)> = None;
         let mut layout_of = |index: usize| -> LineLayout {
             if let Some((line, laid_out)) = &memo
@@ -1114,7 +1114,7 @@ impl Editor {
             } else {
                 None
             }
-            .unwrap_or_else(|| layout_line(&buffer.line_text(index), wrap, wrap_width, tab_stop));
+            .unwrap_or_else(|| layout_line(&buffer.line_text(index), wrap));
             memo = Some((index, laid_out.clone()));
             laid_out
         };
@@ -1130,7 +1130,7 @@ impl Editor {
                 row = row.saturating_add(layout_of(line_idx).display_lines() as u32);
                 line_idx += 1;
             }
-            let column = buffer.column_for_position(range.start, tab_stop);
+            let column = buffer.column_for_position(range.start, wrap.tab_stop);
             let segment = layout_of(line).segment_for_column(column) as u32;
             let mark = row.saturating_add(segment);
             if rows.last() != Some(&mark) {
@@ -1226,15 +1226,12 @@ impl Widget for Editor {
     fn measure(&self, c: MeasureConstraints) -> Measurement {
         let mut width = match c.width {
             Constraint::Exact(n) | Constraint::AtMost(n) => n.max(1),
-            Constraint::Unbounded => self.layout.max_line_width() as u32,
+            Constraint::Unbounded => self.natural_width(),
         };
         width = width.max(1);
 
-        let gutter = self.gutter_width();
-        let wrap_width = width.saturating_sub(gutter).max(1) as usize;
-
         let mut height = if self.config.auto_grow {
-            self.display_metrics(wrap_width).0 as u32
+            self.display_metrics(self.wrap(width)).0 as u32
         } else {
             self.config.min_height.max(1)
         };
@@ -1275,8 +1272,7 @@ impl Widget for Editor {
 
     fn canvas(&self, view: Size, _ctx: &CanvasContext) -> Size {
         let gutter = self.gutter_width();
-        let wrap_width = view.w.saturating_sub(gutter).max(1) as usize;
-        let (line_count, max_line_width) = self.display_metrics(wrap_width);
+        let (line_count, max_line_width) = self.display_metrics(self.wrap(view.w));
         let width = match self.config.wrap {
             // One more column holds the caret after the longest line.
             WrapMode::None => (max_line_width as u32)

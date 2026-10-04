@@ -56,7 +56,7 @@ Built-in widgets for canopy applications.
 - Workspace dependencies: canopy
 - Workspace dependents: canopyctl, gyms, hello, todo
 - Unnameable: crate::image_view::ZoomDirection
-- Items: 677
+- Items: 680
 - Exposes: canopy, grep-regex, image, syntect
 
 ## hello

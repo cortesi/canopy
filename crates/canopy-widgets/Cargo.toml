@@ -19,6 +19,7 @@ devtools = ["dep:tracing-subscriber"]
 canopy.workspace = true
 
 # Widget-specific dependencies
+icu_segmenter.workspace = true
 textwrap.workspace = true
 unicode-segmentation.workspace = true
 grep-matcher = "0.1.9"
