@@ -3099,6 +3099,10 @@ pub mod editor {
     }
 
     /// Editor widget implementation.
+    ///
+    /// An editable editor consumes [`CLEAR_INTENT`]: it clears the field of an
+    /// open search or replace prompt, or else the whole text, as one edit that
+    /// undo reverses. A read-only editor leaves the intent to its ancestors.
     pub struct Editor {/* private fields */}
 
     impl Editor {
@@ -3250,6 +3254,8 @@ pub mod editor {
     }
 
     impl CommandNode for Editor {}
+
+    impl Register for Editor {}
 
     impl Widget for Editor {}
 

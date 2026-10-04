@@ -450,6 +450,18 @@ impl Editor {
         }
     }
 
+    /// Clear the field of the open prompt, if it has one. Returns whether a
+    /// prompt is open.
+    pub(super) fn clear_prompt(&mut self) -> bool {
+        let Some(prompt) = self.prompt.as_mut() else {
+            return false;
+        };
+        if let Some(field) = Self::prompt_edit_field(prompt) {
+            field.clear();
+        }
+        true
+    }
+
     /// Classify one key while a prompt is open.
     ///
     /// Esc cancels every prompt. Editable prompts take backspace, plain text,

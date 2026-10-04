@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use canopy::{
-    Context, EventOutcome, NodeName, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeName, Register, Setup, ViewContext, Widget, derive_commands,
     error::Result,
     geom::{Line, Point, Rect, Size},
     input::{Event, key, mouse},
@@ -26,9 +26,10 @@ use super::{
     vi::{ViMode, ViState},
 };
 use crate::{
+    CLEAR_INTENT,
     click::ClickTracker,
     highlight::{HighlightSpan, Highlighter},
-    run_paint,
+    register_clear_intent, run_paint,
     scrollbar::ScrollbarGlyphs,
     text_buffer::{Selection, TextBuffer, TextPosition, TextRange, single_line},
 };
@@ -75,6 +76,10 @@ enum TextMove {
 }
 
 /// Editor widget implementation.
+///
+/// An editable editor consumes [`CLEAR_INTENT`]: it clears the field of an
+/// open search or replace prompt, or else the whole text, as one edit that
+/// undo reverses. A read-only editor leaves the intent to its ancestors.
 pub struct Editor {
     /// Editor configuration.
     pub(super) config: EditorConfig,
@@ -259,6 +264,35 @@ impl Editor {
         self.highlight_cache.clear();
         self.layout = LayoutCache::new();
         self.search = SearchState::new();
+    }
+
+    /// Clear what the editor edits, for [`CLEAR_INTENT`]: the field of an
+    /// open prompt, or else the whole text, as one edit that undo reverses.
+    /// Visual mode ends, and insert mode stays. Returns false when the editor
+    /// is read-only.
+    fn clear(&mut self, ctx: &mut dyn Context) -> bool {
+        if self.config.interaction.read_only() {
+            return false;
+        }
+        if self.clear_prompt() {
+            return true;
+        }
+        self.commit_text_entry_transaction();
+        if let Some(ViMode::Visual(_)) = self.vi_mode() {
+            self.exit_visual();
+        }
+        let last = self.buffer.line_count().saturating_sub(1);
+        let end = TextPosition::new(last, self.buffer.line_char_len(last));
+        if end != TextPosition::new(0, 0) {
+            self.replace_range(TextRange::new(TextPosition::new(0, 0), end), "");
+        }
+        // Insert mode groups its typing into one edit from its start.
+        if self.vi_mode() == Some(ViMode::Insert) {
+            self.begin_text_entry_transaction();
+        }
+        self.update_preferred_column();
+        self.ensure_cursor_visible(ctx);
+        true
     }
 
     /// Install a syntax highlighter.
@@ -1313,8 +1347,27 @@ impl Widget for Editor {
         }
     }
 
+    fn accepts_intent(&self, intent: &str, _context: &dyn ViewContext) -> bool {
+        intent == CLEAR_INTENT && !self.config.interaction.read_only()
+    }
+
+    fn on_intent(&mut self, intent: &str, context: &mut dyn Context) -> Result<EventOutcome> {
+        if intent == CLEAR_INTENT && self.clear(context) {
+            Ok(EventOutcome::Handle)
+        } else {
+            Ok(EventOutcome::Ignore)
+        }
+    }
+
     fn name(&self) -> NodeName {
         NodeName::convert("editor")
+    }
+}
+
+impl Register for Editor {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()?;
+        register_clear_intent(setup)
     }
 }
 

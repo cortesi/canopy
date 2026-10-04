@@ -80,7 +80,7 @@ impl Widget for EditorHost {
 
 impl Register for EditorHost {
     fn register(setup: &mut Setup) -> Result<()> {
-        setup.add_commands::<Editor>()?;
+        Editor::register(setup)?;
         setup.add_commands::<Self>()?;
         Ok(())
     }
@@ -530,6 +530,97 @@ fn bind_to_host(harness: &mut Harness, spec: &str) {
             r#"canopy.bind("{spec}", {{ path = "editor", description = "Record" }}, command.editor_host.record_binding())"#
         ))
         .unwrap();
+}
+
+/// Binds Ctrl-X to the clear intent, as an application does.
+fn bind_clear(harness: &mut Harness) {
+    harness
+        .canopy
+        .eval_script(r#"canopy.bind("ctrl-x", { description = "Clear" }, "canopy.clear")"#)
+        .unwrap();
+}
+
+#[test]
+fn the_clear_intent_clears_the_text_as_one_edit() {
+    let mut harness = build_harness("alpha\nbeta", EditorConfig::new(), 20, 4);
+    bind_clear(&mut harness);
+    harness.type_text("x").unwrap();
+    harness
+        .key(key::Key::parse_spec("ctrl-x").unwrap())
+        .unwrap();
+    assert_eq!(editor_text(&mut harness), "");
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 0));
+
+    // Undo restores the text, and the typing before the clear is an edit
+    // of its own.
+    with_editor(&mut harness, Editor::undo_edit);
+    assert_eq!(editor_text(&mut harness), "xalpha\nbeta");
+    with_editor(&mut harness, Editor::undo_edit);
+    assert_eq!(editor_text(&mut harness), "alpha\nbeta");
+}
+
+#[test]
+fn the_clear_intent_passes_a_read_only_editor() {
+    let config = EditorConfig::new().with_interaction(Interaction::View);
+    let mut harness = build_harness("alpha", config, 20, 2);
+    bind_clear(&mut harness);
+    bind_to_host(&mut harness, "ctrl-x");
+    harness
+        .key(key::Key::parse_spec("ctrl-x").unwrap())
+        .unwrap();
+    assert_eq!(editor_text(&mut harness), "alpha");
+    assert_eq!(host_binding_hits(&mut harness), 1);
+}
+
+#[test]
+fn the_clear_intent_clears_an_open_prompt_before_the_text() {
+    let config = EditorConfig::new().with_mode(EditMode::Vi);
+    let mut harness = build_harness("alpha", config, 20, 2);
+    bind_clear(&mut harness);
+    harness.key('/').unwrap();
+    harness.type_text("al").unwrap();
+    harness
+        .key(key::Key::parse_spec("ctrl-x").unwrap())
+        .unwrap();
+    assert_eq!(editor_text(&mut harness), "alpha");
+    assert!(with_editor(&mut harness, |editor| matches!(
+        &editor.prompt,
+        Some(PromptState::Search { query, .. }) if query.is_empty()
+    )));
+}
+
+#[test]
+fn the_clear_intent_keeps_insert_mode_and_ends_visual_mode() {
+    let config = EditorConfig::new().with_mode(EditMode::Vi);
+    let mut harness = build_harness("alpha", config, 20, 2);
+    bind_clear(&mut harness);
+    harness.key('i').unwrap();
+    harness.type_text("hi").unwrap();
+    harness
+        .key(key::Key::parse_spec("ctrl-x").unwrap())
+        .unwrap();
+    harness.type_text("yo").unwrap();
+    assert_eq!(editor_text(&mut harness), "yo");
+    assert_eq!(
+        with_editor(&mut harness, |editor| editor.vi_mode()),
+        Some(ViMode::Insert)
+    );
+
+    // The typing after the clear is an edit of its own.
+    harness.key(key::KeyCode::Esc).unwrap();
+    with_editor(&mut harness, Editor::undo_edit);
+    assert_eq!(editor_text(&mut harness), "");
+
+    with_editor(&mut harness, |editor| editor.set_text("alpha"));
+    harness.key('v').unwrap();
+    harness
+        .key(key::Key::parse_spec("ctrl-x").unwrap())
+        .unwrap();
+    assert_eq!(editor_text(&mut harness), "");
+    assert_eq!(
+        with_editor(&mut harness, |editor| editor.vi_mode()),
+        Some(ViMode::Normal)
+    );
 }
 
 #[test]
