@@ -8,7 +8,7 @@ use std::{
 };
 
 use crossterm::event as cevent;
-use futures::{channel::mpsc::UnboundedReceiver, stream::Stream};
+use futures::{channel::mpsc, stream::Stream};
 
 use crate::{
     core::canopy::AdapterEvent,
@@ -30,7 +30,7 @@ pub(super) struct EventSource<S> {
     /// Cancellable terminal event stream owned by the run loop.
     terminal: S,
     /// Framework event receiver channel.
-    internal: UnboundedReceiver<AdapterEvent>,
+    internal: mpsc::UnboundedReceiver<AdapterEvent>,
     /// Framework wake that ended the last batch, returned by the next call.
     pending: Option<AdapterEvent>,
     /// Stream error met while draining, returned by the next call after its
@@ -45,7 +45,7 @@ where
     S: Stream<Item = io::Result<cevent::Event>> + Unpin,
 {
     /// Construct a new event source.
-    pub(super) fn new(terminal: S, internal: UnboundedReceiver<AdapterEvent>) -> Self {
+    pub(super) fn new(terminal: S, internal: mpsc::UnboundedReceiver<AdapterEvent>) -> Self {
         Self {
             terminal,
             internal,
@@ -319,14 +319,14 @@ mod tests {
         sync::{
             Arc, Mutex,
             atomic::{AtomicBool, Ordering},
-            mpsc,
+            mpsc::channel,
         },
         task::Waker,
         thread,
         time::Duration,
     };
 
-    use futures::{StreamExt, channel::mpsc::unbounded, executor::block_on, stream};
+    use futures::{StreamExt, channel::mpsc, executor::block_on, stream};
 
     use super::*;
 
@@ -351,7 +351,7 @@ mod tests {
 
     #[test]
     fn event_source_surfaces_terminal_reader_failure() {
-        let (_internal_tx, internal_rx) = unbounded();
+        let (_internal_tx, internal_rx) = mpsc::unbounded();
         let terminal = stream::iter(vec![Err(io::Error::other("reader failed"))]);
         let mut events = EventSource::new(terminal, internal_rx);
 
@@ -368,7 +368,7 @@ mod tests {
         let terminal = DropReader {
             dropped: Arc::clone(&dropped),
         };
-        let (_internal_tx, internal_rx) = unbounded();
+        let (_internal_tx, internal_rx) = mpsc::unbounded();
 
         drop(EventSource::new(terminal, internal_rx));
 
@@ -381,7 +381,7 @@ mod tests {
         let terminal = DropReader {
             dropped: Arc::clone(&dropped),
         };
-        let (internal_tx, internal_rx) = unbounded();
+        let (internal_tx, internal_rx) = mpsc::unbounded();
         internal_tx
             .unbounded_send(AdapterEvent::Wake)
             .expect("internal event receiver should be open");
@@ -420,7 +420,7 @@ mod tests {
 
     #[test]
     fn event_source_ignores_releases_and_preserves_repeats() -> Result<()> {
-        let (_tx, rx) = unbounded();
+        let (_tx, rx) = mpsc::unbounded();
         let terminal = stream::iter([
             Ok(terminal_key(cevent::KeyEventKind::Press)),
             Ok(terminal_key(cevent::KeyEventKind::Release)),
@@ -447,7 +447,7 @@ mod tests {
     #[test]
     fn event_source_errors_surface_directly_and_after_a_batch() -> Result<()> {
         // Awaiting the next event returns the error at once.
-        let (_tx, rx) = unbounded();
+        let (_tx, rx) = mpsc::unbounded();
         let terminal = stream::iter([
             Ok(terminal_key(cevent::KeyEventKind::Release)),
             Err(io::Error::other("after release")),
@@ -458,7 +458,7 @@ mod tests {
         );
 
         // An error met while draining keeps the batch and returns next.
-        let (_tx, rx) = unbounded();
+        let (_tx, rx) = mpsc::unbounded();
         let terminal = stream::iter([
             Ok(terminal_key(cevent::KeyEventKind::Press)),
             Ok(terminal_key(cevent::KeyEventKind::Release)),
@@ -476,7 +476,7 @@ mod tests {
 
     #[test]
     fn event_source_returns_eof_after_the_batch_before_it() -> Result<()> {
-        let (_tx, rx) = unbounded();
+        let (_tx, rx) = mpsc::unbounded();
         let terminal = stream::iter([
             Ok(terminal_key(cevent::KeyEventKind::Press)),
             Ok(terminal_key(cevent::KeyEventKind::Release)),
@@ -506,7 +506,7 @@ mod tests {
 
     #[test]
     fn ready_input_batches_and_coalesces_moves_and_drags() -> Result<()> {
-        let (_tx, rx) = unbounded();
+        let (_tx, rx) = mpsc::unbounded();
         let terminal = stream::iter([
             Ok(terminal_move(1)),
             Ok(terminal_key(cevent::KeyEventKind::Release)),
@@ -530,7 +530,7 @@ mod tests {
 
     #[test]
     fn a_ready_input_batch_takes_a_bounded_number_of_events() -> Result<()> {
-        let (_tx, rx) = unbounded();
+        let (_tx, rx) = mpsc::unbounded();
         let drags = (0..INPUT_BATCH_LIMIT as u16 + 10)
             .map(|column| Ok(terminal_drag(column)))
             .collect::<Vec<_>>();
@@ -576,13 +576,13 @@ mod tests {
 
     #[test]
     fn input_after_a_drain_wakes_the_loop() {
-        let (done_tx, done_rx) = mpsc::channel();
+        let (done_tx, done_rx) = channel();
         let worker = thread::spawn(move || {
             let state = Arc::new(Mutex::new((
                 VecDeque::from([terminal_key(cevent::KeyEventKind::Press)]),
                 None,
             )));
-            let (_tx, rx) = unbounded();
+            let (_tx, rx) = mpsc::unbounded();
             let mut events = EventSource::new(OneWakerStream(state.clone()), rx);
             // Draining after the first key finds nothing and leaves its waker
             // with the stream, as crossterm does.
@@ -617,7 +617,7 @@ mod tests {
 
     #[test]
     fn event_source_release_does_not_consume_framework_wake() -> Result<()> {
-        let (tx, rx) = unbounded();
+        let (tx, rx) = mpsc::unbounded();
         tx.unbounded_send(AdapterEvent::Wake).unwrap();
         let terminal = stream::iter([Ok(terminal_key(cevent::KeyEventKind::Release))])
             .chain(stream::pending());
@@ -677,7 +677,7 @@ mod tests {
 
     #[test]
     fn event_source_alternates_ready_terminal_and_internal_events() -> Result<()> {
-        let (tx, rx) = unbounded();
+        let (tx, rx) = mpsc::unbounded();
         tx.unbounded_send(AdapterEvent::Wake).unwrap();
         tx.unbounded_send(AdapterEvent::Wake).unwrap();
         let terminal = stream::iter([

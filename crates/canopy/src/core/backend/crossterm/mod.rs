@@ -186,7 +186,7 @@ mod tests {
         atomic::{AtomicUsize, Ordering},
     };
 
-    use futures::{channel::mpsc::unbounded, executor::block_on, stream};
+    use futures::{channel::mpsc, executor::block_on, stream};
 
     use super::*;
     use crate::{
@@ -203,7 +203,7 @@ mod tests {
         canopy.turn(TurnInput::Prepare)?;
         let mut backend = TestRender::new();
         canopy.emit_frame(&mut backend)?;
-        let (_tx, rx) = unbounded();
+        let (_tx, rx) = mpsc::unbounded();
         let terminal = stream::iter([Ok(cevent::Event::Key(cevent::KeyEvent::new(
             cevent::KeyCode::Char('x'),
             cevent::KeyModifiers::empty(),

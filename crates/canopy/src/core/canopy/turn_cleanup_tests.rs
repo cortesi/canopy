@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 
-use futures::{channel::mpsc::UnboundedSender, task::noop_waker};
+use futures::{channel::mpsc, task::noop_waker};
 use tokio::{runtime::Builder, time::sleep};
 
 use super::{AdapterEvent, Canopy, CanopyBuilder, EvalRequest, TurnInput};
@@ -26,7 +26,7 @@ use crate::{
 /// Input fixture that makes its mutation observable even when dispatch fails.
 struct CleanupProbe {
     /// Queue used by the script predicate to request a failing input event.
-    events: UnboundedSender<AdapterEvent>,
+    events: mpsc::UnboundedSender<AdapterEvent>,
     /// Mutation counter that must survive adapter cleanup.
     mutations: Arc<AtomicUsize>,
 }
