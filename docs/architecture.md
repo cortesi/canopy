@@ -36,8 +36,8 @@ The root holds the application, the widget, the contexts, and node handles:
 
 `canopy_widgets` follows the same rule: every widget is exported at its crate
 root once, and a module is public only when it carries a family of supporting
-types: `editor`, `highlight`, `font`, `terminal`, `scrollbar`, `diff`, and
-`list`. Glyph sets are associated constants (`BoxGlyphs::ROUND`,
+types: `editor`, `highlight`, `font`, `terminal`, `scrollbar`, `diff`, `list`,
+and `paged`. Glyph sets are associated constants (`BoxGlyphs::ROUND`,
 `ScrollbarGlyphs::THIN`), and a widget that runs inside modals ships its
 framework group as an associated constant (`Confirm::BINDINGS`).
 
@@ -87,7 +87,7 @@ available. Input and Editor share a crate-private text buffer; `editor`
 re-exports only `TextPosition` and `TextRange`, which `Editor::set_matches`
 takes. Every widget is exported at the crate root once, and a module is public
 only when it carries a family of supporting types: `editor`, `highlight`,
-`font`, `terminal`, `scrollbar`, `diff`, and `list`. Every widget measures
+`font`, `terminal`, `scrollbar`, `diff`, `list`, and `paged`. Every widget measures
 text with `canopy::text::width`, and tab-aware cells with
 `canopy::text::cell_width`, so measurement and painting agree.
 
@@ -105,6 +105,30 @@ tables are optional.
 
 Without `devtools`, Root creates no Inspector nodes or Inspector commands.
 Core scripting and the Crossterm adapter remain available in every profile.
+
+## Paged data
+
+`canopy_widgets::paged::Paged` controls a bounded window over a provider's data.
+It preserves provider order: it never sorts items and requires no ordering
+trait. Stable item keys identify selections and viewport anchors; opaque page
+cursors identify boundaries. These can be different types. The total count is
+optional, so a provider can serve pages without scanning the complete dataset.
+
+The controller emits requests and accepts replies. The host owns I/O, scheduling,
+and cancellation. Request tokens reject replies from another controller, an old
+query, or superseded navigation. Errors retain the resident rows and selection;
+empty pages with a continuation pause until the host requests a retry.
+
+The window evicts whole pages to preserve provider cursors. A pinned selection
+survives eviction, and providers can optionally support seeking to its key or
+to the last page. Pending keyboard movement continues when the next page arrives.
+User scrolling can supersede that movement without losing the selection.
+
+Renderers consume anchor or reveal intents after publishing rows, and acknowledge
+reveals after layout. This keeps viewport preservation separate from selection
+visibility. The controller has no runtime or rendering dependency; dummy providers
+test page boundaries, stale replies, and virtual million-item datasets. `fh` uses
+it for its flat filesystem listing.
 
 ## Tree Model
 

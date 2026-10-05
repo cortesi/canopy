@@ -60,6 +60,8 @@ mod label;
 mod list_view;
 /// One-row gauge over a track.
 mod meter;
+/// Provider-ordered paging and selection state for custom list renderers.
+pub mod paged;
 /// Modal filtered list of items.
 mod picker;
 /// Regular expressions that match as ripgrep does, and their ranges in text.

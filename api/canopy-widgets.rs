@@ -3688,6 +3688,239 @@ pub mod list {
     impl ToArgValue for AutoKey {}
 }
 
+pub mod paged {
+    //! Provider-ordered paging and selection state for custom list renderers.
+    //! Bounded, provider-ordered list state without I/O or a rendering runtime.
+    //!
+    //! A provider executes requests from [`Paged::take_request`] and returns a page
+    //! with the same token. Cursors describe page boundaries, independently of item
+    //! keys. Pages contain unique keys, preserve the provider's order, and contain
+    //! at most the request's limit. Adjacent pages must not overlap resident keys.
+    //! The controller never compares item values or sorts pages.
+    //!
+    //! Whole pages are evicted to preserve opaque boundary cursors. Resident items
+    //! never exceed capacity. One selected item remains pinned outside that budget,
+    //! even when independent viewport scrolling evicts its page. Providers that
+    //! support key seeking can restore that item before keyboard navigation.
+
+    /// Optional provider operations. Loading the first page is always available.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub struct Capabilities {
+        /// The provider can load the last page without enumerating earlier pages.
+        pub last: bool,
+        /// The provider can load a page containing a stable item key.
+        pub seek: bool,
+    }
+
+    /// Direction through the provider's order.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum Direction {
+        /// Items preceding the resident window.
+        Before,
+        /// Items following the resident window.
+        After,
+    }
+
+    /// A contiguous slice in provider order, with cursors at its exact boundaries.
+    #[derive(Clone, Debug)]
+    pub struct Page<T, C> {
+        /// Items in provider order. Do not sort them in the consumer.
+        pub items: Vec<T>,
+        /// Boundary for loading the preceding page, or `None` at the start.
+        pub before: Option<C>,
+        /// Boundary for loading the following page, or `None` at the end.
+        pub after: Option<C>,
+        /// Exact item count if known. `None` means unknown, not zero.
+        pub total: Option<u64>,
+    }
+
+    /// A reply violated the bounded, unique-key page contract.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum PageError {
+        /// A page contained more items than its request permitted.
+        TooLarge,
+        /// A key was repeated within the page or overlapped an adjacent page.
+        DuplicateKey,
+    }
+
+    /// Pure paging controller for a list with a bounded resident window.
+    pub struct Paged<T, K, C> {/* private fields */}
+
+    impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
+        /// Observe renderer scroll without treating layout or reveals as user
+        /// input.
+        pub fn anchor(&mut self, index: usize);
+
+        /// Accept a matching reply. Stale replies return `Ok(false)` unchanged.
+        /// Invalid pages leave rows and selection intact and require explicit
+        /// retry.
+        pub fn apply(&mut self, token: Token, page: Page<T, C>) -> Result<bool, PageError>;
+
+        /// Record a provider failure without changing visible items or selection.
+        /// The caller owns the error message. Stale failures return false.
+        pub fn fail(&mut self, token: Token) -> bool;
+
+        /// Request and select the first item, superseding previous work.
+        pub fn first(&mut self);
+
+        /// Whether following items can be requested.
+        pub fn has_after(&self) -> bool;
+
+        /// Whether preceding items can be requested.
+        pub fn has_before(&self) -> bool;
+
+        /// Resident items, in exact provider order.
+        pub fn items(&self) -> &[T];
+
+        /// Request and select the last item, if the provider supports it.
+        pub fn last(&mut self) -> bool;
+
+        /// Load an adjacent page without moving selection. A reversed direction
+        /// cancels the old adjacent request. Call `set_viewport` for actual user
+        /// scrolling.
+        pub fn load(&mut self, direction: Direction) -> bool;
+
+        /// Queue signed movement in provider order and consume resident movement
+        /// now. Opposite input discards unfulfilled movement in the old
+        /// direction. Returns false when an evicted selection requires
+        /// unsupported key seeking.
+        pub fn navigate(&mut self, delta: i64) -> bool;
+
+        /// Create an idle controller. Call [`Self::first`] to request initial
+        /// items.
+        ///
+        /// Capacity and page size must be positive, and page size must fit
+        /// capacity. The key function must return a stable identity for each
+        /// provider item.
+        pub fn new(
+            capacity: usize,
+            page_size: usize,
+            key: fn(_: &T) -> K,
+            capabilities: Capabilities,
+        ) -> Self;
+
+        /// Signed keyboard movement waiting for pages.
+        pub fn pending_steps(&self) -> i64;
+
+        /// Reload the visible neighborhood while preserving selection and viewport.
+        /// Returns false when a request is active or key seeking is required but
+        /// unsupported.
+        pub fn refresh(&mut self) -> bool;
+
+        /// Forget the old query and reject every outstanding reply.
+        pub fn reset(&mut self);
+
+        /// Explicitly retry a failed request or continue past an empty page.
+        pub fn retry(&mut self) -> bool;
+
+        /// Latest user-action revision, also carried by scroll effects.
+        pub fn revision(&self) -> u64;
+
+        /// Acknowledge a taken reveal after the renderer has applied it in layout.
+        /// Observe the actual viewport with `anchor` first. Pending movement or a
+        /// newer selection keeps reveal priority until its own layout completes.
+        pub fn scroll_applied(&mut self, revision: u64) -> bool;
+
+        /// Request a key's page and select that key, if the provider supports it.
+        /// If the key no longer exists, select the returned page's first item.
+        pub fn seek(&mut self, key: K) -> bool;
+
+        /// Select a resident item. Explicit selection supersedes queued navigation.
+        pub fn select(&mut self, index: usize) -> bool;
+
+        /// Selected item, including a pinned item whose page has been evicted.
+        pub fn selected(&self) -> Option<&T>;
+
+        /// Resident selection index, or `None` when the selected item is evicted.
+        pub fn selected_index(&self) -> Option<usize>;
+
+        /// Stable identity of the selection, including an evicted selection.
+        pub fn selected_key(&self) -> Option<K>;
+
+        /// Observe user viewport movement, superseding pending keyboard navigation.
+        /// An adjacent page may still publish, anchored to this newest viewport.
+        pub fn set_viewport(&mut self, index: usize);
+
+        /// Current request state. Taking a request does not end `Loading`.
+        pub fn status(&self) -> Status;
+
+        /// Take queued work once. Replies remain valid until canceled or reset.
+        pub fn take_request(&mut self) -> Option<Request<K, C>>;
+
+        /// Take the latest scroll effect, if its item remains resident.
+        pub fn take_scroll_intent(&mut self) -> Option<ScrollIntent<K>>;
+
+        /// Provider-reported exact total, or `None` when unknown.
+        pub fn total(&self) -> Option<u64>;
+    }
+
+    /// Work to execute outside the controller.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct Request<K, C> {
+        /// Return this token with either a page or a failure.
+        pub token: Token,
+        /// Provider operation, using opaque cursors or a stable key.
+        pub seek: Seek<K, C>,
+        /// Maximum number of items in the reply.
+        pub limit: usize,
+    }
+
+    /// Latest scroll effect. The renderer owns actual viewport geometry and scroll.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct ScrollIntent<K> {
+        /// Stable identity of the resident item.
+        pub key: K,
+        /// Current resident index of the item.
+        pub index: usize,
+        /// Whether to anchor the viewport or reveal selection.
+        pub kind: ScrollKind,
+        /// User-action revision. Discard an effect superseded by a newer action.
+        pub revision: u64,
+    }
+
+    /// How the renderer should position the resident row.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum ScrollKind {
+        /// Preserve the top visible item's identity after resident indices change.
+        Anchor,
+        /// Reveal a selection made by the latest navigation command.
+        Reveal,
+    }
+
+    /// An operation for the external provider. Cursors and keys are separate types.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub enum Seek<K, C> {
+        /// Load the start of the provider's order.
+        First,
+        /// Load the end of the provider's order.
+        Last,
+        /// Load a page containing this key, if the key still exists.
+        Around(K),
+        /// Load the page preceding this opaque boundary.
+        Before(C),
+        /// Load the page following this opaque boundary.
+        After(C),
+    }
+
+    /// Current provider request state.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub enum Status {
+        /// No request is outstanding.
+        #[default]
+        Idle,
+        /// A request is queued or executing.
+        Loading,
+        /// The last request failed. Only an explicit retry or command starts work.
+        Failed,
+        /// An empty page has a continuation. Automatic navigation has paused.
+        Stalled,
+    }
+
+    /// Opaque identity of one request in one controller generation.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct Token {/* private fields */}
+}
+
 pub mod regex_search {
     //! Regular expressions that match as ripgrep does, and their ranges in text.
     //! Regular expressions that match text as ripgrep does, and the ranges that
