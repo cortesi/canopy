@@ -4,7 +4,7 @@
 // Publish: crates.io
 // Declared features: testing
 // Workspace dependencies: canopy-derive, canopy-geom
-// Workspace dependents: canopy (dev), canopy-derive (dev), canopy-mcp, canopy-widgets, canopyctl, gyms, hello, todo
+// Workspace dependents: canopy (dev), canopy-derive (dev), canopy-mcp, canopy-widgets, canopyctl, gyms, hello, mosaic-score, todo
 // Unnameable: crate::core::commands::sealed::Inject, crate::core::context::sealed::Context, crate::core::context::sealed::ViewContext
 
 //! Canopy: A terminal UI library.
@@ -817,6 +817,9 @@ impl Canopy {
         key: Key,
     ) -> crate::error::Result<KeyRouteExplanation>;
 
+    /// Return the block mosaic characters that the terminal draws well.
+    pub fn glyphs(&self) -> Glyphs;
+
     /// Remove `mode` from the active modes, wherever it is in the stack.
     ///
     /// Leaving a mode that is not active changes nothing. An empty name is an
@@ -856,6 +859,10 @@ impl Canopy {
     /// Replace parts of a cursor role's look, in this theme and every later
     /// one.
     pub fn set_cursor_look(&mut self, role: &str, patch: CursorLookPatch);
+
+    /// Set the block mosaic characters that the terminal draws well. Sizes
+    /// can depend on them, so a change lays the frame out again.
+    pub fn set_glyphs(&mut self, glyphs: Glyphs);
 
     /// Switch to the theme `palette`, reapplying every widget style rule set.
     pub fn set_theme(&mut self, palette: Palette);
@@ -1162,6 +1169,9 @@ impl Setup {
     /// frame preparation, before the user and project `init.luau` modules.
     pub fn register_startup_script(&mut self, name: &str, source: &str)
     -> crate::error::Result<()>;
+
+    /// Set the block mosaic characters that the terminal draws well.
+    pub fn set_glyphs(&mut self, glyphs: Glyphs);
 
     /// Replace the motion settings.
     pub fn set_motion(&mut self, settings: MotionSettings);
@@ -3365,6 +3375,10 @@ pub mod layout {
         pub width: Constraint,
         /// Height constraint.
         pub height: Constraint,
+        /// The block mosaic characters that the terminal draws well. A widget
+        /// whose size depends on its symbols, such as big text, reads them here,
+        /// so that it measures as it renders.
+        pub glyphs: Glyphs,
     }
 
     impl MeasureConstraints {
@@ -3380,6 +3394,9 @@ pub mod layout {
 
         /// Return the main axis constraint.
         pub fn main(&self, direction: Direction) -> Constraint;
+
+        /// Constraints on width and height, with the default glyphs.
+        pub fn new(width: Constraint, height: Constraint) -> Self;
 
         /// Containers: request wrapping.
         pub fn wrap(&self) -> Measurement;
@@ -3727,6 +3744,35 @@ pub mod render {
         pub fn rendered_text(&self) -> String;
     }
 
+    /// The block mosaic characters that the terminal draws well.
+    ///
+    /// Which characters a terminal draws cleanly depends on the terminal and its
+    /// font, and Canopy cannot detect it. An application sets it, and widgets
+    /// that draw pictures or large text, such as image views, font banners, and
+    /// big text, choose their symbols from it.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub enum Glyphs {
+        /// The block elements, U+2580 to U+259F, except the shades. Nearly every
+        /// terminal font has them, so this is the fallback for a font that lacks
+        /// the mosaics of the full set.
+        Blocks,
+        /// The block elements, plus the octants, sextants, bars, and smooth
+        /// mosaics of Symbols for Legacy Computing. It draws the best pictures,
+        /// and it is the default. Some fonts lack these mosaics.
+        #[default]
+        Full,
+    }
+
+    impl Glyphs {
+        /// Every setting.
+        pub const ALL: [Self; 2] = _;
+        /// The setting with a name, as [`Self::name`] gives it.
+        pub fn from_name(name: &str) -> Option<Self>;
+
+        /// The name of the setting, in lower case.
+        pub fn name(self) -> &'static str;
+    }
+
     /// Global motion settings.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub struct MotionSettings {
@@ -3775,6 +3821,10 @@ pub mod render {
         /// be clipped.
         pub fn fill(&mut self, style: &str, r: Rect, c: char) -> crate::error::Result<()>;
 
+        /// The block mosaic characters that the terminal draws well, as the
+        /// application set them.
+        pub fn glyphs(&self) -> Glyphs;
+
         /// Push a style layer.
         pub fn push_layer(&mut self, name: &str);
 
@@ -3820,6 +3870,10 @@ pub mod render {
             p: Point,
             ch: char,
         ) -> crate::error::Result<()>;
+
+        /// Resolve a style by name without the effect stack. A widget that
+        /// applies the effects itself, after its own drawing, starts here.
+        pub fn resolve_base_style(&self, name: &str) -> Style;
 
         /// Resolve a style by name and apply the current effect stack.
         pub fn resolve_style(&self, name: &str) -> Style;

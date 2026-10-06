@@ -17,6 +17,7 @@ devtools = ["dep:tracing-subscriber"]
 
 [dependencies]
 canopy.workspace = true
+canopy-mosaic.workspace = true
 
 # Widget-specific dependencies
 icu_segmenter.workspace = true
@@ -73,6 +74,11 @@ harness = false
 [[bench]]
 name = "rendering"
 harness = false
+
+[[bench]]
+name = "image_view"
+harness = false
+required-features = ["graphics"]
 
 [lints]
 workspace = true

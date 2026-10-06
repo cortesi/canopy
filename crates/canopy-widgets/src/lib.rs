@@ -60,6 +60,8 @@ mod label;
 mod list_view;
 /// One-row gauge over a track.
 mod meter;
+/// Block mosaics: the symbols of image views, font banners, and big text.
+pub mod mosaic;
 /// Provider-ordered paging and selection state for custom list renderers.
 pub mod paged;
 /// Modal filtered list of items.
@@ -100,7 +102,7 @@ mod text;
 /// Shared text editing machinery for Input and Editor.
 mod text_buffer;
 
-pub use big_text::{BigFace, BigSize, BigText, BigWeight};
+pub use big_text::{BigFace, BigGrid, BigSize, BigText, BigWeight};
 pub use border::{Border, BoxGlyphs};
 pub use button::{Button, ButtonLook};
 pub use column_chart::ColumnChart;

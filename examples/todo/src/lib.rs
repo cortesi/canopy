@@ -532,10 +532,10 @@ mod tests {
                 item: text.to_owned(),
             });
             assert_eq!(
-                entry.measure(MeasureConstraints {
-                    width: Constraint::Exact(width),
-                    height: Constraint::Unbounded,
-                }),
+                entry.measure(MeasureConstraints::new(
+                    Constraint::Exact(width),
+                    Constraint::Unbounded
+                )),
                 Measurement::Fixed(Size::new(width, height))
             );
         }
@@ -547,10 +547,10 @@ mod tests {
             id: 1,
             item: "aaaa bbb".to_owned(),
         });
-        let Measurement::Fixed(size) = entry.measure(MeasureConstraints {
-            width: Constraint::Exact(8),
-            height: Constraint::Unbounded,
-        }) else {
+        let Measurement::Fixed(size) = entry.measure(MeasureConstraints::new(
+            Constraint::Exact(8),
+            Constraint::Unbounded,
+        )) else {
             panic!("todo entry has a fixed measurement");
         };
         let mut canopy = CanopyBuilder::new().build()?;

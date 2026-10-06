@@ -3,7 +3,7 @@
 // Package: canopy-widgets
 // Publish: crates.io
 // Declared features: default, devtools, graphics, syntax, terminal-widget
-// Workspace dependencies: canopy
+// Workspace dependencies: canopy, canopy-mosaic
 // Workspace dependents: canopyctl, gyms, hello, todo
 // Unnameable: crate::image_view::ZoomDirection
 
@@ -27,11 +27,12 @@ use canopy::{
     commands::{CommandCall, CommandNode, CommandSpec, ToArgValue},
     input::{FrameworkBindingGroup, IntentName, ModalToken, mouse::MouseEvent},
     layout::{Align, Edges, Layout, ScrollAxis, ScrollDirection},
-    render::{Render, ScreenCapture},
+    render::{Glyphs, Render, ScreenCapture},
     style::Style,
     text::Truncate,
     tree::FocusDirection,
 };
+use canopy_mosaic::Tier;
 use grep_regex::{error::Error, matcher::RegexMatcher};
 use image::RgbaImage;
 use syntect::{SyntaxReference, SyntaxSet};
@@ -126,6 +127,22 @@ impl BigFace {
     pub fn cap_height(self) -> u32;
 }
 
+/// The grid of a cell: how many font pixels it holds, at scale 1.
+///
+/// On the half grid, a cell holds one pixel above another, drawn with half
+/// blocks. On the octant grid, a cell holds two pixels across and four down,
+/// drawn with octants. A pixel is square on a 1:2 cell in both, and an octant
+/// pixel is half the size of a half-block pixel.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum BigGrid {
+    /// Two pixels in each cell, drawn with half blocks.
+    #[default]
+    Half,
+    /// Eight pixels in each cell, drawn with octants. It needs the octants of
+    /// Symbols for Legacy Computing Supplement.
+    Octant,
+}
+
 /// How big text chooses its size.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum BigSize {
@@ -147,12 +164,17 @@ pub enum BigSize {
     },
 }
 
-/// Large text in bitmap faces, drawn with half blocks.
+/// Large text in bitmap faces, drawn with half blocks or octants.
 ///
 /// The faces form a ladder: [`BigFace::Compact`], with Canopy's own numerals
 /// five pixels high, then the seven sizes of Tamzen. Each draws at any
 /// integer scale, where one font pixel is that many columns by that many half
-/// rows. [`BigSize::Fit`], the default, takes the face and scale that draw
+/// rows. With the full mosaic glyphs, each face also draws on the octant
+/// grid, where one font pixel is that many half columns by that many quarter
+/// rows, and the ladder gains a step between each two half-block scales.
+/// The glyphs come from the terminal, as the application set them, unless
+/// the text has a tier of its own, set with [`BigText::with_tier`].
+/// [`BigSize::Fit`], the default, takes the face and scale that draw
 /// the largest capitals in the area; [`BigSize::MaxRows`] caps the rows, and
 /// [`BigSize::Exact`] takes one face at one scale. The fit measures the text
 /// itself: a line box runs from the cap height down to the baseline, and
@@ -184,15 +206,20 @@ pub enum BigSize {
 pub struct BigText {/* private fields */}
 
 impl BigText {
-    /// Returns the face and scale that draw the text in an area of `area`.
+    /// Returns the face and the scale on its grid that draw the text in an
+    /// area of `area`, in its own tier.
     pub fn face_in(&self, area: Size) -> (BigFace, u32);
+
+    /// Returns the grid that draws the text in an area of `area`, in its own
+    /// tier.
+    pub fn grid_in(&self, area: Size) -> BigGrid;
 
     /// Constructs big text of one run in the `text` part. It fits its area,
     /// in bold, at the start of the area.
     pub fn new(text: impl Into<String>) -> Self;
 
     /// Returns the cell rows that draw the text in an area of `area`, placed
-    /// at the start of the area, without trailing spaces.
+    /// at the start of the area, without trailing spaces, in its own tier.
     pub fn rows_in(&self, area: Size) -> Vec<String>;
 
     /// Places each line at the start, the center, or the end of the area.
@@ -213,6 +240,10 @@ impl BigText {
     /// Replaces the text with one run in the `text` part.
     pub fn set_text(&mut self, text: impl Into<String>);
 
+    /// Draws with the symbols of `tier`, or with none, the symbols that the
+    /// terminal's glyphs allow.
+    pub fn set_tier(&mut self, tier: Option<Tier>);
+
     /// Places the block of lines at the top, the middle, or the bottom of the
     /// area.
     pub fn set_vertical_align(&mut self, align: Align);
@@ -220,11 +251,15 @@ impl BigText {
     /// Sets the weight.
     pub fn set_weight(&mut self, weight: BigWeight);
 
-    /// Returns the size in cells that the text takes in an area of `area`.
+    /// Returns the size in cells that the text takes in an area of `area`,
+    /// in its own tier.
     pub fn size_in(&self, area: Size) -> Size;
 
     /// Returns the text of all runs.
     pub fn text(&self) -> String;
+
+    /// Returns the text's own mosaic tier, if it has one.
+    pub fn tier(&self) -> Option<Tier>;
 
     /// Places each line at the start, the center, or the end of the area.
     #[must_use]
@@ -247,6 +282,11 @@ impl BigText {
     /// one baseline, and a change between them can roll.
     #[must_use]
     pub fn with_strut(self, strut: impl Into<String>) -> Self;
+
+    /// Draws with the symbols of `tier`, whatever glyphs the terminal has.
+    /// The full tier adds the octant grid to the ladder.
+    #[must_use]
+    pub fn with_tier(self, tier: Tier) -> Self;
 
     /// Places the block of lines at the top, the middle, or the bottom of the
     /// area. A middle that falls between two half rows takes the upper one.
@@ -1141,6 +1181,13 @@ impl FontBanner {
     /// Update the banner text.
     pub fn set_text(&mut self, text: impl Into<String>);
 
+    /// Draw with the symbols of `tier`, or with none, the symbols that the
+    /// terminal's glyphs allow.
+    pub fn set_tier(&mut self, tier: Option<Tier>);
+
+    /// The banner's own mosaic tier, if it has one.
+    pub fn tier(&self) -> Option<Tier>;
+
     /// Configure rendering effects for the banner.
     #[must_use]
     pub fn with_effects(self, effects: FontEffects) -> Self;
@@ -1152,6 +1199,10 @@ impl FontBanner {
     /// Configure the banner style path.
     #[must_use]
     pub fn with_style(self, style: impl Into<String>) -> Self;
+
+    /// Draw with the symbols of `tier`, whatever glyphs the terminal has.
+    #[must_use]
+    pub fn with_tier(self, tier: Tier) -> Self;
 }
 
 impl Widget for FontBanner {}
@@ -1196,9 +1247,16 @@ impl Frame {
 impl Widget for Frame {}
 
 /// Widget that renders an image into terminal cells.
+///
+/// Each cell is an 8×8 matrix of the image, matched to the block mosaic
+/// symbol and the two colors that reproduce it best. The tier of symbols
+/// comes from the terminal's glyphs, unless the view has a tier of its own.
 pub struct ImageView {/* private fields */}
 
 impl ImageView {
+    /// Build a positional call with typed user arguments.
+    pub fn call_cycle_tier() -> CommandCall;
+
     /// Build a positional call with typed user arguments.
     pub fn call_fit() -> CommandCall;
 
@@ -1207,6 +1265,9 @@ impl ImageView {
 
     /// Build a positional call with typed user arguments.
     pub fn call_zoom(dir: crate::image_view::ZoomDirection) -> CommandCall;
+
+    /// Return the command spec for this command.
+    pub fn spec_cycle_tier() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_fit() -> &'static CommandSpec;
@@ -1219,6 +1280,11 @@ impl ImageView {
 }
 
 impl ImageView {
+    /// Step the view's own mosaic tier: from the terminal's glyphs, through
+    /// each tier from half blocks to the full tier, and back, so that the
+    /// tiers can be compared.
+    pub fn cycle_tier(&mut self, _ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
     /// Create an image view with nothing to show yet.
     ///
     /// The view holds a single transparent pixel until [`Self::set_image`] or
@@ -1249,6 +1315,7 @@ impl ImageView {
     -> canopy::error::Result<()>;
 
     /// Show a different image, returning the view to its auto-fitted state.
+    /// The view keeps its focus setting and its tier.
     pub fn set_image(&mut self, image: &RgbaImage);
 
     /// Show the image at `path`, returning the view to its auto-fitted state.
@@ -1259,26 +1326,37 @@ impl ImageView {
     /// Load a thumbnail within `bounds`, preserving its aspect ratio.
     ///
     /// Small images keep their original pixels. Larger images are averaged
-    /// after compositing transparency onto black. Zooming uses the thumbnail;
-    /// use [`Self::set_path`] to retain full-resolution zooming instead.
+    /// with premultiplied colors, so transparency does not bleed. Zooming
+    /// uses the thumbnail; use [`Self::set_path`] to retain full-resolution
+    /// zooming instead.
     ///
     /// The source is limited to 32 * 1024 * 1024 pixels and the decoder has a
     /// 128 MiB allocation budget. Conversion can allocate one additional RGBA
     /// source buffer. Each thumbnail edge is capped at 1024 pixels, even when
-    /// `bounds` is larger. Sampling tables use at most 24 * (width + 1) *
-    /// (height + 1) bytes for the thumbnail dimensions. Zero bounds are
-    /// invalid. On failure, the current image is preserved. Callers should
-    /// also bound the encoded file size.
+    /// `bounds` is larger, and the view keeps the thumbnail at 4 bytes for
+    /// each pixel. Zero bounds are invalid. On failure, the current image is
+    /// preserved. Callers should also bound the encoded file size.
     pub fn set_preview_path(
         &mut self,
         path: impl AsRef<Path>,
         bounds: Size,
     ) -> canopy::error::Result<()>;
 
+    /// Draw with the symbols of `tier`, or with none, the symbols that the
+    /// terminal's glyphs allow.
+    pub fn set_tier(&mut self, tier: Option<Tier>);
+
+    /// The view's own mosaic tier, if it has one.
+    pub fn tier(&self) -> Option<Tier>;
+
     /// Set whether the view takes focus, which its zoom and pan keys need.
     /// A decorative image, such as a logo, stays out of keyboard traversal.
     #[must_use]
     pub fn with_focus(self, focusable: bool) -> Self;
+
+    /// Draw with the symbols of `tier`, whatever glyphs the terminal has.
+    #[must_use]
+    pub fn with_tier(self, tier: Tier) -> Self;
 
     /// Zoom around the view center.
     /// @param dir The zoom direction.
@@ -3686,6 +3764,29 @@ pub mod list {
     pub struct AutoKey(_);
 
     impl ToArgValue for AutoKey {}
+}
+
+pub mod mosaic {
+    //! Block mosaics: the symbols of image views, font banners, and big text.
+    //! Block mosaics: the symbols that image views, font banners, and big text
+    //! draw with, from `canopy-mosaic`.
+    //!
+    //! Each of those widgets takes its tier from the terminal's glyphs, as the
+    //! application set them, unless the widget has a tier of its own. A gym
+    //! sets one to compare tiers side by side.
+
+    pub use canopy_mosaic::*;
+    /// Step a widget's own tier: from following the terminal's glyphs, through
+    /// each tier from half blocks to the full tier, and back. A gym toggles
+    /// with it to compare tiers.
+    pub fn cycle(tier: Option<Tier>) -> Option<Tier>;
+
+    /// The name of a widget's own tier, or `terminal` when it follows the
+    /// terminal's glyphs.
+    pub fn label(tier: Option<Tier>) -> &'static str;
+
+    /// The richest tier that the terminal's glyphs allow.
+    pub fn tier_for(glyphs: Glyphs) -> Tier;
 }
 
 pub mod paged {

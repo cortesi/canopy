@@ -87,7 +87,7 @@ available. Input and Editor share a crate-private text buffer; `editor`
 re-exports only `TextPosition` and `TextRange`, which `Editor::set_matches`
 takes. Every widget is exported at the crate root once, and a module is public
 only when it carries a family of supporting types: `editor`, `highlight`,
-`font`, `terminal`, `scrollbar`, `diff`, `list`, and `paged`. Every widget measures
+`font`, `terminal`, `scrollbar`, `diff`, `list`, `paged`, and `mosaic`. Every widget measures
 text with `canopy::text::width`, and tab-aware cells with
 `canopy::text::cell_width`, so measurement and painting agree.
 
@@ -100,7 +100,7 @@ tables are optional.
 | --- | --- |
 | `syntax` | `SyntectHighlighter` and its Syntect dependencies |
 | `terminal-widget` | Terminal and `itty-core` |
-| `graphics` | `ImageView` (crate-root re-export), fonts, `image`, and `fontdue` |
+| `graphics` | `ImageView` (crate-root re-export), fonts, screenshots, `image`, and `fontdue` |
 | `devtools` | Inspector and tracing subscriber support |
 
 Without `devtools`, Root creates no Inspector nodes or Inspector commands.
@@ -511,6 +511,47 @@ with full render output.
 
 If a pre-render hook marks layout dirty, Canopy runs layout again before
 rendering. Rendering must not rely on stale views.
+
+### Block mosaics
+
+The `canopy-mosaic` crate draws pictures and large text with block mosaic
+characters, and depends on nothing in Canopy. Each cell is an 8×8 matrix of
+pixels. The matcher finds the symbol and the two pens that reproduce the matrix
+with the least squared error. It rounds the means of the two parts of each
+candidate mask to the pens that it would emit, and scores those pens exactly in
+integers, over subset-sum tables of each run of four pixels, so exact search
+over every symbol of a tier is cheap. A mask and its inverse are one symbol
+with the pens swapped, and ties go to the family that more terminals draw well.
+
+The shapes of the characters come from their Unicode names, and a fixture of
+those names, extracted from `UnicodeData.txt`, checks them. The same shapes
+give the masks that the matcher searches, the glyphs that screenshots draw,
+and the displays that the quality harness scores, so the three cannot
+disagree. The harness keeps baselines for a corpus of images and text in every
+tier, and fails when quality drops.
+
+`mosaic-score` measures the drawing as a person sees it, to guide work on the
+matcher. Its suite holds photographs, generated images, and text in four fonts
+at four sizes, antialiased and crisp. A display model draws each cell from its
+Unicode geometry at 16 by 32 device pixels, and mixes the two colors of a pixel
+in linear light. The reference is the item itself at those pixels. S-CIELAB
+blurs both as the eye does, at 3 and at 6 cell columns to a degree of visual
+angle, and the score is the mean CIEDE2000 difference that remains. Its filters
+follow the reference implementation of Zhang and Wandell, and its CIEDE2000
+follows the test data of Sharma, Wu, and Dalal. Groups of images, antialiased
+text, and crisp text score the geometric mean of their items, and the suite the
+geometric mean of its groups. `cargo xtask score` compares a run with the
+committed baseline.
+
+Which symbols a terminal draws well depends on the terminal and its font, so
+the application sets `Glyphs`: `Full`, the default, or `Blocks`. Layout reads
+it from `MeasureConstraints`, which keys the measure cache on it, and rendering
+reads it from `Render::glyphs`, so a widget measures as it draws. A change lays
+the frame out again. `ImageView` matches in RGB and caches its cells by view,
+zoom, tier, and the ground of each cell, and applies the effect stack after the
+cache. `FontBanner` matches coverage, so its colors stay in the style system,
+and gradients and motion still resolve at emission. `BigText` draws its bitmap
+faces on an octant grid where the full glyphs allow it, by direct lookup.
 
 ### Soft cursors
 

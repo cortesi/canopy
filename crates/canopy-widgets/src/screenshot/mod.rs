@@ -439,6 +439,116 @@ mod tests {
 
     use super::*;
 
+    /// PSNR in dB between two pixel lists.
+    fn psnr(a: &[[u8; 3]], b: &[[u8; 3]]) -> f64 {
+        let error: f64 = a
+            .iter()
+            .zip(b)
+            .map(|(p, q)| {
+                (0..3)
+                    .map(|ch| (f64::from(p[ch]) - f64::from(q[ch])).powi(2))
+                    .sum::<f64>()
+            })
+            .sum();
+        let mse = error / (a.len() * 3) as f64;
+        10.0 * (255.0f64 * 255.0 / mse.max(1e-9)).log10()
+    }
+
+    /// Resample opaque RGB pixels to `cols × 8` by `rows × 8` matrix pixels.
+    fn to_matrix(
+        rgb: &[u8],
+        width: usize,
+        height: usize,
+        cols: usize,
+        rows: usize,
+    ) -> Vec<[u8; 3]> {
+        use canopy_mosaic::raster::{Image, LinearRaster, Placement, composite, resample};
+        let rgba: Vec<u8> = rgb
+            .chunks(3)
+            .flat_map(|p| [p[0], p[1], p[2], 255])
+            .collect();
+        let image = Image::new(&rgba, width, height).expect("image");
+        let placement = Placement {
+            origin: [0.0, 0.0],
+            step: [
+                width as f32 / (cols * 8) as f32,
+                height as f32 / (rows * 8) as f32,
+            ],
+        };
+        let mut linear = LinearRaster::new();
+        resample(&image, placement, cols * 8, rows * 8, &mut linear);
+        let mut out = Vec::new();
+        composite(&linear, &vec![[0, 0, 0]; cols * rows], &mut out);
+        out
+    }
+
+    #[test]
+    fn the_real_display_agrees_with_the_model_and_keeps_the_gain() -> Result<()> {
+        use std::path::Path;
+
+        use canopy::geom::Rect as Area;
+        use canopy_mosaic::{RasterView, SymbolSet, Tier, geometry::Shape, rgb_into};
+        let (cols, rows) = (48usize, 16usize);
+        let photo =
+            image::open(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.assets/shyness.jpg"))
+                .expect("photo")
+                .into_rgb8();
+        let source = to_matrix(
+            photo.as_raw(),
+            photo.width() as usize,
+            photo.height() as usize,
+            cols,
+            rows,
+        );
+        let mut shot = Screenshot::new(ScreenshotOptions::default())?;
+        let mut scores = Vec::new();
+        for tier in [Tier::Halves, Tier::Blocks, Tier::Full] {
+            let view = RasterView::new(&source, cols * 8, rows * 8, cols * 8).expect("raster");
+            let mut cells = Vec::new();
+            rgb_into(&view, SymbolSet::tier(tier), &mut cells);
+            // The ideal display: each matrix pixel shows the pen of its part.
+            let mut ideal = vec![[0u8; 3]; source.len()];
+            let style = ResolvedStyle::new(Color::Black, Color::Black, AttrSet::default());
+            let mut buf = TermBuf::new(Size::new(cols as u32, rows as u32), ' ', style)?;
+            for (index, cell) in cells.iter().enumerate() {
+                let (x, y) = (index % cols, index / cols);
+                let mask = Shape::of(cell.ch).expect("shape").mask();
+                for i in 0..64 {
+                    let pen = if mask.get(i % 8, i / 8) {
+                        cell.fg
+                    } else {
+                        cell.bg
+                    };
+                    ideal[(y * 8 + i / 8) * cols * 8 + x * 8 + i % 8] = pen;
+                }
+                let color = |[r, g, b]: [u8; 3]| Color::Rgb { r, g, b };
+                let style = ResolvedStyle::new(color(cell.fg), color(cell.bg), AttrSet::default());
+                buf.fill(&style, Area::new(x as u32, y as u32, 1, 1), cell.ch)?;
+            }
+            let canvas = shot.draw(&buf.capture())?;
+            assert!(shot.missing.is_empty(), "every mosaic draws from geometry");
+            let shown = to_matrix(
+                &canvas.pixels,
+                canvas.width as usize,
+                canvas.height as usize,
+                cols,
+                rows,
+            );
+            let agreement = psnr(&shown, &ideal);
+            let quality = psnr(&shown, &source);
+            assert!(
+                agreement > 30.0,
+                "{tier:?}: the real display departs from the model: {agreement:.2} dB"
+            );
+            scores.push(quality);
+        }
+        assert!(
+            scores[1] > scores[0] && scores[2] > scores[1] && scores[2] > scores[0] + 1.0,
+            "the real display keeps the gain of each tier: {scores:?}"
+        );
+        Ok(())
+    }
+
     /// Returns the pixel at `(x, y)` of a canvas.
     fn pixel(canvas: &Canvas, x: i32, y: i32) -> [u8; 3] {
         let at = canvas.offset(x, y).expect("inside");

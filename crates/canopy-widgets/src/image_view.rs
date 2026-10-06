@@ -1,6 +1,6 @@
 //! Image viewer widget with zoom and pan controls.
 
-use std::path::Path;
+use std::{mem, path::Path};
 
 use canopy::{
     CommandEnum, Context, Register, Setup, ViewContext, Widget, derive_commands,
@@ -8,9 +8,16 @@ use canopy::{
     geom::{Point, Rect, Size},
     layout::{CanvasContext, Layout, ScrollDirection, ScrollOp},
     render::Render,
-    style::{AttrSet, Color, Mix, ResolvedStyle, Style},
+    style::{AttrSet, Color, ResolvedStyle, Style},
+};
+use canopy_mosaic::{
+    Cell, RasterView, SymbolSet, Tier,
+    raster::{Image, LinearRaster, Placement, composite, resample},
+    rgb_into,
 };
 use image::{DynamicImage, ImageDecoder, RgbaImage};
+
+use crate::mosaic::{cycle, tier_for};
 
 /// Direction for zoom commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, CommandEnum)]
@@ -21,8 +28,6 @@ pub enum ZoomDirection {
     Out,
 }
 
-/// Character used to render two vertical pixels per terminal cell.
-const HALF_BLOCK: char = '\u{2580}';
 /// Minimum zoom factor.
 const MIN_ZOOM: f32 = 0.1;
 /// Maximum zoom factor.
@@ -39,103 +44,8 @@ const PREVIEW_MAX_PIXELS: u64 = 32 * 1024 * 1024;
 const PREVIEW_DECODE_BYTES: u64 = 128 * 1024 * 1024;
 /// Largest retained thumbnail edge, regardless of caller-provided bounds.
 const PREVIEW_MAX_EDGE: u32 = 1024;
-
-/// Summed-area table for fast image region sampling.
-struct IntegralImage {
-    /// Row stride in the summed-area tables.
-    stride: usize,
-    /// Summed red channel values, each multiplied by its alpha.
-    red: Vec<u64>,
-    /// Summed green channel values, each multiplied by its alpha.
-    green: Vec<u64>,
-    /// Summed blue channel values, each multiplied by its alpha.
-    blue: Vec<u64>,
-    /// Summed alpha values.
-    alpha: Vec<u64>,
-}
-
-impl IntegralImage {
-    /// Build an integral image from an RGBA buffer.
-    fn new(image: &RgbaImage) -> Self {
-        let width = image.width();
-        let height = image.height();
-        let stride = (width + 1) as usize;
-        let size = stride * (height + 1) as usize;
-        let mut red = vec![0u64; size];
-        let mut green = vec![0u64; size];
-        let mut blue = vec![0u64; size];
-        let mut alpha = vec![0u64; size];
-
-        for y in 0..height {
-            let mut row_red = 0u64;
-            let mut row_green = 0u64;
-            let mut row_blue = 0u64;
-            let mut row_alpha = 0u64;
-            for x in 0..width {
-                let pixel = image.get_pixel(x, y);
-                let opacity = pixel[3] as u64;
-                row_red += pixel[0] as u64 * opacity;
-                row_green += pixel[1] as u64 * opacity;
-                row_blue += pixel[2] as u64 * opacity;
-                row_alpha += opacity;
-
-                let idx = (y as usize + 1) * stride + (x as usize + 1);
-                let above = idx - stride;
-                red[idx] = red[above] + row_red;
-                green[idx] = green[above] + row_green;
-                blue[idx] = blue[above] + row_blue;
-                alpha[idx] = alpha[above] + row_alpha;
-            }
-        }
-
-        Self {
-            stride,
-            red,
-            green,
-            blue,
-            alpha,
-        }
-    }
-
-    /// Sum a channel over a rectangular region (exclusive end coordinates).
-    fn sum_channel(&self, channel: &[u64], left: u32, top: u32, right: u32, bottom: u32) -> u64 {
-        let left = left as usize;
-        let right = right as usize;
-        let top = top as usize;
-        let bottom = bottom as usize;
-        let idx = |x: usize, y: usize| y * self.stride + x;
-        let a = channel[idx(right, bottom)];
-        let b = channel[idx(left, top)];
-        let c = channel[idx(right, top)];
-        let d = channel[idx(left, bottom)];
-        a + b - c - d
-    }
-
-    /// Sum the RGB channels, each multiplied by its alpha, and the alpha over
-    /// a region.
-    fn sum_rgba(&self, left: u32, top: u32, right: u32, bottom: u32) -> [u64; 4] {
-        [&self.red, &self.green, &self.blue, &self.alpha]
-            .map(|channel| self.sum_channel(channel, left, top, right, bottom))
-    }
-}
-
-/// The average of a region of an image.
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct Sample {
-    /// Color of the covered part of the region, not premultiplied.
-    color: Color,
-    /// Share of the region the image covers: 0.0 for transparent, and 1.0
-    /// for opaque.
-    alpha: f32,
-}
-
-impl Sample {
-    /// A region the image does not cover.
-    const CLEAR: Self = Self {
-        color: Color::Black,
-        alpha: 0.0,
-    };
-}
+/// Matrix pixels across and down a cell.
+const MATRIX: usize = 8;
 
 /// Decode an image file into RGBA pixels.
 fn read_rgba(path: &Path) -> Result<RgbaImage> {
@@ -206,32 +116,68 @@ fn thumbnail(image: DynamicImage, bounds: Size) -> RgbaImage {
     reduced
 }
 
+/// What a cached mosaic depends on, besides the ground of each cell.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct MosaicKey {
+    /// The visible view, in canvas coordinates.
+    view: Rect,
+    /// Zoom in display subpixels per image pixel.
+    zoom: f32,
+    /// Display subpixel offset that centers the image.
+    offset: (f32, f32),
+    /// The mosaic tier.
+    tier: Tier,
+}
+
+/// The cells of the last render, and what they depend on.
+struct Mosaic {
+    /// The view, zoom, offset, and tier of the cells.
+    key: MosaicKey,
+    /// The ground color under each cell, row by row, without effects.
+    grounds: Vec<[u8; 3]>,
+    /// The matched cells, row by row.
+    cells: Vec<Cell<[u8; 3]>>,
+}
+
 /// Widget that renders an image into terminal cells.
+///
+/// Each cell is an 8×8 matrix of the image, matched to the block mosaic
+/// symbol and the two colors that reproduce it best. The tier of symbols
+/// comes from the terminal's glyphs, unless the view has a tier of its own.
 pub struct ImageView {
-    /// Cached image width in pixels.
-    image_width: u32,
-    /// Cached image height in pixels.
-    image_height: u32,
-    /// Integral image for fast sampling.
-    integral: IntegralImage,
-    /// Zoom factor in display subpixels per image pixel.
+    /// The image, RGBA8 with unassociated alpha.
+    image: RgbaImage,
+    /// Zoom factor in display subpixels per image pixel. A display subpixel
+    /// is one column by half a row.
     zoom: f32,
     /// Whether the view should auto-fit the image to the terminal.
     auto_fit: bool,
     /// Whether the view takes focus, which its zoom and pan keys need.
     focusable: bool,
+    /// The view's own mosaic tier, or none to follow the terminal's glyphs.
+    tier: Option<Tier>,
+    /// The cells of the last render.
+    mosaic: Option<Mosaic>,
+    /// Scratch raster in linear light, kept between renders.
+    linear: LinearRaster,
+    /// Scratch opaque raster, kept between renders.
+    opaque: Vec<[u8; 3]>,
+    /// Scratch ground colors of the render under way, kept between renders.
+    grounds: Vec<[u8; 3]>,
+    /// Matches since the view was made, which tests count.
+    matches: usize,
 }
 
 #[derive_commands]
 impl ImageView {
     /// Convert the cached image width to a float.
     fn image_width_f32(&self) -> f32 {
-        self.image_width as f32
+        self.image.width() as f32
     }
 
     /// Convert the cached image height to a float.
     fn image_height_f32(&self) -> f32 {
-        self.image_height as f32
+        self.image.height() as f32
     }
 
     /// Convert the view width to display subpixels.
@@ -309,38 +255,6 @@ impl ImageView {
         }
     }
 
-    /// Compute the image-space bounds of a display subpixel.
-    fn subpixel_bounds(
-        &self,
-        zoom: f32,
-        subpixel_column: f32,
-        subpixel_row: f32,
-    ) -> (f32, f32, f32, f32) {
-        let inverse_zoom = 1.0 / zoom;
-        let left = subpixel_column * inverse_zoom;
-        let right = (subpixel_column + 1.0) * inverse_zoom;
-        let top = subpixel_row * inverse_zoom;
-        let bottom = (subpixel_row + 1.0) * inverse_zoom;
-        (left, top, right, bottom)
-    }
-
-    /// Sample the image for a display subpixel. A subpixel outside the
-    /// image is clear.
-    fn sample_color(&self, zoom: f32, subpixel_column: f32, subpixel_row: f32) -> Sample {
-        let (left, top, right, bottom) = self.subpixel_bounds(zoom, subpixel_column, subpixel_row);
-        let center_column = (left + right) * 0.5;
-        let center_row = (top + bottom) * 0.5;
-        if center_column < 0.0
-            || center_row < 0.0
-            || center_column >= self.image_width_f32()
-            || center_row >= self.image_height_f32()
-        {
-            return Sample::CLEAR;
-        }
-        self.sample_region(left, top, right, bottom)
-            .unwrap_or(Sample::CLEAR)
-    }
-
     /// Compute the display subpixel offset to center the image in the view.
     fn center_offset(&self, view_size: Size, zoom: f32) -> (f32, f32) {
         let view_width = Self::view_subpixel_width(view_size);
@@ -354,116 +268,138 @@ impl ImageView {
         (offset_x, offset_y)
     }
 
-    /// Sample a rectangular region in image space and return its average.
-    fn sample_region(&self, left: f32, top: f32, right: f32, bottom: f32) -> Option<Sample> {
-        if self.image_width == 0 || self.image_height == 0 {
-            return None;
+    /// Match the visible cells, unless the last render matched the same
+    /// view, zoom, offset, tier, and the grounds in `self.grounds`. A render
+    /// that matches nothing allocates nothing.
+    fn refresh_mosaic(&mut self, key: MosaicKey) {
+        if let Some(mosaic) = &self.mosaic
+            && mosaic.key == key
+            && mosaic.grounds == self.grounds
+        {
+            return;
         }
-
-        let left_index = left.floor() as i32;
-        let right_index = right.ceil() as i32;
-        let top_index = top.floor() as i32;
-        let bottom_index = bottom.ceil() as i32;
-
-        let left_clamped = left_index.max(0) as u32;
-        let right_clamped = right_index.min(self.image_width as i32).max(0) as u32;
-        let top_clamped = top_index.max(0) as u32;
-        let bottom_clamped = bottom_index.min(self.image_height as i32).max(0) as u32;
-
-        if left_clamped >= right_clamped || top_clamped >= bottom_clamped {
-            return None;
+        let (mut cells, spare) = self
+            .mosaic
+            .take()
+            .map(|mosaic| (mosaic.cells, mosaic.grounds))
+            .unwrap_or_default();
+        let (cols, rows) = (key.view.w as usize, key.view.h as usize);
+        let (offset_x, offset_y) = key.offset;
+        // Matrix pixels are an eighth of a subpixel wide, and a quarter of
+        // one tall, since a subpixel is half a row.
+        let placement = Placement {
+            origin: [
+                (key.view.tl.x as f32 - offset_x) / key.zoom,
+                (key.view.tl.y as f32 * 2.0 - offset_y) / key.zoom,
+            ],
+            step: [1.0 / (8.0 * key.zoom), 1.0 / (4.0 * key.zoom)],
+        };
+        let (width, height) = (self.image.width() as usize, self.image.height() as usize);
+        cells.clear();
+        if let Ok(image) = Image::new(self.image.as_raw(), width, height) {
+            resample(
+                &image,
+                placement,
+                cols * MATRIX,
+                rows * MATRIX,
+                &mut self.linear,
+            );
+            composite(&self.linear, &self.grounds, &mut self.opaque);
+            let stride = cols * MATRIX;
+            if let Ok(raster) = RasterView::new(&self.opaque, stride, rows * MATRIX, stride) {
+                rgb_into(&raster, SymbolSet::tier(key.tier), &mut cells);
+            }
         }
-
-        let area = (right_clamped - left_clamped) as u64 * (bottom_clamped - top_clamped) as u64;
-        let [red, green, blue, alpha] =
-            self.integral
-                .sum_rgba(left_clamped, top_clamped, right_clamped, bottom_clamped);
-        if alpha == 0 {
-            return Some(Sample::CLEAR);
-        }
-        // Each color sum weighs its pixels by their alpha, so dividing by
-        // the alpha sum gives the color of the covered part alone.
-        let channel = |total: u64| (total / alpha).min(255) as u8;
-        Some(Sample {
-            color: Color::Rgb {
-                r: channel(red),
-                g: channel(green),
-                b: channel(blue),
-            },
-            alpha: alpha as f32 / (area * 255) as f32,
-        })
+        self.matches += 1;
+        // The grounds of this render move into the mosaic, and the buffer of
+        // the last one becomes the scratch of the next.
+        let grounds = mem::replace(&mut self.grounds, spare);
+        self.mosaic = Some(Mosaic {
+            key,
+            grounds,
+            cells,
+        });
     }
 
-    /// Render the image into the provided view rectangle. Each half of a
-    /// cell lays its sample over the ground of the `background` style, so a
-    /// transparent image shows the ground of whatever holds it.
+    /// Render the image into the provided view rectangle. Each cell lays
+    /// the image over the ground of the `background` style, without
+    /// effects, so a transparent image shows the ground of whatever holds
+    /// it. The effect stack then acts on both colors of each cell alike.
     fn render_cells(
-        &self,
+        &mut self,
         render: &mut Render,
         view: Rect,
         origin: Point,
         offset: (f32, f32),
         zoom: f32,
     ) -> Result<()> {
-        let (offset_x, offset_y) = offset;
+        if zoom <= 0.0 || !zoom.is_finite() {
+            return Ok(());
+        }
         let bounds = Rect::new(origin.x, origin.y, view.w, view.h);
-        let ground = render.resolve_style("background");
-
-        for row_index in 0..view.h {
-            let top_subpixel_row = view.tl.y.saturating_add(row_index).saturating_mul(2);
-            let bottom_subpixel_row = top_subpixel_row.saturating_add(1);
-            let top_row = top_subpixel_row as f32 - offset_y;
-            let bottom_row = bottom_subpixel_row as f32 - offset_y;
-
-            for column_index in 0..view.w {
-                let column = (view.tl.x + column_index) as f32 - offset_x;
-                let top = self.sample_color(zoom, column, top_row);
-                let bottom = self.sample_color(zoom, column, bottom_row);
-                let point = Point {
-                    x: origin.x + column_index,
-                    y: origin.y + row_index,
-                };
-                let shown = render
-                    .apply_effects(Style {
-                        fg: top.color.into(),
-                        bg: bottom.color.into(),
-                        attrs: AttrSet::default(),
-                    })
-                    .resolve_at(bounds, point);
-                let under = ground.resolve_at(bounds, point).bg;
-                let over = |color: Color, alpha: f32| {
-                    if alpha >= 1.0 {
-                        color
-                    } else if alpha <= 0.0 {
-                        under
-                    } else {
-                        under.mix(color, alpha, Mix::Rgb)
-                    }
-                };
-                let style = ResolvedStyle {
-                    fg: over(shown.fg, top.alpha),
-                    bg: over(shown.bg, bottom.alpha),
-                    attrs: shown.attrs,
-                };
-                render.put_cell(style, point, HALF_BLOCK)?;
+        let point = |col: u32, row: u32| Point {
+            x: origin.x + col,
+            y: origin.y + row,
+        };
+        let ground = render.resolve_base_style("background");
+        self.grounds.clear();
+        for row in 0..view.h {
+            for col in 0..view.w {
+                let (r, g, b) = ground.resolve_at(bounds, point(col, row)).bg.rgb();
+                self.grounds.push([r, g, b]);
             }
         }
-
+        let tier = self.tier.unwrap_or_else(|| tier_for(render.glyphs()));
+        let key = MosaicKey {
+            view,
+            zoom,
+            offset,
+            tier,
+        };
+        self.refresh_mosaic(key);
+        let Some(mosaic) = &self.mosaic else {
+            return Ok(());
+        };
+        for (index, cell) in mosaic.cells.iter().enumerate() {
+            let at = point(index as u32 % view.w, index as u32 / view.w);
+            let pen = |rgb: [u8; 3]| {
+                let color = Color::Rgb {
+                    r: rgb[0],
+                    g: rgb[1],
+                    b: rgb[2],
+                };
+                render
+                    .apply_effects(Style {
+                        fg: color.into(),
+                        bg: color.into(),
+                        attrs: AttrSet::default(),
+                    })
+                    .resolve_at(bounds, at)
+            };
+            let (fg, bg) = (pen(cell.fg), pen(cell.bg));
+            let style = ResolvedStyle {
+                fg: fg.fg,
+                bg: bg.fg,
+                attrs: fg.attrs,
+            };
+            render.put_cell(style, at, cell.ch)?;
+        }
         Ok(())
     }
 
     /// Create a new image view widget.
     pub fn new(image: &RgbaImage) -> Self {
-        let image_width = image.width();
-        let image_height = image.height();
-        let integral = IntegralImage::new(image);
         Self {
-            image_width,
-            image_height,
-            integral,
+            image: image.clone(),
             zoom: 1.0,
             auto_fit: true,
             focusable: true,
+            tier: None,
+            mosaic: None,
+            linear: LinearRaster::new(),
+            opaque: Vec::new(),
+            grounds: Vec::new(),
+            matches: 0,
         }
     }
 
@@ -475,6 +411,24 @@ impl ImageView {
         self
     }
 
+    /// Draw with the symbols of `tier`, whatever glyphs the terminal has.
+    #[must_use]
+    pub fn with_tier(mut self, tier: Tier) -> Self {
+        self.tier = Some(tier);
+        self
+    }
+
+    /// Draw with the symbols of `tier`, or with none, the symbols that the
+    /// terminal's glyphs allow.
+    pub fn set_tier(&mut self, tier: Option<Tier>) {
+        self.tier = tier;
+    }
+
+    /// The view's own mosaic tier, if it has one.
+    pub fn tier(&self) -> Option<Tier> {
+        self.tier
+    }
+
     /// Create a new image view widget from a file path.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {
         Ok(Self::new(&read_rgba(path.as_ref())?))
@@ -482,7 +436,7 @@ impl ImageView {
 
     /// Return the size of the image in pixels.
     pub fn image_size(&self) -> Size {
-        Size::new(self.image_width, self.image_height)
+        Size::new(self.image.width(), self.image.height())
     }
 
     /// Create a new image view widget from encoded image bytes, such as a
@@ -504,8 +458,12 @@ impl ImageView {
     }
 
     /// Show a different image, returning the view to its auto-fitted state.
+    /// The view keeps its focus setting and its tier.
     pub fn set_image(&mut self, image: &RgbaImage) {
+        let (focusable, tier) = (self.focusable, self.tier);
         *self = Self::new(image);
+        self.focusable = focusable;
+        self.tier = tier;
     }
 
     /// Show the image at `path`, returning the view to its auto-fitted state.
@@ -519,16 +477,16 @@ impl ImageView {
     /// Load a thumbnail within `bounds`, preserving its aspect ratio.
     ///
     /// Small images keep their original pixels. Larger images are averaged
-    /// after compositing transparency onto black. Zooming uses the thumbnail;
-    /// use [`Self::set_path`] to retain full-resolution zooming instead.
+    /// with premultiplied colors, so transparency does not bleed. Zooming
+    /// uses the thumbnail; use [`Self::set_path`] to retain full-resolution
+    /// zooming instead.
     ///
     /// The source is limited to 32 * 1024 * 1024 pixels and the decoder has a
     /// 128 MiB allocation budget. Conversion can allocate one additional RGBA
     /// source buffer. Each thumbnail edge is capped at 1024 pixels, even when
-    /// `bounds` is larger. Sampling tables use at most 24 * (width + 1) *
-    /// (height + 1) bytes for the thumbnail dimensions. Zero bounds are
-    /// invalid. On failure, the current image is preserved. Callers should
-    /// also bound the encoded file size.
+    /// `bounds` is larger, and the view keeps the thumbnail at 4 bytes for
+    /// each pixel. Zero bounds are invalid. On failure, the current image is
+    /// preserved. Callers should also bound the encoded file size.
     pub fn set_preview_path(&mut self, path: impl AsRef<Path>, bounds: Size) -> Result<()> {
         self.set_image(&read_preview(path.as_ref(), bounds)?);
         Ok(())
@@ -573,6 +531,15 @@ impl ImageView {
             ScrollDirection::Up | ScrollDirection::Down => PAN_STEP_ROWS,
         };
         ctx.scroll(ScrollOp::Lines(dir, step.unsigned_abs()));
+        Ok(())
+    }
+
+    /// Step the view's own mosaic tier: from the terminal's glyphs, through
+    /// each tier from half blocks to the full tier, and back, so that the
+    /// tiers can be compared.
+    #[command]
+    pub fn cycle_tier(&mut self, _ctx: &mut dyn Context) -> Result<()> {
+        self.tier = cycle(self.tier);
         Ok(())
     }
 }
@@ -626,8 +593,8 @@ mod tests {
     use std::{fs, io::Cursor, sync::Arc};
 
     use canopy::{
-        CanopyBuilder, ContextExt,
-        render::TermBuf,
+        Canopy, CanopyBuilder, ContextExt,
+        render::{Glyphs, TermBuf},
         style::{
             GradientSpec, GradientStop, Paint,
             effects::{self, Effect, StyleEffect},
@@ -640,6 +607,58 @@ mod tests {
 
     fn make_view(width: u32, height: u32) -> Size {
         Size::new(width, height)
+    }
+
+    /// The alpha-weighted mean color and the mean alpha of a region.
+    fn average(image: &RgbaImage, x0: u32, y0: u32, x1: u32, y1: u32) -> ([u8; 3], f32) {
+        let mut sums = [0u64; 4];
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let pixel = image.get_pixel(x, y);
+                let alpha = u64::from(pixel[3]);
+                for ch in 0..3 {
+                    sums[ch] += u64::from(pixel[ch]) * alpha;
+                }
+                sums[3] += alpha;
+            }
+        }
+        let area = u64::from((x1 - x0) * (y1 - y0));
+        let color = if sums[3] == 0 {
+            [0; 3]
+        } else {
+            [0, 1, 2].map(|ch| (sums[ch] / sums[3]) as u8)
+        };
+        (color, sums[3] as f32 / (area * 255) as f32)
+    }
+
+    /// One pixel laid over a ground, as the view composites it.
+    fn over(pixel: [u8; 4], ground: [u8; 3]) -> Color {
+        let image = Image::new(&pixel, 1, 1).expect("image");
+        let mut linear = LinearRaster::new();
+        let placement = Placement {
+            origin: [0.0, 0.0],
+            step: [1.0 / 8.0, 1.0 / 8.0],
+        };
+        resample(&image, placement, 8, 8, &mut linear);
+        let mut out = Vec::new();
+        composite(&linear, &[ground], &mut out);
+        let [r, g, b] = out[0];
+        Color::Rgb { r, g, b }
+    }
+
+    /// An application whose root holds an image view, on a ground.
+    fn app(view: ImageView, ground: Color, effects: Vec<Effect>) -> Result<Canopy> {
+        let mut canopy = CanopyBuilder::new().build()?;
+        canopy.style_mut().rules().bg("background", ground).apply();
+        canopy.with_root_context(|ctx| {
+            ctx.set_layout_override(ctx.node_id(), Layout::fill().into())?;
+            let _ = ctx.add_child(ctx.node_id(), view)?;
+            for effect in effects {
+                ctx.push_effect(ctx.node_id(), effect)?;
+            }
+            Ok(())
+        })?;
+        Ok(canopy)
     }
 
     #[test]
@@ -658,23 +677,17 @@ mod tests {
             }
             let mut view = ImageView::empty();
             view.set_preview_path(&path, Size::new(64, 64))?;
-            assert_eq!(
-                (view.image_width, view.image_height),
-                (64, 32),
-                "{extension}"
-            );
-            assert_eq!(view.integral.red.len(), 65 * 33);
-            let sample = view.sample_region(0.0, 0.0, 64.0, 32.0).unwrap();
-            assert!((sample.alpha - 1.0).abs() < 0.01, "{extension}: opaque");
-            let (r, g, b) = sample.color.rgb();
+            assert_eq!(view.image_size(), Size::new(64, 32), "{extension}");
+            let ([r, g, b], alpha) = average(&view.image, 0, 0, 64, 32);
+            assert!((alpha - 1.0).abs() < 0.01, "{extension}: opaque");
             assert!(
                 r.abs_diff(80) <= 2 && g.abs_diff(160) <= 2 && b.abs_diff(40) <= 2,
                 "{extension}: {r}, {g}, {b}"
             );
             view.set_path(&path)?;
-            assert_eq!((view.image_width, view.image_height), (512, 256));
+            assert_eq!(view.image_size(), Size::new(512, 256));
             let full = ImageView::from_path(&path)?;
-            assert_eq!((full.image_width, full.image_height), (512, 256));
+            assert_eq!(full.image_size(), Size::new(512, 256));
         }
         Ok(())
     }
@@ -698,19 +711,13 @@ mod tests {
             0,
             "transparent blue must not bleed into red"
         );
-        let full = ImageView::new(&source);
-        let preview = ImageView::new(&reduced);
         for x in 0..2 {
-            let left = (x * 2) as f32;
-            let expected = full.sample_region(left, 0.0, left + 2.0, 2.0).unwrap();
-            let actual = preview
-                .sample_region(x as f32, 0.0, (x + 1) as f32, 1.0)
-                .unwrap();
-            let (actual_rgb, expected_rgb) = (actual.color.rgb(), expected.color.rgb());
-            assert!(actual_rgb.0.abs_diff(expected_rgb.0) <= 2);
-            assert!(actual_rgb.1.abs_diff(expected_rgb.1) <= 2);
-            assert!(actual_rgb.2.abs_diff(expected_rgb.2) <= 2);
-            assert!((actual.alpha - expected.alpha).abs() < 0.01);
+            let (expected, expected_alpha) = average(&source, x * 2, 0, x * 2 + 2, 2);
+            let (actual, actual_alpha) = average(&reduced, x, 0, x + 1, 1);
+            for ch in 0..3 {
+                assert!(actual[ch].abs_diff(expected[ch]) <= 2);
+            }
+            assert!((actual_alpha - expected_alpha).abs() < 0.01);
         }
     }
 
@@ -740,11 +747,8 @@ mod tests {
             (valid.clone(), Size::new(16, 0)),
         ] {
             assert!(view.set_preview_path(path, bounds).is_err());
-            assert_eq!((view.image_width, view.image_height), (3, 2));
-            assert_eq!(
-                view.sample_color(1.0, 0.0, 0.0).color,
-                Color::Rgb { r: 255, g: 0, b: 0 }
-            );
+            assert_eq!(view.image_size(), Size::new(3, 2));
+            assert_eq!(view.image.get_pixel(0, 0), &image::Rgba([255, 0, 0, 255]));
             assert!(!view.auto_fit);
             assert_eq!(view.zoom, 3.0);
         }
@@ -767,112 +771,80 @@ mod tests {
             .set_preview_path(&path, Size::new(256, 256))
             .unwrap_err();
         assert!(error.to_string().contains("image preview limited to"));
-        assert_eq!((view.image_width, view.image_height), (1, 1));
-        assert_eq!(view.integral.red.len(), 4);
+        assert_eq!(view.image_size(), Size::new(1, 1));
     }
 
     #[test]
-    fn oversized_preview_bounds_still_cap_retained_tables() -> Result<()> {
+    fn oversized_preview_bounds_still_cap_the_retained_thumbnail() -> Result<()> {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("image.png");
         image::GrayImage::new(2048, 1024).save(&path).unwrap();
         let mut view = ImageView::empty();
         view.set_preview_path(path, Size::new(u32::MAX, u32::MAX))?;
-        assert_eq!((view.image_width, view.image_height), (1024, 512));
-        assert_eq!(view.integral.red.len(), 1025 * 513);
+        assert_eq!(view.image_size(), Size::new(1024, 512));
+        assert_eq!(view.image.as_raw().len(), 1024 * 512 * 4);
         Ok(())
     }
 
-    fn render_effect_image(effects: Vec<Effect>) -> Result<TermBuf> {
-        let image = RgbaImage::from_fn(2, 2, |x, y| {
+    /// A 2×2 image: an opaque and a half-covered pixel over two opaque ones.
+    fn effect_image() -> RgbaImage {
+        RgbaImage::from_fn(2, 2, |x, y| {
             if y == 0 {
                 Rgba([200, 100, 40, if x == 0 { 255 } else { 128 }])
             } else {
                 Rgba([40, 80, 120, 255])
             }
-        });
-        let mut canopy = CanopyBuilder::new().build()?;
-        // A black ground leaves the half-covered pixel at half its color.
-        canopy
-            .style_mut()
-            .rules()
-            .bg("background", Color::Black)
-            .apply();
-        canopy.with_root_context(|ctx| {
-            ctx.set_layout_override(ctx.node_id(), Layout::fill().into())?;
-            let _ = ctx.add_child(ctx.node_id(), ImageView::new(&image))?;
-            for effect in effects {
-                ctx.push_effect(ctx.node_id(), effect)?;
-            }
-            Ok(())
-        })?;
+        })
+    }
+
+    fn render_effect_image(effects: Vec<Effect>) -> Result<TermBuf> {
+        // A black ground under the half-covered pixel.
+        let canopy = app(ImageView::new(&effect_image()), Color::Black, effects)?;
         let mut harness = Harness::from_canopy(canopy, Size::new(2, 1))?;
         harness.render()?;
         Ok(harness.buf().clone())
     }
 
     #[test]
-    fn image_cells_inherit_effects_once_on_both_pixel_channels() -> Result<()> {
+    fn effects_act_on_both_colors_of_each_cell_after_compositing() -> Result<()> {
         let plain = render_effect_image(vec![])?;
         let dimmed = render_effect_image(vec![effects::brightness(0.5), effects::bold()])?;
-        for x in 0..2 {
-            let point = Point { x, y: 0 };
+        let dim = |color: Color| {
+            effects::brightness(0.5)
+                .apply(Style {
+                    fg: color.into(),
+                    bg: color.into(),
+                    attrs: AttrSet::default(),
+                })
+                .resolve_at(Rect::new(0, 0, 1, 1), Point::default())
+                .fg
+        };
+        let bottom = Color::Rgb {
+            r: 40,
+            g: 80,
+            b: 120,
+        };
+        let tops = [
+            Color::Rgb {
+                r: 200,
+                g: 100,
+                b: 40,
+            },
+            over([200, 100, 40, 128], [0, 0, 0]),
+        ];
+        for (x, top) in tops.into_iter().enumerate() {
+            let point = Point { x: x as u32, y: 0 };
             let plain_cell = plain.get(point).expect("plain pixel cell");
             let dimmed_cell = dimmed.get(point).expect("dimmed pixel cell");
-            assert_eq!(plain_cell.ch, HALF_BLOCK);
-            assert_eq!(dimmed_cell.ch, HALF_BLOCK);
-            let plain_fg = if x == 0 {
-                Color::Rgb {
-                    r: 200,
-                    g: 100,
-                    b: 40,
-                }
-            } else {
-                Color::Rgb {
-                    r: 100,
-                    g: 50,
-                    b: 20,
-                }
-            };
-            let dimmed_fg = if x == 0 {
-                Color::Rgb {
-                    r: 100,
-                    g: 50,
-                    b: 20,
-                }
-            } else {
-                Color::Rgb {
-                    r: 50,
-                    g: 25,
-                    b: 10,
-                }
-            };
-            assert_eq!(plain_cell.style.fg, plain_fg);
-            assert_eq!(
-                plain_cell.style.bg,
-                Color::Rgb {
-                    r: 40,
-                    g: 80,
-                    b: 120
-                }
-            );
+            assert_eq!(plain_cell.ch, '▀');
+            assert_eq!((plain_cell.style.fg, plain_cell.style.bg), (top, bottom));
             assert_eq!(plain_cell.style.attrs, AttrSet::default());
-            assert_eq!(dimmed_cell.style.fg, dimmed_fg);
+            assert_eq!(dimmed_cell.ch, '▀');
             assert_eq!(
-                dimmed_cell.style.bg,
-                Color::Rgb {
-                    r: 20,
-                    g: 40,
-                    b: 60
-                }
+                (dimmed_cell.style.fg, dimmed_cell.style.bg),
+                (dim(top), dim(bottom))
             );
-            assert_eq!(
-                dimmed_cell.style.attrs,
-                AttrSet {
-                    bold: true,
-                    ..AttrSet::default()
-                }
-            );
+            assert!(dimmed_cell.style.attrs.bold);
         }
         Ok(())
     }
@@ -891,26 +863,11 @@ mod tests {
     }
 
     #[test]
-    fn image_effects_can_replace_solid_paint_with_a_gradient() -> Result<()> {
+    fn an_effect_that_replaces_the_foreground_recolors_the_whole_image() -> Result<()> {
         let buf = render_effect_image(vec![Arc::new(PixelGradient)])?;
         for x in 0..2 {
             let cell = buf.get(Point { x, y: 0 }).expect("pixel cell");
-            assert_eq!(cell.ch, HALF_BLOCK);
-            // The half-covered pixel lays the effect's color over the ground.
-            let fg = if x == 0 {
-                Color::Blue
-            } else {
-                Color::Black.mix(Color::Blue, 128.0 / 255.0, Mix::Rgb)
-            };
-            assert_eq!(cell.style.fg, fg);
-            assert_eq!(
-                cell.style.bg,
-                Color::Rgb {
-                    r: 40,
-                    g: 80,
-                    b: 120
-                }
-            );
+            assert_eq!((cell.style.fg, cell.style.bg), (Color::Blue, Color::Blue));
         }
         Ok(())
     }
@@ -946,29 +903,31 @@ mod tests {
     fn an_image_decodes_from_bytes_with_its_alpha() -> Result<()> {
         let source = RgbaImage::from_fn(2, 1, |x, _| Rgba([10, 20, 30, [0, 255][x as usize]]));
         let mut png = Vec::new();
-        DynamicImage::ImageRgba8(source)
+        DynamicImage::ImageRgba8(source.clone())
             .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
             .unwrap();
         let view = ImageView::from_bytes(&png)?;
         assert_eq!(view.image_size(), Size::new(2, 1));
-        assert_eq!(view.sample_color(1.0, 0.0, 0.0), Sample::CLEAR);
-        assert_eq!(view.sample_color(1.0, 1.0, 0.0).alpha, 1.0);
+        assert_eq!(view.image.get_pixel(0, 0)[3], 0);
+        assert_eq!(view.image.get_pixel(1, 0), source.get_pixel(1, 0));
         assert!(ImageView::from_bytes(b"not an image").is_err());
         Ok(())
     }
 
     #[test]
-    fn a_sample_outside_the_image_is_clear() {
+    fn the_view_around_the_image_shows_the_ground() -> Result<()> {
+        // A 4×4 image fits 4 columns by 2 rows, centered in 8 by 2.
         let image = RgbaImage::from_pixel(4, 4, Rgba([255, 0, 0, 255]));
-        let view = ImageView::new(&image);
-        assert_eq!(view.sample_color(1.0, -1.0, 0.0), Sample::CLEAR);
-        assert_eq!(
-            view.sample_color(1.0, 0.0, 0.0),
-            Sample {
-                color: Color::Rgb { r: 255, g: 0, b: 0 },
-                alpha: 1.0,
-            }
-        );
+        let ground = Color::Rgb { r: 0, g: 0, b: 200 };
+        let mut harness = Harness::from_canopy(
+            app(ImageView::new(&image), ground, vec![])?,
+            Size::new(8, 2),
+        )?;
+        harness.render()?;
+        let cell = |x| harness.buf().get(Point { x, y: 0 }).expect("cell").style;
+        assert_eq!((cell(0).fg, cell(0).bg), (ground, ground));
+        assert_eq!(cell(3).bg, Color::Rgb { r: 255, g: 0, b: 0 });
+        Ok(())
     }
 
     #[test]
@@ -977,37 +936,105 @@ mod tests {
         let image =
             RgbaImage::from_fn(3, 2, |x, _| Rgba([200, 100, 40, [0, 128, 255][x as usize]]));
         let ground = Color::Rgb { r: 0, g: 0, b: 200 };
-        let mut canopy = CanopyBuilder::new().build()?;
-        canopy.style_mut().rules().bg("background", ground).apply();
-        canopy.with_root_context(|ctx| {
-            ctx.set_layout_override(ctx.node_id(), Layout::fill().into())?;
-            let _ = ctx.add_child(ctx.node_id(), ImageView::new(&image))?;
-            Ok(())
-        })?;
-        let mut harness = Harness::from_canopy(canopy, Size::new(3, 1))?;
+        let mut harness = Harness::from_canopy(
+            app(ImageView::new(&image), ground, vec![])?,
+            Size::new(3, 1),
+        )?;
         harness.render()?;
         let cell = |x| harness.buf().get(Point { x, y: 0 }).expect("cell").style;
         assert_eq!((cell(0).fg, cell(0).bg), (ground, ground));
+        assert_eq!(cell(1).bg, over([200, 100, 40, 128], [0, 0, 200]));
         assert_eq!(
-            cell(1).fg,
-            ground.mix(
-                Color::Rgb {
-                    r: 200,
-                    g: 100,
-                    b: 40
-                },
-                128.0 / 255.0,
-                Mix::Rgb
-            )
-        );
-        assert_eq!(
-            cell(2).fg,
+            cell(2).bg,
             Color::Rgb {
                 r: 200,
                 g: 100,
                 b: 40
             }
         );
+        Ok(())
+    }
+
+    /// A diagonal edge: dark below the line from the top-left corner to the
+    /// bottom-right one.
+    fn diagonal() -> RgbaImage {
+        RgbaImage::from_fn(64, 64, |x, y| {
+            if y > x {
+                Rgba([20, 20, 20, 255])
+            } else {
+                Rgba([230, 230, 230, 255])
+            }
+        })
+    }
+
+    /// The characters a view of `diagonal` draws in a tier.
+    fn drawn(tier: Option<Tier>, glyphs: Glyphs) -> Result<Vec<char>> {
+        let mut view = ImageView::new(&diagonal());
+        view.set_tier(tier);
+        let mut canopy = app(view, Color::Black, vec![])?;
+        canopy.set_glyphs(glyphs);
+        let mut harness = Harness::from_canopy(canopy, Size::new(16, 8))?;
+        harness.render()?;
+        let buf = harness.buf();
+        Ok((0..8)
+            .flat_map(|y| (0..16).map(move |x| Point { x, y }))
+            .filter_map(|point| buf.get(point).map(|cell| cell.ch))
+            .collect())
+    }
+
+    #[test]
+    fn each_tier_draws_with_its_own_symbols() -> Result<()> {
+        let halves = drawn(Some(Tier::Halves), Glyphs::Blocks)?;
+        assert!(
+            halves.iter().all(|ch| matches!(ch, ' ' | '▀')),
+            "{halves:?}"
+        );
+        let blocks = drawn(None, Glyphs::Blocks)?;
+        assert!(
+            blocks
+                .iter()
+                .all(|ch| ('\u{2580}'..='\u{259F}').contains(ch) || *ch == ' '),
+            "{blocks:?}"
+        );
+        let full = drawn(None, Glyphs::Full)?;
+        assert!(
+            full.iter().any(|ch| u32::from(*ch) >= 0x1CD00),
+            "a diagonal edge takes the mosaics of the full tier: {full:?}"
+        );
+        Ok(())
+    }
+
+    /// The number of matches the view in a harness has run.
+    fn matches(harness: &mut Harness) -> usize {
+        harness
+            .with_unique::<ImageView, _>(|view, _| Ok(view.matches))
+            .expect("image view")
+    }
+
+    #[test]
+    fn a_render_with_nothing_changed_matches_nothing() -> Result<()> {
+        let canopy = app(ImageView::new(&diagonal()), Color::Black, vec![])?;
+        let mut harness = Harness::from_canopy(canopy, Size::new(16, 8))?;
+        harness.render()?;
+        assert_eq!(matches(&mut harness), 1);
+        harness.render()?;
+        assert_eq!(matches(&mut harness), 1);
+        // A dim acts after the cache, so it matches nothing either.
+        harness.canopy.with_root_context(|ctx| {
+            ctx.push_effect(ctx.node_id(), effects::brightness(0.5))?;
+            Ok(())
+        })?;
+        harness.render()?;
+        assert_eq!(matches(&mut harness), 1);
+        // A new ground lays the image over it, so the view matches again.
+        harness
+            .canopy
+            .style_mut()
+            .rules()
+            .bg("background", Color::Rgb { r: 0, g: 90, b: 0 })
+            .apply();
+        harness.render()?;
+        assert_eq!(matches(&mut harness), 2);
         Ok(())
     }
 }

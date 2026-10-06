@@ -1,0 +1,26 @@
+[package]
+name = "canopy-mosaic"
+version = "0.0.1"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Draw pictures and large text with block mosaic characters"
+
+[lib]
+doctest = false
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+fontdue = "0.9.4"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+proptest.workspace = true
+
+[[bench]]
+name = "mosaic"
+harness = false
+
+[lints]
+workspace = true

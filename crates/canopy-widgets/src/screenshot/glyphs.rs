@@ -1,7 +1,13 @@
-//! Box drawing, block elements, braille, and triangles, drawn from geometry.
+//! Box drawing, block mosaics, braille, and triangles, drawn from geometry.
 //!
 //! Terminals draw these characters themselves rather than from a font, so
-//! that lines meet at cell edges and blocks fill their cells exactly.
+//! that lines meet at cell edges and blocks fill their cells exactly. The
+//! block mosaics take their shapes from `canopy-mosaic`, the geometry that
+//! the matcher searches, so a screenshot shows what the matcher chose.
+
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
+use canopy_mosaic::geometry::{Part, Shape};
 
 use super::{Canvas, Rect};
 
@@ -49,8 +55,8 @@ pub(super) fn draw(canvas: &mut Canvas, ch: char, cell: Rect, color: [u8; 3], st
     let code = ch as u32;
     match code {
         0x2500..=0x257F => box_drawing(canvas, code - 0x2500, cell, color, stroke),
-        0x2580..=0x259F => {
-            block(canvas, code - 0x2580, cell, color);
+        0x2591..=0x2593 => {
+            shade(canvas, code - 0x2590, cell, color);
             true
         }
         0x25B2..=0x25C5 => {
@@ -61,7 +67,9 @@ pub(super) fn draw(canvas: &mut Canvas, ch: char, cell: Rect, color: [u8; 3], st
             braille(canvas, (code - 0x2800) as u8, cell, color);
             true
         }
-        _ => false,
+        // The space draws from the font, as every other text does.
+        0x20 => false,
+        _ => mosaic(canvas, ch, cell, color),
     }
 }
 
@@ -334,68 +342,77 @@ fn segment(
     }
 }
 
-/// The parts of U+2580 to U+259F, by offset from U+2580: rectangles in
-/// eighths of the cell, as left, top, right, and bottom.
-const BLOCKS: [&[[u32; 4]]; 32] = [
-    &[[0, 0, 8, 4]],               // ▀
-    &[[0, 7, 8, 8]],               // ▁
-    &[[0, 6, 8, 8]],               // ▂
-    &[[0, 5, 8, 8]],               // ▃
-    &[[0, 4, 8, 8]],               // ▄
-    &[[0, 3, 8, 8]],               // ▅
-    &[[0, 2, 8, 8]],               // ▆
-    &[[0, 1, 8, 8]],               // ▇
-    &[[0, 0, 8, 8]],               // █
-    &[[0, 0, 7, 8]],               // ▉
-    &[[0, 0, 6, 8]],               // ▊
-    &[[0, 0, 5, 8]],               // ▋
-    &[[0, 0, 4, 8]],               // ▌
-    &[[0, 0, 3, 8]],               // ▍
-    &[[0, 0, 2, 8]],               // ▎
-    &[[0, 0, 1, 8]],               // ▏
-    &[[4, 0, 8, 8]],               // ▐
-    &[],                           // ░
-    &[],                           // ▒
-    &[],                           // ▓
-    &[[0, 0, 8, 1]],               // ▔
-    &[[7, 0, 8, 8]],               // ▕
-    &[[0, 4, 4, 8]],               // ▖
-    &[[4, 4, 8, 8]],               // ▗
-    &[[0, 0, 4, 4]],               // ▘
-    &[[0, 0, 4, 4], [0, 4, 8, 8]], // ▙
-    &[[0, 0, 4, 4], [4, 4, 8, 8]], // ▚
-    &[[0, 0, 8, 4], [0, 4, 4, 8]], // ▛
-    &[[0, 0, 8, 4], [4, 4, 8, 8]], // ▜
-    &[[4, 0, 8, 4]],               // ▝
-    &[[4, 0, 8, 4], [0, 4, 4, 8]], // ▞
-    &[[4, 0, 8, 4], [0, 4, 8, 8]], // ▟
-];
+/// Draw a shade: the cell covered with a quarter, a half, or three quarters
+/// of the color, for `level` 1 to 3.
+fn shade(canvas: &mut Canvas, level: u32, cell: Rect, color: [u8; 3]) {
+    let alpha = (level * 64) as u8;
+    for y in cell.y..cell.bottom() {
+        for x in cell.x..cell.right() {
+            canvas.blend(x, y, color, alpha);
+        }
+    }
+}
 
-/// Draw one block element, by offset from U+2580.
-fn block(canvas: &mut Canvas, offset: u32, cell: Rect, color: [u8; 3]) {
-    // The shades cover the cell with a quarter, a half, and three quarters
-    // of the color.
-    if let 0x11..=0x13 = offset {
-        let alpha = ((offset - 0x10) * 64) as u8;
-        for y in cell.y..cell.bottom() {
-            for x in cell.x..cell.right() {
-                canvas.blend(x, y, color, alpha);
+/// Coverage of mosaic characters by character and cell size, or none for a
+/// character without a shape.
+type MosaicCache = HashMap<(char, u32, u32), Option<Rc<[u8]>>>;
+
+thread_local! {
+    /// Coverage of each mosaic character at each cell size, drawn once.
+    static MOSAICS: RefCell<MosaicCache> = RefCell::new(HashMap::new());
+}
+
+/// Draw a block mosaic character from its shape, and return whether `ch`
+/// has one.
+fn mosaic(canvas: &mut Canvas, ch: char, cell: Rect, color: [u8; 3]) -> bool {
+    let coverage = MOSAICS.with(|mosaics| {
+        mosaics
+            .borrow_mut()
+            .entry((ch, cell.w, cell.h))
+            .or_insert_with(|| Shape::of(ch).map(|shape| mosaic_coverage(&shape, cell.w, cell.h)))
+            .clone()
+    });
+    let Some(coverage) = coverage else {
+        return false;
+    };
+    for (i, alpha) in coverage.iter().enumerate() {
+        let (x, y) = ((i as u32 % cell.w) as i32, (i as u32 / cell.w) as i32);
+        canvas.blend(cell.x + x, cell.y + y, color, *alpha);
+    }
+    true
+}
+
+/// The coverage of a shape on a cell of `width` by `height` pixels. Each
+/// rectangle snaps its edges to whole pixels, as terminals draw blocks, and
+/// each polygon has antialiased edges.
+fn mosaic_coverage(shape: &Shape, width: u32, height: u32) -> Rc<[u8]> {
+    let (w, h) = (width as usize, height as usize);
+    let mut coverage = vec![0u8; w * h];
+    let snap = |unit: f32, length: usize| (unit * length as f32).round() as usize;
+    for part in shape.parts() {
+        match part {
+            Part::Rect { x0, y0, x1, y1 } => {
+                for y in snap(*y0, h)..snap(*y1, h) {
+                    for x in snap(*x0, w)..snap(*x1, w) {
+                        coverage[y * w + x] = 255;
+                    }
+                }
+            }
+            Part::Polygon(_) => {
+                let (sx, sy) = (1.0 / w as f32, 1.0 / h as f32);
+                for y in 0..h {
+                    for x in 0..w {
+                        let (x0, y0) = (x as f32 * sx, y as f32 * sy);
+                        let share = part.coverage_of(x0, y0, x0 + sx, y0 + sy);
+                        let value = (share * 255.0).round() as u8;
+                        let pixel = &mut coverage[y * w + x];
+                        *pixel = pixel.saturating_add(value);
+                    }
+                }
             }
         }
-        return;
     }
-    let scale = |length: u32, eighths: u32| ((length * eighths + 4) / 8) as i32;
-    for [left, top, right, bottom] in BLOCKS[offset as usize] {
-        canvas.fill(
-            Rect::between(
-                cell.x + scale(cell.w, *left),
-                cell.y + scale(cell.h, *top),
-                cell.x + scale(cell.w, *right),
-                cell.y + scale(cell.h, *bottom),
-            ),
-            color,
-        );
-    }
+    coverage.into()
 }
 
 /// Draw one braille pattern from its dot bits.
@@ -506,6 +523,9 @@ fn side(edge: ((f32, f32), (f32, f32)), point: (f32, f32)) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    use canopy::text;
+    use canopy_mosaic::Tier;
+
     use super::*;
 
     /// Draws `ch` in a cell 9 wide and 18 high with a stroke of 1, and
@@ -523,6 +543,46 @@ mod tests {
                     .collect()
             })
             .collect()
+    }
+
+    #[test]
+    fn every_mosaic_of_every_tier_draws_from_geometry() {
+        for ch in Tier::Full
+            .families()
+            .iter()
+            .flat_map(|family| family.chars())
+            .filter(|ch| *ch != ' ')
+        {
+            let mut canvas = Canvas::new(9, 18);
+            let cell = Rect::between(0, 0, 9, 18);
+            assert!(draw(&mut canvas, ch, cell, [255, 255, 255], 1), "{ch:?}");
+            assert_eq!(text::grapheme_width(&ch.to_string()), 1, "{ch:?}");
+        }
+    }
+
+    #[test]
+    fn mosaics_snap_rectangles_to_whole_pixels() {
+        // BLOCK SEXTANT-1: the upper left third, 18 rows in thirds of 6.
+        let sextant = rows('\u{1FB00}');
+        assert_eq!(sextant[5], "#####....");
+        assert_eq!(sextant[6], ".........");
+        let half = rows('▀');
+        assert_eq!(half[8], "#########");
+        assert_eq!(half[9], ".........");
+    }
+
+    #[test]
+    fn diagonals_draw_with_antialiased_edges() {
+        let mut canvas = Canvas::new(9, 18);
+        let cell = Rect::between(0, 0, 9, 18);
+        // LOWER LEFT BLOCK DIAGONAL UPPER LEFT TO LOWER CENTRE.
+        assert!(draw(&mut canvas, '\u{1FB40}', cell, [255, 255, 255], 1));
+        let partial = canvas
+            .pixels
+            .chunks(3)
+            .filter(|pixel| pixel[0] > 0 && pixel[0] < 255)
+            .count();
+        assert!(partial > 0, "the slanted edge blends");
     }
 
     #[test]

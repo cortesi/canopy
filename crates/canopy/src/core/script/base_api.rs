@@ -35,6 +35,7 @@ use crate::{
     core::{context::matching_nodes, inputmap::IntentCatalog},
     geom::PointI32,
     input::{BindingId, BindingTarget, KeyExpectation},
+    render::Glyphs,
     style::Color,
     tree::FocusDirection,
 };
@@ -326,6 +327,28 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         docs: Some("Replace the given motion settings. Omitted fields keep their values."),
         signature: || FunctionSignature::new().param(("options", Type::named("MotionOptions"))),
         handler: Handler::Sync(host_set_motion),
+    },
+    BaseFunction {
+        name: "glyphs",
+        docs: Some(
+            "Return the block mosaic characters that the terminal draws well: `full`, the \
+             default, which adds the octants, sextants, bars, and smooth mosaics of Symbols \
+             for Legacy Computing to the block elements, or `blocks`, the block elements \
+             alone.",
+        ),
+        signature: || FunctionSignature::new().ret(Type::literals(["full", "blocks"])),
+        handler: Handler::Sync(host_glyphs),
+    },
+    BaseFunction {
+        name: "set_glyphs",
+        docs: Some(
+            "Set the block mosaic characters that the terminal draws well. Image views, font \
+             banners, and big text choose their symbols from them, and the frame lays out again.",
+        ),
+        signature: || {
+            FunctionSignature::new().param(("glyphs", Type::literals(["full", "blocks"])))
+        },
+        handler: Handler::Sync(host_set_glyphs),
     },
     BaseFunction {
         name: "snapshot",
@@ -742,6 +765,35 @@ fn host_set_cursor_look<'s>(
     }
     with_current_canopy(scope, |canopy, _| {
         canopy.set_cursor_look(&role, patch);
+        Ok(())
+    })?;
+    Ok(ret_none())
+}
+
+/// `canopy.glyphs`: return the block mosaic characters the terminal draws.
+fn host_glyphs<'s>(
+    scope: &Scope<'s>,
+    _args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    host_value(scope, |canopy, _| {
+        Ok(ArgValue::String(canopy.glyphs().name().to_string()))
+    })
+}
+
+/// `canopy.set_glyphs`: set the block mosaic characters the terminal draws.
+fn host_set_glyphs<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = HostArgCursor::new(scope, args);
+    let name = args.required::<String>("glyphs")?;
+    let glyphs = Glyphs::from_name(&name).ok_or_else(|| {
+        RuntimeError::runtime(format!(
+            "glyphs must be \"full\" or \"blocks\", got {name:?}"
+        ))
+    })?;
+    with_current_canopy(scope, |canopy, _| {
+        canopy.set_glyphs(glyphs);
         Ok(())
     })?;
     Ok(ret_none())

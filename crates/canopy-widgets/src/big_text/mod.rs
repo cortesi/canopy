@@ -1,4 +1,5 @@
-//! Large text in bitmap faces, drawn with half blocks at integer scales.
+//! Large text in bitmap faces, drawn with half blocks or octants at integer
+//! scales.
 
 mod face;
 #[rustfmt::skip]
@@ -21,9 +22,12 @@ use canopy::{
     runtime::{NodeWakeHandle, PollLifetime},
     style::{Style, roles},
 };
+use canopy_mosaic::symbols::octant;
 pub use face::{BigFace, BigWeight};
-pub use layout::BigSize;
+pub use layout::{BigGrid, BigSize};
 use layout::{Column, Resolved, resolve};
+
+use crate::mosaic::{Tier, tier_for};
 
 /// Time that a changed character takes to roll.
 const ROLL: Duration = Duration::from_millis(200);
@@ -41,6 +45,8 @@ struct Geometry {
     weight: BigWeight,
     /// The scale.
     scale: u32,
+    /// The grid.
+    grid: BigGrid,
     /// Pixel rows of the line box above the baseline.
     above: u32,
     /// Pixel rows of the line box below the baseline.
@@ -54,6 +60,7 @@ impl Geometry {
             face: resolved.laid.face,
             weight: resolved.laid.weight,
             scale: resolved.scale,
+            grid: resolved.grid,
             above: resolved.laid.above,
             below: resolved.laid.below,
         }
@@ -83,12 +90,17 @@ struct Roll {
     started: Option<Instant>,
 }
 
-/// Large text in bitmap faces, drawn with half blocks.
+/// Large text in bitmap faces, drawn with half blocks or octants.
 ///
 /// The faces form a ladder: [`BigFace::Compact`], with Canopy's own numerals
 /// five pixels high, then the seven sizes of Tamzen. Each draws at any
 /// integer scale, where one font pixel is that many columns by that many half
-/// rows. [`BigSize::Fit`], the default, takes the face and scale that draw
+/// rows. With the full mosaic glyphs, each face also draws on the octant
+/// grid, where one font pixel is that many half columns by that many quarter
+/// rows, and the ladder gains a step between each two half-block scales.
+/// The glyphs come from the terminal, as the application set them, unless
+/// the text has a tier of its own, set with [`BigText::with_tier`].
+/// [`BigSize::Fit`], the default, takes the face and scale that draw
 /// the largest capitals in the area; [`BigSize::MaxRows`] caps the rows, and
 /// [`BigSize::Exact`] takes one face at one scale. The fit measures the text
 /// itself: a line box runs from the cap height down to the baseline, and
@@ -130,6 +142,8 @@ pub struct BigText {
     vertical: Align,
     /// Characters whose glyphs the line box holds.
     strut: String,
+    /// The text's own mosaic tier, or none to follow the terminal's glyphs.
+    tier: Option<Tier>,
     /// What the last render showed.
     shown: Option<Shown>,
     /// Roll in progress.
@@ -149,6 +163,7 @@ impl BigText {
             align: Align::Start,
             vertical: Align::Start,
             strut: String::new(),
+            tier: None,
             shown: None,
             roll: None,
             wake: None,
@@ -203,6 +218,25 @@ impl BigText {
     pub fn with_strut(mut self, strut: impl Into<String>) -> Self {
         self.strut = strut.into();
         self
+    }
+
+    /// Draws with the symbols of `tier`, whatever glyphs the terminal has.
+    /// The full tier adds the octant grid to the ladder.
+    #[must_use]
+    pub fn with_tier(mut self, tier: Tier) -> Self {
+        self.tier = Some(tier);
+        self
+    }
+
+    /// Draws with the symbols of `tier`, or with none, the symbols that the
+    /// terminal's glyphs allow.
+    pub fn set_tier(&mut self, tier: Option<Tier>) {
+        self.tier = tier;
+    }
+
+    /// Returns the text's own mosaic tier, if it has one.
+    pub fn tier(&self) -> Option<Tier> {
+        self.tier
     }
 
     /// Sets how the text chooses its size.
@@ -268,21 +302,37 @@ impl BigText {
         self.runs.iter().map(|(_, text)| text.as_str()).collect()
     }
 
-    /// Returns the size in cells that the text takes in an area of `area`.
-    pub fn size_in(&self, area: Size) -> Size {
-        self.resolve(Some(area.w), Some(area.h)).size()
+    /// The tier that the text draws with when it does not know the
+    /// terminal's glyphs: its own, or the default tier.
+    fn own_tier(&self) -> Tier {
+        self.tier.unwrap_or_default()
     }
 
-    /// Returns the face and scale that draw the text in an area of `area`.
+    /// Returns the size in cells that the text takes in an area of `area`,
+    /// in its own tier.
+    pub fn size_in(&self, area: Size) -> Size {
+        self.resolve(Some(area.w), Some(area.h), self.own_tier())
+            .size()
+    }
+
+    /// Returns the face and the scale on its grid that draw the text in an
+    /// area of `area`, in its own tier.
     pub fn face_in(&self, area: Size) -> (BigFace, u32) {
-        let resolved = self.resolve(Some(area.w), Some(area.h));
+        let resolved = self.resolve(Some(area.w), Some(area.h), self.own_tier());
         (resolved.laid.face, resolved.scale)
     }
 
+    /// Returns the grid that draws the text in an area of `area`, in its own
+    /// tier.
+    pub fn grid_in(&self, area: Size) -> BigGrid {
+        self.resolve(Some(area.w), Some(area.h), self.own_tier())
+            .grid
+    }
+
     /// Returns the cell rows that draw the text in an area of `area`, placed
-    /// at the start of the area, without trailing spaces.
+    /// at the start of the area, without trailing spaces, in its own tier.
     pub fn rows_in(&self, area: Size) -> Vec<String> {
-        let resolved = self.resolve(Some(area.w), Some(area.h));
+        let resolved = self.resolve(Some(area.w), Some(area.h), self.own_tier());
         let lines = Self::columns(&resolved);
         let size = resolved.size();
         let placement = Placement::new(&resolved, &lines, size, Align::Start, Align::Start);
@@ -318,16 +368,22 @@ impl BigText {
         lines
     }
 
-    /// Choose the face and scale for an area of at most `width` columns and
-    /// `height` rows. `None` is unbounded.
-    fn resolve(&self, width: Option<u32>, height: Option<u32>) -> Resolved {
+    /// Choose the face, scale, and grid for an area of at most `width`
+    /// columns and `height` rows, in `tier`. `None` is unbounded. Only the
+    /// full tier has the octants of the octant grid.
+    fn resolve(&self, width: Option<u32>, height: Option<u32>, tier: Tier) -> Resolved {
+        let grids: &[BigGrid] = if tier == Tier::Full {
+            &[BigGrid::Half, BigGrid::Octant]
+        } else {
+            &[BigGrid::Half]
+        };
         resolve(
             &self.lines(),
             &self.strut,
             self.weight,
             self.size,
-            width,
-            height,
+            (width, height),
+            grids,
         )
     }
 
@@ -371,18 +427,20 @@ impl BigText {
     }
 }
 
-/// Where resolved text falls in an area: each line's first column, and the
-/// half row where the block starts.
+/// Where resolved text falls in an area: each line's first grid column, and
+/// the grid row where the block starts.
 struct Placement {
-    /// Columns and half rows of one font pixel.
+    /// Grid pixels of one font pixel, on each axis.
     scale: u32,
-    /// Half rows of one line box.
-    line_half_rows: u32,
-    /// Half rows from the top of one line to the top of the next.
+    /// The grid.
+    grid: BigGrid,
+    /// Grid rows of one line box.
+    line_rows: u32,
+    /// Grid rows from the top of one line to the top of the next.
     pitch: u32,
-    /// Half row where the block of lines starts.
+    /// Grid row where the block of lines starts.
     top: u32,
-    /// First column of each line.
+    /// First grid column of each line.
     lefts: Vec<u32>,
 }
 
@@ -395,15 +453,15 @@ impl Placement {
         align: Align,
         vertical: Align,
     ) -> Self {
-        let scale = resolved.scale;
-        let line_half_rows = resolved.laid.line_half_rows(scale);
-        let block = resolved.laid.half_rows(scale);
-        let room = area.h.saturating_mul(2);
+        let (scale, grid) = (resolved.scale, resolved.grid);
+        let block = resolved.laid.grid_rows(scale, grid);
+        let room = area.h.saturating_mul(grid.down());
         let top = match vertical {
             Align::Start => 0,
             Align::Center => room.saturating_sub(block) / 2,
             Align::End => room.saturating_sub(block),
         };
+        let columns = area.w.saturating_mul(grid.across());
         let lefts = lines
             .iter()
             .map(|line| {
@@ -412,47 +470,82 @@ impl Placement {
                     .saturating_mul(scale);
                 match align {
                     Align::Start => 0,
-                    Align::Center => area.w.saturating_sub(width) / 2,
-                    Align::End => area.w.saturating_sub(width),
+                    Align::Center => columns.saturating_sub(width) / 2,
+                    Align::End => columns.saturating_sub(width),
                 }
             })
             .collect();
         Self {
             scale,
-            line_half_rows,
-            pitch: resolved.laid.pitch(scale),
+            grid,
+            line_rows: resolved.laid.line_rows(scale),
+            pitch: resolved.laid.pitch(scale, grid),
             top,
             lefts,
         }
     }
 
-    /// Returns the line and the pixel row of half row `half` of the area,
-    /// or `None` for a half row outside every line box.
-    fn pixel_row(&self, half: u32) -> Option<(usize, u32)> {
-        let from_top = half.checked_sub(self.top)?;
+    /// Returns the line and the pixel row of grid row `row` of the area, or
+    /// `None` for a row outside every line box.
+    fn pixel_row(&self, row: u32) -> Option<(usize, u32)> {
+        let from_top = row.checked_sub(self.top)?;
         let within = from_top % self.pitch;
-        (within < self.line_half_rows)
-            .then(|| ((from_top / self.pitch) as usize, within / self.scale))
+        (within < self.line_rows).then(|| ((from_top / self.pitch) as usize, within / self.scale))
     }
 
-    /// Returns the half block at cell `x`, `y` of the area and the run that
-    /// paints it, or `None` for a cell without ink.
-    fn cell(&self, lines: &[Vec<Column>], x: u32, y: u32) -> Option<(char, usize)> {
-        let upper = self.pixel_row(y.saturating_mul(2));
-        let lower = self.pixel_row(y.saturating_mul(2).saturating_add(1));
-        // At least one blank row separates two lines, so a cell never holds
-        // pixels of two lines.
-        let line = upper.or(lower)?.0;
+    /// Returns the run of the font pixel at grid column `x`, row `y`, and
+    /// whether it has ink, or `None` outside the text.
+    fn pixel(&self, lines: &[Vec<Column>], x: u32, y: u32) -> Option<(usize, bool)> {
+        let (line, row) = self.pixel_row(y)?;
         let column = x.checked_sub(*self.lefts.get(line)?)? / self.scale;
         let column = lines.get(line)?.get(column as usize)?;
-        let ink = |half: Option<(usize, u32)>| half.is_some_and(|(_, row)| column.ink(row));
-        let ch = match (ink(upper), ink(lower)) {
-            (true, true) => '█',
-            (true, false) => '▀',
-            (false, true) => '▄',
-            (false, false) => return None,
-        };
-        Some((ch, column.run))
+        Some((column.run, column.ink(row)))
+    }
+
+    /// Returns the character at cell `x`, `y` of the area and the run that
+    /// paints it, or `None` for a cell without ink.
+    fn cell(&self, lines: &[Vec<Column>], x: u32, y: u32) -> Option<(char, usize)> {
+        match self.grid {
+            BigGrid::Half => {
+                // At least one blank row separates two lines, so a cell
+                // never holds pixels of two lines.
+                let upper = self.pixel(lines, x, y.saturating_mul(2));
+                let lower = self.pixel(lines, x, y.saturating_mul(2).saturating_add(1));
+                let run = upper.or(lower)?.0;
+                let ink = |pixel: Option<(usize, bool)>| pixel.is_some_and(|(_, ink)| ink);
+                let ch = match (ink(upper), ink(lower)) {
+                    (true, true) => '█',
+                    (true, false) => '▀',
+                    (false, true) => '▄',
+                    (false, false) => return None,
+                };
+                Some((ch, run))
+            }
+            BigGrid::Octant => {
+                // The run with the most ink in the cell paints it. On a tie,
+                // the run that comes first in the text does.
+                let mut bits = 0u8;
+                let mut ink: Vec<(usize, u32)> = Vec::new();
+                for row in 0..4 {
+                    for col in 0..2 {
+                        let gx = x.saturating_mul(2).saturating_add(col);
+                        let gy = y.saturating_mul(4).saturating_add(row);
+                        if let Some((run, true)) = self.pixel(lines, gx, gy) {
+                            bits |= 1 << (row * 2 + col);
+                            match ink.iter_mut().find(|(r, _)| *r == run) {
+                                Some((_, count)) => *count += 1,
+                                None => ink.push((run, 1)),
+                            }
+                        }
+                    }
+                }
+                let run = ink
+                    .iter()
+                    .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))?
+                    .0;
+                Some((octant(bits), run))
+            }
+        }
     }
 }
 
@@ -469,7 +562,8 @@ impl Widget for BigText {
             Constraint::Unbounded => None,
         };
         let (width, height) = (bound(c.width), bound(c.height));
-        let text = self.resolve(width, height).size();
+        let tier = self.tier.unwrap_or_else(|| tier_for(c.glyphs));
+        let text = self.resolve(width, height, tier).size();
         // A fit fills each bounded axis, and a capped fit fills a bounded
         // width. An unbounded axis takes the text, so text in a scrolling
         // area keeps a size.
@@ -488,17 +582,20 @@ impl Widget for BigText {
             return Ok(());
         }
         render.fill(roles::TEXT, area, ' ')?;
-        let resolved = self.resolve(Some(area.w), Some(area.h));
+        let tier = self.tier.unwrap_or_else(|| tier_for(render.glyphs()));
+        let resolved = self.resolve(Some(area.w), Some(area.h), tier);
         let lines = self.frame(ctx.now(), ctx.motion_active(), &resolved);
         let placement = Placement::new(&resolved, &lines, area.size(), self.align, self.vertical);
         // Gradients span the block of text, not each row of it.
         let size = resolved.size();
+        let (across, down) = (resolved.grid.across(), resolved.grid.down());
         let left = placement.lefts.iter().copied().min().unwrap_or(0);
         let block = Rect::new(
-            area.tl.x.saturating_add(left),
-            area.tl.y.saturating_add(placement.top / 2),
-            size.w,
-            size.h.saturating_add(placement.top % 2),
+            area.tl.x.saturating_add(left / across),
+            area.tl.y.saturating_add(placement.top / down),
+            size.w.saturating_add(u32::from(left % across != 0)),
+            size.h
+                .saturating_add(u32::from(!placement.top.is_multiple_of(down))),
         );
         let styles: Vec<Style> = self
             .runs

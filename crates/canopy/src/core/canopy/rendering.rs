@@ -173,6 +173,7 @@ impl Canopy {
 
         let mut rndr = Render::new(&self.style, styl, dest_buf, local_clip, screen_origin)
             .with_effects(effect_slice)
+            .with_glyphs(self.core.glyphs)
             .with_frame(frame);
 
         let result = self.core.with_widget_render(node_id, |widget, core| {

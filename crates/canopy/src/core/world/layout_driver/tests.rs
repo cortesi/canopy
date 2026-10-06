@@ -1095,10 +1095,7 @@ fn measure_errors_include_operation_node_and_path() -> Result<()> {
     let child = fixed_leaf(&mut core, 1, 1)?;
     attach_root_child(&mut core, child)?;
     let path = core.path_of(core.root, child).to_string();
-    let constraints = MeasureConstraints {
-        width: Constraint::AtMost(1),
-        height: Constraint::AtMost(1),
-    };
+    let constraints = MeasureConstraints::new(Constraint::AtMost(1), Constraint::AtMost(1));
 
     let error = core
         .with_widget_dyn_mut(child, |_widget, core| {

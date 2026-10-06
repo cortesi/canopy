@@ -25,6 +25,7 @@ use crate::{
     error::{Error, NodeOperationKind, Result},
     input::Event,
     layout::Layout,
+    render::Glyphs,
     style::StyleChange,
     widget::Widget,
 };
@@ -105,6 +106,8 @@ pub struct Core {
     /// Whether cells move: the motion settings allow it, and the adapter
     /// shows it.
     pub(crate) motion_active: bool,
+    /// The block mosaic characters that the terminal draws well.
+    pub(crate) glyphs: Glyphs,
 }
 
 /// Journal for one outermost tree edit and all nested edits it performs.
@@ -234,6 +237,7 @@ impl Core {
             notices: Notices::default(),
             clock: Arc::new(SystemClock),
             motion_active: false,
+            glyphs: Glyphs::default(),
         }
     }
 

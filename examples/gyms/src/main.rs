@@ -313,7 +313,7 @@ impl Demo {
             Self::Framegym => {
                 framegym::binding_setup(builder.configure(framegym::FrameGym::register))
             }
-            Self::Imgview { .. } => imgview::binding_setup(builder.configure(ImageView::register)),
+            Self::Imgview { .. } => imgview::binding_setup(builder),
             Self::Intervals => {
                 intervals::binding_setup(builder.configure(intervals::Intervals::register))
             }
@@ -351,7 +351,11 @@ impl Demo {
             Self::Focusgym => install(builder, focusgym::FocusGym::new(), inspector),
             Self::Fontgym => install(builder, fontgym::FontGym::new(), inspector),
             Self::Framegym => install(builder, framegym::FrameGym::new(), inspector),
-            Self::Imgview { file } => install(builder, ImageView::from_path(file)?, inspector),
+            Self::Imgview { file } => install(
+                builder,
+                imgview::ImgGym::new(ImageView::from_path(file)?),
+                inspector,
+            ),
             Self::Intervals => install(builder, intervals::Intervals::new(), inspector),
             Self::Listgym => install(builder, listgym::ListGym::new(), inspector),
             Self::Motiongym => install(builder, motiongym::MotionGym::new(), inspector),

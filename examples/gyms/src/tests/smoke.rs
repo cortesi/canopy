@@ -94,3 +94,19 @@ fn the_motion_gym_script_passes() -> Result<()> {
 fn the_chart_gym_script_passes() -> Result<()> {
     run_gym_script(Demo::Chartgym, "chartgym.luau")
 }
+
+#[test]
+fn the_image_view_gym_script_passes() -> Result<()> {
+    let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.assets/shyness.jpg");
+    run_gym_script(Demo::Imgview { file }, "imgview.luau")
+}
+
+#[test]
+fn the_font_gym_script_passes() -> Result<()> {
+    run_gym_script(Demo::Fontgym, "fontgym.luau")
+}
+
+#[test]
+fn the_big_text_gym_script_passes() -> Result<()> {
+    run_gym_script(Demo::Biggym, "biggym.luau")
+}

@@ -7,7 +7,7 @@ use crate::{
     commands,
     core::{cursor::CursorLooks, inputmap},
     error::{Error, Result},
-    render::RenderLimits,
+    render::{Glyphs, RenderLimits},
     script::Fixture,
     style::{StyleRules, themes::Palette},
 };
@@ -197,6 +197,11 @@ impl Setup {
     /// Replace the motion settings.
     pub fn set_motion(&mut self, settings: MotionSettings) {
         self.canopy.set_motion(settings);
+    }
+
+    /// Set the block mosaic characters that the terminal draws well.
+    pub fn set_glyphs(&mut self, glyphs: Glyphs) {
+        self.canopy.set_glyphs(glyphs);
     }
 
     /// Add style rules derived from the active palette.

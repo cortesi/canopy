@@ -9,6 +9,7 @@ use canopy::{
     geom::Size,
     layout::Align,
 };
+use canopy_mosaic::{RasterView, SymbolSet, Tier, coverage_into, fixed_into};
 use fontdue::{Font as FontdueFont, FontSettings, LineMetrics, Metrics};
 
 /// Supersampling scale factor used to rasterize glyphs before downsampling.
@@ -78,74 +79,6 @@ struct Glyph {
     pub bearing_bottom: i32,
     /// Horizontal advance width in pixels.
     pub advance: f32,
-}
-
-/// Coverage mask for a glyph, ordered as top-left, top-right, bottom-left,
-/// bottom-right.
-#[derive(Debug, Clone, Copy)]
-struct GlyphSample {
-    /// Glyph character.
-    ch: char,
-    /// Coverage mask for each quadrant, 0-255.
-    mask: [u8; 4],
-}
-
-impl GlyphSample {
-    /// Build a sample with an explicit mask.
-    fn mask(ch: char, mask: [u8; 4]) -> Self {
-        Self { ch, mask }
-    }
-}
-
-/// A glyph ramp used to convert coverage regions into terminal glyphs.
-#[derive(Debug, Clone)]
-struct GlyphRamp {
-    /// Candidate glyph samples used for coverage matching.
-    glyphs: Vec<GlyphSample>,
-}
-
-impl GlyphRamp {
-    /// Block-element ramp that matches 2x2 quadrant coverage.
-    fn blocks() -> Self {
-        let on = 255;
-        let off = 0;
-        let glyphs = vec![
-            GlyphSample::mask(' ', [off, off, off, off]),
-            GlyphSample::mask('▘', [on, off, off, off]),
-            GlyphSample::mask('▝', [off, on, off, off]),
-            GlyphSample::mask('▀', [on, on, off, off]),
-            GlyphSample::mask('▖', [off, off, on, off]),
-            GlyphSample::mask('▌', [on, off, on, off]),
-            GlyphSample::mask('▞', [off, on, on, off]),
-            GlyphSample::mask('▛', [on, on, on, off]),
-            GlyphSample::mask('▗', [off, off, off, on]),
-            GlyphSample::mask('▚', [on, off, off, on]),
-            GlyphSample::mask('▐', [off, on, off, on]),
-            GlyphSample::mask('▜', [on, on, off, on]),
-            GlyphSample::mask('▄', [off, off, on, on]),
-            GlyphSample::mask('▙', [on, off, on, on]),
-            GlyphSample::mask('▟', [off, on, on, on]),
-            GlyphSample::mask('█', [on, on, on, on]),
-        ];
-        Self { glyphs }
-    }
-
-    /// Convert per-quadrant coverage into the closest glyph sample.
-    fn sample(&self, coverage: [u8; 4]) -> GlyphSample {
-        self.glyphs
-            .iter()
-            .copied()
-            .min_by_key(|sample| {
-                coverage
-                    .iter()
-                    .zip(sample.mask.iter())
-                    .fold(0u32, |error, (value, expected)| {
-                        let diff = value.abs_diff(*expected) as u32;
-                        error.saturating_add(diff.saturating_mul(diff))
-                    })
-            })
-            .unwrap_or(GlyphSample::mask(' ', [0; 4]))
-    }
 }
 
 /// Rasterized font data for terminal rendering.
@@ -228,8 +161,6 @@ pub(crate) struct FontLayout {
 pub struct FontRenderer {
     /// Font used for rasterization.
     font: Font,
-    /// Glyph ramp for coverage matching.
-    ramp: GlyphRamp,
     /// Fallback glyph for missing characters.
     fallback: char,
     /// Cached glyph rasters.
@@ -241,19 +172,20 @@ impl FontRenderer {
     pub fn new(font: Font) -> Self {
         Self {
             font,
-            ramp: GlyphRamp::blocks(),
             fallback: '?',
             cache: HashMap::new(),
         }
     }
 
-    /// Render text into a layout that fits within the target canvas.
+    /// Render text into a layout that fits within the target canvas, in the
+    /// symbols of `tier`.
     pub(crate) fn layout(
         &mut self,
         text: &str,
         size: Size,
         options: LayoutOptions,
         effects: FontEffects,
+        tier: Tier,
     ) -> FontLayout {
         if size.w == 0 || size.h == 0 {
             return FontLayout {
@@ -354,58 +286,7 @@ impl FontRenderer {
             apply_dim(&mut buffer, 0.6);
         }
 
-        let mut cells = Vec::with_capacity(size.h as usize);
-        let quad_x = (scale_x / 2).max(1);
-        let quad_y = (scale_y / 2).max(1);
-        let quad_area = quad_x.saturating_mul(quad_y);
-        for cell_y in 0..size.h {
-            let mut row_cells = Vec::with_capacity(size.w as usize);
-            let start_y = cell_y * scale_y;
-            for cell_x in 0..size.w {
-                let start_x = cell_x * scale_x;
-                let mut sums = [0u32; 4];
-                for sub_y in 0..scale_y {
-                    let y = start_y + sub_y;
-                    let row_start = y as usize * buffer_width as usize;
-                    let y_band = if sub_y < quad_y { 0 } else { 2 };
-                    for sub_x in 0..scale_x {
-                        let x = start_x + sub_x;
-                        let idx = row_start + x as usize;
-                        let x_band = if sub_x < quad_x { 0 } else { 1 };
-                        let quadrant = (y_band + x_band) as usize;
-                        sums[quadrant] += buffer[idx] as u32;
-                    }
-                }
-                let coverage = [
-                    (sums[0] / quad_area) as u8,
-                    (sums[1] / quad_area) as u8,
-                    (sums[2] / quad_area) as u8,
-                    (sums[3] / quad_area) as u8,
-                ];
-                let cell = if options.crisp {
-                    // A quadrant at least half covered draws whole.
-                    let choice = self
-                        .ramp
-                        .sample(coverage.map(|value| if value >= 128 { 255 } else { 0 }));
-                    let fg_coverage = if choice.ch == ' ' { 0 } else { 255 };
-                    FontCell {
-                        ch: choice.ch,
-                        fg_coverage,
-                        bg_coverage: 0,
-                    }
-                } else {
-                    let choice = self.ramp.sample(coverage);
-                    let (fg_coverage, bg_coverage) = coverage_weights(coverage, choice.mask);
-                    FontCell {
-                        ch: choice.ch,
-                        fg_coverage,
-                        bg_coverage,
-                    }
-                };
-                row_cells.push(cell);
-            }
-            cells.push(row_cells);
-        }
+        let cells = match_cells(&buffer, size, scale_y, options.crisp, tier);
 
         FontLayout {
             size,
@@ -716,38 +597,51 @@ fn rasterize_glyph(metrics: Metrics, bitmap: Vec<u8>) -> Glyph {
     }
 }
 
-/// Compute foreground/background coverage weights from quadrant coverage.
-fn coverage_weights(coverage: [u8; 4], mask: [u8; 4]) -> (u8, u8) {
-    let uniform = mask.iter().all(|value| *value == mask[0]);
-    let total = coverage
-        .iter()
-        .fold(0u32, |sum, value| sum.saturating_add(*value as u32));
-    let total_avg = (total / 4) as u8;
-    if uniform {
-        return (total_avg, 0);
-    }
-
-    let mut fg_sum = 0u32;
-    let mut fg_count = 0u32;
-    let mut bg_sum = 0u32;
-    let mut bg_count = 0u32;
-
-    for (value, sample) in coverage.iter().zip(mask.iter()) {
-        if *sample >= 128 {
-            fg_sum = fg_sum.saturating_add(*value as u32);
-            fg_count = fg_count.saturating_add(1);
-        } else {
-            bg_sum = bg_sum.saturating_add(*value as u32);
-            bg_count = bg_count.saturating_add(1);
+/// Match the coverage buffer of a layout, `scale_y` pixel rows to each cell
+/// row, to the symbols of `tier`. Crisp text draws each pixel at full ink or
+/// bare ground.
+fn match_cells(
+    buffer: &[u8],
+    size: Size,
+    scale_y: u32,
+    crisp: bool,
+    tier: Tier,
+) -> Vec<Vec<FontCell>> {
+    let width = size.w as usize * COVERAGE_SCALE as usize;
+    let height = size.h as usize * COVERAGE_SCALE as usize;
+    // Each matrix pixel averages the buffer rows it spans.
+    let rows_per_pixel = (scale_y / COVERAGE_SCALE).max(1) as usize;
+    let mut matrix = vec![0u8; width * height];
+    for (y, row) in matrix.chunks_mut(width).enumerate() {
+        for (x, pixel) in row.iter_mut().enumerate() {
+            let sum: u32 = (0..rows_per_pixel)
+                .map(|dy| u32::from(buffer[(y * rows_per_pixel + dy) * width + x]))
+                .sum();
+            *pixel = ((sum + rows_per_pixel as u32 / 2) / rows_per_pixel as u32) as u8;
         }
     }
-
-    let fg_avg = fg_sum.checked_div(fg_count).map_or(0, |value| value as u8);
-    let bg_avg = bg_sum
-        .checked_div(bg_count)
-        .map_or(fg_avg, |value| value as u8);
-
-    (fg_avg, bg_avg)
+    let Ok(raster) = RasterView::new(&matrix, width, height, width) else {
+        return Vec::new();
+    };
+    let set = SymbolSet::tier(tier);
+    let mut matched = Vec::new();
+    if crisp {
+        fixed_into(&raster, set, &mut matched);
+    } else {
+        coverage_into(&raster, set, &mut matched);
+    }
+    matched
+        .chunks(size.w as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| FontCell {
+                    ch: cell.ch,
+                    fg_coverage: cell.fg,
+                    bg_coverage: cell.bg,
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// Compute the horizontal slant applied per line for italic rendering.
@@ -972,6 +866,7 @@ mod tests {
             size,
             LayoutOptions::default(),
             FontEffects::default(),
+            Tier::Blocks,
         );
         assert_eq!(layout.size, size);
         assert_eq!(layout.cells.len(), size.h as usize);
@@ -987,6 +882,7 @@ mod tests {
             size,
             LayoutOptions::default(),
             FontEffects::default(),
+            Tier::Blocks,
         );
         assert_eq!(layout.cells.len(), size.h as usize);
         assert_eq!(layout.cells[0].len(), size.w as usize);
@@ -1002,6 +898,7 @@ mod tests {
             size,
             LayoutOptions::default(),
             FontEffects::default(),
+            Tier::Blocks,
         );
         let top_half = layout.cells[..4].iter().any(|row| {
             row.iter()
@@ -1024,8 +921,15 @@ mod tests {
             size,
             LayoutOptions::default(),
             FontEffects::default(),
+            Tier::Blocks,
         );
-        let fallback = renderer.layout("?", size, LayoutOptions::default(), FontEffects::default());
+        let fallback = renderer.layout(
+            "?",
+            size,
+            LayoutOptions::default(),
+            FontEffects::default(),
+            Tier::Blocks,
+        );
         assert_eq!(missing.cells, fallback.cells);
     }
 }

@@ -24,7 +24,8 @@ use canopy::{
     style::{Attr, Color, Drift, GradientSpec, GradientStop, Paint, StyleRules, themes::Palette},
 };
 use canopy_widgets::{
-    BigFace, BigSize, BigText, BigWeight, BoxGlyphs, Container, Frame, Input, Scroll, Text,
+    BigFace, BigGrid, BigSize, BigText, BigWeight, BoxGlyphs, Container, Frame, Input, Scroll,
+    Text, mosaic::Tier,
 };
 
 use crate::{fixed_row, flex_row};
@@ -107,10 +108,12 @@ enum Setting {
     Look,
     /// Whether the last number counts up.
     Ticker,
+    /// The glyphs of the text: half blocks, or octants as well.
+    Glyphs,
 }
 
 /// The settings, in the order of the panel.
-const SETTINGS: [Setting; 13] = [
+const SETTINGS: [Setting; 14] = [
     Setting::View,
     Setting::Size,
     Setting::Face,
@@ -124,6 +127,7 @@ const SETTINGS: [Setting; 13] = [
     Setting::Strut,
     Setting::Look,
     Setting::Ticker,
+    Setting::Glyphs,
 ];
 
 impl Setting {
@@ -143,6 +147,7 @@ impl Setting {
             Self::Strut => "strut",
             Self::Look => "style",
             Self::Ticker => "ticker",
+            Self::Glyphs => "glyphs",
         }
     }
 }
@@ -178,6 +183,8 @@ struct State {
     look: Look,
     /// Whether the last number counts up.
     ticker: bool,
+    /// The mosaic tier: blocks for half blocks, full for octants too.
+    tier: Tier,
 }
 
 impl State {
@@ -198,6 +205,7 @@ impl State {
             strut: 0,
             look: Look::Plain,
             ticker: false,
+            tier: Tier::Full,
         }
     }
 
@@ -265,6 +273,11 @@ impl State {
             }
             .to_owned(),
             Setting::Ticker => if self.ticker { "on" } else { "off" }.to_owned(),
+            Setting::Glyphs => match self.tier {
+                Tier::Full => "octants",
+                _ => "half blocks",
+            }
+            .to_owned(),
         }
     }
 
@@ -299,6 +312,9 @@ impl State {
                 );
             }
             Setting::Ticker => self.ticker = !self.ticker,
+            Setting::Glyphs => {
+                self.tier = cycle(&[Tier::Blocks, Tier::Full], self.tier, delta);
+            }
         }
     }
 
@@ -333,6 +349,7 @@ impl State {
         big.set_align(self.align);
         big.set_vertical_align(self.vertical);
         big.set_strut(STRUTS[self.strut % STRUTS.len()]);
+        big.set_tier(Some(self.tier));
     }
 
     /// Returns big text of the state at `size`.
@@ -459,10 +476,15 @@ impl Settings {
         };
         let big = self.state.big(self.state.size());
         let (face, scale) = big.face_in(area);
+        let grid = match big.grid_in(area) {
+            BigGrid::Half => "half blocks",
+            BigGrid::Octant => "octants",
+        };
         let size = big.size_in(area);
         let lines = lines(&self.state.text).lines().count().max(1);
         vec![
             ("draws", format!("{} ×{scale}", face_name(face))),
+            ("grid", grid.to_owned()),
             ("text", format!("{}×{}", size.w, size.h)),
             ("area", format!("{}×{}", area.w, area.h)),
             ("lines", lines.to_string()),

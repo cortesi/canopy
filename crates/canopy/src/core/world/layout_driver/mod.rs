@@ -241,6 +241,7 @@ impl<'a> LayoutPass<'a> {
                 pad_y,
                 layout.overflow_y == MeasureOverflow::Unbounded,
             ),
+            glyphs: self.core.glyphs,
         };
 
         let did_measure =
@@ -279,7 +280,7 @@ impl<'a> LayoutPass<'a> {
             if content.w != width_seen {
                 let c1 = MeasureConstraints {
                     width: Constraint::Exact(content.w),
-                    height: c0.height,
+                    ..c0
                 };
                 let content1 = self.measure_content(
                     node_id,
@@ -300,6 +301,7 @@ impl<'a> LayoutPass<'a> {
             let c_final = MeasureConstraints {
                 width: Constraint::Exact(content.w),
                 height: Constraint::Exact(content.h),
+                ..c0
             };
             self.measure_cached(node_id, c_final)?;
         }

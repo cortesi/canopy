@@ -6,6 +6,7 @@ use canopy::{
     ContextExt, NodeId,
     geom::Point,
     layout::{Edges, LayoutOverride},
+    render::Glyphs,
     style::{Color, ResolvedStyle},
     testing::{ManualClock, harness::Harness},
 };
@@ -42,6 +43,12 @@ fn compact(text: &str) -> BigText {
         face: BigFace::Compact,
         scale: 1,
     })
+}
+
+/// Returns text that draws on the half grid, as with the block elements
+/// alone.
+fn half(text: &str) -> BigText {
+    BigText::new(text).with_tier(Tier::Blocks)
 }
 
 /// Returns the cell rows of text in the compact face at scale 1.
@@ -124,7 +131,7 @@ fn a_newline_starts_a_line_below_a_blank_row() {
 
 #[test]
 fn a_fit_draws_the_largest_capitals_at_the_lowest_scale() {
-    let fit = |text: &str, w, h| BigText::new(text).face_in(Size::new(w, h));
+    let fit = |text: &str, w, h| half(text).face_in(Size::new(w, h));
     // Three rows take the compact face: it is narrower than Tamzen 5×9.
     assert_eq!(fit("123", 40, 3), (BigFace::Compact, 1));
     // Five rows take Tamzen 10×20 at scale 1 over the compact face at scale
@@ -143,13 +150,9 @@ fn a_fit_draws_the_largest_capitals_at_the_lowest_scale() {
 #[test]
 fn a_dash_a_dot_or_a_space_fits_like_a_digit() {
     for area in [Size::new(40, 3), Size::new(200, 5), Size::new(200, 12)] {
-        let digit = BigText::new("0").face_in(area);
+        let digit = half("0").face_in(area);
         for text in ["—", ".", " ", ""] {
-            assert_eq!(
-                BigText::new(text).face_in(area),
-                digit,
-                "{text:?} in {area:?}"
-            );
+            assert_eq!(half(text).face_in(area), digit, "{text:?} in {area:?}");
         }
     }
 }
@@ -161,8 +164,8 @@ fn descenders_take_rows_below_the_baseline() {
     // So four rows fit descenders in the compact face, and capitals in a
     // larger one.
     let area = Size::new(200, 4);
-    assert_eq!(BigText::new("Ag").face_in(area), (BigFace::Compact, 1));
-    assert_eq!(BigText::new("AB").face_in(area), (BigFace::Tamzen7x14, 1));
+    assert_eq!(half("Ag").face_in(area), (BigFace::Compact, 1));
+    assert_eq!(half("AB").face_in(area), (BigFace::Tamzen7x14, 1));
 }
 
 #[test]
@@ -177,24 +180,24 @@ fn a_strut_grows_the_line_box_and_draws_nothing() {
     assert_eq!(strut.rows_in(ROOMY), rows, "the digits keep their rows");
     // A fit takes the strut as if the text had it.
     let area = Size::new(200, 5);
-    assert_eq!(BigText::new("12").face_in(area), (BigFace::Tamzen10x20, 1));
+    assert_eq!(half("12").face_in(area), (BigFace::Tamzen10x20, 1));
     assert_eq!(
-        BigText::new("12").with_strut("k").face_in(area),
-        BigText::new("12k").face_in(area)
+        half("12").with_strut("k").face_in(area),
+        half("12k").face_in(area)
     );
 }
 
 #[test]
 fn nothing_fits_takes_the_smallest_rendering() {
     assert_eq!(
-        BigText::new("12345").face_in(Size::new(2, 1)),
+        half("12345").face_in(Size::new(2, 1)),
         (BigFace::Compact, 1)
     );
 }
 
 #[test]
 fn max_rows_caps_a_fit_and_exact_takes_its_size() {
-    let capped = BigText::new("1").with_size(BigSize::MaxRows(3));
+    let capped = half("1").with_size(BigSize::MaxRows(3));
     assert_eq!(capped.face_in(Size::new(200, 20)), (BigFace::Compact, 1));
     let exact = BigText::new("1").with_size(BigSize::Exact {
         face: BigFace::Tamzen6x12,
@@ -206,7 +209,7 @@ fn max_rows_caps_a_fit_and_exact_takes_its_size() {
 #[test]
 fn measure_follows_the_constraints() {
     let measure =
-        |text: BigText, width, height| match text.measure(MeasureConstraints { width, height }) {
+        |text: BigText, width, height| match text.measure(MeasureConstraints::new(width, height)) {
             Measurement::Fixed(size) => size,
             Measurement::Wrap => panic!("big text has its own size"),
         };
@@ -293,7 +296,7 @@ fn cell_at(harness: &Harness, x: u32, y: u32) -> (char, ResolvedStyle) {
 
 #[test]
 fn runs_paint_in_their_own_styles() -> Result<()> {
-    let text = BigText::new("").with_runs([("text", "4"), ("unit", "%")]);
+    let text = half("").with_runs([("text", "4"), ("unit", "%")]);
     let mut harness = Harness::builder(text)
         .size(12, 3)
         .configure(|setup| {
@@ -320,7 +323,7 @@ fn text_stays_within_its_area() -> Result<()> {
     // "88" is seven columns wide and three rows high, but the widget has
     // only five columns and two rows inside its padding, so the smallest
     // rendering shows, cut at the area.
-    let mut harness = Harness::builder(Padded(Some(BigText::new("88"))))
+    let mut harness = Harness::builder(Padded(Some(half("88"))))
         .size(7, 4)
         .build()?;
     harness.render()?;
@@ -356,7 +359,7 @@ impl Widget for Padded {
 
 #[test]
 fn lines_align_in_a_wider_area() -> Result<()> {
-    let text = BigText::new("1\n11").with_align(Align::End);
+    let text = half("1\n11").with_align(Align::End);
     let mut harness = Harness::builder(text).size(9, 7).build()?;
     harness.render()?;
     let lines = harness.tbuf().lines();
@@ -379,7 +382,7 @@ fn the_block_centers_vertically_in_half_rows() -> Result<()> {
 /// Returns a harness of `text` whose clock the test moves, and the clock.
 fn clocked(text: &str, motion: bool) -> Result<(Harness, Arc<ManualClock>)> {
     let clock = Arc::new(ManualClock::new());
-    let mut harness = Harness::builder(BigText::new(text))
+    let mut harness = Harness::builder(half(text))
         .size(20, 3)
         .clock(Arc::clone(&clock))
         .motion(motion)
@@ -529,7 +532,7 @@ fn a_change_of_geometry_shows_at_once() -> Result<()> {
     });
     harness.render()?;
     assert!(!rolls(&mut harness), "another face does not roll");
-    let expected = BigText::new("13")
+    let expected = half("13")
         .with_size(BigSize::Exact {
             face: BigFace::Tamzen5x9,
             scale: 1,
@@ -649,7 +652,7 @@ fn push_by(harness: &mut Harness, rows: u32) -> Result<()> {
 #[test]
 fn text_in_a_scroll_keeps_its_size() -> Result<()> {
     let mut harness = Harness::builder(Below {
-        text: Some(BigText::new("12")),
+        text: Some(half("12")),
         blank: None,
     })
     .size(20, 3)
@@ -663,7 +666,7 @@ fn text_in_a_scroll_keeps_its_size() -> Result<()> {
 fn a_roll_out_of_view_ends_by_the_clock() -> Result<()> {
     let clock = Arc::new(ManualClock::new());
     let mut harness = Harness::builder(Below {
-        text: Some(BigText::new("12")),
+        text: Some(half("12")),
         blank: None,
     })
     .size(20, 3)
@@ -697,4 +700,196 @@ fn a_roll_out_of_view_ends_by_the_clock() -> Result<()> {
     assert_eq!(screen(&harness), rows_of("99"));
     assert!(!harness.with_unique(|text: &mut BigText, _| Ok(text.rolling()))?);
     Ok(())
+}
+
+/// Returns the cell rows of resolved text, placed at the start.
+fn rows_resolved(resolved: &Resolved) -> Vec<String> {
+    let lines = BigText::columns(resolved);
+    let size = resolved.size();
+    let placement = Placement::new(resolved, &lines, size, Align::Start, Align::Start);
+    (0..size.h)
+        .map(|y| {
+            let row: String = (0..size.w)
+                .map(|x| placement.cell(&lines, x, y).map_or(' ', |(ch, _)| ch))
+                .collect();
+            row.trim_end().to_owned()
+        })
+        .collect()
+}
+
+#[test]
+fn octant_scale_two_draws_as_half_block_scale_one() {
+    // An octant pixel is half the size of a half-block pixel, so scale 2 on
+    // the octant grid puts each font pixel on one half block.
+    for text in ["0123456789", "Ag%", "12\n34"] {
+        let laid = Laid::new(
+            BigFace::Tamzen8x16,
+            BigWeight::Bold,
+            &compact(text).lines(),
+            "",
+        );
+        let half = Resolved {
+            laid: laid.clone(),
+            scale: 1,
+            grid: BigGrid::Half,
+        };
+        let octant = Resolved {
+            laid,
+            scale: 2,
+            grid: BigGrid::Octant,
+        };
+        assert_eq!(half.size(), octant.size(), "{text:?}");
+        assert_eq!(rows_resolved(&half), rows_resolved(&octant), "{text:?}");
+    }
+}
+
+#[test]
+fn octant_digits_draw_in_half_the_rows() {
+    let half = compact("0123456789").rows_in(ROOMY);
+    let laid = Laid::new(
+        BigFace::Compact,
+        BigWeight::Bold,
+        &compact("0123456789").lines(),
+        "",
+    );
+    let octant = rows_resolved(&Resolved {
+        laid,
+        scale: 1,
+        grid: BigGrid::Octant,
+    });
+    assert_eq!(half.len(), 3);
+    assert_eq!(octant.len(), 2, "five pixel rows take two octant rows");
+    assert!(
+        octant
+            .iter()
+            .flat_map(|row| row.chars())
+            .any(|ch| u32::from(ch) >= 0x1CD00),
+        "{octant:?}"
+    );
+}
+
+#[test]
+fn the_full_tier_adds_the_octant_steps_to_the_fit() {
+    let area = Size::new(200, 3);
+    // Half blocks fit only the compact face in three rows.
+    assert_eq!(half("1").face_in(area), (BigFace::Compact, 1));
+    assert_eq!(half("1").grid_in(area), BigGrid::Half);
+    // Octants fit Tamzen 10×20 at its own pixels: the same cap height in
+    // smaller pixels, which keep more of the design. The full tier is the
+    // default.
+    let full = BigText::new("1");
+    assert_eq!(
+        full.face_in(area),
+        BigText::new("1").with_tier(Tier::Full).face_in(area)
+    );
+    assert_eq!(full.face_in(area), (BigFace::Tamzen10x20, 1));
+    assert_eq!(full.grid_in(area), BigGrid::Octant);
+    // An exact size keeps the half grid.
+    let exact = BigText::new("1")
+        .with_tier(Tier::Full)
+        .with_size(BigSize::Exact {
+            face: BigFace::Compact,
+            scale: 1,
+        });
+    assert_eq!(exact.grid_in(area), BigGrid::Half);
+}
+
+#[test]
+fn measurement_reads_the_glyphs_of_its_constraints() {
+    let text = || BigText::new("12").with_size(BigSize::MaxRows(2));
+    let measure = |glyphs| {
+        let constraints = MeasureConstraints {
+            glyphs,
+            ..MeasureConstraints::new(Constraint::Unbounded, Constraint::AtMost(2))
+        };
+        match text().measure(constraints) {
+            Measurement::Fixed(size) => size,
+            Measurement::Wrap => panic!("big text has its own size"),
+        }
+    };
+    let blocks = measure(Glyphs::Blocks);
+    let full = measure(Glyphs::Full);
+    // Half blocks cannot fit two rows, so the smallest rendering shows, cut
+    // at the bound.
+    let smallest = text().with_tier(Tier::Blocks).size_in(Size::new(1000, 2));
+    assert_eq!(blocks, Size::new(smallest.w, 2));
+    assert_eq!(
+        full,
+        text().with_tier(Tier::Full).size_in(Size::new(1000, 2))
+    );
+    assert_eq!(
+        text().with_tier(Tier::Full).grid_in(Size::new(1000, 2)),
+        BigGrid::Octant,
+        "octants fit two rows that half blocks cannot"
+    );
+}
+
+/// A root that holds its child at the child's measured size.
+struct Holder(Option<BigText>);
+
+impl Widget for Holder {
+    fn layout(&self) -> Layout {
+        Layout::column()
+    }
+
+    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        let child = self.0.take().expect("child");
+        ctx.add_child(ctx.node_id(), child)?;
+        Ok(())
+    }
+}
+
+#[test]
+fn a_change_of_glyphs_lays_the_text_out_again() -> Result<()> {
+    let text = BigText::new("12").with_size(BigSize::MaxRows(2));
+    let mut harness = Harness::builder(Holder(Some(text))).size(40, 10).build()?;
+    harness.render()?;
+    let height = |harness: &mut Harness| {
+        harness.with_unique(|_: &mut BigText, ctx| Ok(ctx.view().content_size().h))
+    };
+    let octants = |harness: &Harness| {
+        let drawn: String = harness.tbuf().lines().concat();
+        drawn.chars().any(|ch| u32::from(ch) >= 0x1CD00)
+    };
+    assert_eq!(height(&mut harness)?, 2, "octants take two rows");
+    assert!(octants(&harness), "the full glyphs are the default");
+    harness.canopy.set_glyphs(Glyphs::Blocks);
+    harness.render()?;
+    assert_eq!(height(&mut harness)?, 3, "half blocks take three");
+    assert!(!octants(&harness));
+    Ok(())
+}
+
+#[test]
+fn runs_that_meet_in_a_cell_give_it_to_the_one_with_more_ink() {
+    // Two runs side by side on the octant grid, at scale 1: the gap
+    // between the digits can share a cell between them.
+    let text = BigText::new("").with_runs([("a", "1"), ("b", "1")]);
+    let laid = Laid::new(BigFace::Compact, BigWeight::Bold, &text.lines(), "");
+    let resolved = Resolved {
+        laid,
+        scale: 1,
+        grid: BigGrid::Octant,
+    };
+    let lines = BigText::columns(&resolved);
+    let size = resolved.size();
+    let placement = Placement::new(&resolved, &lines, size, Align::Start, Align::Start);
+    for y in 0..size.h {
+        for x in 0..size.w {
+            let Some((_, run)) = placement.cell(&lines, x, y) else {
+                continue;
+            };
+            // Count the ink of each run in the cell, and check the winner.
+            let mut ink = [0u32; 2];
+            for row in 0..4 {
+                for col in 0..2 {
+                    if let Some((r, true)) = placement.pixel(&lines, x * 2 + col, y * 4 + row) {
+                        ink[r] += 1;
+                    }
+                }
+            }
+            let expected = if ink[1] > ink[0] { 1 } else { 0 };
+            assert_eq!(run, expected, "cell ({x}, {y}): {ink:?}");
+        }
+    }
 }

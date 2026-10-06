@@ -4,7 +4,10 @@ use std::result::Result;
 
 use thiserror::Error;
 
-use crate::geom::{Rect, Size};
+use crate::{
+    core::render::Glyphs,
+    geom::{Rect, Size},
+};
 pub use crate::{
     core::{
         context::{RevealAlign, ScrollDirection, ScrollOp},
@@ -698,9 +701,22 @@ pub struct MeasureConstraints {
     pub width: Constraint,
     /// Height constraint.
     pub height: Constraint,
+    /// The block mosaic characters that the terminal draws well. A widget
+    /// whose size depends on its symbols, such as big text, reads them here,
+    /// so that it measures as it renders.
+    pub glyphs: Glyphs,
 }
 
 impl MeasureConstraints {
+    /// Constraints on width and height, with the default glyphs.
+    pub fn new(width: Constraint, height: Constraint) -> Self {
+        Self {
+            width,
+            height,
+            glyphs: Glyphs::default(),
+        }
+    }
+
     /// Leaf widgets: clamp a content size to these constraints and return
     /// Fixed.
     pub fn clamp(&self, content: Size) -> Measurement {
@@ -795,30 +811,21 @@ mod tests {
 
     #[test]
     fn clamp_size_unbounded() {
-        let c = MeasureConstraints {
-            width: Constraint::Unbounded,
-            height: Constraint::Unbounded,
-        };
+        let c = MeasureConstraints::new(Constraint::Unbounded, Constraint::Unbounded);
         let size = Size::new(12, 7);
         assert_eq!(c.clamp_size(size), size);
     }
 
     #[test]
     fn clamp_size_at_most() {
-        let c = MeasureConstraints {
-            width: Constraint::AtMost(3),
-            height: Constraint::AtMost(0),
-        };
+        let c = MeasureConstraints::new(Constraint::AtMost(3), Constraint::AtMost(0));
         let size = Size::new(10, 4);
         assert_eq!(c.clamp_size(size), Size::new(3, 0));
     }
 
     #[test]
     fn clamp_size_exact() {
-        let c = MeasureConstraints {
-            width: Constraint::Exact(0),
-            height: Constraint::Exact(5),
-        };
+        let c = MeasureConstraints::new(Constraint::Exact(0), Constraint::Exact(5));
         let size = Size::new(3, 3);
         assert_eq!(c.clamp_size(size), Size::new(0, 5));
     }

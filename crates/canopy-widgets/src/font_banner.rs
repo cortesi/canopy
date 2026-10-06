@@ -9,7 +9,10 @@ use canopy::{
     style::Coverage,
 };
 
-use crate::font::{FontEffects, FontLayout, FontRenderer, LayoutOptions, align_offset};
+use crate::{
+    font::{FontEffects, FontLayout, FontRenderer, LayoutOptions, align_offset},
+    mosaic::{Tier, tier_for},
+};
 
 /// Render large ASCII-font text into a bounded region.
 ///
@@ -28,6 +31,8 @@ pub struct FontBanner {
     options: LayoutOptions,
     /// Rendering effects for the banner.
     effects: FontEffects,
+    /// The banner's own mosaic tier, or none to follow the terminal's glyphs.
+    tier: Option<Tier>,
     /// Cached layout keyed by size and text.
     cache: Option<LayoutCache>,
 }
@@ -42,6 +47,8 @@ struct LayoutCache {
     options: LayoutOptions,
     /// Rendering effects for the banner.
     effects: FontEffects,
+    /// The mosaic tier of the layout.
+    tier: Tier,
     /// Rasterized layout.
     layout: FontLayout,
 }
@@ -55,6 +62,7 @@ impl FontBanner {
             style: String::from("text"),
             options: LayoutOptions::default(),
             effects: FontEffects::default(),
+            tier: None,
             cache: None,
         }
     }
@@ -96,28 +104,51 @@ impl FontBanner {
         self.effects = effects;
     }
 
-    /// Rebuild the cached layout when the text, size, options, or effects
-    /// changed.
-    fn refresh_layout(&mut self, size: Size) {
+    /// Draw with the symbols of `tier`, whatever glyphs the terminal has.
+    #[must_use]
+    pub fn with_tier(mut self, tier: Tier) -> Self {
+        self.tier = Some(tier);
+        self
+    }
+
+    /// Draw with the symbols of `tier`, or with none, the symbols that the
+    /// terminal's glyphs allow.
+    pub fn set_tier(&mut self, tier: Option<Tier>) {
+        self.tier = tier;
+    }
+
+    /// The banner's own mosaic tier, if it has one.
+    pub fn tier(&self) -> Option<Tier> {
+        self.tier
+    }
+
+    /// Rebuild the cached layout when the text, size, options, effects, or
+    /// tier changed.
+    fn refresh_layout(&mut self, size: Size, tier: Tier) {
         let rebuild = match &self.cache {
             Some(cache) => {
                 cache.text != self.text
                     || cache.size != size
                     || cache.options != self.options
                     || cache.effects != self.effects
+                    || cache.tier != tier
             }
             None => true,
         };
         if rebuild {
-            let layout =
-                self.renderer
-                    .borrow_mut()
-                    .layout(&self.text, size, self.options, self.effects);
+            let layout = self.renderer.borrow_mut().layout(
+                &self.text,
+                size,
+                self.options,
+                self.effects,
+                tier,
+            );
             self.cache = Some(LayoutCache {
                 text: self.text.clone(),
                 size,
                 options: self.options,
                 effects: self.effects,
+                tier,
                 layout,
             });
         }
@@ -156,7 +187,8 @@ impl Widget for FontBanner {
             return Ok(());
         }
         let size = view_rect.size();
-        self.refresh_layout(size);
+        let tier = self.tier.unwrap_or_else(|| tier_for(rndr.glyphs()));
+        self.refresh_layout(size, tier);
         let options = self.options;
         let style = &self.style;
         let layout = &self.cache.as_ref().expect("layout cached").layout;
@@ -214,10 +246,7 @@ mod tests {
     /// Measure `text` at `height` rows, with room for any width.
     fn measured(text: &str, height: Constraint) -> Result<Measurement> {
         let banner = FontBanner::new(text, FontRenderer::new(Font::from_bytes(TEST_FONT)?));
-        Ok(banner.measure(MeasureConstraints {
-            width: Constraint::AtMost(500),
-            height,
-        }))
+        Ok(banner.measure(MeasureConstraints::new(Constraint::AtMost(500), height)))
     }
 
     #[test]
@@ -242,10 +271,7 @@ mod tests {
     fn a_banner_narrower_than_its_text_shrinks_the_text() -> Result<()> {
         let banner = |width| -> Result<Measurement> {
             let banner = FontBanner::new("abab", FontRenderer::new(Font::from_bytes(TEST_FONT)?));
-            Ok(banner.measure(MeasureConstraints {
-                width,
-                height: Constraint::Exact(6),
-            }))
+            Ok(banner.measure(MeasureConstraints::new(width, Constraint::Exact(6))))
         };
         let Measurement::Fixed(natural) = banner(Constraint::Unbounded)? else {
             panic!("a bounded height measures");

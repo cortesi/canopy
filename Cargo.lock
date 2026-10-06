@@ -366,10 +366,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "canopy-mosaic"
+version = "0.0.1"
+dependencies = [
+ "criterion",
+ "fontdue",
+ "image",
+ "proptest",
+ "thiserror",
+]
+
+[[package]]
 name = "canopy-widgets"
 version = "0.0.1"
 dependencies = [
  "canopy",
+ "canopy-mosaic",
  "criterion",
  "fontdue",
  "grep-matcher",
@@ -1890,6 +1902,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "536bfad37a309d62069485248eeaba1e8d9853aaf951caaeaed0585a95346f08"
 dependencies = [
  "windows-sys 0.60.2",
+]
+
+[[package]]
+name = "mosaic-score"
+version = "0.1.0"
+dependencies = [
+ "canopy",
+ "canopy-mosaic",
+ "clap",
+ "fontdue",
+ "image",
 ]
 
 [[package]]

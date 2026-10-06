@@ -13,6 +13,8 @@
 ## Repository map
 
 - `crates/canopy` is the runtime; `crates/canopy-widgets` the stock widgets;
+  `crates/canopy-mosaic` the block mosaic matcher, which depends on no other
+  workspace crate; `crates/mosaic-score` the perceptual score of its drawing;
   `crates/canopy-mcp` the MCP launcher, config homes, and smoke suites;
   `crates/canopyctl` the automation CLI; `crates/canopy-geom` and
   `crates/canopy-derive` the geometry and command macros.
@@ -25,6 +27,9 @@
 - `../fh` is the main consumer. API changes migrate it in the same change;
   there are no compatibility shims.
 - `cargo xtask smoke` runs every tracked smoke suite through `canopyctl`.
+- `cargo xtask score` scores the block mosaics on the standard suite against
+  `crates/mosaic-score/baseline.txt`; `--update` rewrites the baseline, and
+  `--sheets` writes contact sheets to `tmp/score`.
 - `ncode api` refreshes the captures in `api/`; review their diff with every
   public API change.
 

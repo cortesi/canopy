@@ -621,6 +621,10 @@ reads.
 every theme, for example `{ color = "#98c379", motion = "steady" }`.
 `canopy.set_motion(options)` replaces the given motion settings: `enabled`,
 `max_fps`, and `idle_ms`.
+`canopy.glyphs()` returns the block mosaic characters that the terminal draws
+well, `full` by default or `blocks`, and `canopy.set_glyphs(glyphs)` sets them. Image
+views, font banners, and big text choose their symbols from the setting, and a
+change lays the frame out again.
 
 The generated API is test-covered by an exact golden tail that includes command
 enums, optional named arguments, fixtures, and default bindings.

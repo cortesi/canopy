@@ -19,4 +19,8 @@ table.insert(shots, { id = "biggym-area", title = "Big text in an area", caption
 -- Back to the first setting, the view, and the ladder.
 keys({ "k", "k", "k", "k", "k", "k", "k", "k", "k", "k", "k", "l" })
 table.insert(shots, { id = "biggym-ladder", title = "Big text ladder", caption = "The text in every face, at the scale of the settings.", capture = canopy.capture() })
+-- Back to the preview, then up from the view to the last setting, the
+-- glyphs, and on to half blocks.
+keys({ "l", "k", "l" })
+table.insert(shots, { id = "biggym-halves", title = "Big text in half blocks", caption = "The same area in half blocks, for a font without octants: the ladder loses the step between each two half-block scales.", capture = canopy.capture() })
 return shots

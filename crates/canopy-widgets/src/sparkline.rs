@@ -329,10 +329,10 @@ mod tests {
     fn a_sparkline_measures_its_values() {
         let bars = Sparkline::bars().with_rows(2).with_values([1.0, 2.0, 3.0]);
         let line = Sparkline::line().with_values([1.0, 2.0, 3.0]);
-        let size = |sparkline: &Sparkline| match sparkline.measure(MeasureConstraints {
-            width: Constraint::Unbounded,
-            height: Constraint::Unbounded,
-        }) {
+        let size = |sparkline: &Sparkline| match sparkline.measure(MeasureConstraints::new(
+            Constraint::Unbounded,
+            Constraint::Unbounded,
+        )) {
             Measurement::Fixed(size) => size,
             other => panic!("{other:?}"),
         };

@@ -89,7 +89,7 @@ pub mod render {
     pub use crate::core::{
         canopy::MotionSettings,
         cursor,
-        render::{NopBackend, Render, RenderBackend},
+        render::{Glyphs, NopBackend, Render, RenderBackend},
         termbuf::{CaptureRun, CaptureStyle, Cell, RenderLimits, ScreenCapture, TermBuf},
     };
 }

@@ -11,6 +11,43 @@ use crate::{
     },
 };
 
+/// The block mosaic characters that the terminal draws well.
+///
+/// Which characters a terminal draws cleanly depends on the terminal and its
+/// font, and Canopy cannot detect it. An application sets it, and widgets
+/// that draw pictures or large text, such as image views, font banners, and
+/// big text, choose their symbols from it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum Glyphs {
+    /// The block elements, U+2580 to U+259F, except the shades. Nearly every
+    /// terminal font has them, so this is the fallback for a font that lacks
+    /// the mosaics of the full set.
+    Blocks,
+    /// The block elements, plus the octants, sextants, bars, and smooth
+    /// mosaics of Symbols for Legacy Computing. It draws the best pictures,
+    /// and it is the default. Some fonts lack these mosaics.
+    #[default]
+    Full,
+}
+
+impl Glyphs {
+    /// Every setting.
+    pub const ALL: [Self; 2] = [Self::Blocks, Self::Full];
+
+    /// The name of the setting, in lower case.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Blocks => "blocks",
+            Self::Full => "full",
+        }
+    }
+
+    /// The setting with a name, as [`Self::name`] gives it.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|glyphs| glyphs.name() == name)
+    }
+}
+
 /// The trait implemented by renderers.
 pub trait RenderBackend {
     /// Apply a style to the following text output
@@ -149,6 +186,8 @@ pub struct Render<'a> {
     origin: Offset,
     /// Current effect stack, applied in order to resolved styles.
     effects: &'a [Effect],
+    /// The block mosaic characters that the terminal draws well.
+    glyphs: Glyphs,
     /// Frame state, absent when rendering outside a frame.
     frame: Option<RenderFrame<'a>>,
 }
@@ -172,8 +211,21 @@ impl<'a> Render<'a> {
             clip,
             origin: Offset::between(screen_origin, clip.tl),
             effects: &[],
+            glyphs: Glyphs::default(),
             frame: None,
         }
+    }
+
+    /// Set the block mosaic characters that the terminal draws well.
+    pub(crate) fn with_glyphs(mut self, glyphs: Glyphs) -> Self {
+        self.glyphs = glyphs;
+        self
+    }
+
+    /// The block mosaic characters that the terminal draws well, as the
+    /// application set them.
+    pub fn glyphs(&self) -> Glyphs {
+        self.glyphs
     }
 
     /// Attach the frame state for one node's render.
@@ -267,6 +319,12 @@ impl<'a> Render<'a> {
     pub fn resolve_style(&self, name: &str) -> Style {
         let base = self.style.get(self.stylemap, name);
         self.apply_effects(base)
+    }
+
+    /// Resolve a style by name without the effect stack. A widget that
+    /// applies the effects itself, after its own drawing, starts here.
+    pub fn resolve_base_style(&self, name: &str) -> Style {
+        self.style.get(self.stylemap, name)
     }
 
     /// Push a style layer.

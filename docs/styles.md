@@ -258,20 +258,53 @@ hiding what the row covers for long: the row goes at the next input.
 
 ## Images
 
-`ImageView` keeps the alpha of its image. Each half of a cell lays the image
-over the ground of the `background` style, so a transparent image, such as a
-logo, shows the ground of whatever holds it, and so does the area around an
-image that does not fill its view. `ImageView::from_bytes` decodes an image an
-application embeds, and `with_focus(false)` keeps a decorative image out of
-keyboard traversal.
+`ImageView` draws its image in block mosaics. Each cell is an 8×8 matrix of the
+image, and the view matches it to the symbol and the two colors that reproduce
+it with the least error. The symbols come from the tier that the application's
+glyph setting allows (see Block mosaics), or from the view's own tier, set with
+`with_tier`.
+
+`ImageView` keeps the alpha of its image. The view lays the image over the
+ground of the `background` style, in linear light, so a transparent image, such
+as a logo, shows the ground of whatever holds it, and so does the area around
+an image that does not fill its view. The effect stack then acts on both colors
+of each cell alike, so an effect that dims the view dims the whole image, and
+the view does not match the image again for it. `ImageView::from_bytes`
+decodes an image an application embeds, and `with_focus(false)` keeps a
+decorative image out of keyboard traversal.
+
+## Block mosaics
+
+Image views, font banners, and big text draw with block mosaic characters. The
+symbols form tiers, each holding the one before it:
+
+- `Halves`: the upper half block, two pixels to a cell.
+- `Quadrants`: the quadrants and the left and right halves.
+- `Blocks`: every block element of U+2580 to U+259F except the shades. Nearly
+  every terminal font has them.
+- `Full`: the block elements, plus the octants, sextants, one-eighth bars,
+  and smooth mosaics of Symbols for Legacy Computing. They draw finer edges,
+  and this is the default tier. Some fonts lack them.
+
+Canopy cannot detect which symbols a terminal draws well, so the application
+sets it with `Canopy::set_glyphs`, or `canopy.set_glyphs` in Luau: `full`,
+the default, or `blocks`, for a font that lacks the mosaics. A widget with a tier of its own ignores the setting,
+which lets a gym compare the tiers side by side. The image viewer gym,
+`cargo run -p gyms -- imgview IMAGE`, also draws a chart of the glyphs that
+each tier uses, where a glyph that the terminal draws at the wrong width breaks
+its row.
 
 ## Big text
 
-`BigText` draws text in bitmap faces with half blocks. The faces form a
-ladder: `BigFace::Compact`, Canopy's own numerals five pixels high with the
-letters of Tamzen 5×9, then the seven sizes of Tamzen, from 5×9 to 10×20. Each
-face draws at any integer scale, where one font pixel is that many columns by
-that many half rows. Every face and weight draws printable ASCII, the Latin-1
+`BigText` draws text in bitmap faces with half blocks, or with octants where
+the full glyphs allow them. The faces form a ladder: `BigFace::Compact`,
+Canopy's own numerals five pixels high with the letters of Tamzen 5×9, then the
+seven sizes of Tamzen, from 5×9 to 10×20. Each face draws at any integer scale,
+where one font pixel is that many columns by that many half rows. On the octant
+grid of `BigGrid::Octant`, one font pixel is that many half columns by that
+many quarter rows, so the ladder gains a step between each two half-block
+scales. At an even octant scale the text draws exactly as half blocks draw it,
+so a fit takes octants only where an odd scale gives larger capitals. Every face and weight draws printable ASCII, the Latin-1
 letters, the light box-drawing lines, and `× ÷ ≤ ≥ ° · — … ↑ ↓ ▲ ▼ ± µ €`.
 
 `BigSize` chooses the size:
@@ -281,7 +314,7 @@ letters, the light box-drawing lines, and `× ÷ ≤ ≥ ° · — … ↑ ↓ �
   takes the fewer rows, then the lower scale, then the narrower text, then the
   smaller face.
 - `MaxRows(n)` fits within at most `n` rows.
-- `Exact { face, scale }` takes one face at one scale.
+- `Exact { face, scale }` takes one face at one scale, on the half grid.
 
 A fit measures the text itself. A line box runs from the cap height down to the
 baseline and grows for the ascenders and descenders that the text has, so a
@@ -300,14 +333,16 @@ every face.
 
 ## Font banners
 
-`FontBanner` draws text from a font in quadrant blocks, scaled to its height,
-and shrinks the text to its width when the text is wider. `LayoutOptions`
-sets how the text draws:
+`FontBanner` draws text from a font in block mosaics, scaled to its height,
+and shrinks the text to its width when the text is wider. Each cell is an 8×8
+matrix of the text's coverage, matched to the symbol whose shape fits it best,
+so curves and diagonals take the octants and smooth mosaics of the full tier
+where the glyph setting allows them. `LayoutOptions` sets how the text draws:
 
 - `fit: Fit::Ink` fits the ink of the text to the height instead of the font's
   line box, so a short word fills its rows.
-- `crisp: true` draws each quadrant fully or not at all, so edges are hard and
-  there are no shades between the text and the ground.
+- `crisp: true` draws each pixel at full ink or bare ground, so edges are hard
+  and there are no shades between the text and the ground.
 - `tall_cells: true` keeps the glyphs in their proportions on cells twice as
   tall as wide. Without it a glyph draws at twice its height.
 

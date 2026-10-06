@@ -1,0 +1,18 @@
+[package]
+name = "mosaic-score"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Score the block mosaics of Canopy against a model of the human eye"
+
+[dependencies]
+canopy.workspace = true
+canopy-mosaic.workspace = true
+clap.workspace = true
+fontdue = "0.9.4"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+
+[lints]
+workspace = true

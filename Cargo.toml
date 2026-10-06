@@ -14,6 +14,24 @@ debug = "line-tables-only"
 [profile.dev.package."*"]
 debug = false
 
+# Mosaic matching runs about 30 times slower unoptimized.
+[profile.dev.package.canopy-mosaic]
+opt-level = 3
+
+# Decoding the images of tests and gyms is too slow without optimization.
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+
+# The mosaic score filters millions of pixels for each item.
+[profile.dev.package.mosaic-score]
+opt-level = 3
+
+[profile.dev.package.fontdue]
+opt-level = 3
+
 [workspace.package]
 authors = ["Aldo Cortesi <aldo@corte.si>"]
 edition = "2024"
@@ -25,6 +43,7 @@ canopy = { path = "crates/canopy" }
 canopy-derive = { path = "crates/canopy-derive" }
 canopy-geom = { path = "crates/canopy-geom" }
 canopy-mcp = { path = "crates/canopy-mcp" }
+canopy-mosaic = { path = "crates/canopy-mosaic" }
 canopy-widgets = { path = "crates/canopy-widgets", default-features = false }
 
 # External crates.

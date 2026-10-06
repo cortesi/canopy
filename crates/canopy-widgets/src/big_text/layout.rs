@@ -26,6 +26,45 @@ pub enum BigSize {
     },
 }
 
+/// The grid of a cell: how many font pixels it holds, at scale 1.
+///
+/// On the half grid, a cell holds one pixel above another, drawn with half
+/// blocks. On the octant grid, a cell holds two pixels across and four down,
+/// drawn with octants. A pixel is square on a 1:2 cell in both, and an octant
+/// pixel is half the size of a half-block pixel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+pub enum BigGrid {
+    /// Two pixels in each cell, drawn with half blocks.
+    #[default]
+    Half,
+    /// Eight pixels in each cell, drawn with octants. It needs the octants of
+    /// Symbols for Legacy Computing Supplement.
+    Octant,
+}
+
+impl BigGrid {
+    /// Pixels across a cell at scale 1.
+    pub(super) fn across(self) -> u32 {
+        match self {
+            Self::Half => 1,
+            Self::Octant => 2,
+        }
+    }
+
+    /// Pixels down a cell at scale 1.
+    pub(super) fn down(self) -> u32 {
+        match self {
+            Self::Half => 2,
+            Self::Octant => 4,
+        }
+    }
+
+    /// Quarter rows of one pixel at scale 1, a unit that both grids share.
+    fn quarters(self) -> u32 {
+        4 / self.down()
+    }
+}
+
 /// A glyph placed on a line.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Placed {
@@ -155,50 +194,51 @@ impl Laid {
         self.lines.iter().map(|line| line.width).max().unwrap_or(0)
     }
 
-    /// Returns the half rows of one line box at `scale`.
-    pub(super) fn line_half_rows(&self, scale: u32) -> u32 {
+    /// Returns the grid rows of one line box at `scale`.
+    pub(super) fn line_rows(&self, scale: u32) -> u32 {
         self.box_height().saturating_mul(scale)
     }
 
-    /// Returns the half rows from the top of one line to the top of the
-    /// next at `scale`: the whole rows of a line box, and one blank row.
-    pub(super) fn pitch(&self, scale: u32) -> u32 {
-        self.line_half_rows(scale)
-            .div_ceil(2)
+    /// Returns the grid rows from the top of one line to the top of the
+    /// next at `scale`: the whole cell rows of a line box, and one blank row.
+    pub(super) fn pitch(&self, scale: u32, grid: BigGrid) -> u32 {
+        self.line_rows(scale)
+            .div_ceil(grid.down())
             .saturating_add(1)
-            .saturating_mul(2)
+            .saturating_mul(grid.down())
     }
 
-    /// Returns the half rows that the text takes at `scale`. Each line
-    /// starts a whole number of rows below the last, one blank row apart.
-    pub(super) fn half_rows(&self, scale: u32) -> u32 {
+    /// Returns the grid rows that the text takes at `scale`. Each line
+    /// starts a whole number of cell rows below the last, one blank row
+    /// apart.
+    pub(super) fn grid_rows(&self, scale: u32, grid: BigGrid) -> u32 {
         let lines = u32::try_from(self.lines.len()).unwrap_or(u32::MAX).max(1);
         (lines - 1)
-            .saturating_mul(self.pitch(scale))
-            .saturating_add(self.line_half_rows(scale))
+            .saturating_mul(self.pitch(scale, grid))
+            .saturating_add(self.line_rows(scale))
     }
 
     /// Returns the size in cells that the text takes at `scale`.
-    pub(super) fn size(&self, scale: u32) -> Size {
+    pub(super) fn size(&self, scale: u32, grid: BigGrid) -> Size {
         Size::new(
-            self.width().saturating_mul(scale),
-            self.half_rows(scale).div_ceil(2),
+            self.width().saturating_mul(scale).div_ceil(grid.across()),
+            self.grid_rows(scale, grid).div_ceil(grid.down()),
         )
     }
 
     /// Returns the largest scale that fits `rows` rows and, when given,
     /// `columns` columns, or 0 when none does.
-    fn max_scale(&self, rows: u32, columns: Option<u32>) -> u32 {
+    fn max_scale(&self, rows: u32, columns: Option<u32>, grid: BigGrid) -> u32 {
         let lines = u32::try_from(self.lines.len()).unwrap_or(u32::MAX).max(1);
-        let room = rows.saturating_mul(2);
+        let room = rows.saturating_mul(grid.down());
         // The line boxes alone bound the scale. The rows that round each
         // line up and separate the lines can take a few steps off it.
         let mut by_rows = room / lines.saturating_mul(self.box_height());
-        while by_rows > 0 && self.half_rows(by_rows) > room {
+        while by_rows > 0 && self.grid_rows(by_rows, grid) > room {
             by_rows -= 1;
         }
         let by_columns = match (columns, self.width()) {
-            (Some(columns), width) if width > 0 => columns / width,
+            (Some(columns), width) if width > 0 => columns.saturating_mul(grid.across()) / width,
             _ => u32::MAX,
         };
         by_rows.min(by_columns)
@@ -256,38 +296,69 @@ impl Laid {
     }
 }
 
-/// The face, scale, and layout that draw text.
+/// The face, scale, grid, and layout that draw text.
 #[derive(Debug, Clone)]
 pub(super) struct Resolved {
     /// The text laid out in the chosen face.
     pub(super) laid: Laid,
     /// The chosen scale.
     pub(super) scale: u32,
+    /// The chosen grid.
+    pub(super) grid: BigGrid,
 }
 
 impl Resolved {
     /// Returns the size in cells that the text takes.
     pub(super) fn size(&self) -> Size {
-        self.laid.size(self.scale)
+        self.laid.size(self.scale, self.grid)
     }
 }
 
-/// Choose the face and scale of `lines` under `size`, in an area of at most
-/// `width` columns and `height` rows. `None` is unbounded. The line box also
-/// holds the glyphs of `strut`.
+/// One candidate rendering of a fit: a face, a grid, and the largest scale
+/// that fits.
+struct Candidate<'a> {
+    /// Position of the face in [`BigFace::ALL`].
+    order: usize,
+    /// The text laid out in the face.
+    laid: &'a Laid,
+    /// The grid.
+    grid: BigGrid,
+    /// The scale.
+    scale: u32,
+    /// The size in cells.
+    size: Size,
+}
+
+impl Candidate<'_> {
+    /// Quarter rows of one font pixel, a scale that both grids share.
+    fn pixel(&self) -> u32 {
+        self.scale.saturating_mul(self.grid.quarters())
+    }
+
+    /// The cap height in quarter rows.
+    fn cap(&self) -> u32 {
+        self.laid.face.cap_height().saturating_mul(self.pixel())
+    }
+}
+
+/// Choose the face, scale, and grid of `lines` under `size`, in an area of at
+/// most `width` columns and `height` rows. `None` is unbounded. The line box
+/// also holds the glyphs of `strut`. A fit chooses from `grids`, and an exact
+/// size and unbounded text take the half grid.
 pub(super) fn resolve(
     lines: &[Vec<(usize, char)>],
     strut: &str,
     weight: BigWeight,
     size: BigSize,
-    width: Option<u32>,
-    height: Option<u32>,
+    (width, height): (Option<u32>, Option<u32>),
+    grids: &[BigGrid],
 ) -> Resolved {
     let rows = match size {
         BigSize::Exact { face, scale } => {
             return Resolved {
                 laid: Laid::new(face, weight, lines, strut),
                 scale: scale.max(1),
+                grid: BigGrid::Half,
             };
         }
         BigSize::Fit => height,
@@ -299,37 +370,54 @@ pub(super) fn resolve(
         return Resolved {
             laid: Laid::new(BigFace::Compact, weight, lines, strut),
             scale: 1,
+            grid: BigGrid::Half,
         };
     };
     let laid = BigFace::ALL.map(|face| Laid::new(face, weight, lines, strut));
-    let best = laid
-        .iter()
-        .enumerate()
-        .filter_map(|(order, laid)| {
-            let scale = laid.max_scale(rows, width);
-            (scale > 0).then(|| (order, laid, scale, laid.size(scale)))
-        })
-        .max_by(|a, b| {
-            let cap = |laid: &Laid, scale: u32| laid.face.cap_height().saturating_mul(scale);
-            cap(a.1, a.2)
-                .cmp(&cap(b.1, b.2))
-                .then(b.3.h.cmp(&a.3.h))
-                .then(b.2.cmp(&a.2))
-                .then(b.3.w.cmp(&a.3.w))
-                .then(b.0.cmp(&a.0))
-        });
-    let (laid, scale) = match best {
-        Some((_, laid, scale, _)) => (laid.clone(), scale),
-        // Nothing fits: the smallest rendering, which the area clips.
-        None => laid
-            .iter()
+    let candidates = |scale: Option<u32>| -> Vec<Candidate<'_>> {
+        laid.iter()
             .enumerate()
-            .min_by_key(|(order, laid)| {
-                let size = laid.size(1);
-                (size.h, size.w, *order)
+            .flat_map(|(order, laid)| grids.iter().map(move |grid| (order, laid, *grid)))
+            .filter_map(|(order, laid, grid)| {
+                let scale = scale.unwrap_or_else(|| laid.max_scale(rows, width, grid));
+                (scale > 0).then(|| Candidate {
+                    order,
+                    laid,
+                    grid,
+                    scale,
+                    size: laid.size(scale, grid),
+                })
             })
-            .map(|(_, laid)| (laid.clone(), 1))
-            .unwrap_or_else(|| (Laid::new(BigFace::Compact, weight, lines, strut), 1)),
+            .collect()
     };
-    Resolved { laid, scale }
+    // The largest capitals win. At equal size, the fewer rows, then the
+    // smaller pixels, which keep more of the design, then the narrower
+    // text, then the half grid, then the earlier face.
+    let best = candidates(None).into_iter().max_by(|a, b| {
+        a.cap()
+            .cmp(&b.cap())
+            .then(b.size.h.cmp(&a.size.h))
+            .then(b.pixel().cmp(&a.pixel()))
+            .then(b.size.w.cmp(&a.size.w))
+            .then((b.grid as u8).cmp(&(a.grid as u8)))
+            .then(b.order.cmp(&a.order))
+    });
+    let chosen = best.or_else(|| {
+        // Nothing fits: the smallest rendering, which the area clips.
+        candidates(Some(1))
+            .into_iter()
+            .min_by_key(|c| (c.size.h, c.size.w, c.grid as u8, c.order))
+    });
+    match chosen {
+        Some(c) => Resolved {
+            laid: c.laid.clone(),
+            scale: c.scale,
+            grid: c.grid,
+        },
+        None => Resolved {
+            laid: Laid::new(BigFace::Compact, weight, lines, strut),
+            scale: 1,
+            grid: BigGrid::Half,
+        },
+    }
 }

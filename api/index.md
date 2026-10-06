@@ -32,9 +32,9 @@ Canopy: A terminal UI library.
 - Publish: crates.io
 - Declared features: testing
 - Workspace dependencies: canopy-derive, canopy-geom
-- Workspace dependents: canopy (dev), canopy-derive (dev), canopy-mcp, canopy-widgets, canopyctl, gyms, hello, todo
+- Workspace dependents: canopy (dev), canopy-derive (dev), canopy-mcp, canopy-widgets, canopyctl, gyms, hello, mosaic-score, todo
 - Unnameable: crate::core::commands::sealed::Inject, crate::core::context::sealed::Context, crate::core::context::sealed::ViewContext
-- Items: 663
+- Items: 673
 - Exposes: canopy-geom, futures-channel, ruau, ruau-declaration, schemars, serde_core, serde_json
 
 ## canopy-mcp
@@ -47,17 +47,27 @@ MCP and smoke-test helpers for canopy applications.
 - Items: 53
 - Exposes: canopy, ruau-script-api, schemars, serde_core, serde_json, tmcp
 
+## canopy-mosaic
+
+Draw pictures and large text with block mosaic characters.
+
+- Publish: crates.io
+- Workspace dependencies: none
+- Workspace dependents: canopy-widgets, mosaic-score
+- Items: 58
+- Exposes: none
+
 ## canopy-widgets
 
 Built-in widgets for canopy applications.
 
 - Publish: crates.io
 - Declared features: default, devtools, graphics, syntax, terminal-widget
-- Workspace dependencies: canopy
+- Workspace dependencies: canopy, canopy-mosaic
 - Workspace dependents: canopyctl, gyms, hello, todo
 - Unnameable: crate::image_view::ZoomDirection
-- Items: 718
-- Exposes: canopy, grep-regex, image, syntect
+- Items: 735
+- Exposes: canopy, canopy-mosaic, grep-regex, image, syntect
 
 ## hello
 
@@ -86,5 +96,7 @@ Todo application used as Canopy's end-to-end example and smoke-test target.
 - canopyctl: workspace dependencies: canopy, canopy-mcp, canopy-widgets
 
 - gyms: workspace dependencies: canopy, canopy-mcp, canopy-widgets
+
+- mosaic-score: workspace dependencies: canopy, canopy-mosaic
 
 - xtask: workspace dependencies: none

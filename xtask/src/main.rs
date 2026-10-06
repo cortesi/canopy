@@ -4,6 +4,7 @@
 mod big_text;
 mod cargo_env;
 mod luau_grammar;
+mod unicode_mosaics;
 
 use std::{
     fs,
@@ -48,6 +49,25 @@ enum Task {
         #[arg(long)]
         check: bool,
     },
+    /// Score the block mosaics on the standard suite of images and text, as
+    /// the eye sees them at two viewing distances, against the baseline.
+    /// Arguments pass to `mosaic-score`, for example `--update`,
+    /// `--filter NAME`, `--sheets`, or `--detail`.
+    Score {
+        /// The arguments of `mosaic-score`.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Extract the names of the mosaic characters from a copy of
+    /// `UnicodeData.txt` into the fixture of canopy-mosaic.
+    UnicodeMosaics {
+        /// A copy of `UnicodeData.txt`, version 16.0 or later.
+        data: PathBuf,
+        /// Fail when the fixture differs from what the data gives, and write
+        /// nothing.
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 /// Run the `cargo xtask` entry point.
@@ -60,6 +80,12 @@ fn main() -> ExitCode {
         Task::Gallery => run_gallery(&root),
         Task::LuauGrammar { checkout } => luau_grammar::run(&root, &checkout),
         Task::BigText { check } => big_text::run(&root, check),
+        Task::UnicodeMosaics { data, check } => unicode_mosaics::run(&root, &data, check),
+        Task::Score { args } => {
+            let mut command = vec!["run", "--quiet", "-p", "mosaic-score", "--"];
+            command.extend(args.iter().map(String::as_str));
+            run_cargo_command(&root, &command)
+        }
     })
 }
 

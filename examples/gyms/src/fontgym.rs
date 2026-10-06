@@ -20,6 +20,7 @@ use canopy::{
 use canopy_widgets::{
     BoxGlyphs, Container, FontBanner, Frame, List, Selectable, Text,
     font::{Font, FontEffects, FontRenderer, LayoutOptions},
+    mosaic::{self, Tier},
 };
 
 use crate::fixed_row;
@@ -173,7 +174,7 @@ impl Widget for FontGym {
         let controls_frame = panel(ctx, controls_id, "Controls", CONTROLS_PANEL_WIDTH)?;
 
         let status_id = ctx.create_detached(
-            Text::new(status_text(BANNER_HEIGHT, style_state))
+            Text::new(status_text(BANNER_HEIGHT, style_state, None))
                 .with_style("fontgym/legend")
                 .with_wrap_width(STATUS_WRAP_WIDTH),
         )?;
@@ -381,6 +382,11 @@ impl FontBlock {
         self.with_banner(ctx, |banner| banner.set_effects(effects))
     }
 
+    /// Update the banner's own mosaic tier.
+    fn set_tier(&mut self, ctx: &mut dyn Context, tier: Option<Tier>) -> Result<()> {
+        self.with_banner(ctx, |banner| banner.set_tier(tier))
+    }
+
     /// Update the banner height.
     fn set_banner_height(&mut self, ctx: &mut dyn Context, height: u32) -> Result<()> {
         self.banner_height = height;
@@ -494,6 +500,8 @@ struct FontGymInput {
     style_state: FontEffects,
     /// Status text widget to update.
     status_text: canopy::TypedId<Text>,
+    /// The banners' own mosaic tier, or none to follow the terminal.
+    tier: Option<Tier>,
 }
 
 impl FontGymInput {
@@ -524,6 +532,7 @@ impl FontGymInput {
             banner_height,
             style_state,
             status_text,
+            tier: None,
         }
     }
 
@@ -612,6 +621,17 @@ impl FontGymInput {
         Ok(())
     }
 
+    /// Step every banner to the next mosaic tier, to compare them.
+    fn cycle_tier(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        self.tier = mosaic::cycle(self.tier);
+        for target in &self.targets {
+            ctx.with_widget_mut(*target, |block: &mut FontBlock, ctx| {
+                block.set_tier(ctx, self.tier)
+            })?;
+        }
+        self.sync_status(ctx)
+    }
+
     /// Toggle a style attribute and refresh styles.
     fn toggle_style(&mut self, ctx: &mut dyn Context, key: char) -> Result<bool> {
         let flag = match key.to_ascii_lowercase() {
@@ -631,7 +651,7 @@ impl FontGymInput {
 
     /// Update the status panel contents.
     fn sync_status(&self, ctx: &mut dyn Context) -> Result<()> {
-        let status = status_text(self.banner_height, self.style_state);
+        let status = status_text(self.banner_height, self.style_state, self.tier);
         ctx.with_widget_mut(self.status_text, |text: &mut Text, _| {
             text.set_text(status);
             Ok(())
@@ -649,6 +669,7 @@ impl FontGymInput {
             return match normalized.key {
                 key::KeyCode::Up => Some(FontInputCommand::Height(1)),
                 key::KeyCode::Down => Some(FontInputCommand::Height(-1)),
+                key::KeyCode::Char('t' | 'T') => Some(FontInputCommand::CycleTier),
                 key::KeyCode::Char(character) if is_style_key(character) => {
                     Some(FontInputCommand::ToggleStyle(character))
                 }
@@ -674,6 +695,8 @@ enum FontInputCommand {
     Height(i32),
     /// Toggle a style attribute.
     ToggleStyle(char),
+    /// Step every banner to the next mosaic tier.
+    CycleTier,
     /// Insert one character.
     Insert(char),
     /// Delete backward.
@@ -738,6 +761,7 @@ impl Widget for FontGymInput {
             FontInputCommand::ToggleStyle(character) => {
                 let _ = self.toggle_style(ctx, character)?;
             }
+            FontInputCommand::CycleTier => self.cycle_tier(ctx)?,
             FontInputCommand::Insert(character) => {
                 self.insert_char(character);
                 changed = true;
@@ -843,6 +867,12 @@ const CONTROLS_LEGEND: &[&[LegendSegment]] = &[
         LegendSegment::text(" Overline   "),
         LegendSegment::key("Ctrl+X"),
         LegendSegment::text(" Strike"),
+    ],
+    &[
+        LegendSegment::title("Glyphs"),
+        LegendSegment::text(" : "),
+        LegendSegment::key("Ctrl+T"),
+        LegendSegment::text(" Next mosaic tier"),
     ],
     &[
         LegendSegment::title("Input"),
@@ -1034,10 +1064,11 @@ fn font_styles() -> StyleMap {
 }
 
 /// Build the status text for the current state.
-fn status_text(height: u32, state: FontEffects) -> String {
+fn status_text(height: u32, state: FontEffects, tier: Option<Tier>) -> String {
     let flag = |enabled: bool| if enabled { "on " } else { "off" };
     [
         format!("Height : {}", height),
+        format!("Glyphs : {}", mosaic::label(tier)),
         format!(
             "Bold: {}  Italic: {}  Underline: {}",
             flag(state.bold),
@@ -1198,17 +1229,17 @@ mod tests {
                 assert_eq!(input.cursor_column(), column);
             }
             assert_eq!(
-                input.measure(MeasureConstraints {
-                    width: Constraint::Unbounded,
-                    height: Constraint::Unbounded,
-                }),
+                input.measure(MeasureConstraints::new(
+                    Constraint::Unbounded,
+                    Constraint::Unbounded
+                )),
                 Measurement::Fixed(Size::new(width, 1))
             );
             assert_eq!(
-                input.measure(MeasureConstraints {
-                    width: Constraint::AtMost(1),
-                    height: Constraint::Exact(1),
-                }),
+                input.measure(MeasureConstraints::new(
+                    Constraint::AtMost(1),
+                    Constraint::Exact(1)
+                )),
                 Measurement::Fixed(Size::new(1, 1))
             );
         }

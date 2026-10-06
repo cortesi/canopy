@@ -63,6 +63,7 @@ use crate::{
     error::Result,
     geom::{PointI32, Size},
     input::{Event, key::Key},
+    render::Glyphs,
     style::{
         StyleMap, WidgetStyles,
         themes::{self, Palette},
@@ -329,6 +330,20 @@ impl Canopy {
     /// Return the palette of the active theme.
     pub fn palette(&self) -> &Palette {
         &self.palette
+    }
+
+    /// Return the block mosaic characters that the terminal draws well.
+    pub fn glyphs(&self) -> Glyphs {
+        self.core.glyphs
+    }
+
+    /// Set the block mosaic characters that the terminal draws well. Sizes
+    /// can depend on them, so a change lays the frame out again.
+    pub fn set_glyphs(&mut self, glyphs: Glyphs) {
+        if self.core.glyphs != glyphs {
+            self.core.glyphs = glyphs;
+            self.core.invalidate(crate::Invalidation::Layout);
+        }
     }
 
     /// Switch to the theme `palette`, reapplying every widget style rule set.
