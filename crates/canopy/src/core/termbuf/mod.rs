@@ -321,6 +321,14 @@ impl TermBuf {
         if width == 0 {
             return Ok(0);
         }
+        // A control character stands alone in its grapheme. A line break
+        // measures one column, but a terminal would move its cursor instead
+        // of drawing it, so the column paints blank.
+        let grapheme = if grapheme.chars().any(char::is_control) {
+            " "
+        } else {
+            grapheme
+        };
         let Some(index) = self.idx(p) else {
             return Ok(0);
         };

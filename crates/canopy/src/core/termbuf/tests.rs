@@ -225,6 +225,23 @@ fn text_write() {
 }
 
 #[test]
+fn text_paints_line_breaks_blank() {
+    let mut tb = TermBuf::new(Size::new(9, 1), 'x', def_style())
+        .expect("test render target should allocate");
+    tb.text(&def_style(), Line::new(0, 0, 9), "a\nb\r\nc\rd\x1b")
+        .expect("test buffer mutation should succeed");
+
+    BufTest::new(&tb).assert_matches(buf!["a b c d  "]);
+    for x in 0..tb.size().w {
+        let cell = tb.get(Point { x, y: 0 }).expect("missing cell");
+        assert!(
+            !cell.ch.is_control() && !cell.suffix.chars().any(char::is_control),
+            "cell {x} holds a control character: {cell:?}"
+        );
+    }
+}
+
+#[test]
 fn text_handles_combining_and_wide_graphemes() {
     let style = def_style();
     let mut tb =
