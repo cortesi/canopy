@@ -172,6 +172,12 @@ impl Button {
         self.active = active;
     }
 
+    /// Replace the label, so a button can show the state of what it
+    /// changes. A label of another width takes effect at the next layout.
+    pub fn set_label(&mut self, label: impl Into<String>) {
+        self.label = label.into();
+    }
+
     /// Return the size that the button takes: its label with padding, in the
     /// rows of its look.
     pub fn size(&self) -> Size {

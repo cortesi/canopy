@@ -309,7 +309,7 @@ impl Demo {
             Self::Focusgym => {
                 focusgym::binding_setup(builder.configure(focusgym::FocusGym::register))
             }
-            Self::Fontgym => fontgym::binding_setup(builder),
+            Self::Fontgym => fontgym::binding_setup(builder.configure(fontgym::FontGym::register)),
             Self::Framegym => {
                 framegym::binding_setup(builder.configure(framegym::FrameGym::register))
             }

@@ -1,50 +1,36 @@
-use std::time::Duration;
+//! The font gym: TrueType fonts drawn as banners, with controls for the
+//! text, its size, its effects, and the mosaic tier that draws it.
+
+use std::{iter, time::Duration};
 
 use canopy::{
-    CanopyBuilder, ChangeOutcome, Context, ContextExt, EventOutcome, NodeId, NodeName, ViewContext,
-    Widget,
-    error::Result,
-    geom::{Line, Point, Size},
-    input::{Event, key},
-    layout::{
-        Align, Edges, Layout, MeasureConstraints, Measurement, ScrollDirection, ScrollOp, View,
-    },
-    render::{
-        Render,
-        cursor::{self, CursorRequest},
-    },
+    CanopyBuilder, Context, ContextExt, NodeName, Register, Setup, TypedId, ViewContext, Widget,
+    derive_commands,
+    error::{Error, Result},
+    geom::{Line, Size},
+    layout::{Align, Edges, Layout, MeasureConstraints, Measurement, ScrollOp},
+    render::Render,
     rgb,
-    style::{Attr, Color, Drift, GradientSpec, GradientStop, Paint, StyleMap},
+    style::{Attr, Color, Drift, GradientSpec, GradientStop, Paint, StyleRules, themes::Palette},
     text,
 };
 use canopy_widgets::{
-    BoxGlyphs, Container, FontBanner, Frame, List, Selectable, Text,
+    BoxGlyphs, Button, Container, FontBanner, Frame, Input, List, Selectable, Text,
     font::{Font, FontEffects, FontRenderer, LayoutOptions},
     mosaic::{self, Tier},
 };
 
-use crate::fixed_row;
-
 /// Initial text rendered by the banners.
 const DEFAULT_TEXT: &str = "Canopy";
-/// Fixed height for the input frame.
-const INPUT_HEIGHT: u32 = 3;
-/// Fixed height for each font banner.
+/// Initial height of each font banner, in rows.
 const BANNER_HEIGHT: u32 = 16;
-/// Minimum height for banner blocks.
+/// Least height of a font banner, in rows.
 const MIN_BANNER_HEIGHT: u32 = 4;
-/// Fixed height for the status row.
-const STATUS_HEIGHT: u32 = 13;
-/// Minimum width for the controls panel.
-const CONTROLS_PANEL_WIDTH: u32 = 44;
-/// Minimum width for the status panel.
-const STATUS_PANEL_WIDTH: u32 = 48;
-/// Vertical padding inside control panels.
-const PANEL_PADDING_V: u32 = 1;
-/// Horizontal padding inside control panels.
-const PANEL_PADDING_H: u32 = 1;
-/// Wrap width for status text.
-const STATUS_WRAP_WIDTH: u32 = 44;
+/// Columns of the label at the start of each row of controls.
+const CONTROL_LABEL_WIDTH: u32 = 8;
+/// Buttons to a row in a group of controls, so the panel fits a terminal 80
+/// columns wide.
+const CONTROL_COLUMNS: usize = 3;
 /// Label height beneath each banner.
 const LABEL_HEIGHT: u32 = 1;
 /// Gap between banner and label.
@@ -113,14 +99,435 @@ const BANNERS: [BannerSpec; 4] = [
     },
 ];
 
-/// Demo node that renders ASCII font banners.
-#[derive(Default)]
-pub struct FontGym;
+/// A text effect that the controls toggle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Effect {
+    /// Thicker strokes.
+    Bold,
+    /// Slanted glyphs.
+    Italic,
+    /// A line beneath the text.
+    Underline,
+    /// Lower contrast.
+    Dim,
+    /// A line above the text.
+    Overline,
+    /// A line through the text.
+    Strike,
+}
 
+impl Effect {
+    /// Every effect, in the order the controls show them.
+    const ALL: [Self; 6] = [
+        Self::Bold,
+        Self::Italic,
+        Self::Underline,
+        Self::Dim,
+        Self::Overline,
+        Self::Strike,
+    ];
+
+    /// The name of the effect, as its control shows it.
+    fn name(self) -> &'static str {
+        match self {
+            Self::Bold => "Bold",
+            Self::Italic => "Italic",
+            Self::Underline => "Underline",
+            Self::Dim => "Dim",
+            Self::Overline => "Overline",
+            Self::Strike => "Strike",
+        }
+    }
+
+    /// The effect a command names, without regard to case.
+    fn named(name: &str) -> Result<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|effect| effect.name().eq_ignore_ascii_case(name))
+            .ok_or_else(|| Error::Invalid(format!("no text effect named {name}")))
+    }
+
+    /// The letter of the name that its key, Ctrl and the letter, uses.
+    fn key(self) -> char {
+        self.name().chars().next().unwrap_or(' ')
+    }
+
+    /// The flag of the effect in `effects`.
+    fn flag(self, effects: &mut FontEffects) -> &mut bool {
+        match self {
+            Self::Bold => &mut effects.bold,
+            Self::Italic => &mut effects.italic,
+            Self::Underline => &mut effects.underline,
+            Self::Dim => &mut effects.dim,
+            Self::Overline => &mut effects.overline,
+            Self::Strike => &mut effects.strike,
+        }
+    }
+
+    /// Whether the effect is on in `effects`.
+    fn on(self, mut effects: FontEffects) -> bool {
+        *self.flag(&mut effects)
+    }
+
+    /// The label of its control, a box checked when the effect is on.
+    fn label(self, on: bool) -> String {
+        format!("{} {}", if on { "[x]" } else { "[ ]" }, self.name())
+    }
+}
+
+/// The tiers the glyph controls offer: the terminal's own glyphs, then each
+/// tier from half blocks to the full tier.
+fn tiers() -> impl Iterator<Item = Option<Tier>> {
+    iter::once(None).chain(Tier::ALL.map(Some))
+}
+
+/// The label of a glyph control, marked when its tier is the one in use.
+fn tier_label(tier: Option<Tier>, chosen: bool) -> String {
+    format!(
+        "{} {}",
+        if chosen { "(•)" } else { "( )" },
+        mosaic::label(tier)
+    )
+}
+
+/// The value the size control shows.
+fn size_label(height: u32) -> String {
+    format!("{height} rows")
+}
+
+/// The nodes that the gym updates as its state changes.
+struct Nodes {
+    /// The list of font blocks.
+    list: TypedId<List<FontBlock>>,
+    /// The font blocks.
+    blocks: Vec<TypedId<FontBlock>>,
+    /// The value of the size control.
+    size: TypedId<Text>,
+    /// The glyph controls, one to each tier in [`tiers`] order.
+    tiers: Vec<TypedId<Button>>,
+    /// The effect controls, one to each effect in [`Effect::ALL`] order.
+    effects: Vec<TypedId<Button>>,
+}
+
+/// Demo node that renders TrueType fonts as banners, under one panel of
+/// controls that change the banners and show what they are set to.
+pub struct FontGym {
+    /// The text the banners draw.
+    text: String,
+    /// The height of each banner, in rows.
+    height: u32,
+    /// The effects the banners draw with.
+    effects: FontEffects,
+    /// The banners' own mosaic tier, or none to follow the terminal.
+    tier: Option<Tier>,
+    /// The nodes to update, once mounted.
+    nodes: Option<Nodes>,
+}
+
+impl Default for FontGym {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive_commands]
 impl FontGym {
     /// Construct a new font gym demo.
     pub fn new() -> Self {
-        Self
+        Self {
+            text: DEFAULT_TEXT.to_owned(),
+            height: BANNER_HEIGHT,
+            effects: FontEffects::default(),
+            tier: None,
+            nodes: None,
+        }
+    }
+
+    /// Draw `text` in every banner.
+    #[command]
+    pub fn set_text(&mut self, c: &mut dyn Context, text: String) -> Result<()> {
+        self.text = text;
+        self.each_block(c, |block, ctx, gym| block.set_text(ctx, gym.text.clone()))
+    }
+
+    /// Change the height of the banners by `delta` rows.
+    #[command]
+    pub fn resize(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
+        let height = self
+            .height
+            .saturating_add_signed(delta)
+            .max(MIN_BANNER_HEIGHT);
+        if height == self.height {
+            return Ok(());
+        }
+        self.height = height;
+        self.each_block(c, |block, ctx, gym| {
+            block.set_banner_height(ctx, gym.height)
+        })?;
+        if let Some(nodes) = &self.nodes {
+            for block in &nodes.blocks {
+                c.set_layout_override((*block).into(), block_layout(height).into())?;
+            }
+        }
+        self.sync_controls(c)
+    }
+
+    /// Turn the effect named `effect` on or off.
+    #[command]
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "command arguments are owned values"
+    )]
+    pub fn toggle(&mut self, c: &mut dyn Context, effect: String) -> Result<()> {
+        let flag = Effect::named(&effect)?.flag(&mut self.effects);
+        *flag = !*flag;
+        self.each_block(c, |block, ctx, gym| block.set_effects(ctx, gym.effects))?;
+        self.sync_controls(c)
+    }
+
+    /// Draw the banners in the tier at `index` of the glyph controls: 0
+    /// follows the terminal, and 1 to 4 run from half blocks to the full
+    /// tier.
+    #[command]
+    pub fn set_tier(&mut self, c: &mut dyn Context, index: usize) -> Result<()> {
+        let tier = tiers()
+            .nth(index)
+            .ok_or_else(|| Error::Invalid(format!("no mosaic tier at {index}")))?;
+        self.use_tier(c, tier)
+    }
+
+    /// Draw the banners in the next tier of the glyph controls, wrapping to
+    /// the terminal's own glyphs.
+    #[command]
+    pub fn next_tier(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.use_tier(c, mosaic::cycle(self.tier))
+    }
+
+    /// Scroll the fonts by `lines` rows: negative moves up.
+    #[command]
+    pub fn scroll(&self, c: &mut dyn Context, lines: i32) -> Result<()> {
+        self.scroll_fonts(c, ScrollOp::By(0, lines))
+    }
+
+    /// Scroll the fonts by `pages` pages: negative moves up.
+    #[command]
+    pub fn page(&self, c: &mut dyn Context, pages: i32) -> Result<()> {
+        self.scroll_fonts(c, ScrollOp::pages(pages))
+    }
+
+    /// Draw the banners in `tier`.
+    fn use_tier(&mut self, c: &mut dyn Context, tier: Option<Tier>) -> Result<()> {
+        self.tier = tier;
+        self.each_block(c, |block, ctx, gym| block.set_tier(ctx, gym.tier))?;
+        self.sync_controls(c)
+    }
+
+    /// Scroll the list of fonts.
+    fn scroll_fonts(&self, c: &mut dyn Context, op: ScrollOp) -> Result<()> {
+        let Some(nodes) = &self.nodes else {
+            return Ok(());
+        };
+        c.with_widget_mut(nodes.list, |_: &mut List<FontBlock>, ctx| {
+            ctx.scroll(op);
+            Ok(())
+        })
+    }
+
+    /// Apply `f` to every font block.
+    fn each_block(
+        &self,
+        c: &mut dyn Context,
+        f: impl Fn(&mut FontBlock, &mut dyn Context, &Self) -> Result<()>,
+    ) -> Result<()> {
+        let Some(nodes) = &self.nodes else {
+            return Ok(());
+        };
+        for block in &nodes.blocks {
+            c.with_widget_mut(*block, |block: &mut FontBlock, ctx| f(block, ctx, self))?;
+        }
+        Ok(())
+    }
+
+    /// Show the current state in the controls.
+    fn sync_controls(&self, c: &mut dyn Context) -> Result<()> {
+        let Some(nodes) = &self.nodes else {
+            return Ok(());
+        };
+        let height = self.height;
+        c.with_widget_mut(nodes.size, |text: &mut Text, _| {
+            text.set_text(size_label(height));
+            Ok(())
+        })?;
+        for (tier, button) in tiers().zip(&nodes.tiers) {
+            let label = tier_label(tier, tier == self.tier);
+            c.with_widget_mut(*button, |button: &mut Button, _| {
+                button.set_label(label);
+                Ok(())
+            })?;
+        }
+        for (effect, button) in Effect::ALL.into_iter().zip(&nodes.effects) {
+            let label = effect.label(effect.on(self.effects));
+            c.with_widget_mut(*button, |button: &mut Button, _| {
+                button.set_label(label);
+                Ok(())
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Add a row of controls under `parent`, headed by `label`.
+    fn control_row(
+        c: &mut dyn Context,
+        parent: TypedId<Container>,
+        label: &str,
+    ) -> Result<TypedId<Container>> {
+        let row = c.add_child(parent, Container::row())?;
+        c.set_layout_override(
+            row.into(),
+            Layout::row()
+                .gap(1)
+                .flex_horizontal(1)
+                .fixed_height(1)
+                .into(),
+        )?;
+        let label = c.add_child(row, Text::new(label).with_style("fontgym/control"))?;
+        c.set_layout_override(
+            label.into(),
+            Layout::fill().fixed_width(CONTROL_LABEL_WIDTH).into(),
+        )?;
+        Ok(row)
+    }
+
+    /// Add a group of `buttons` under `parent`, headed by `label`, in rows of
+    /// [`CONTROL_COLUMNS`], each column as wide as its widest button.
+    fn button_grid(
+        c: &mut dyn Context,
+        parent: TypedId<Container>,
+        label: &str,
+        buttons: Vec<Button>,
+    ) -> Result<Vec<TypedId<Button>>> {
+        // A row between rows of buttons keeps their faces apart.
+        let group = c.add_child(parent, Container::column())?;
+        let rows = u32::try_from(buttons.len().div_ceil(CONTROL_COLUMNS)).unwrap_or(u32::MAX);
+        c.set_layout_override(
+            group.into(),
+            Layout::column()
+                .gap(1)
+                .flex_horizontal(1)
+                .fixed_height(rows * 2 - 1)
+                .into(),
+        )?;
+        let widths: Vec<u32> = (0..CONTROL_COLUMNS)
+            .map(|column| {
+                buttons
+                    .iter()
+                    .skip(column)
+                    .step_by(CONTROL_COLUMNS)
+                    .map(|button| button.size().w)
+                    .max()
+                    .unwrap_or(0)
+            })
+            .collect();
+        let mut ids = Vec::with_capacity(buttons.len());
+        let mut row = None;
+        for (index, button) in buttons.into_iter().enumerate() {
+            let column = index % CONTROL_COLUMNS;
+            if column == 0 {
+                let heading = if index == 0 { label } else { "" };
+                row = Some(Self::control_row(c, group, heading)?);
+            }
+            let Some(row) = row else {
+                continue;
+            };
+            let id = c.add_child(row, button)?;
+            c.set_layout_override(id.into(), Layout::fill().fixed_width(widths[column]).into())?;
+            ids.push(id);
+        }
+        Ok(ids)
+    }
+
+    /// Rows of the panel of controls, inside its frame: text, size, and the
+    /// glyph and style groups, with a row between each group and between the
+    /// rows of a group.
+    fn control_rows() -> u32 {
+        let grid =
+            |count: usize| u32::try_from(count.div_ceil(CONTROL_COLUMNS)).unwrap_or(0) * 2 - 1;
+        let groups = 4;
+        1 + 1 + grid(tiers().count()) + grid(Effect::ALL.len()) + (groups - 1)
+    }
+
+    /// Build the panel of controls over the fonts in `list`, and return it
+    /// with its text field and the nodes that the gym updates.
+    fn mount_controls(
+        &self,
+        c: &mut dyn Context,
+        list: TypedId<List<FontBlock>>,
+        blocks: Vec<TypedId<FontBlock>>,
+    ) -> Result<(TypedId<Frame>, TypedId<Input>, Nodes)> {
+        let frame = c.create_detached(
+            Frame::new()
+                .with_title("Controls")
+                .with_glyphs(BoxGlyphs::SINGLE_THICK),
+        )?;
+        let rows = c.add_child(frame, Container::column())?;
+        c.set_layout_override(
+            rows.into(),
+            Layout::column()
+                .gap(1)
+                .flex_horizontal(1)
+                .padding(Edges::symmetric(0, 1))
+                .into(),
+        )?;
+
+        let text = Self::control_row(c, rows, "Text")?;
+        let input = c.add_child(
+            text,
+            Input::new(&self.text).with_on_change(Self::spec_set_text().call()),
+        )?;
+        c.set_layout_override(input.into(), Layout::fill().flex_horizontal(1).into())?;
+
+        let size_row = Self::control_row(c, rows, "Size")?;
+        c.add_child(
+            size_row,
+            Button::new("−").with_command(Self::call_resize(-1)),
+        )?;
+        let size = c.add_child(
+            size_row,
+            Text::new(size_label(self.height)).with_style("fontgym/value"),
+        )?;
+        c.set_layout_override(size.into(), Layout::fill().fixed_width(8).into())?;
+        c.add_child(
+            size_row,
+            Button::new("+").with_command(Self::call_resize(1)),
+        )?;
+
+        let tier_buttons = tiers()
+            .enumerate()
+            .map(|(index, tier)| {
+                Button::new(tier_label(tier, tier == self.tier))
+                    .with_command(Self::call_set_tier(index))
+            })
+            .collect();
+        let tier_buttons = Self::button_grid(c, rows, "Glyphs", tier_buttons)?;
+
+        let effect_buttons = Effect::ALL
+            .into_iter()
+            .map(|effect| {
+                Button::new(effect.label(effect.on(self.effects)))
+                    .with_accelerator(effect.key())
+                    .with_command(Self::call_toggle(effect.name().to_lowercase()))
+            })
+            .collect();
+        let effect_buttons = Self::button_grid(c, rows, "Style", effect_buttons)?;
+
+        let nodes = Nodes {
+            list,
+            blocks,
+            size,
+            tiers: tier_buttons,
+            effects: effect_buttons,
+        };
+        Ok((frame, input, nodes))
     }
 }
 
@@ -130,204 +537,57 @@ impl Widget for FontGym {
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let style_state = FontEffects::default();
-        ctx.set_style(font_styles());
-
-        let list_id = ctx.create_detached(List::new())?;
-        ctx.set_layout_override(list_id.into(), Layout::fill().into())?;
-
-        let blocks = ctx.with_widget_mut(list_id, |list: &mut List<FontBlock>, ctx| {
-            let mut ids = Vec::new();
-            let centered = LayoutOptions {
-                h_align: Align::Center,
-                v_align: Align::Center,
-                ..LayoutOptions::default()
-            };
-            for spec in &BANNERS {
-                let font = Font::from_bytes(spec.font).expect("embedded font loads");
-                let label = font_label(&font);
-                let banner = FontBanner::new(DEFAULT_TEXT, FontRenderer::new(font))
-                    .with_effects(style_state)
-                    .with_style(spec.style)
-                    .with_layout_options(centered);
-                let id = list.append(ctx, FontBlock::new(banner, label, BANNER_HEIGHT))?;
-                ctx.set_layout_override(id.into(), block_layout(BANNER_HEIGHT).into())?;
-                ids.push(id);
-            }
-
-            Ok(ids)
+        let list = ctx.create_detached(List::new())?;
+        ctx.set_layout_override(list.into(), Layout::fill().into())?;
+        let centered = LayoutOptions {
+            h_align: Align::Center,
+            v_align: Align::Center,
+            ..LayoutOptions::default()
+        };
+        let (effects, height, text) = (self.effects, self.height, self.text.clone());
+        let blocks = ctx.with_widget_mut(list, |list: &mut List<FontBlock>, ctx| {
+            BANNERS
+                .iter()
+                .map(|spec| {
+                    let font = Font::from_bytes(spec.font)?;
+                    let label = font_label(&font);
+                    let banner = FontBanner::new(text.clone(), FontRenderer::new(font))
+                        .with_effects(effects)
+                        .with_style(spec.style)
+                        .with_layout_options(centered);
+                    let id = list.append(ctx, FontBlock::new(banner, label, height))?;
+                    ctx.set_layout_override(id.into(), block_layout(height).into())?;
+                    Ok(id)
+                })
+                .collect::<Result<Vec<_>>>()
         })?;
-
-        let font_frame_id = ctx.create_detached(FocusFrame::new(
+        let fonts = ctx.create_detached(
             Frame::new()
                 .with_title("Fonts")
                 .with_glyphs(BoxGlyphs::SINGLE_THICK),
-            list_id,
-        ))?;
-        ctx.set_children(font_frame_id.into(), vec![list_id.into()])?;
-        ctx.set_layout_override(
-            font_frame_id.into(),
-            Layout::fill().padding(Edges::all(1)).into(),
         )?;
+        ctx.set_children(fonts.into(), vec![list.into()])?;
+        ctx.set_layout_override(fonts.into(), Layout::fill().padding(Edges::all(1)).into())?;
 
-        let controls_id = ctx.create_detached(ControlsLegend)?;
-        let controls_frame = panel(ctx, controls_id, "Controls", CONTROLS_PANEL_WIDTH)?;
-
-        let status_id = ctx.create_detached(
-            Text::new(status_text(BANNER_HEIGHT, style_state, None))
-                .with_style("fontgym/legend")
-                .with_wrap_width(STATUS_WRAP_WIDTH),
-        )?;
-        let status_frame = panel(ctx, status_id, "Status", STATUS_PANEL_WIDTH)?;
-
-        let status_row_id = ctx.create_detached(StatusRow)?;
-        ctx.set_children(status_row_id.into(), vec![controls_frame, status_frame])?;
-
-        let input_id = ctx.create_detached(FontGymInput::new(
-            DEFAULT_TEXT,
-            blocks,
-            BANNER_HEIGHT,
-            style_state,
-            status_id,
-        ))?;
-        ctx.set_layout_override(input_id.into(), Layout::fill().into())?;
-
-        let input_frame = ctx.wrap_node(input_id, Frame::new().with_title("Text input"))?;
-        let stack_id = ctx.add_child(ctx.node_id(), Container::column())?;
-        ctx.set_children(
-            stack_id.into(),
-            vec![
-                input_frame.into(),
-                status_row_id.into(),
-                font_frame_id.into(),
-            ],
-        )?;
-        ctx.set_layout_override(input_frame.into(), fixed_row(INPUT_HEIGHT))?;
-        ctx.set_layout_override(status_row_id.into(), fixed_row(STATUS_HEIGHT))?;
-        ctx.set_focus(input_id.into())?;
+        let (controls, input, nodes) = self.mount_controls(ctx, list, blocks)?;
+        // The rows of controls, and the frame.
+        ctx.set_layout_override(controls.into(), crate::fixed_row(Self::control_rows() + 2))?;
+        let stack = ctx.add_child(ctx.node_id(), Container::column())?;
+        ctx.set_children(stack.into(), vec![controls.into(), fonts.into()])?;
+        ctx.set_focus(input.into())?;
+        self.nodes = Some(nodes);
         Ok(())
-    }
-}
-
-/// Focusable frame wrapper that delegates rendering and handles keyboard
-/// scroll.
-struct FocusFrame {
-    /// Inner frame widget.
-    frame: Frame,
-    /// List widget to scroll.
-    list_id: canopy::TypedId<List<FontBlock>>,
-}
-
-impl FocusFrame {
-    /// Build a new focusable frame for the font list.
-    fn new(frame: Frame, list_id: canopy::TypedId<List<FontBlock>>) -> Self {
-        Self { frame, list_id }
-    }
-
-    /// Scroll the list view using the provided action.
-    fn scroll_list(
-        &self,
-        ctx: &mut dyn Context,
-        action: impl FnOnce(&mut dyn Context) -> ChangeOutcome,
-    ) -> Result<bool> {
-        ctx.with_widget_mut(self.list_id, |_: &mut List<FontBlock>, list_ctx| {
-            Ok(action(list_ctx).changed())
-        })
-    }
-
-    /// Classify one key after the same normalization the handler applies.
-    fn classify_key(key: key::Key) -> Option<FocusScroll> {
-        match key.normalize().key {
-            key::KeyCode::Up => Some(FocusScroll::Up),
-            key::KeyCode::Down => Some(FocusScroll::Down),
-            key::KeyCode::PageUp => Some(FocusScroll::PageUp),
-            key::KeyCode::PageDown => Some(FocusScroll::PageDown),
-            _ => None,
-        }
-    }
-
-    /// Return the vertical scroll delta `command` requests.
-    fn scroll_delta(view: View, command: FocusScroll) -> i32 {
-        let page = i32::try_from(view.content.h).unwrap_or(i32::MAX);
-        match command {
-            FocusScroll::Up => -1,
-            FocusScroll::Down => 1,
-            FocusScroll::PageUp => -page,
-            FocusScroll::PageDown => page,
-        }
-    }
-}
-
-/// One focus-frame scroll action.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum FocusScroll {
-    /// Scroll up one line.
-    Up,
-    /// Scroll down one line.
-    Down,
-    /// Scroll up one page.
-    PageUp,
-    /// Scroll down one page.
-    PageDown,
-}
-
-impl Widget for FocusFrame {
-    fn layout(&self) -> Layout {
-        Layout::fill()
-    }
-
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
-        true
-    }
-
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        self.frame.render(rndr, ctx)
-    }
-
-    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
-        if let Event::Key(raw) = event
-            && let Some(command) = Self::classify_key(*raw)
-        {
-            let changed = match command {
-                FocusScroll::Up => self.scroll_list(ctx, |ctx| {
-                    ctx.scroll(ScrollOp::Lines(ScrollDirection::Up, 1))
-                })?,
-                FocusScroll::Down => self.scroll_list(ctx, |ctx| {
-                    ctx.scroll(ScrollOp::Lines(ScrollDirection::Down, 1))
-                })?,
-                FocusScroll::PageUp => self.scroll_list(ctx, |ctx| {
-                    ctx.scroll(ScrollOp::Pages(ScrollDirection::Up, 1))
-                })?,
-                FocusScroll::PageDown => self.scroll_list(ctx, |ctx| {
-                    ctx.scroll(ScrollOp::Pages(ScrollDirection::Down, 1))
-                })?,
-            };
-            if changed {
-                return Ok(EventOutcome::Handle);
-            }
-        }
-
-        self.frame.on_event(event, ctx)
-    }
-
-    fn key_outcome(&self, key: key::Key, context: &dyn ViewContext) -> EventOutcome {
-        let Some(command) = Self::classify_key(key) else {
-            return EventOutcome::Ignore;
-        };
-        let node = NodeId::from(self.list_id);
-        let Some(view) = context.view_of(node) else {
-            return EventOutcome::Ignore;
-        };
-        let delta = Self::scroll_delta(view, command);
-        if context.scroll_outcome(node, ScrollOp::By(0, delta)) == Some(ChangeOutcome::Changed) {
-            EventOutcome::Handle
-        } else {
-            EventOutcome::Ignore
-        }
     }
 
     fn name(&self) -> NodeName {
-        NodeName::convert("fontgym-focus-frame")
+        NodeName::convert("font_gym")
+    }
+}
+
+impl Register for FontGym {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()?;
+        Input::register(setup)
     }
 }
 
@@ -486,521 +746,6 @@ impl Widget for FontLabel {
     }
 }
 
-/// Single-line text input that updates font banners.
-struct FontGymInput {
-    /// Current input text.
-    text: String,
-    /// Cursor position in characters.
-    cursor: usize,
-    /// Font blocks to update.
-    targets: Vec<canopy::TypedId<FontBlock>>,
-    /// Current banner height.
-    banner_height: u32,
-    /// Active style toggles.
-    style_state: FontEffects,
-    /// Status text widget to update.
-    status_text: canopy::TypedId<Text>,
-    /// The banners' own mosaic tier, or none to follow the terminal.
-    tier: Option<Tier>,
-}
-
-impl FontGymInput {
-    /// Return the display column of the cursor.
-    fn cursor_column(&self) -> u32 {
-        text::slice_by_columns(
-            &self.text[..byte_index_for_char(&self.text, self.cursor)],
-            0,
-            usize::MAX,
-        )
-        .1 as u32
-    }
-
-    /// Create a new input widget targeting the provided banners.
-    fn new(
-        text: impl Into<String>,
-        targets: Vec<canopy::TypedId<FontBlock>>,
-        banner_height: u32,
-        style_state: FontEffects,
-        status_text: canopy::TypedId<Text>,
-    ) -> Self {
-        let text = text.into();
-        let cursor = text.chars().count();
-        Self {
-            text,
-            cursor,
-            targets,
-            banner_height,
-            style_state,
-            status_text,
-            tier: None,
-        }
-    }
-
-    /// Insert a character at the cursor.
-    fn insert_char(&mut self, ch: char) {
-        let idx = byte_index_for_char(&self.text, self.cursor);
-        self.text.insert(idx, ch);
-        self.cursor = self.cursor.saturating_add(1);
-    }
-
-    /// Delete the character before the cursor.
-    fn backspace(&mut self) {
-        if self.cursor == 0 {
-            return;
-        }
-        let idx = byte_index_for_char(&self.text, self.cursor.saturating_sub(1));
-        self.text.remove(idx);
-        self.cursor = self.cursor.saturating_sub(1);
-    }
-
-    /// Move the cursor left.
-    fn move_left(&mut self) {
-        self.cursor = self.cursor.saturating_sub(1);
-    }
-
-    /// Move the cursor right.
-    fn move_right(&mut self) {
-        let max = self.text.chars().count();
-        if self.cursor < max {
-            self.cursor += 1;
-        }
-    }
-
-    /// Move the cursor to the start of the line.
-    fn move_home(&mut self) {
-        self.cursor = 0;
-    }
-
-    /// Move the cursor to the end of the line.
-    fn move_end(&mut self) {
-        self.cursor = self.text.chars().count();
-    }
-
-    /// Push the current text into all target banners.
-    fn sync_targets(&self, ctx: &mut dyn Context) -> Result<()> {
-        for target in &self.targets {
-            ctx.with_widget_mut(*target, |block: &mut FontBlock, ctx| {
-                block.set_text(ctx, self.text.clone())
-            })?;
-        }
-        Ok(())
-    }
-
-    /// Update block layouts to the current height.
-    fn sync_heights(&self, ctx: &mut dyn Context) -> Result<()> {
-        for target in &self.targets {
-            ctx.with_widget_mut(*target, |block: &mut FontBlock, ctx| {
-                block.set_banner_height(ctx, self.banner_height)
-            })?;
-            ctx.set_layout_override((*target).into(), block_layout(self.banner_height).into())?;
-        }
-        Ok(())
-    }
-
-    /// Apply the current style toggles to the banners.
-    fn sync_effects(&self, ctx: &mut dyn Context) -> Result<()> {
-        let effects = self.style_state;
-        for target in &self.targets {
-            ctx.with_widget_mut(*target, |block: &mut FontBlock, ctx| {
-                block.set_effects(ctx, effects)
-            })?;
-        }
-        Ok(())
-    }
-
-    /// Adjust the banner height by a delta.
-    fn adjust_height(&mut self, ctx: &mut dyn Context, delta: i32) -> Result<()> {
-        let current = self.banner_height as i32;
-        let next = (current + delta).max(MIN_BANNER_HEIGHT as i32) as u32;
-        if next == self.banner_height {
-            return Ok(());
-        }
-        self.banner_height = next;
-        self.sync_heights(ctx)?;
-        self.sync_status(ctx)?;
-        Ok(())
-    }
-
-    /// Step every banner to the next mosaic tier, to compare them.
-    fn cycle_tier(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        self.tier = mosaic::cycle(self.tier);
-        for target in &self.targets {
-            ctx.with_widget_mut(*target, |block: &mut FontBlock, ctx| {
-                block.set_tier(ctx, self.tier)
-            })?;
-        }
-        self.sync_status(ctx)
-    }
-
-    /// Toggle a style attribute and refresh styles.
-    fn toggle_style(&mut self, ctx: &mut dyn Context, key: char) -> Result<bool> {
-        let flag = match key.to_ascii_lowercase() {
-            'b' => &mut self.style_state.bold,
-            'i' => &mut self.style_state.italic,
-            'u' => &mut self.style_state.underline,
-            'd' => &mut self.style_state.dim,
-            'o' => &mut self.style_state.overline,
-            'x' => &mut self.style_state.strike,
-            _ => return Ok(false),
-        };
-        *flag = !*flag;
-        self.sync_effects(ctx)?;
-        self.sync_status(ctx)?;
-        Ok(true)
-    }
-
-    /// Update the status panel contents.
-    fn sync_status(&self, ctx: &mut dyn Context) -> Result<()> {
-        let status = status_text(self.banner_height, self.style_state, self.tier);
-        ctx.with_widget_mut(self.status_text, |text: &mut Text, _| {
-            text.set_text(status);
-            Ok(())
-        })?;
-        Ok(())
-    }
-
-    /// Classify one key without running its effect.
-    ///
-    /// The control branch reads the normalized key, and the editing branch
-    /// reads the raw key, exactly as [`FontGymInput::on_event`] does.
-    fn classify_key(key: key::Key) -> Option<FontInputCommand> {
-        let normalized = key.normalize();
-        if normalized.mods.ctrl {
-            return match normalized.key {
-                key::KeyCode::Up => Some(FontInputCommand::Height(1)),
-                key::KeyCode::Down => Some(FontInputCommand::Height(-1)),
-                key::KeyCode::Char('t' | 'T') => Some(FontInputCommand::CycleTier),
-                key::KeyCode::Char(character) if is_style_key(character) => {
-                    Some(FontInputCommand::ToggleStyle(character))
-                }
-                _ => None,
-            };
-        }
-        Some(match key.key {
-            key::KeyCode::Char(character) => FontInputCommand::Insert(character),
-            key::KeyCode::Backspace => FontInputCommand::Backspace,
-            key::KeyCode::Left => FontInputCommand::Move(FontInputMove::Left),
-            key::KeyCode::Right => FontInputCommand::Move(FontInputMove::Right),
-            key::KeyCode::Home => FontInputCommand::Move(FontInputMove::Home),
-            key::KeyCode::End => FontInputCommand::Move(FontInputMove::End),
-            _ => return None,
-        })
-    }
-}
-
-/// One fontgym input action.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum FontInputCommand {
-    /// Adjust the banner height.
-    Height(i32),
-    /// Toggle a style attribute.
-    ToggleStyle(char),
-    /// Step every banner to the next mosaic tier.
-    CycleTier,
-    /// Insert one character.
-    Insert(char),
-    /// Delete backward.
-    Backspace,
-    /// Move the caret.
-    Move(FontInputMove),
-}
-
-/// A fontgym input caret movement.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum FontInputMove {
-    /// Move left.
-    Left,
-    /// Move right.
-    Right,
-    /// Move to the start.
-    Home,
-    /// Move to the end.
-    End,
-}
-
-/// Return whether `key` names a style toggle.
-fn is_style_key(key: char) -> bool {
-    matches!(key.to_ascii_lowercase(), 'b' | 'i' | 'u' | 'd' | 'o' | 'x')
-}
-
-impl Widget for FontGymInput {
-    fn layout(&self) -> Layout {
-        Layout::fill()
-    }
-
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
-        true
-    }
-
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        let view = ctx.view();
-        let view_rect = view.view_rect();
-        let origin = view.content_origin();
-        let line = Line::new(origin.x, origin.y, view_rect.w);
-        rndr.text("text", line, &self.text)?;
-        if ctx.is_focused() {
-            let location = Point {
-                x: origin.x.saturating_add(self.cursor_column()),
-                y: origin.y,
-            };
-            rndr.cursor(location, CursorRequest::new(cursor::TEXT));
-        }
-        Ok(())
-    }
-
-    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
-        let Event::Key(key) = event else {
-            return Ok(EventOutcome::Ignore);
-        };
-        let Some(command) = Self::classify_key(*key) else {
-            return Ok(EventOutcome::Ignore);
-        };
-        let mut changed = false;
-        match command {
-            FontInputCommand::Height(delta) => self.adjust_height(ctx, delta)?,
-            FontInputCommand::ToggleStyle(character) => {
-                let _ = self.toggle_style(ctx, character)?;
-            }
-            FontInputCommand::CycleTier => self.cycle_tier(ctx)?,
-            FontInputCommand::Insert(character) => {
-                self.insert_char(character);
-                changed = true;
-            }
-            FontInputCommand::Backspace => {
-                self.backspace();
-                changed = true;
-            }
-            FontInputCommand::Move(FontInputMove::Left) => self.move_left(),
-            FontInputCommand::Move(FontInputMove::Right) => self.move_right(),
-            FontInputCommand::Move(FontInputMove::Home) => self.move_home(),
-            FontInputCommand::Move(FontInputMove::End) => self.move_end(),
-        }
-        if changed {
-            self.sync_targets(ctx)?;
-        }
-        Ok(EventOutcome::Handle)
-    }
-
-    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> EventOutcome {
-        if Self::classify_key(key).is_some() {
-            EventOutcome::Handle
-        } else {
-            EventOutcome::Ignore
-        }
-    }
-
-    fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let width = text::width(&self.text).max(1) as u32;
-        c.clamp(Size::new(width, 1))
-    }
-
-    fn name(&self) -> NodeName {
-        NodeName::convert("fontgym-input")
-    }
-}
-
-/// Horizontal row container for status panels.
-struct StatusRow;
-
-impl Widget for StatusRow {
-    fn layout(&self) -> Layout {
-        Layout::row()
-            .fixed_height(STATUS_HEIGHT)
-            .gap(3)
-            .align_vertical(Align::Center)
-    }
-
-    fn name(&self) -> NodeName {
-        NodeName::convert("fontgym-status-row")
-    }
-}
-
-/// Legend segment with a style and text.
-struct LegendSegment {
-    /// Style path for the segment.
-    style: &'static str,
-    /// Text to render for the segment.
-    text: &'static str,
-}
-
-/// The Controls legend, one entry per rendered row.
-const CONTROLS_LEGEND: &[&[LegendSegment]] = &[
-    &[
-        LegendSegment::title("Focus"),
-        LegendSegment::text(" : "),
-        LegendSegment::key("Tab"),
-        LegendSegment::text(" / "),
-        LegendSegment::key("Shift+Tab"),
-    ],
-    &[
-        LegendSegment::title("Scroll"),
-        LegendSegment::text(" : "),
-        LegendSegment::key("PgUp"),
-        LegendSegment::text(" / "),
-        LegendSegment::key("PgDn"),
-    ],
-    &[
-        LegendSegment::title("Height"),
-        LegendSegment::text(" : "),
-        LegendSegment::key("Ctrl+Up"),
-        LegendSegment::text(" / "),
-        LegendSegment::key("Ctrl+Down"),
-    ],
-    &[
-        LegendSegment::title("Styles"),
-        LegendSegment::text(" : "),
-        LegendSegment::key("Ctrl+B"),
-        LegendSegment::text(" Bold  "),
-        LegendSegment::key("Ctrl+I"),
-        LegendSegment::text(" Italic"),
-    ],
-    &[
-        LegendSegment::text("         "),
-        LegendSegment::key("Ctrl+U"),
-        LegendSegment::text(" Underline  "),
-        LegendSegment::key("Ctrl+D"),
-        LegendSegment::text(" Dim"),
-    ],
-    &[
-        LegendSegment::text("         "),
-        LegendSegment::key("Ctrl+O"),
-        LegendSegment::text(" Overline   "),
-        LegendSegment::key("Ctrl+X"),
-        LegendSegment::text(" Strike"),
-    ],
-    &[
-        LegendSegment::title("Glyphs"),
-        LegendSegment::text(" : "),
-        LegendSegment::key("Ctrl+T"),
-        LegendSegment::text(" Next mosaic tier"),
-    ],
-    &[
-        LegendSegment::title("Input"),
-        LegendSegment::text(" : "),
-        LegendSegment::text("Type to edit text"),
-    ],
-];
-
-impl LegendSegment {
-    /// Create a segment styled as a key.
-    const fn key(text: &'static str) -> Self {
-        Self {
-            style: "fontgym/key",
-            text,
-        }
-    }
-
-    /// Create a segment styled as a title.
-    const fn title(text: &'static str) -> Self {
-        Self {
-            style: "fontgym/legend/title",
-            text,
-        }
-    }
-
-    /// Create a segment styled as body text.
-    const fn text(text: &'static str) -> Self {
-        Self {
-            style: "fontgym/legend",
-            text,
-        }
-    }
-}
-
-/// Controls legend widget with styled key hints.
-struct ControlsLegend;
-
-impl Widget for ControlsLegend {
-    fn layout(&self) -> Layout {
-        Layout::fill()
-    }
-
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        let view = ctx.view();
-        let view_rect = view.view_rect_local();
-        for (row_idx, segments) in CONTROLS_LEGEND.iter().enumerate() {
-            let y = view_rect.tl.y.saturating_add(row_idx as u32);
-            if y >= view_rect.tl.y.saturating_add(view_rect.h) {
-                break;
-            }
-            let mut x = view_rect.tl.x;
-            for segment in *segments {
-                if segment.text.is_empty() {
-                    continue;
-                }
-                if x >= view_rect.tl.x.saturating_add(view_rect.w) {
-                    break;
-                }
-                let width = segment.text.len() as u32;
-                let line = Line::new(x, y, width);
-                rndr.text(segment.style, line, segment.text)?;
-                x = x.saturating_add(width);
-            }
-        }
-
-        Ok(())
-    }
-
-    fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let max_width = CONTROLS_LEGEND
-            .iter()
-            .map(|segments| {
-                segments
-                    .iter()
-                    .map(|segment| segment.text.len() as u32)
-                    .sum()
-            })
-            .max()
-            .unwrap_or(1)
-            .max(1);
-        let height = CONTROLS_LEGEND.len().max(1) as u32;
-        c.clamp(Size::new(max_width, height))
-    }
-
-    fn name(&self) -> NodeName {
-        NodeName::convert("fontgym-controls-legend")
-    }
-}
-
-/// Convert a char index into a byte offset.
-fn byte_index_for_char(text: &str, char_index: usize) -> usize {
-    if char_index == 0 {
-        return 0;
-    }
-    text.char_indices()
-        .nth(char_index)
-        .map(|(idx, _)| idx)
-        .unwrap_or(text.len())
-}
-
-/// Wrap a detached child in a padded, titled panel frame of a minimum width.
-fn panel(
-    ctx: &mut dyn Context,
-    child: impl Into<NodeId>,
-    title: &str,
-    min_width: u32,
-) -> Result<NodeId> {
-    let pad = ctx.wrap_node(
-        child,
-        Container::padded(Edges::symmetric(PANEL_PADDING_V, PANEL_PADDING_H)),
-    )?;
-    let frame = ctx.wrap_node(
-        pad,
-        Frame::new()
-            .with_title(title)
-            .with_glyphs(BoxGlyphs::SINGLE_THICK),
-    )?;
-    ctx.set_layout_override(
-        frame.into(),
-        Layout::column()
-            .flex_horizontal(1)
-            .min_width(min_width)
-            .padding(Edges::all(1))
-            .into(),
-    )?;
-    Ok(frame.into())
-}
-
 /// Build a label string for a font.
 fn font_label(font: &Font) -> String {
     let name = font.name().unwrap_or("Unknown font");
@@ -1042,16 +787,13 @@ fn drifting_gradient(angle_deg: f32, colors: [Color; 4]) -> Paint {
     )
 }
 
-/// Construct the style map used by the demo banners.
-fn font_styles() -> StyleMap {
-    let mut style = StyleMap::new();
-    let mut rules = style
-        .rules()
-        .attr("fontgym/legend", Attr::Dim)
-        .attr("fontgym/legend/title", Attr::Bold)
-        .attr("fontgym/key", Attr::Bold)
-        .fg("fontgym/legend/title", rgb!("#E9ECEF"))
-        .fg("fontgym/key", rgb!("#FFD166"))
+/// Install the gym's styles, over whatever theme is in use.
+fn setup_style(_palette: &Palette, rules: StyleRules<'_>) {
+    let mut rules = rules
+        .attr("fontgym/control", Attr::Bold)
+        .fg("fontgym/control", rgb!("#E9ECEF"))
+        .attr("fontgym/value", Attr::Bold)
+        .fg("fontgym/value", rgb!("#FFD166"))
         .fg("fontgym/label", rgb!("#A3B1C2"));
     for spec in &BANNERS {
         rules = rules.fg(
@@ -1060,189 +802,229 @@ fn font_styles() -> StyleMap {
         );
     }
     rules.apply();
-    style
 }
 
-/// Build the status text for the current state.
-fn status_text(height: u32, state: FontEffects, tier: Option<Tier>) -> String {
-    let flag = |enabled: bool| if enabled { "on " } else { "off" };
-    [
-        format!("Height : {}", height),
-        format!("Glyphs : {}", mosaic::label(tier)),
-        format!(
-            "Bold: {}  Italic: {}  Underline: {}",
-            flag(state.bold),
-            flag(state.italic),
-            flag(state.underline)
-        ),
-        format!(
-            "Dim : {}  Overline: {}  Strike: {}",
-            flag(state.dim),
-            flag(state.overline),
-            flag(state.strike)
-        ),
-    ]
-    .join("\n")
-}
-
-/// Focus controls shared by eager and builder setup.
+/// The gym's bindings. Every key it answers is a binding here, so the help
+/// lists them all; the buttons show what each control is set to.
 const DEFAULT_BINDINGS: &str = r#"
 root.default_bindings()
+
 canopy.keymap({
-    { key = "Tab", description = "Next focus", action = command.root.focus("next") },
-    { key = "BackTab", description = "Previous focus", action = command.root.focus("prev") },
+    path = "font_gym/",
+    phase = "before_widget",
+    { key = "Tab", description = "Next control", action = command.root.focus("next") },
+    { key = "BackTab", description = "Previous control", action = command.root.focus("prev") },
+})
+
+canopy.keymap({
+    path = "font_gym/",
+    { key = "Ctrl+Up", description = "Larger text", action = command.font_gym.resize(1) },
+    { key = "Ctrl+Down", description = "Smaller text", action = command.font_gym.resize(-1) },
+    { key = "Ctrl+t", description = "Next mosaic tier", action = command.font_gym.next_tier() },
+    { key = "Ctrl+b", description = "Toggle bold", action = command.font_gym.toggle("bold") },
+    { key = "Ctrl+i", description = "Toggle italic", action = command.font_gym.toggle("italic") },
+    {
+        key = "Ctrl+u",
+        description = "Toggle underline",
+        action = command.font_gym.toggle("underline"),
+    },
+    { key = "Ctrl+d", description = "Toggle dim", action = command.font_gym.toggle("dim") },
+    {
+        key = "Ctrl+o",
+        description = "Toggle overline",
+        action = command.font_gym.toggle("overline"),
+    },
+    { key = "Ctrl+s", description = "Toggle strike", action = command.font_gym.toggle("strike") },
+    { key = "Up", description = "Scroll fonts up", action = command.font_gym.scroll(-1) },
+    { key = "Down", description = "Scroll fonts down", action = command.font_gym.scroll(1) },
+    { key = "PageUp", description = "Page fonts up", action = command.font_gym.page(-1) },
+    { key = "PageDown", description = "Page fonts down", action = command.font_gym.page(1) },
 })
 "#;
 
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.script("fontgym", DEFAULT_BINDINGS)
+    builder
+        .configure(|setup| {
+            setup.widget_styles(setup_style);
+            Ok(())
+        })
+        .script("fontgym", DEFAULT_BINDINGS)
 }
 
 #[cfg(test)]
 mod tests {
-    use canopy::{
-        ViewContextExt,
-        geom::Rect,
-        layout::{Constraint, RevealAlign},
-        testing::harness::Harness,
-    };
+    use canopy::{ViewContextExt, geom::Point, input::key::Key, testing::harness::Harness};
 
     use super::*;
     use crate::tests::{Mount, root_harness};
 
-    fn font_list_scroll(harness: &Harness) -> Point {
+    /// Returns a harness of the gym at `size`.
+    fn gym(size: Size) -> Result<Harness> {
+        root_harness(
+            FontGym::new(),
+            |builder| binding_setup(builder.configure(FontGym::register)),
+            size,
+            Mount::Wrap,
+        )
+    }
+
+    /// Sends key specs in order, then renders.
+    fn keys(harness: &mut Harness, specs: &[&str]) -> Result<()> {
+        for spec in specs {
+            harness.key(Key::parse_spec(spec)?)?;
+        }
+        harness.render()
+    }
+
+    /// Returns the screen as text, one line a row.
+    fn screen(harness: &Harness) -> String {
+        harness.tbuf().lines().join("\n")
+    }
+
+    /// Reads the gym's state through `f`.
+    fn state<R>(harness: &mut Harness, f: impl FnOnce(&FontGym) -> R) -> Result<R> {
+        let gym = harness
+            .canopy
+            .with_root_view(|ctx| ctx.unique_descendant::<FontGym>(ctx.root_id()))?
+            .ok_or_else(|| Error::NotFound("font gym".into()))?;
+        harness
+            .canopy
+            .with_root_context(|ctx| ctx.with_widget_mut(gym, |gym: &mut FontGym, _| Ok(f(gym))))
+    }
+
+    /// Returns the scroll offset of the list of fonts.
+    fn font_list_scroll(harness: &Harness) -> Result<Point> {
         harness.canopy.with_root_view(|ctx| {
             let list = ctx
-                .unique_descendant::<List<FontBlock>>(ctx.root_id())
-                .expect("list lookup")
-                .expect("font list");
-            ctx.view_of(list.into()).expect("font list view").scroll
+                .unique_descendant::<List<FontBlock>>(ctx.root_id())?
+                .ok_or_else(|| Error::NotFound("font list".into()))?;
+            Ok(ctx.view_of(list.into()).expect("font list view").scroll)
         })
     }
 
     #[test]
-    fn page_down_scrolls_the_font_list() -> Result<()> {
-        let mut harness = root_harness(
-            FontGym::new(),
-            binding_setup,
-            Size::new(80, 24),
-            Mount::Wrap,
-        )?;
-        let before = font_list_scroll(&harness);
-
-        let frame = harness
-            .canopy
-            .with_root_view(|ctx| ctx.unique_descendant::<FocusFrame>(ctx.root_id()))
-            .expect("frame lookup")
-            .expect("focus frame");
-        harness.canopy.with_root_context(|ctx| {
-            ctx.set_focus(frame.into())?;
-            Ok(())
-        })?;
-
-        harness.key(key::Key::parse_spec("PageDown").expect("valid key"))?;
-
-        let after = font_list_scroll(&harness);
-        assert!(after.y > before.y, "PageDown must scroll the font list");
+    fn the_text_field_has_the_keyboard_and_typing_draws_in_every_banner() -> Result<()> {
+        let mut harness = gym(Size::new(110, 36))?;
+        keys(&mut harness, &["End", "!"])?;
+        assert_eq!(state(&mut harness, |gym| gym.text.clone())?, "Canopy!");
         Ok(())
     }
 
     #[test]
-    fn focus_frame_predicts_scroll_boundaries_and_pending_reveals() -> Result<()> {
-        let mut harness = root_harness(
-            FontGym::new(),
-            binding_setup,
-            Size::new(80, 24),
-            Mount::Wrap,
-        )?;
-        let (frame, list) = harness.canopy.with_root_view(|ctx| {
-            (
-                ctx.unique_descendant::<FocusFrame>(ctx.root_id())
-                    .expect("frame lookup")
-                    .expect("focus frame"),
-                ctx.unique_descendant::<List<FontBlock>>(ctx.root_id())
-                    .expect("list lookup")
-                    .expect("font list"),
-            )
-        });
-        harness.canopy.with_root_context(|ctx| {
-            ctx.set_focus(frame.into())?;
-            Ok(())
-        })?;
-
-        let check = |harness: &mut Harness, spec: &str| -> Result<()> {
-            harness.canopy.with_root_context(|ctx| {
-                ctx.with_widget_mut(frame, |frame: &mut FocusFrame, ctx| {
-                    let key = key::Key::parse_spec(spec)?;
-                    let predicted = frame.key_outcome(key, ctx);
-                    let actual = frame.on_event(&Event::Key(key), ctx)?;
-                    assert_eq!(
-                        predicted, actual,
-                        "prediction must match handling for {spec}"
-                    );
-                    Ok(())
-                })
-            })
-        };
-
-        for offset in [3, 0, u32::MAX] {
-            harness.canopy.with_root_context(|ctx| {
-                ctx.scroll_node(list.into(), ScrollOp::To(Point { x: 0, y: offset }))
-            })?;
-            check(&mut harness, "up")?;
-            harness.canopy.with_root_context(|ctx| {
-                ctx.scroll_node(list.into(), ScrollOp::To(Point { x: 0, y: offset }))
-            })?;
-            check(&mut harness, "down")?;
-        }
-
-        // A pending reveal changes a scroll that the clamped offset alone
-        // would report as no movement.
-        harness.canopy.with_root_context(|ctx| {
-            ctx.scroll_node(list.into(), ScrollOp::To(Point { x: 0, y: 0 }))
-        })?;
-        harness.canopy.with_root_context(|ctx| {
-            ctx.with_widget_mut(list, |_: &mut List<FontBlock>, list_ctx| {
-                list_ctx.reveal_area(Rect::new(0, 0, 1, 1), RevealAlign::Nearest);
-                Ok(())
-            })
-        })?;
-        check(&mut harness, "up")?;
-        Ok(())
-    }
-
-    #[test]
-    fn input_cursor_and_measurement_use_display_columns() -> Result<()> {
-        let mut canopy = canopy::CanopyBuilder::new().build()?;
-        let status = canopy.with_root_context(|ctx| ctx.create_detached(Text::new("")))?;
-        for (text, columns, width) in [
-            ("界a", vec![0, 2, 3], 3),
-            ("e\u{301}a", vec![0, 1, 1, 2], 2),
-            ("abc", vec![0, 1, 2, 3], 3),
-            ("", vec![0], 1),
+    fn keys_change_the_banners_and_the_controls_show_what_they_are_set_to() -> Result<()> {
+        let mut harness = gym(Size::new(110, 36))?;
+        let shown = screen(&harness);
+        for expected in [
+            "16 rows",
+            "(•) terminal",
+            "( ) halves",
+            "[ ] Bold",
+            "[ ] Strike",
         ] {
-            let mut input = FontGymInput::new(text, Vec::new(), 1, FontEffects::default(), status);
-            for (position, column) in columns.into_iter().enumerate() {
-                input.cursor = position;
-                assert_eq!(input.cursor_column(), column);
-            }
-            assert_eq!(
-                input.measure(MeasureConstraints::new(
-                    Constraint::Unbounded,
-                    Constraint::Unbounded
-                )),
-                Measurement::Fixed(Size::new(width, 1))
-            );
-            assert_eq!(
-                input.measure(MeasureConstraints::new(
-                    Constraint::AtMost(1),
-                    Constraint::Exact(1)
-                )),
-                Measurement::Fixed(Size::new(1, 1))
-            );
+            assert!(shown.contains(expected), "{expected}:\n{shown}");
         }
+
+        keys(
+            &mut harness,
+            &["Ctrl+b", "Ctrl+s", "Ctrl+t", "Ctrl+Up", "Ctrl+Up"],
+        )?;
+        let shown = screen(&harness);
+        for expected in [
+            "18 rows",
+            "( ) terminal",
+            "(•) halves",
+            "[x] Bold",
+            "[x] Strike",
+        ] {
+            assert!(shown.contains(expected), "{expected}:\n{shown}");
+        }
+        let (effects, height, tier) =
+            state(&mut harness, |gym| (gym.effects, gym.height, gym.tier))?;
+        assert!(effects.bold && effects.strike && !effects.italic);
+        assert_eq!((height, tier), (18, Some(Tier::Halves)));
+        let tiers: Vec<Option<Tier>> = harness.canopy.with_root_view(|ctx| {
+            ctx.descendants::<FontBanner>(ctx.root_id())
+                .map(|banner| ctx.with_widget(banner, |banner: &FontBanner| Ok(banner.tier())))
+                .collect::<Result<_>>()
+        })?;
+        assert_eq!(tiers, vec![Some(Tier::Halves); BANNERS.len()]);
+
+        // The smallest banner stops shrinking.
+        let shrink = vec!["Ctrl+Down"; 20];
+        keys(&mut harness, &shrink)?;
+        assert_eq!(state(&mut harness, |gym| gym.height)?, MIN_BANNER_HEIGHT);
+        Ok(())
+    }
+
+    #[test]
+    fn controls_take_focus_in_turn_and_run_their_action() -> Result<()> {
+        let mut harness = gym(Size::new(110, 36))?;
+        // The text field, the size buttons, then the first two tiers.
+        keys(&mut harness, &["Tab", "Tab", "Tab", "Tab", "Enter"])?;
+        assert_eq!(state(&mut harness, |gym| gym.tier)?, Some(Tier::Halves));
+        keys(&mut harness, &["BackTab", "BackTab", "Space"])?;
+        assert_eq!(state(&mut harness, |gym| gym.height)?, BANNER_HEIGHT + 1);
+        Ok(())
+    }
+
+    #[test]
+    fn page_down_scrolls_the_fonts_from_the_text_field() -> Result<()> {
+        let mut harness = gym(Size::new(80, 24))?;
+        let before = font_list_scroll(&harness)?;
+        keys(&mut harness, &["PageDown"])?;
+        assert!(font_list_scroll(&harness)?.y > before.y);
+        keys(&mut harness, &["PageUp"])?;
+        assert_eq!(font_list_scroll(&harness)?, before);
+        Ok(())
+    }
+
+    #[test]
+    fn help_lists_every_key_the_gym_answers() -> Result<()> {
+        let mut harness = gym(Size::new(110, 50))?;
+        keys(&mut harness, &["Ctrl+g"])?;
+        let shown = screen(&harness);
+        for description in [
+            "Next control",
+            "Previous control",
+            "Larger text",
+            "Smaller text",
+            "Next mosaic tier",
+            "Toggle bold",
+            "Toggle italic",
+            "Toggle underline",
+            "Toggle dim",
+            "Toggle overline",
+            "Toggle strike",
+            "Scroll fonts up",
+            "Scroll fonts down",
+            "Page fonts up",
+            "Page fonts down",
+        ] {
+            assert!(shown.contains(description), "{description}:\n{shown}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn effects_and_tiers_name_their_controls() -> Result<()> {
+        for effect in Effect::ALL {
+            assert_eq!(Effect::named(&effect.name().to_lowercase())?, effect);
+            assert!(effect.label(false).contains(effect.key()));
+        }
+        assert!(Effect::named("blink").is_err());
+        let labels: Vec<String> = tiers().map(|tier| tier_label(tier, false)).collect();
+        assert_eq!(
+            labels,
+            [
+                "( ) terminal",
+                "( ) halves",
+                "( ) quadrants",
+                "( ) blocks",
+                "( ) full"
+            ]
+        );
         Ok(())
     }
 }

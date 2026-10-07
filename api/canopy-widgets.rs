@@ -410,6 +410,10 @@ impl Button {
     /// answer does, so the action arrives after construction.
     pub fn set_command(&mut self, command: CommandCall);
 
+    /// Replace the label, so a button can show the state of what it
+    /// changes. A label of another width takes effect at the next layout.
+    pub fn set_label(&mut self, label: impl Into<String>);
+
     /// Return the size that the button takes: its label with padding, in the
     /// rows of its look.
     pub fn size(&self) -> Size;
