@@ -32,6 +32,17 @@ const MATRIX: usize = 8;
 /// ascenders, descenders, and digits.
 const TEXT: &str = "Hamburgefonstiv 0123";
 
+/// The text of the banner item: the word the font gym first shows, in
+/// Bungee on square cells. The rounded ends of its strokes, such as the
+/// bottom right of the C and of the stem of the Y, once hung spurs of ink
+/// below them.
+const BANNER: &str = "Canopy";
+
+/// The offsets of the banner item's lines, in cells across and down. Where
+/// a stroke ends within a cell decides which symbol draws it, so each line
+/// sets the word at another offset.
+const BANNER_PHASES: [[f32; 2]; 4] = [[0.0, 0.0], [0.25, 0.125], [0.5, 0.25], [0.75, 0.375]];
+
 /// The fonts of the text items, by name and file.
 const FONTS: [(&str, &str); 4] = [
     ("bungee", "Bungee-Regular.ttf"),
@@ -42,6 +53,11 @@ const FONTS: [(&str, &str); 4] = [
 
 /// The heights of the text items, in cell rows.
 const TEXT_ROWS: [usize; 4] = [2, 3, 5, 8];
+
+/// The heights of the text items drawn on square cells, in cell rows. A font
+/// banner draws this way unless it asks for tall cells: each glyph at twice
+/// its height.
+const SQUARE_ROWS: [usize; 3] = [4, 8, 16];
 
 /// Light text on a dark ground, as in a dark theme.
 const LIGHT: ([u8; 3], [u8; 3]) = ([0xdc, 0xdf, 0xe4], [0x28, 0x2c, 0x34]);
@@ -187,17 +203,28 @@ enum Build {
         /// The generator.
         f: Generator,
     },
-    /// The suite's text in a font.
-    Text {
-        /// The font file in the fonts of canopy-widgets.
-        font: &'static str,
-        /// The height of the line in cell rows.
-        rows: usize,
-        /// The ink and the ground.
-        colors: ([u8; 3], [u8; 3]),
-        /// Whether the pens are fixed.
-        crisp: bool,
-    },
+    /// Text in a font.
+    Text(Text),
+}
+
+/// Text in a font, as an item draws it.
+struct Text {
+    /// The words.
+    words: &'static str,
+    /// The font file in the fonts of canopy-widgets.
+    font: &'static str,
+    /// The height of the line box in cell rows.
+    rows: usize,
+    /// The ink and the ground.
+    colors: ([u8; 3], [u8; 3]),
+    /// Whether the pens are fixed.
+    crisp: bool,
+    /// Whether the text takes a cell as square, and so draws at twice its
+    /// height.
+    square: bool,
+    /// The offset of each line, in cells across and down. Each line draws
+    /// the words once.
+    phases: &'static [[f32; 2]],
 }
 
 /// An item of the suite, before it is built.
@@ -216,12 +243,7 @@ impl Spec {
         match self.build {
             Build::Photo { path, cols } => photo(path, cols),
             Build::Generated { cols, rows, f } => generated(cols, rows, f),
-            Build::Text {
-                font,
-                rows,
-                colors,
-                crisp,
-            } => text(font, rows, colors, crisp),
+            Build::Text(ref spec) => text(spec),
         }
     }
 
@@ -230,7 +252,14 @@ impl Spec {
         match self.build {
             Build::Photo { cols, .. } => cols * cols,
             Build::Generated { cols, rows, .. } => cols * rows,
-            Build::Text { rows, .. } => rows * rows * 12,
+            Build::Text(ref text) => {
+                let rows = if text.square {
+                    text.rows / 2
+                } else {
+                    text.rows
+                };
+                rows * rows * 12 * text.phases.len()
+            }
         }
     }
 }
@@ -261,26 +290,47 @@ pub fn suite() -> Vec<Spec> {
             build: Build::Generated { cols, rows, f },
         });
     }
-    for (name, font) in FONTS {
-        for rows in TEXT_ROWS {
+    let sizes = TEXT_ROWS
+        .map(|rows| (rows, false))
+        .into_iter()
+        .chain(SQUARE_ROWS.map(|rows| (rows, true)));
+    for (rows, square) in sizes {
+        for (name, font) in FONTS {
             for (suffix, group, colors, crisp) in [
                 ("light", Group::Text, LIGHT, false),
                 ("dark", Group::Text, DARK, false),
                 ("crisp", Group::Crisp, LIGHT, true),
             ] {
+                let shape = if square { "-square" } else { "" };
                 specs.push(Spec {
-                    name: format!("{name}-{rows}-{suffix}"),
+                    name: format!("{name}-{rows}{shape}-{suffix}"),
                     group,
-                    build: Build::Text {
+                    build: Build::Text(Text {
+                        words: TEXT,
                         font,
                         rows,
                         colors,
                         crisp,
-                    },
+                        square,
+                        phases: &[[0.0, 0.0]],
+                    }),
                 });
             }
         }
     }
+    specs.push(Spec {
+        name: "banner".into(),
+        group: Group::Text,
+        build: Build::Text(Text {
+            words: BANNER,
+            font: "Bungee-Regular.ttf",
+            rows: 16,
+            colors: LIGHT,
+            crisp: false,
+            square: true,
+            phases: &BANNER_PHASES,
+        }),
+    });
     specs
 }
 
@@ -413,37 +463,62 @@ fn generated(cols: usize, rows: usize, f: Generator) -> Item {
     }
 }
 
-/// The suite's text in a font, its line box `rows` cells high, with a
-/// margin of one cell around it.
-fn text(font: &str, rows: usize, (fg, bg): ([u8; 3], [u8; 3]), crisp: bool) -> Item {
+/// Text in a font: a line for each phase, its line box `rows` cells high,
+/// with a margin of one cell around each. Square text takes a cell as
+/// square, as a font banner does by default, and so draws at twice its
+/// height.
+fn text(spec: &Text) -> Item {
+    let Text {
+        words,
+        font,
+        rows,
+        colors: (fg, bg),
+        crisp,
+        square,
+        phases,
+    } = *spec;
     let path = root().join("crates/canopy-widgets/assets/fonts").join(font);
     let bytes = fs::read(&path).expect("font");
     let font = fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default()).expect("font");
+    // Square text rasterizes on cells as tall as they are wide, then
+    // stretches each pixel row to two.
+    let (cell_h, stretch) = if square {
+        (CELL_W, CELL_H / CELL_W)
+    } else {
+        (CELL_H, 1)
+    };
     let unit = font.horizontal_line_metrics(100.0).expect("line metrics");
-    let px = (rows * CELL_H) as f32 * 100.0 / (unit.ascent - unit.descent);
+    let px = (rows * cell_h) as f32 * 100.0 / (unit.ascent - unit.descent);
     let metrics = font.horizontal_line_metrics(px).expect("line metrics");
-    let glyphs: Vec<_> = TEXT.chars().map(|ch| font.rasterize(ch, px)).collect();
+    let glyphs: Vec<_> = words.chars().map(|ch| font.rasterize(ch, px)).collect();
     let advance: f32 = glyphs.iter().map(|(m, _)| m.advance_width).sum();
     let cols = (advance / CELL_W as f32).ceil() as usize + 2;
-    let total_rows = rows + 2;
-    let (width, height) = (cols * CELL_W, total_rows * CELL_H);
+    let total_rows = phases.len() * (rows + 1) + 1;
+    let (width, height) = (cols * CELL_W, total_rows * cell_h);
     let mut coverage = vec![0u8; width * height];
-    let baseline = CELL_H as f32 + metrics.ascent;
-    let mut pen = CELL_W as f32;
-    for (m, bitmap) in &glyphs {
-        let x0 = (pen + m.xmin as f32).round() as i64;
-        let y0 = (baseline - m.ymin as f32 - m.height as f32).round() as i64;
-        for gy in 0..m.height {
-            for gx in 0..m.width {
-                let (x, y) = (x0 + gx as i64, y0 + gy as i64);
-                if (0..width as i64).contains(&x) && (0..height as i64).contains(&y) {
-                    let at = y as usize * width + x as usize;
-                    coverage[at] = coverage[at].max(bitmap[gy * m.width + gx]);
+    for (line, [phase_x, phase_y]) in phases.iter().enumerate() {
+        let top = (line * (rows + 1) + 1) as f32;
+        let baseline = cell_h as f32 * (top + phase_y) + metrics.ascent;
+        let mut pen = CELL_W as f32 * (1.0 + phase_x);
+        for (m, bitmap) in &glyphs {
+            let x0 = (pen + m.xmin as f32).round() as i64;
+            let y0 = (baseline - m.ymin as f32 - m.height as f32).round() as i64;
+            for gy in 0..m.height {
+                for gx in 0..m.width {
+                    let (x, y) = (x0 + gx as i64, y0 + gy as i64);
+                    if (0..width as i64).contains(&x) && (0..height as i64).contains(&y) {
+                        let at = y as usize * width + x as usize;
+                        coverage[at] = coverage[at].max(bitmap[gy * m.width + gx]);
+                    }
                 }
             }
+            pen += m.advance_width;
         }
-        pen += m.advance_width;
     }
+    let coverage: Vec<u8> = coverage
+        .chunks(width)
+        .flat_map(|row| (0..stretch).flat_map(move |_| row.iter().copied()))
+        .collect();
     let (fg_linear, bg_linear) = (color::decode_rgb(fg), color::decode_rgb(bg));
     let reference = coverage
         .iter()
@@ -662,9 +737,43 @@ mod tests {
         assert_eq!(names.len(), specs.len());
     }
 
+    /// One line of light antialiased text.
+    fn line(words: &'static str, font: &'static str, rows: usize, square: bool) -> Text {
+        Text {
+            words,
+            font,
+            rows,
+            colors: LIGHT,
+            crisp: false,
+            square,
+            phases: &[[0.0, 0.0]],
+        }
+    }
+
+    #[test]
+    fn each_phase_draws_a_line_and_moves_its_ink() {
+        let phases = text(&Text {
+            phases: &BANNER_PHASES,
+            ..line(BANNER, "Bungee-Regular.ttf", 4, true)
+        });
+        assert_eq!(phases.rows, 4 * 5 + 1);
+        // The first ink of each line moves right with its phase.
+        let width = phases.width();
+        let first_ink = |line: usize| {
+            let rows = (line * 5 + 1) * CELL_H..(line * 5 + 5) * CELL_H;
+            rows.flat_map(|y| (0..width).map(move |x| (x, y)))
+                .filter(|(x, y)| phases.reference[y * width + x][0] > 0.5)
+                .map(|(x, _)| x)
+                .min()
+                .expect("ink")
+        };
+        let starts: Vec<usize> = (0..4).map(first_ink).collect();
+        assert!(starts.windows(2).all(|w| w[1] > w[0]), "{starts:?}");
+    }
+
     #[test]
     fn text_fills_its_rows_and_its_matrix_matches_its_reference() {
-        let item = text("FiraMono-Regular.ttf", 3, LIGHT, false);
+        let item = text(&line(TEXT, "FiraMono-Regular.ttf", 3, false));
         assert_eq!(item.rows, 5);
         assert_eq!(item.reference.len(), item.width() * item.rows * CELL_H);
         let Input::Coverage { matrix, .. } = &item.input else {
@@ -678,6 +787,29 @@ mod tests {
                 .all(|v| *v == 0)
         );
         assert!(matrix.iter().any(|v| *v > 200));
+    }
+
+    #[test]
+    fn square_text_draws_at_twice_its_height() {
+        let tall = text(&line(TEXT, "Bungee-Regular.ttf", 4, false));
+        let square = text(&line(TEXT, "Bungee-Regular.ttf", 8, true));
+        // On square cells, eight rows hold the glyphs of four tall rows, at
+        // about the same width.
+        assert_eq!(square.rows, 10);
+        assert!(
+            tall.cols.abs_diff(square.cols) <= 1,
+            "{} {}",
+            tall.cols,
+            square.cols
+        );
+        // Each pixel row is doubled.
+        let width = square.width();
+        for y in (0..square.reference.len() / width).step_by(2) {
+            assert_eq!(
+                square.reference[y * width..(y + 1) * width],
+                square.reference[(y + 1) * width..(y + 2) * width]
+            );
+        }
     }
 
     #[test]

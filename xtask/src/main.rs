@@ -51,8 +51,8 @@ enum Task {
     },
     /// Score the block mosaics on the standard suite of images and text, as
     /// the eye sees them at two viewing distances, against the baseline.
-    /// Arguments pass to `mosaic-score`, for example `--update`,
-    /// `--filter NAME`, `--sheets`, or `--detail`.
+    /// Arguments pass to `mosaic-score`, for example `--check`, `--update`,
+    /// `--filter NAME`, `--sheets`, `--worst N`, or `--detail`.
     Score {
         /// The arguments of `mosaic-score`.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]

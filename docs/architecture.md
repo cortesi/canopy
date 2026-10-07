@@ -517,31 +517,54 @@ rendering. Rendering must not rely on stale views.
 The `canopy-mosaic` crate draws pictures and large text with block mosaic
 characters, and depends on nothing in Canopy. Each cell is an 8×8 matrix of
 pixels. The matcher finds the symbol and the two pens that reproduce the matrix
-with the least squared error. It rounds the means of the two parts of each
-candidate mask to the pens that it would emit, and scores those pens exactly in
-integers, over subset-sum tables of each run of four pixels, so exact search
-over every symbol of a tier is cheap. A mask and its inverse are one symbol
-with the pens swapped, and ties go to the family that more terminals draw well.
+at the least cost. It rounds the means of the two parts of each candidate mask
+to the pens that it would emit, and scores the squared error of those pens
+exactly in integers, over subset-sum tables of each run of four pixels, so
+exact search over every symbol of a tier is cheap. A mask and its inverse are
+one symbol with the pens swapped, and ties go to the family that more
+terminals draw well.
+
+Squared error alone weighs a spur of ink that hangs off a stroke no more than
+an edge that moves a little, but the eye sees the spur at once. So the cost
+adds stray: the squared distance of each pixel outside the range of each
+channel that the matrix holds near it, across cell edges. Near is a pixel
+across and half a pixel down, the values midway between a pixel and those
+above and below it, since a terminal draws a matrix pixel half as wide as it
+is tall, and so a spur one pixel long strays. Stray counts three times over:
+on the `mosaic-score` suite, stray falls steeply as its weight rises to that,
+and beyond it each step costs more in difference than it saves. Crisp text,
+whose pens are only full ink or bare ground, counts ink as explained wherever
+any ink is near. Stray is never negative, so only the few candidates whose
+squared error is below the least cost so far need their stray scored, and the
+search stays exact.
 
 The shapes of the characters come from their Unicode names, and a fixture of
 those names, extracted from `UnicodeData.txt`, checks them. The same shapes
 give the masks that the matcher searches, the glyphs that screenshots draw,
 and the displays that the quality harness scores, so the three cannot
 disagree. The harness keeps baselines for a corpus of images and text in every
-tier, and fails when quality drops.
+tier, of fidelity and of stray, and fails when either drops.
 
 `mosaic-score` measures the drawing as a person sees it, to guide work on the
 matcher. Its suite holds photographs, generated images, and text in four fonts
-at four sizes, antialiased and crisp. A display model draws each cell from its
-Unicode geometry at 16 by 32 device pixels, and mixes the two colors of a pixel
-in linear light. The reference is the item itself at those pixels. S-CIELAB
-blurs both as the eye does, at 3 and at 6 cell columns to a degree of visual
-angle, and the score is the mean CIEDE2000 difference that remains. Its filters
-follow the reference implementation of Zhang and Wandell, and its CIEDE2000
-follows the test data of Sharma, Wu, and Dalal. Groups of images, antialiased
-text, and crisp text score the geometric mean of their items, and the suite the
+at seven sizes, antialiased and crisp, on tall cells and on the square cells
+that font banners use by default. A banner item sets one word at several
+offsets within a cell, since where a stroke ends in a cell decides which
+symbol draws it. A display model draws each cell from its Unicode geometry at
+16 by 32 device pixels, and mixes the two colors of a pixel in linear light.
+The reference is the item itself at those pixels. S-CIELAB blurs both as the
+eye does, at 3 and at 6 cell columns to a degree of visual angle. Two metrics
+compare them. Difference is the mean CIEDE2000 difference that remains. Stray
+clamps the display into the range of each channel that the reference holds
+within two device pixels each way, and takes the CIEDE2000 difference of the
+display from that explained display, pooled as a Minkowski mean of exponent
+4, so a few strong marks outweigh a wide faint shade. The filters follow the
+reference implementation of Zhang and Wandell, and the CIEDE2000 follows the
+test data of Sharma, Wu, and Dalal. Groups of images, antialiased text, and
+crisp text score the geometric mean of their items, and the suite the
 geometric mean of its groups. `cargo xtask score` compares a run with the
-committed baseline.
+committed baseline, and `--check` fails when a group or the suite regresses
+in any tier or metric.
 
 Which symbols a terminal draws well depends on the terminal and its font, so
 the application sets `Glyphs`: `Full`, the default, or `Blocks`. Layout reads

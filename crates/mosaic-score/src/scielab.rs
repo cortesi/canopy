@@ -88,15 +88,18 @@ impl Scielab {
     }
 }
 
-/// The mean CIEDE2000 difference between two CIELAB images.
-pub fn mean_difference(a: &[[f32; 3]], b: &[[f32; 3]]) -> f64 {
+/// The CIEDE2000 difference of each pixel of two CIELAB images.
+pub fn differences(a: &[[f32; 3]], b: &[[f32; 3]]) -> Vec<f64> {
     assert_eq!(a.len(), b.len(), "images of one size");
-    let total: f64 = a
-        .iter()
+    a.iter()
         .zip(b)
         .map(|(p, q)| color::ciede2000(p.map(f64::from), q.map(f64::from)))
-        .sum();
-    total / a.len().max(1) as f64
+        .collect()
+}
+
+/// The mean CIEDE2000 difference between two CIELAB images.
+pub fn mean_difference(a: &[[f32; 3]], b: &[[f32; 3]]) -> f64 {
+    differences(a, b).iter().sum::<f64>() / a.len().max(1) as f64
 }
 
 /// MATLAB's `round`: halves away from zero.

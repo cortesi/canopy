@@ -1,450 +1,1491 @@
-# Mean CIEDE2000 difference after S-CIELAB, by item, tier, and viewing
-# condition. `cargo xtask score --update` rewrites it.
-bungee-2-crisp blocks far 4.373165
-bungee-2-crisp blocks near 5.436042
-bungee-2-crisp full far 3.707890
-bungee-2-crisp full near 4.584616
-bungee-2-crisp halves far 6.638232
-bungee-2-crisp halves near 7.561953
-bungee-2-crisp quadrants far 4.402750
-bungee-2-crisp quadrants near 5.449525
-bungee-2-dark blocks far 5.582786
-bungee-2-dark blocks near 7.021330
-bungee-2-dark full far 4.817109
-bungee-2-dark full near 6.179575
-bungee-2-dark halves far 6.742739
-bungee-2-dark halves near 8.332152
-bungee-2-dark quadrants far 5.665050
-bungee-2-dark quadrants near 7.081383
-bungee-2-light blocks far 7.045072
-bungee-2-light blocks near 7.529021
-bungee-2-light full far 6.254509
-bungee-2-light full near 6.702176
-bungee-2-light halves far 7.992867
-bungee-2-light halves near 8.521769
-bungee-2-light quadrants far 7.128034
-bungee-2-light quadrants near 7.658523
-bungee-3-crisp blocks far 3.947621
-bungee-3-crisp blocks near 4.794430
-bungee-3-crisp full far 2.849727
-bungee-3-crisp full near 3.484237
-bungee-3-crisp halves far 8.860368
-bungee-3-crisp halves near 10.655951
-bungee-3-crisp quadrants far 7.406840
-bungee-3-crisp quadrants near 8.654596
-bungee-3-dark blocks far 4.842516
-bungee-3-dark blocks near 6.241737
-bungee-3-dark full far 4.030080
-bungee-3-dark full near 5.247421
-bungee-3-dark halves far 8.897836
-bungee-3-dark halves near 10.758218
-bungee-3-dark quadrants far 7.207578
-bungee-3-dark quadrants near 8.973306
-bungee-3-light blocks far 5.278176
-bungee-3-light blocks near 6.079653
-bungee-3-light full far 4.472500
-bungee-3-light full near 5.153496
-bungee-3-light halves far 9.503188
-bungee-3-light halves near 10.497494
-bungee-3-light quadrants far 8.048975
-bungee-3-light quadrants near 8.949614
-bungee-5-crisp blocks far 3.002072
-bungee-5-crisp blocks near 3.285027
-bungee-5-crisp full far 1.892075
-bungee-5-crisp full near 2.152690
-bungee-5-crisp halves far 7.041578
-bungee-5-crisp halves near 8.061726
-bungee-5-crisp quadrants far 5.567169
-bungee-5-crisp quadrants near 6.269873
-bungee-5-dark blocks far 3.959470
-bungee-5-dark blocks near 4.705629
-bungee-5-dark full far 2.757565
-bungee-5-dark full near 3.362418
-bungee-5-dark halves far 8.293491
-bungee-5-dark halves near 9.372748
-bungee-5-dark quadrants far 6.378841
-bungee-5-dark quadrants near 7.470429
-bungee-5-light blocks far 3.527547
-bungee-5-light blocks near 3.901150
-bungee-5-light full far 2.470536
-bungee-5-light full near 2.857565
-bungee-5-light halves far 7.734157
-bungee-5-light halves near 8.710019
-bungee-5-light quadrants far 5.881110
-bungee-5-light quadrants near 6.650417
-bungee-8-crisp blocks far 1.625777
-bungee-8-crisp blocks near 1.823175
-bungee-8-crisp full far 1.369022
-bungee-8-crisp full near 1.540025
-bungee-8-crisp halves far 5.736586
-bungee-8-crisp halves near 6.169256
-bungee-8-crisp quadrants far 4.264495
-bungee-8-crisp quadrants near 4.487614
-bungee-8-dark blocks far 1.961298
-bungee-8-dark blocks near 2.250394
-bungee-8-dark full far 1.687736
-bungee-8-dark full near 1.971892
-bungee-8-dark halves far 5.833504
-bungee-8-dark halves near 6.172265
-bungee-8-dark quadrants far 3.992993
-bungee-8-dark quadrants near 4.471609
-bungee-8-light blocks far 2.122603
-bungee-8-light blocks near 2.372997
-bungee-8-light full far 1.781937
-bungee-8-light full near 2.037605
-bungee-8-light halves far 5.959248
-bungee-8-light halves near 6.510352
-bungee-8-light quadrants far 4.172429
-bungee-8-light quadrants near 4.729704
-checker blocks far 1.371093
-checker blocks near 1.542739
-checker full far 1.556710
-checker full near 1.809107
-checker halves far 6.452678
-checker halves near 7.188675
-checker quadrants far 3.149979
-checker quadrants near 3.464759
-disc blocks far 0.296341
-disc blocks near 0.369971
-disc full far 0.227129
-disc full near 0.283813
-disc halves far 0.434134
-disc halves near 0.519922
-disc quadrants far 0.370639
-disc quadrants near 0.455373
-fira-mono-2-crisp blocks far 9.455981
-fira-mono-2-crisp blocks near 8.453275
-fira-mono-2-crisp full far 5.741940
-fira-mono-2-crisp full near 6.187227
-fira-mono-2-crisp halves far 12.544516
-fira-mono-2-crisp halves near 10.618780
-fira-mono-2-crisp quadrants far 9.494017
-fira-mono-2-crisp quadrants near 8.499935
-fira-mono-2-dark blocks far 2.709083
-fira-mono-2-dark blocks near 3.970789
-fira-mono-2-dark full far 2.402470
-fira-mono-2-dark full near 3.608208
-fira-mono-2-dark halves far 3.206845
-fira-mono-2-dark halves near 4.513029
-fira-mono-2-dark quadrants far 2.877151
-fira-mono-2-dark quadrants near 4.146838
-fira-mono-2-light blocks far 7.159789
-fira-mono-2-light blocks near 7.174930
-fira-mono-2-light full far 6.261746
-fira-mono-2-light full near 6.356127
-fira-mono-2-light halves far 8.402450
-fira-mono-2-light halves near 8.382714
-fira-mono-2-light quadrants far 7.639845
-fira-mono-2-light quadrants near 7.658486
-fira-mono-3-crisp blocks far 5.154070
-fira-mono-3-crisp blocks near 5.632270
-fira-mono-3-crisp full far 3.198488
-fira-mono-3-crisp full near 3.595327
-fira-mono-3-crisp halves far 12.607510
-fira-mono-3-crisp halves near 11.425752
-fira-mono-3-crisp quadrants far 6.874280
-fira-mono-3-crisp quadrants near 7.057896
-fira-mono-3-dark blocks far 2.665214
-fira-mono-3-dark blocks near 4.128106
-fira-mono-3-dark full far 2.148513
-fira-mono-3-dark full near 3.432833
-fira-mono-3-dark halves far 4.061813
-fira-mono-3-dark halves near 5.898114
-fira-mono-3-dark quadrants far 3.063988
-fira-mono-3-dark quadrants near 4.652732
-fira-mono-3-light blocks far 5.356339
-fira-mono-3-light blocks near 5.737735
-fira-mono-3-light full far 4.341578
-fira-mono-3-light full near 4.715085
-fira-mono-3-light halves far 8.112328
-fira-mono-3-light halves near 8.493442
-fira-mono-3-light quadrants far 6.107172
-fira-mono-3-light quadrants near 6.585695
-fira-mono-5-crisp blocks far 3.134316
-fira-mono-5-crisp blocks near 3.616095
-fira-mono-5-crisp full far 2.186167
-fira-mono-5-crisp full near 2.522393
-fira-mono-5-crisp halves far 7.253635
-fira-mono-5-crisp halves near 8.185534
-fira-mono-5-crisp quadrants far 4.773543
-fira-mono-5-crisp quadrants near 5.346826
-fira-mono-5-dark blocks far 2.818524
-fira-mono-5-dark blocks near 4.183805
-fira-mono-5-dark full far 2.252061
-fira-mono-5-dark full near 3.500055
-fira-mono-5-dark halves far 5.156012
-fira-mono-5-dark halves near 7.129390
-fira-mono-5-dark quadrants far 3.644127
-fira-mono-5-dark quadrants near 5.322861
-fira-mono-5-light blocks far 4.050477
-fira-mono-5-light blocks near 4.619132
-fira-mono-5-light full far 3.192019
-fira-mono-5-light full near 3.703763
-fira-mono-5-light halves far 7.583873
-fira-mono-5-light halves near 8.279389
-fira-mono-5-light quadrants far 5.205642
-fira-mono-5-light quadrants near 5.910587
-fira-mono-8-crisp blocks far 1.907088
-fira-mono-8-crisp blocks near 2.306643
-fira-mono-8-crisp full far 1.314093
-fira-mono-8-crisp full near 1.619139
-fira-mono-8-crisp halves far 5.354451
-fira-mono-8-crisp halves near 6.366447
-fira-mono-8-crisp quadrants far 4.000103
-fira-mono-8-crisp quadrants near 4.726671
-fira-mono-8-dark blocks far 2.495143
-fira-mono-8-dark blocks near 3.171653
-fira-mono-8-dark full far 1.965870
-fira-mono-8-dark full near 2.530466
-fira-mono-8-dark halves far 5.373869
-fira-mono-8-dark halves near 6.581950
-fira-mono-8-dark quadrants far 4.045652
-fira-mono-8-dark quadrants near 5.075762
-fira-mono-8-light blocks far 2.762671
-fira-mono-8-light blocks near 3.072685
-fira-mono-8-light full far 2.168424
-fira-mono-8-light full near 2.458199
-fira-mono-8-light halves far 6.264726
-fira-mono-8-light halves near 6.647768
-fira-mono-8-light quadrants far 4.701009
-fira-mono-8-light quadrants near 5.107463
-jetbrains-bold-2-crisp blocks far 5.148072
-jetbrains-bold-2-crisp blocks near 6.281374
-jetbrains-bold-2-crisp full far 4.007748
-jetbrains-bold-2-crisp full near 4.882481
-jetbrains-bold-2-crisp halves far 10.804979
-jetbrains-bold-2-crisp halves near 9.941205
-jetbrains-bold-2-crisp quadrants far 6.609554
-jetbrains-bold-2-crisp quadrants near 7.161129
-jetbrains-bold-2-dark blocks far 3.383510
-jetbrains-bold-2-dark blocks near 4.955642
-jetbrains-bold-2-dark full far 2.978849
-jetbrains-bold-2-dark full near 4.426487
-jetbrains-bold-2-dark halves far 3.965567
-jetbrains-bold-2-dark halves near 5.661241
-jetbrains-bold-2-dark quadrants far 3.602761
-jetbrains-bold-2-dark quadrants near 5.227380
-jetbrains-bold-2-light blocks far 6.985751
-jetbrains-bold-2-light blocks near 7.102155
-jetbrains-bold-2-light full far 6.186579
-jetbrains-bold-2-light full near 6.319921
-jetbrains-bold-2-light halves far 8.111953
-jetbrains-bold-2-light halves near 8.207135
-jetbrains-bold-2-light quadrants far 7.552213
-jetbrains-bold-2-light quadrants near 7.618285
-jetbrains-bold-3-crisp blocks far 4.340383
-jetbrains-bold-3-crisp blocks near 5.091218
-jetbrains-bold-3-crisp full far 3.016606
-jetbrains-bold-3-crisp full near 3.561516
-jetbrains-bold-3-crisp halves far 8.916893
-jetbrains-bold-3-crisp halves near 9.978268
-jetbrains-bold-3-crisp quadrants far 6.049105
-jetbrains-bold-3-crisp quadrants near 7.059704
-jetbrains-bold-3-dark blocks far 3.387323
-jetbrains-bold-3-dark blocks near 5.011229
-jetbrains-bold-3-dark full far 2.729905
-jetbrains-bold-3-dark full near 4.225517
-jetbrains-bold-3-dark halves far 5.634682
-jetbrains-bold-3-dark halves near 7.656137
-jetbrains-bold-3-dark quadrants far 4.284071
-jetbrains-bold-3-dark quadrants near 6.181843
-jetbrains-bold-3-light blocks far 5.321712
-jetbrains-bold-3-light blocks near 5.799745
-jetbrains-bold-3-light full far 4.425611
-jetbrains-bold-3-light full near 4.864563
-jetbrains-bold-3-light halves far 8.693528
-jetbrains-bold-3-light halves near 9.214924
-jetbrains-bold-3-light quadrants far 6.775570
-jetbrains-bold-3-light quadrants near 7.331512
-jetbrains-bold-5-crisp blocks far 3.112113
-jetbrains-bold-5-crisp blocks near 3.691755
-jetbrains-bold-5-crisp full far 2.278368
-jetbrains-bold-5-crisp full near 2.762966
-jetbrains-bold-5-crisp halves far 6.781832
-jetbrains-bold-5-crisp halves near 7.947462
-jetbrains-bold-5-crisp quadrants far 5.197611
-jetbrains-bold-5-crisp quadrants near 5.979695
-jetbrains-bold-5-dark blocks far 3.609661
-jetbrains-bold-5-dark blocks near 4.940582
-jetbrains-bold-5-dark full far 2.973983
-jetbrains-bold-5-dark full near 4.182099
-jetbrains-bold-5-dark halves far 6.204333
-jetbrains-bold-5-dark halves near 8.081675
-jetbrains-bold-5-dark quadrants far 4.767674
-jetbrains-bold-5-dark quadrants near 6.410628
-jetbrains-bold-5-light blocks far 4.131462
-jetbrains-bold-5-light blocks near 4.767501
-jetbrains-bold-5-light full far 3.322828
-jetbrains-bold-5-light full near 3.961434
-jetbrains-bold-5-light halves far 7.463968
-jetbrains-bold-5-light halves near 8.328070
-jetbrains-bold-5-light quadrants far 5.632324
-jetbrains-bold-5-light quadrants near 6.451553
-jetbrains-bold-8-crisp blocks far 1.881411
-jetbrains-bold-8-crisp blocks near 2.273107
-jetbrains-bold-8-crisp full far 1.388036
-jetbrains-bold-8-crisp full near 1.660836
-jetbrains-bold-8-crisp halves far 5.619599
-jetbrains-bold-8-crisp halves near 6.201783
-jetbrains-bold-8-crisp quadrants far 3.987126
-jetbrains-bold-8-crisp quadrants near 4.465175
-jetbrains-bold-8-dark blocks far 2.469312
-jetbrains-bold-8-dark blocks near 3.043781
-jetbrains-bold-8-dark full far 1.920845
-jetbrains-bold-8-dark full near 2.434246
-jetbrains-bold-8-dark halves far 5.623300
-jetbrains-bold-8-dark halves near 6.438339
-jetbrains-bold-8-dark quadrants far 3.989660
-jetbrains-bold-8-dark quadrants near 4.791251
-jetbrains-bold-8-light blocks far 2.529983
-jetbrains-bold-8-light blocks near 2.878979
-jetbrains-bold-8-light full far 1.953402
-jetbrains-bold-8-light full near 2.244291
-jetbrains-bold-8-light halves far 5.970835
-jetbrains-bold-8-light halves near 6.524905
-jetbrains-bold-8-light quadrants far 4.252759
-jetbrains-bold-8-light quadrants near 4.782521
-lines blocks far 2.836201
-lines blocks near 4.924253
-lines full far 2.050633
-lines full near 3.884296
-lines halves far 3.861835
-lines halves near 6.212208
-lines quadrants far 3.430174
-lines quadrants near 5.704900
-noise blocks far 0.615163
-noise blocks near 0.801013
-noise full far 0.577435
-noise full near 0.758777
-noise halves far 0.678720
-noise halves near 0.878630
-noise quadrants far 0.640748
-noise quadrants near 0.828917
-photo blocks far 5.746600
-photo blocks near 8.761939
-photo full far 5.148042
-photo full near 8.113958
-photo halves far 6.917675
-photo halves near 10.037200
-photo quadrants far 6.162213
-photo quadrants near 9.247963
-ramps blocks far 0.123041
-ramps blocks near 0.170634
-ramps full far 0.123041
-ramps full near 0.170634
-ramps halves far 0.282376
-ramps halves near 0.378619
-ramps quadrants far 0.128014
-ramps quadrants near 0.175096
-shapes blocks far 1.154207
-shapes blocks near 1.421779
-shapes full far 0.806780
-shapes full near 1.013748
-shapes halves far 1.781354
-shapes halves near 2.122139
-shapes quadrants far 1.455156
-shapes quadrants near 1.763169
-tangerine-2-crisp blocks far 7.702428
-tangerine-2-crisp blocks near 6.654632
-tangerine-2-crisp full far 7.340489
-tangerine-2-crisp full near 6.408124
-tangerine-2-crisp halves far 7.895948
-tangerine-2-crisp halves near 6.811478
-tangerine-2-crisp quadrants far 7.895948
-tangerine-2-crisp quadrants near 6.811478
-tangerine-2-dark blocks far 1.281512
-tangerine-2-dark blocks near 1.678800
-tangerine-2-dark full far 1.200755
-tangerine-2-dark full near 1.581955
-tangerine-2-dark halves far 1.410188
-tangerine-2-dark halves near 1.818049
-tangerine-2-dark quadrants far 1.317241
-tangerine-2-dark quadrants near 1.726333
-tangerine-2-light blocks far 4.838615
-tangerine-2-light blocks near 4.780046
-tangerine-2-light full far 4.650857
-tangerine-2-light full near 4.581224
-tangerine-2-light halves far 5.223115
-tangerine-2-light halves near 5.164270
-tangerine-2-light quadrants far 5.004972
-tangerine-2-light quadrants near 4.944796
-tangerine-3-crisp blocks far 8.599148
-tangerine-3-crisp blocks near 7.558851
-tangerine-3-crisp full far 5.745109
-tangerine-3-crisp full near 5.540750
-tangerine-3-crisp halves far 8.972311
-tangerine-3-crisp halves near 7.821439
-tangerine-3-crisp quadrants far 8.599148
-tangerine-3-crisp quadrants near 7.558851
-tangerine-3-dark blocks far 1.721631
-tangerine-3-dark blocks near 2.386791
-tangerine-3-dark full far 1.499706
-tangerine-3-dark full near 2.128560
-tangerine-3-dark halves far 2.016303
-tangerine-3-dark halves near 2.704777
-tangerine-3-dark quadrants far 1.855182
-tangerine-3-dark quadrants near 2.551868
-tangerine-3-light blocks far 5.573863
-tangerine-3-light blocks near 5.581553
-tangerine-3-light full far 4.905503
-tangerine-3-light full near 4.925573
-tangerine-3-light halves far 6.409481
-tangerine-3-light halves near 6.396487
-tangerine-3-light quadrants far 6.103578
-tangerine-3-light quadrants near 6.047576
-tangerine-5-crisp blocks far 5.622860
-tangerine-5-crisp blocks near 5.803568
-tangerine-5-crisp full far 3.616170
-tangerine-5-crisp full near 4.070537
-tangerine-5-crisp halves far 9.505426
-tangerine-5-crisp halves near 8.805967
-tangerine-5-crisp quadrants far 6.024142
-tangerine-5-crisp quadrants near 6.134743
-tangerine-5-dark blocks far 2.122722
-tangerine-5-dark blocks near 3.180855
-tangerine-5-dark full far 1.682523
-tangerine-5-dark full near 2.604420
-tangerine-5-dark halves far 2.728833
-tangerine-5-dark halves near 3.897479
-tangerine-5-dark quadrants far 2.207701
-tangerine-5-dark quadrants near 3.296685
-tangerine-5-light blocks far 5.472391
-tangerine-5-light blocks near 5.792363
-tangerine-5-light full far 4.173880
-tangerine-5-light full near 4.532402
-tangerine-5-light halves far 6.759289
-tangerine-5-light halves near 7.047212
-tangerine-5-light quadrants far 5.670706
-tangerine-5-light quadrants near 6.010717
-tangerine-8-crisp blocks far 3.661397
-tangerine-8-crisp blocks near 4.050200
-tangerine-8-crisp full far 2.449959
-tangerine-8-crisp full near 2.847910
-tangerine-8-crisp halves far 6.620306
-tangerine-8-crisp halves near 6.918700
-tangerine-8-crisp quadrants far 4.473169
-tangerine-8-crisp quadrants near 4.830089
-tangerine-8-dark blocks far 2.113504
-tangerine-8-dark blocks near 3.270350
-tangerine-8-dark full far 1.729146
-tangerine-8-dark full near 2.764017
-tangerine-8-dark halves far 3.097460
-tangerine-8-dark halves near 4.479251
-tangerine-8-dark quadrants far 2.397516
-tangerine-8-dark quadrants near 3.647856
-tangerine-8-light blocks far 4.112581
-tangerine-8-light blocks near 4.568052
-tangerine-8-light full far 3.314257
-tangerine-8-light full near 3.762188
-tangerine-8-light halves far 5.896895
-tangerine-8-light halves near 6.368839
-tangerine-8-light quadrants far 4.645022
-tangerine-8-light quadrants near 5.136969
-zone-plate blocks far 15.762994
-zone-plate blocks near 21.941368
-zone-plate full far 12.815983
-zone-plate full near 18.621114
-zone-plate halves far 18.593467
-zone-plate halves near 25.088308
-zone-plate quadrants far 16.827833
-zone-plate quadrants near 23.118613
+# Scores by item, tier, viewing condition, and metric: the mean
+# CIEDE2000 difference and the pooled stray, both after S-CIELAB.
+# `cargo xtask score --update` rewrites it.
+banner blocks far difference 1.425554
+banner blocks far stray 6.417488
+banner blocks near difference 1.670309
+banner blocks near stray 8.179672
+banner full far difference 1.151918
+banner full far stray 4.643613
+banner full near difference 1.375703
+banner full near stray 5.891535
+banner halves far difference 4.815300
+banner halves far stray 16.171991
+banner halves near difference 5.251299
+banner halves near stray 18.056042
+banner quadrants far difference 2.758650
+banner quadrants far stray 9.907799
+banner quadrants near difference 3.221085
+banner quadrants near stray 12.439869
+bungee-16-square-crisp blocks far difference 1.112320
+bungee-16-square-crisp blocks far stray 6.654230
+bungee-16-square-crisp blocks near difference 1.235972
+bungee-16-square-crisp blocks near stray 9.826148
+bungee-16-square-crisp full far difference 0.951156
+bungee-16-square-crisp full far stray 3.048940
+bungee-16-square-crisp full near difference 1.034550
+bungee-16-square-crisp full near stray 4.812183
+bungee-16-square-crisp halves far difference 4.656217
+bungee-16-square-crisp halves far stray 20.208969
+bungee-16-square-crisp halves near difference 5.106382
+bungee-16-square-crisp halves near stray 25.604490
+bungee-16-square-crisp quadrants far difference 2.923992
+bungee-16-square-crisp quadrants far stray 11.446341
+bungee-16-square-crisp quadrants near difference 3.103432
+bungee-16-square-crisp quadrants near stray 15.571016
+bungee-16-square-dark blocks far difference 1.348644
+bungee-16-square-dark blocks far stray 6.851606
+bungee-16-square-dark blocks near difference 1.590389
+bungee-16-square-dark blocks near stray 9.215983
+bungee-16-square-dark full far difference 1.160741
+bungee-16-square-dark full far stray 5.187260
+bungee-16-square-dark full near difference 1.399635
+bungee-16-square-dark full near stray 6.611176
+bungee-16-square-dark halves far difference 5.246090
+bungee-16-square-dark halves far stray 16.065015
+bungee-16-square-dark halves near difference 5.506803
+bungee-16-square-dark halves near stray 18.915611
+bungee-16-square-dark quadrants far difference 3.067249
+bungee-16-square-dark quadrants far stray 12.239011
+bungee-16-square-dark quadrants near difference 3.515680
+bungee-16-square-dark quadrants near stray 13.877355
+bungee-16-square-light blocks far difference 1.240399
+bungee-16-square-light blocks far stray 5.970953
+bungee-16-square-light blocks near difference 1.462342
+bungee-16-square-light blocks near stray 7.814434
+bungee-16-square-light full far difference 1.100760
+bungee-16-square-light full far stray 4.452257
+bungee-16-square-light full near difference 1.290719
+bungee-16-square-light full near stray 5.634131
+bungee-16-square-light halves far difference 4.944805
+bungee-16-square-light halves far stray 16.163292
+bungee-16-square-light halves near difference 5.424494
+bungee-16-square-light halves near stray 18.096006
+bungee-16-square-light quadrants far difference 2.848999
+bungee-16-square-light quadrants far stray 9.524827
+bungee-16-square-light quadrants near difference 3.319098
+bungee-16-square-light quadrants near stray 12.267219
+bungee-2-crisp blocks far difference 4.569568
+bungee-2-crisp blocks far stray 11.087628
+bungee-2-crisp blocks near difference 5.539037
+bungee-2-crisp blocks near stray 16.544016
+bungee-2-crisp full far difference 3.709058
+bungee-2-crisp full far stray 6.044988
+bungee-2-crisp full near difference 4.584604
+bungee-2-crisp full near stray 10.902912
+bungee-2-crisp halves far difference 6.488013
+bungee-2-crisp halves far stray 18.824034
+bungee-2-crisp halves near difference 7.735547
+bungee-2-crisp halves near stray 25.106398
+bungee-2-crisp quadrants far difference 4.599828
+bungee-2-crisp quadrants far stray 11.105365
+bungee-2-crisp quadrants near difference 5.544283
+bungee-2-crisp quadrants near stray 16.582229
+bungee-2-dark blocks far difference 5.562972
+bungee-2-dark blocks far stray 13.305158
+bungee-2-dark blocks near difference 7.018847
+bungee-2-dark blocks near stray 16.637948
+bungee-2-dark full far difference 4.823079
+bungee-2-dark full far stray 10.708395
+bungee-2-dark full near difference 6.196681
+bungee-2-dark full near stray 13.583077
+bungee-2-dark halves far difference 6.742388
+bungee-2-dark halves far stray 16.054541
+bungee-2-dark halves near difference 8.332436
+bungee-2-dark halves near stray 19.247818
+bungee-2-dark quadrants far difference 5.665050
+bungee-2-dark quadrants far stray 13.626146
+bungee-2-dark quadrants near difference 7.081383
+bungee-2-dark quadrants near stray 16.718120
+bungee-2-light blocks far difference 7.034658
+bungee-2-light blocks far stray 9.268353
+bungee-2-light blocks near difference 7.515402
+bungee-2-light blocks near stray 12.716550
+bungee-2-light full far difference 6.275102
+bungee-2-light full far stray 7.756737
+bungee-2-light full near difference 6.724145
+bungee-2-light full near stray 9.958512
+bungee-2-light halves far difference 7.994453
+bungee-2-light halves far stray 10.587278
+bungee-2-light halves near difference 8.521253
+bungee-2-light halves near stray 14.950436
+bungee-2-light quadrants far difference 7.128034
+bungee-2-light quadrants far stray 9.208938
+bungee-2-light quadrants near difference 7.658523
+bungee-2-light quadrants near stray 12.892939
+bungee-3-crisp blocks far difference 4.245462
+bungee-3-crisp blocks far stray 12.974056
+bungee-3-crisp blocks near difference 5.061144
+bungee-3-crisp blocks near stray 18.850127
+bungee-3-crisp full far difference 2.862121
+bungee-3-crisp full far stray 5.645053
+bungee-3-crisp full near difference 3.508233
+bungee-3-crisp full near stray 9.984511
+bungee-3-crisp halves far difference 9.051670
+bungee-3-crisp halves far stray 22.719061
+bungee-3-crisp halves near difference 10.764871
+bungee-3-crisp halves near stray 31.028933
+bungee-3-crisp quadrants far difference 7.563043
+bungee-3-crisp quadrants far stray 18.071924
+bungee-3-crisp quadrants near difference 8.773985
+bungee-3-crisp quadrants near stray 25.494214
+bungee-3-dark blocks far difference 4.875037
+bungee-3-dark blocks far stray 13.590008
+bungee-3-dark blocks near difference 6.294826
+bungee-3-dark blocks near stray 17.304273
+bungee-3-dark full far difference 4.031384
+bungee-3-dark full far stray 11.040710
+bungee-3-dark full near difference 5.289097
+bungee-3-dark full near stray 14.366062
+bungee-3-dark halves far difference 8.902723
+bungee-3-dark halves far stray 21.637320
+bungee-3-dark halves near difference 10.761492
+bungee-3-dark halves near stray 26.372326
+bungee-3-dark quadrants far difference 7.217335
+bungee-3-dark quadrants far stray 17.949412
+bungee-3-dark quadrants near difference 8.975075
+bungee-3-dark quadrants near stray 23.092220
+bungee-3-light blocks far difference 5.309858
+bungee-3-light blocks far stray 9.031223
+bungee-3-light blocks near difference 6.149265
+bungee-3-light blocks near stray 13.551229
+bungee-3-light full far difference 4.476462
+bungee-3-light full far stray 6.253996
+bungee-3-light full near difference 5.184284
+bungee-3-light full near stray 10.671942
+bungee-3-light halves far difference 9.509840
+bungee-3-light halves far stray 15.369471
+bungee-3-light halves near difference 10.501913
+bungee-3-light halves near stray 21.264411
+bungee-3-light quadrants far difference 8.090863
+bungee-3-light quadrants far stray 13.142788
+bungee-3-light quadrants near difference 8.975139
+bungee-3-light quadrants near stray 18.012606
+bungee-4-square-crisp blocks far difference 3.548866
+bungee-4-square-crisp blocks far stray 8.378665
+bungee-4-square-crisp blocks near difference 4.438150
+bungee-4-square-crisp blocks near stray 14.317785
+bungee-4-square-crisp full far difference 3.208970
+bungee-4-square-crisp full far stray 6.608660
+bungee-4-square-crisp full near difference 3.906923
+bungee-4-square-crisp full near stray 11.225113
+bungee-4-square-crisp halves far difference 7.629119
+bungee-4-square-crisp halves far stray 19.755625
+bungee-4-square-crisp halves near difference 8.909308
+bungee-4-square-crisp halves near stray 26.268641
+bungee-4-square-crisp quadrants far difference 5.355679
+bungee-4-square-crisp quadrants far stray 9.277124
+bungee-4-square-crisp quadrants near difference 6.520763
+bungee-4-square-crisp quadrants near stray 15.704655
+bungee-4-square-dark blocks far difference 4.312965
+bungee-4-square-dark blocks far stray 10.673747
+bungee-4-square-dark blocks near difference 5.577979
+bungee-4-square-dark blocks near stray 13.448470
+bungee-4-square-dark full far difference 3.803633
+bungee-4-square-dark full far stray 8.187118
+bungee-4-square-dark full near difference 5.114023
+bungee-4-square-dark full near stray 10.934613
+bungee-4-square-dark halves far difference 8.404500
+bungee-4-square-dark halves far stray 16.763763
+bungee-4-square-dark halves near difference 10.337289
+bungee-4-square-dark halves near stray 20.990855
+bungee-4-square-dark quadrants far difference 6.019254
+bungee-4-square-dark quadrants far stray 11.830958
+bungee-4-square-dark quadrants near difference 7.628407
+bungee-4-square-dark quadrants near stray 15.183370
+bungee-4-square-light blocks far difference 4.059653
+bungee-4-square-light blocks far stray 6.750813
+bungee-4-square-light blocks near difference 4.984863
+bungee-4-square-light blocks near stray 11.322919
+bungee-4-square-light full far difference 3.678647
+bungee-4-square-light full far stray 5.794820
+bungee-4-square-light full near difference 4.584375
+bungee-4-square-light full near stray 10.020993
+bungee-4-square-light halves far difference 8.621718
+bungee-4-square-light halves far stray 12.975621
+bungee-4-square-light halves near difference 9.954239
+bungee-4-square-light halves near stray 17.611950
+bungee-4-square-light quadrants far difference 6.471010
+bungee-4-square-light quadrants far stray 9.510826
+bungee-4-square-light quadrants near difference 7.577654
+bungee-4-square-light quadrants near stray 13.082549
+bungee-5-crisp blocks far difference 2.998997
+bungee-5-crisp blocks far stray 10.407131
+bungee-5-crisp blocks near difference 3.282247
+bungee-5-crisp blocks near stray 16.701510
+bungee-5-crisp full far difference 1.918557
+bungee-5-crisp full far stray 6.475820
+bungee-5-crisp full near difference 2.170500
+bungee-5-crisp full near stray 10.273026
+bungee-5-crisp halves far difference 7.055289
+bungee-5-crisp halves far stray 20.248594
+bungee-5-crisp halves near difference 8.074563
+bungee-5-crisp halves near stray 28.520351
+bungee-5-crisp quadrants far difference 5.751839
+bungee-5-crisp quadrants far stray 14.046640
+bungee-5-crisp quadrants near difference 6.413455
+bungee-5-crisp quadrants near stray 22.041135
+bungee-5-dark blocks far difference 3.935719
+bungee-5-dark blocks far stray 13.271261
+bungee-5-dark blocks near difference 4.688772
+bungee-5-dark blocks near stray 15.204817
+bungee-5-dark full far difference 2.725804
+bungee-5-dark full far stray 8.435095
+bungee-5-dark full near difference 3.362318
+bungee-5-dark full near stray 10.479737
+bungee-5-dark halves far difference 8.295281
+bungee-5-dark halves far stray 20.632707
+bungee-5-dark halves near difference 9.372028
+bungee-5-dark halves near stray 23.759247
+bungee-5-dark quadrants far difference 6.411611
+bungee-5-dark quadrants far stray 18.245773
+bungee-5-dark quadrants near difference 7.498041
+bungee-5-dark quadrants near stray 20.288947
+bungee-5-light blocks far difference 3.492247
+bungee-5-light blocks far stray 8.517890
+bungee-5-light blocks near difference 3.889053
+bungee-5-light blocks near stray 13.660449
+bungee-5-light full far difference 2.476704
+bungee-5-light full far stray 5.927769
+bungee-5-light full near difference 2.888175
+bungee-5-light full near stray 9.293803
+bungee-5-light halves far difference 7.732920
+bungee-5-light halves far stray 15.592043
+bungee-5-light halves near difference 8.707010
+bungee-5-light halves near stray 21.365880
+bungee-5-light quadrants far difference 5.892339
+bungee-5-light quadrants far stray 11.539917
+bungee-5-light quadrants near difference 6.660866
+bungee-5-light quadrants near stray 17.362811
+bungee-8-crisp blocks far difference 1.639366
+bungee-8-crisp blocks far stray 5.913648
+bungee-8-crisp blocks near difference 1.842474
+bungee-8-crisp blocks near stray 9.725637
+bungee-8-crisp full far difference 1.379416
+bungee-8-crisp full far stray 3.856108
+bungee-8-crisp full near difference 1.550378
+bungee-8-crisp full near stray 6.366223
+bungee-8-crisp halves far difference 5.740500
+bungee-8-crisp halves far stray 20.424601
+bungee-8-crisp halves near difference 6.174763
+bungee-8-crisp halves near stray 27.043100
+bungee-8-crisp quadrants far difference 4.265322
+bungee-8-crisp quadrants far stray 15.560065
+bungee-8-crisp quadrants near difference 4.491307
+bungee-8-crisp quadrants near stray 21.978935
+bungee-8-dark blocks far difference 1.953959
+bungee-8-dark blocks far stray 8.024668
+bungee-8-dark blocks near difference 2.326777
+bungee-8-dark blocks near stray 10.117603
+bungee-8-dark full far difference 1.673931
+bungee-8-dark full far stray 7.580997
+bungee-8-dark full near difference 2.041450
+bungee-8-dark full near stray 9.203076
+bungee-8-dark halves far difference 5.836100
+bungee-8-dark halves far stray 16.590933
+bungee-8-dark halves near difference 6.171918
+bungee-8-dark halves near stray 20.408471
+bungee-8-dark quadrants far difference 4.000060
+bungee-8-dark quadrants far stray 13.744555
+bungee-8-dark quadrants near difference 4.473735
+bungee-8-dark quadrants near stray 17.300982
+bungee-8-light blocks far difference 1.964593
+bungee-8-light blocks far stray 6.560034
+bungee-8-light blocks near difference 2.278996
+bungee-8-light blocks near stray 8.597576
+bungee-8-light full far difference 1.627533
+bungee-8-light full far stray 4.912958
+bungee-8-light full near difference 1.941081
+bungee-8-light full near stray 6.466271
+bungee-8-light halves far difference 5.960349
+bungee-8-light halves far stray 16.162467
+bungee-8-light halves near difference 6.507004
+bungee-8-light halves near stray 19.116564
+bungee-8-light quadrants far difference 4.182141
+bungee-8-light quadrants far stray 12.526790
+bungee-8-light quadrants near difference 4.728184
+bungee-8-light quadrants near stray 15.876882
+bungee-8-square-crisp blocks far difference 2.178971
+bungee-8-square-crisp blocks far stray 6.696213
+bungee-8-square-crisp blocks near difference 2.545791
+bungee-8-square-crisp blocks near stray 11.021180
+bungee-8-square-crisp full far difference 1.792455
+bungee-8-square-crisp full far stray 4.122178
+bungee-8-square-crisp full near difference 2.101248
+bungee-8-square-crisp full near stray 7.123732
+bungee-8-square-crisp halves far difference 7.351493
+bungee-8-square-crisp halves far stray 21.214173
+bungee-8-square-crisp halves near difference 8.444977
+bungee-8-square-crisp halves near stray 30.458641
+bungee-8-square-crisp quadrants far difference 5.300491
+bungee-8-square-crisp quadrants far stray 14.780699
+bungee-8-square-crisp quadrants near difference 5.893570
+bungee-8-square-crisp quadrants near stray 20.971813
+bungee-8-square-dark blocks far difference 2.602828
+bungee-8-square-dark blocks far stray 7.552214
+bungee-8-square-dark blocks near difference 3.349111
+bungee-8-square-dark blocks near stray 10.709335
+bungee-8-square-dark full far difference 2.207746
+bungee-8-square-dark full far stray 6.939719
+bungee-8-square-dark full near difference 2.926940
+bungee-8-square-dark full near stray 9.454936
+bungee-8-square-dark halves far difference 7.927259
+bungee-8-square-dark halves far stray 18.390428
+bungee-8-square-dark halves near difference 9.294043
+bungee-8-square-dark halves near stray 23.112539
+bungee-8-square-dark quadrants far difference 4.842940
+bungee-8-square-dark quadrants far stray 13.098791
+bungee-8-square-dark quadrants near difference 6.007426
+bungee-8-square-dark quadrants near stray 17.224332
+bungee-8-square-light blocks far difference 2.653188
+bungee-8-square-light blocks far stray 6.320882
+bungee-8-square-light blocks near difference 3.190687
+bungee-8-square-light blocks near stray 9.679748
+bungee-8-square-light full far difference 2.128488
+bungee-8-square-light full far stray 4.428778
+bungee-8-square-light full near difference 2.641081
+bungee-8-square-light full near stray 7.501153
+bungee-8-square-light halves far difference 7.723002
+bungee-8-square-light halves far stray 16.284959
+bungee-8-square-light halves near difference 9.072855
+bungee-8-square-light halves near stray 22.309150
+bungee-8-square-light quadrants far difference 5.116668
+bungee-8-square-light quadrants far stray 11.818355
+bungee-8-square-light quadrants near difference 6.133257
+bungee-8-square-light quadrants near stray 15.759022
+checker blocks far difference 1.371093
+checker blocks far stray 7.027507
+checker blocks near difference 1.542739
+checker blocks near stray 8.740436
+checker full far difference 1.505346
+checker full far stray 8.533884
+checker full near difference 1.736385
+checker full near stray 10.901534
+checker halves far difference 6.452678
+checker halves far stray 14.082787
+checker halves near difference 7.188675
+checker halves near stray 16.112045
+checker quadrants far difference 3.149979
+checker quadrants far stray 7.835706
+checker quadrants near difference 3.464759
+checker quadrants near stray 9.710782
+disc blocks far difference 0.296290
+disc blocks far stray 1.780609
+disc blocks near difference 0.369886
+disc blocks near stray 3.057427
+disc full far difference 0.227388
+disc full far stray 0.761749
+disc full near difference 0.284380
+disc full near stray 1.056092
+disc halves far difference 0.434303
+disc halves far stray 3.403167
+disc halves near difference 0.520259
+disc halves near stray 4.714833
+disc quadrants far difference 0.373711
+disc quadrants far stray 3.049269
+disc quadrants near difference 0.457609
+disc quadrants near stray 4.383650
+fira-mono-16-square-crisp blocks far difference 1.414947
+fira-mono-16-square-crisp blocks far stray 6.173856
+fira-mono-16-square-crisp blocks near difference 1.769837
+fira-mono-16-square-crisp blocks near stray 10.022721
+fira-mono-16-square-crisp full far difference 1.089724
+fira-mono-16-square-crisp full far stray 3.686309
+fira-mono-16-square-crisp full near difference 1.351284
+fira-mono-16-square-crisp full near stray 6.142344
+fira-mono-16-square-crisp halves far difference 4.323942
+fira-mono-16-square-crisp halves far stray 17.671042
+fira-mono-16-square-crisp halves near difference 5.322076
+fira-mono-16-square-crisp halves near stray 24.922624
+fira-mono-16-square-crisp quadrants far difference 2.625292
+fira-mono-16-square-crisp quadrants far stray 10.516062
+fira-mono-16-square-crisp quadrants near difference 3.155855
+fira-mono-16-square-crisp quadrants near stray 15.575441
+fira-mono-16-square-dark blocks far difference 2.075958
+fira-mono-16-square-dark blocks far stray 10.018198
+fira-mono-16-square-dark blocks near difference 2.470788
+fira-mono-16-square-dark blocks near stray 11.182066
+fira-mono-16-square-dark full far difference 1.642271
+fira-mono-16-square-dark full far stray 8.328007
+fira-mono-16-square-dark full near difference 2.018323
+fira-mono-16-square-dark full near stray 9.167191
+fira-mono-16-square-dark halves far difference 4.905247
+fira-mono-16-square-dark halves far stray 19.561216
+fira-mono-16-square-dark halves near difference 5.699834
+fira-mono-16-square-dark halves near stray 22.346112
+fira-mono-16-square-dark quadrants far difference 3.079662
+fira-mono-16-square-dark quadrants far stray 12.930292
+fira-mono-16-square-dark quadrants near difference 3.656435
+fira-mono-16-square-dark quadrants near stray 14.467852
+fira-mono-16-square-light blocks far difference 2.069482
+fira-mono-16-square-light blocks far stray 5.920648
+fira-mono-16-square-light blocks near difference 2.324326
+fira-mono-16-square-light blocks near stray 8.826913
+fira-mono-16-square-light full far difference 1.635093
+fira-mono-16-square-light full far stray 4.187378
+fira-mono-16-square-light full near difference 1.868279
+fira-mono-16-square-light full near stray 6.383811
+fira-mono-16-square-light halves far difference 5.151650
+fira-mono-16-square-light halves far stray 12.842302
+fira-mono-16-square-light halves near difference 5.538296
+fira-mono-16-square-light halves near stray 17.263841
+fira-mono-16-square-light quadrants far difference 3.063251
+fira-mono-16-square-light quadrants far stray 8.177605
+fira-mono-16-square-light quadrants near difference 3.490179
+fira-mono-16-square-light quadrants near stray 11.940028
+fira-mono-2-crisp blocks far difference 9.617400
+fira-mono-2-crisp blocks far stray 6.504916
+fira-mono-2-crisp blocks near difference 8.624027
+fira-mono-2-crisp blocks near stray 9.193932
+fira-mono-2-crisp full far difference 5.621762
+fira-mono-2-crisp full far stray 7.364968
+fira-mono-2-crisp full near difference 6.255023
+fira-mono-2-crisp full near stray 11.133207
+fira-mono-2-crisp halves far difference 12.544516
+fira-mono-2-crisp halves far stray 6.329793
+fira-mono-2-crisp halves near difference 10.618780
+fira-mono-2-crisp halves near stray 8.478289
+fira-mono-2-crisp quadrants far difference 9.872152
+fira-mono-2-crisp quadrants far stray 6.587831
+fira-mono-2-crisp quadrants near difference 8.779064
+fira-mono-2-crisp quadrants near stray 8.971282
+fira-mono-2-dark blocks far difference 2.715599
+fira-mono-2-dark blocks far stray 5.717858
+fira-mono-2-dark blocks near difference 3.983399
+fira-mono-2-dark blocks near stray 6.928218
+fira-mono-2-dark full far difference 2.459156
+fira-mono-2-dark full far stray 5.098993
+fira-mono-2-dark full near difference 3.645283
+fira-mono-2-dark full near stray 6.643222
+fira-mono-2-dark halves far difference 3.208993
+fira-mono-2-dark halves far stray 6.332989
+fira-mono-2-dark halves near difference 4.516112
+fira-mono-2-dark halves near stray 6.920928
+fira-mono-2-dark quadrants far difference 2.894253
+fira-mono-2-dark quadrants far stray 5.494758
+fira-mono-2-dark quadrants near difference 4.162557
+fira-mono-2-dark quadrants near stray 6.627533
+fira-mono-2-light blocks far difference 7.171431
+fira-mono-2-light blocks far stray 6.256298
+fira-mono-2-light blocks near difference 7.203771
+fira-mono-2-light blocks near stray 8.419385
+fira-mono-2-light full far difference 6.192903
+fira-mono-2-light full far stray 5.227734
+fira-mono-2-light full near difference 6.366303
+fira-mono-2-light full near stray 7.599632
+fira-mono-2-light halves far difference 8.412776
+fira-mono-2-light halves far stray 6.964719
+fira-mono-2-light halves near difference 8.389454
+fira-mono-2-light halves near stray 8.880242
+fira-mono-2-light quadrants far difference 7.691871
+fira-mono-2-light quadrants far stray 5.778392
+fira-mono-2-light quadrants near difference 7.696655
+fira-mono-2-light quadrants near stray 7.975205
+fira-mono-3-crisp blocks far difference 5.381806
+fira-mono-3-crisp blocks far stray 12.577089
+fira-mono-3-crisp blocks near difference 5.780585
+fira-mono-3-crisp blocks near stray 17.032925
+fira-mono-3-crisp full far difference 3.194596
+fira-mono-3-crisp full far stray 7.306632
+fira-mono-3-crisp full near difference 3.598339
+fira-mono-3-crisp full near stray 10.796872
+fira-mono-3-crisp halves far difference 12.785010
+fira-mono-3-crisp halves far stray 17.944815
+fira-mono-3-crisp halves near difference 11.559121
+fira-mono-3-crisp halves near stray 22.268936
+fira-mono-3-crisp quadrants far difference 6.885589
+fira-mono-3-crisp quadrants far stray 12.734534
+fira-mono-3-crisp quadrants near difference 7.072726
+fira-mono-3-crisp quadrants near stray 17.205330
+fira-mono-3-dark blocks far difference 2.670244
+fira-mono-3-dark blocks far stray 7.243083
+fira-mono-3-dark blocks near difference 4.131700
+fira-mono-3-dark blocks near stray 9.092997
+fira-mono-3-dark full far difference 2.142111
+fira-mono-3-dark full far stray 4.994291
+fira-mono-3-dark full near difference 3.442496
+fira-mono-3-dark full near stray 7.288745
+fira-mono-3-dark halves far difference 4.062364
+fira-mono-3-dark halves far stray 8.699880
+fira-mono-3-dark halves near difference 5.899094
+fira-mono-3-dark halves near stray 11.042642
+fira-mono-3-dark quadrants far difference 3.066456
+fira-mono-3-dark quadrants far stray 6.863442
+fira-mono-3-dark quadrants near difference 4.655874
+fira-mono-3-dark quadrants near stray 8.973773
+fira-mono-3-light blocks far difference 5.373654
+fira-mono-3-light blocks far stray 7.830860
+fira-mono-3-light blocks near difference 5.761425
+fira-mono-3-light blocks near stray 10.931488
+fira-mono-3-light full far difference 4.343394
+fira-mono-3-light full far stray 5.288672
+fira-mono-3-light full near difference 4.743397
+fira-mono-3-light full near stray 7.981536
+fira-mono-3-light halves far difference 8.114588
+fira-mono-3-light halves far stray 11.017438
+fira-mono-3-light halves near difference 8.495610
+fira-mono-3-light halves near stray 14.176182
+fira-mono-3-light quadrants far difference 6.124401
+fira-mono-3-light quadrants far stray 8.136268
+fira-mono-3-light quadrants near difference 6.602355
+fira-mono-3-light quadrants near stray 11.243588
+fira-mono-4-square-crisp blocks far difference 9.610409
+fira-mono-4-square-crisp blocks far stray 12.424954
+fira-mono-4-square-crisp blocks near difference 9.274165
+fira-mono-4-square-crisp blocks near stray 16.309809
+fira-mono-4-square-crisp full far difference 5.468566
+fira-mono-4-square-crisp full far stray 9.135188
+fira-mono-4-square-crisp full near difference 5.732232
+fira-mono-4-square-crisp full near stray 12.489853
+fira-mono-4-square-crisp halves far difference 14.268103
+fira-mono-4-square-crisp halves far stray 14.712115
+fira-mono-4-square-crisp halves near difference 13.007604
+fira-mono-4-square-crisp halves near stray 18.049402
+fira-mono-4-square-crisp quadrants far difference 11.220644
+fira-mono-4-square-crisp quadrants far stray 14.118733
+fira-mono-4-square-crisp quadrants near difference 10.762970
+fira-mono-4-square-crisp quadrants near stray 17.360629
+fira-mono-4-square-dark blocks far difference 3.248363
+fira-mono-4-square-dark blocks far stray 8.234407
+fira-mono-4-square-dark blocks near difference 4.785776
+fira-mono-4-square-dark blocks near stray 9.669919
+fira-mono-4-square-dark full far difference 2.855648
+fira-mono-4-square-dark full far stray 6.193084
+fira-mono-4-square-dark full near difference 4.238880
+fira-mono-4-square-dark full near stray 7.827973
+fira-mono-4-square-dark halves far difference 4.434696
+fira-mono-4-square-dark halves far stray 7.528571
+fira-mono-4-square-dark halves near difference 6.363039
+fira-mono-4-square-dark halves near stray 9.295700
+fira-mono-4-square-dark quadrants far difference 3.863303
+fira-mono-4-square-dark quadrants far stray 7.013267
+fira-mono-4-square-dark quadrants near difference 5.682980
+fira-mono-4-square-dark quadrants near stray 9.094721
+fira-mono-4-square-light blocks far difference 6.813772
+fira-mono-4-square-light blocks far stray 9.044007
+fira-mono-4-square-light blocks near difference 7.382078
+fira-mono-4-square-light blocks near stray 11.966506
+fira-mono-4-square-light full far difference 5.573627
+fira-mono-4-square-light full far stray 6.845661
+fira-mono-4-square-light full near difference 6.308607
+fira-mono-4-square-light full near stray 9.518771
+fira-mono-4-square-light halves far difference 9.643444
+fira-mono-4-square-light halves far stray 11.009489
+fira-mono-4-square-light halves near difference 10.311515
+fira-mono-4-square-light halves near stray 13.810967
+fira-mono-4-square-light quadrants far difference 8.394335
+fira-mono-4-square-light quadrants far stray 9.151163
+fira-mono-4-square-light quadrants near difference 9.032822
+fira-mono-4-square-light quadrants near stray 11.800477
+fira-mono-5-crisp blocks far difference 3.107993
+fira-mono-5-crisp blocks far stray 12.282569
+fira-mono-5-crisp blocks near difference 3.640947
+fira-mono-5-crisp blocks near stray 16.911653
+fira-mono-5-crisp full far difference 2.167436
+fira-mono-5-crisp full far stray 6.633542
+fira-mono-5-crisp full near difference 2.511078
+fira-mono-5-crisp full near stray 9.420120
+fira-mono-5-crisp halves far difference 7.165470
+fira-mono-5-crisp halves far stray 24.225546
+fira-mono-5-crisp halves near difference 8.179063
+fira-mono-5-crisp halves near stray 29.009294
+fira-mono-5-crisp quadrants far difference 4.821329
+fira-mono-5-crisp quadrants far stray 14.860188
+fira-mono-5-crisp quadrants near difference 5.391193
+fira-mono-5-crisp quadrants near stray 20.246787
+fira-mono-5-dark blocks far difference 2.822892
+fira-mono-5-dark blocks far stray 9.127610
+fira-mono-5-dark blocks near difference 4.219528
+fira-mono-5-dark blocks near stray 15.364736
+fira-mono-5-dark full far difference 2.254093
+fira-mono-5-dark full far stray 6.748022
+fira-mono-5-dark full near difference 3.533905
+fira-mono-5-dark full near stray 12.485383
+fira-mono-5-dark halves far difference 5.155877
+fira-mono-5-dark halves far stray 15.192155
+fira-mono-5-dark halves near difference 7.128258
+fira-mono-5-dark halves near stray 23.400353
+fira-mono-5-dark quadrants far difference 3.650983
+fira-mono-5-dark quadrants far stray 10.696453
+fira-mono-5-dark quadrants near difference 5.325359
+fira-mono-5-dark quadrants near stray 17.506712
+fira-mono-5-light blocks far difference 4.035931
+fira-mono-5-light blocks far stray 8.083745
+fira-mono-5-light blocks near difference 4.607982
+fira-mono-5-light blocks near stray 11.544499
+fira-mono-5-light full far difference 3.186898
+fira-mono-5-light full far stray 4.649842
+fira-mono-5-light full near difference 3.697144
+fira-mono-5-light full near stray 7.374702
+fira-mono-5-light halves far difference 7.587569
+fira-mono-5-light halves far stray 14.099030
+fira-mono-5-light halves near difference 8.282322
+fira-mono-5-light halves near stray 17.984557
+fira-mono-5-light quadrants far difference 5.218644
+fira-mono-5-light quadrants far stray 9.844451
+fira-mono-5-light quadrants near difference 5.927798
+fira-mono-5-light quadrants near stray 13.506639
+fira-mono-8-crisp blocks far difference 1.983152
+fira-mono-8-crisp blocks far stray 10.163489
+fira-mono-8-crisp blocks near difference 2.375266
+fira-mono-8-crisp blocks near stray 14.397069
+fira-mono-8-crisp full far difference 1.317998
+fira-mono-8-crisp full far stray 4.695145
+fira-mono-8-crisp full near difference 1.624405
+fira-mono-8-crisp full near stray 7.714489
+fira-mono-8-crisp halves far difference 5.408147
+fira-mono-8-crisp halves far stray 20.324066
+fira-mono-8-crisp halves near difference 6.403449
+fira-mono-8-crisp halves near stray 26.792280
+fira-mono-8-crisp quadrants far difference 4.020772
+fira-mono-8-crisp quadrants far stray 17.198380
+fira-mono-8-crisp quadrants near difference 4.746050
+fira-mono-8-crisp quadrants near stray 22.247222
+fira-mono-8-dark blocks far difference 2.507329
+fira-mono-8-dark blocks far stray 12.133733
+fira-mono-8-dark blocks near difference 3.193991
+fira-mono-8-dark blocks near stray 15.427528
+fira-mono-8-dark full far difference 1.975680
+fira-mono-8-dark full far stray 9.005300
+fira-mono-8-dark full near difference 2.561765
+fira-mono-8-dark full near stray 11.309765
+fira-mono-8-dark halves far difference 5.376220
+fira-mono-8-dark halves far stray 20.445299
+fira-mono-8-dark halves near difference 6.583382
+fira-mono-8-dark halves near stray 24.810745
+fira-mono-8-dark quadrants far difference 4.048994
+fira-mono-8-dark quadrants far stray 16.794999
+fira-mono-8-dark quadrants near difference 5.076948
+fira-mono-8-dark quadrants near stray 21.225907
+fira-mono-8-light blocks far difference 2.772210
+fira-mono-8-light blocks far stray 7.497320
+fira-mono-8-light blocks near difference 3.091362
+fira-mono-8-light blocks near stray 10.907493
+fira-mono-8-light full far difference 2.156670
+fira-mono-8-light full far stray 4.693197
+fira-mono-8-light full near difference 2.449324
+fira-mono-8-light full near stray 7.523301
+fira-mono-8-light halves far difference 6.267253
+fira-mono-8-light halves far stray 13.661958
+fira-mono-8-light halves near difference 6.647175
+fira-mono-8-light halves near stray 18.266150
+fira-mono-8-light quadrants far difference 4.716387
+fira-mono-8-light quadrants far stray 11.346279
+fira-mono-8-light quadrants near difference 5.119584
+fira-mono-8-light quadrants near stray 15.402943
+fira-mono-8-square-crisp blocks far difference 3.136226
+fira-mono-8-square-crisp blocks far stray 13.731548
+fira-mono-8-square-crisp blocks near difference 3.646420
+fira-mono-8-square-crisp blocks near stray 17.316091
+fira-mono-8-square-crisp full far difference 1.938144
+fira-mono-8-square-crisp full far stray 4.878543
+fira-mono-8-square-crisp full near difference 2.311959
+fira-mono-8-square-crisp full near stray 8.031831
+fira-mono-8-square-crisp halves far difference 10.406600
+fira-mono-8-square-crisp halves far stray 27.693829
+fira-mono-8-square-crisp halves near difference 11.323372
+fira-mono-8-square-crisp halves near stray 31.897285
+fira-mono-8-square-crisp quadrants far difference 5.205581
+fira-mono-8-square-crisp quadrants far stray 17.536477
+fira-mono-8-square-crisp quadrants near difference 5.934124
+fira-mono-8-square-crisp quadrants near stray 21.514619
+fira-mono-8-square-dark blocks far difference 3.065952
+fira-mono-8-square-dark blocks far stray 10.964723
+fira-mono-8-square-dark blocks near difference 4.439325
+fira-mono-8-square-dark blocks near stray 16.287123
+fira-mono-8-square-dark full far difference 2.227858
+fira-mono-8-square-dark full far stray 7.129293
+fira-mono-8-square-dark full near difference 3.396033
+fira-mono-8-square-dark full near stray 11.479533
+fira-mono-8-square-dark halves far difference 6.281085
+fira-mono-8-square-dark halves far stray 16.801926
+fira-mono-8-square-dark halves near difference 8.463486
+fira-mono-8-square-dark halves near stray 24.411215
+fira-mono-8-square-dark quadrants far difference 4.303125
+fira-mono-8-square-dark quadrants far stray 14.484462
+fira-mono-8-square-dark quadrants near difference 6.052466
+fira-mono-8-square-dark quadrants near stray 20.125229
+fira-mono-8-square-light blocks far difference 4.185031
+fira-mono-8-square-light blocks far stray 8.709298
+fira-mono-8-square-light blocks near difference 4.842835
+fira-mono-8-square-light blocks near stray 12.474881
+fira-mono-8-square-light full far difference 2.996279
+fira-mono-8-square-light full far stray 5.076159
+fira-mono-8-square-light full near difference 3.594832
+fira-mono-8-square-light full near stray 8.332242
+fira-mono-8-square-light halves far difference 9.230009
+fira-mono-8-square-light halves far stray 16.173980
+fira-mono-8-square-light halves near difference 10.157730
+fira-mono-8-square-light halves near stray 19.972712
+fira-mono-8-square-light quadrants far difference 5.998657
+fira-mono-8-square-light quadrants far stray 10.881812
+fira-mono-8-square-light quadrants near difference 6.860155
+fira-mono-8-square-light quadrants near stray 14.805626
+jetbrains-bold-16-square-crisp blocks far difference 1.374083
+jetbrains-bold-16-square-crisp blocks far stray 7.056273
+jetbrains-bold-16-square-crisp blocks near difference 1.652421
+jetbrains-bold-16-square-crisp blocks near stray 10.637316
+jetbrains-bold-16-square-crisp full far difference 1.058235
+jetbrains-bold-16-square-crisp full far stray 3.318085
+jetbrains-bold-16-square-crisp full near difference 1.263762
+jetbrains-bold-16-square-crisp full near stray 5.791080
+jetbrains-bold-16-square-crisp halves far difference 4.599633
+jetbrains-bold-16-square-crisp halves far stray 18.424947
+jetbrains-bold-16-square-crisp halves near difference 5.279084
+jetbrains-bold-16-square-crisp halves near stray 25.253437
+jetbrains-bold-16-square-crisp quadrants far difference 2.740661
+jetbrains-bold-16-square-crisp quadrants far stray 10.912974
+jetbrains-bold-16-square-crisp quadrants near difference 3.142179
+jetbrains-bold-16-square-crisp quadrants near stray 15.654719
+jetbrains-bold-16-square-dark blocks far difference 1.773346
+jetbrains-bold-16-square-dark blocks far stray 8.389859
+jetbrains-bold-16-square-dark blocks near difference 2.092438
+jetbrains-bold-16-square-dark blocks near stray 10.097203
+jetbrains-bold-16-square-dark full far difference 1.405552
+jetbrains-bold-16-square-dark full far stray 6.513762
+jetbrains-bold-16-square-dark full near difference 1.705192
+jetbrains-bold-16-square-dark full near stray 7.465429
+jetbrains-bold-16-square-dark halves far difference 5.182480
+jetbrains-bold-16-square-dark halves far stray 18.120093
+jetbrains-bold-16-square-dark halves near difference 5.678519
+jetbrains-bold-16-square-dark halves near stray 20.391104
+jetbrains-bold-16-square-dark quadrants far difference 3.020915
+jetbrains-bold-16-square-dark quadrants far stray 12.347972
+jetbrains-bold-16-square-dark quadrants near difference 3.554311
+jetbrains-bold-16-square-dark quadrants near stray 13.939042
+jetbrains-bold-16-square-light blocks far difference 1.725824
+jetbrains-bold-16-square-light blocks far stray 6.306583
+jetbrains-bold-16-square-light blocks near difference 1.983184
+jetbrains-bold-16-square-light blocks near stray 8.656368
+jetbrains-bold-16-square-light full far difference 1.410429
+jetbrains-bold-16-square-light full far stray 4.548573
+jetbrains-bold-16-square-light full near difference 1.625881
+jetbrains-bold-16-square-light full near stray 6.058253
+jetbrains-bold-16-square-light halves far difference 5.089648
+jetbrains-bold-16-square-light halves far stray 14.198980
+jetbrains-bold-16-square-light halves near difference 5.583895
+jetbrains-bold-16-square-light halves near stray 17.915792
+jetbrains-bold-16-square-light quadrants far difference 2.858506
+jetbrains-bold-16-square-light quadrants far stray 8.463149
+jetbrains-bold-16-square-light quadrants near difference 3.315932
+jetbrains-bold-16-square-light quadrants near stray 11.752761
+jetbrains-bold-2-crisp blocks far difference 5.309996
+jetbrains-bold-2-crisp blocks far stray 10.319484
+jetbrains-bold-2-crisp blocks near difference 6.377253
+jetbrains-bold-2-crisp blocks near stray 15.061763
+jetbrains-bold-2-crisp full far difference 4.063252
+jetbrains-bold-2-crisp full far stray 7.972233
+jetbrains-bold-2-crisp full near difference 4.927784
+jetbrains-bold-2-crisp full near stray 12.183696
+jetbrains-bold-2-crisp halves far difference 11.177894
+jetbrains-bold-2-crisp halves far stray 15.044549
+jetbrains-bold-2-crisp halves near difference 10.131092
+jetbrains-bold-2-crisp halves near stray 19.495494
+jetbrains-bold-2-crisp quadrants far difference 6.609554
+jetbrains-bold-2-crisp quadrants far stray 10.730653
+jetbrains-bold-2-crisp quadrants near difference 7.161129
+jetbrains-bold-2-crisp quadrants near stray 15.434973
+jetbrains-bold-2-dark blocks far difference 3.391442
+jetbrains-bold-2-dark blocks far stray 6.764411
+jetbrains-bold-2-dark blocks near difference 4.969290
+jetbrains-bold-2-dark blocks near stray 8.598312
+jetbrains-bold-2-dark full far difference 2.998809
+jetbrains-bold-2-dark full far stray 5.824473
+jetbrains-bold-2-dark full near difference 4.459593
+jetbrains-bold-2-dark full near stray 7.785966
+jetbrains-bold-2-dark halves far difference 3.965242
+jetbrains-bold-2-dark halves far stray 8.115540
+jetbrains-bold-2-dark halves near difference 5.661931
+jetbrains-bold-2-dark halves near stray 9.399056
+jetbrains-bold-2-dark quadrants far difference 3.616188
+jetbrains-bold-2-dark quadrants far stray 6.926320
+jetbrains-bold-2-dark quadrants near difference 5.239156
+jetbrains-bold-2-dark quadrants near stray 8.730604
+jetbrains-bold-2-light blocks far difference 7.023705
+jetbrains-bold-2-light blocks far stray 6.792069
+jetbrains-bold-2-light blocks near difference 7.140573
+jetbrains-bold-2-light blocks near stray 9.821865
+jetbrains-bold-2-light full far difference 6.144960
+jetbrains-bold-2-light full far stray 5.243626
+jetbrains-bold-2-light full near difference 6.302316
+jetbrains-bold-2-light full near stray 7.760071
+jetbrains-bold-2-light halves far difference 8.112900
+jetbrains-bold-2-light halves far stray 8.780484
+jetbrains-bold-2-light halves near difference 8.207375
+jetbrains-bold-2-light halves near stray 12.163213
+jetbrains-bold-2-light quadrants far difference 7.593195
+jetbrains-bold-2-light quadrants far stray 7.413709
+jetbrains-bold-2-light quadrants near difference 7.663218
+jetbrains-bold-2-light quadrants near stray 10.532985
+jetbrains-bold-3-crisp blocks far difference 4.423777
+jetbrains-bold-3-crisp blocks far stray 14.169696
+jetbrains-bold-3-crisp blocks near difference 5.168600
+jetbrains-bold-3-crisp blocks near stray 19.270426
+jetbrains-bold-3-crisp full far difference 3.016606
+jetbrains-bold-3-crisp full far stray 6.601402
+jetbrains-bold-3-crisp full near difference 3.561516
+jetbrains-bold-3-crisp full near stray 10.900506
+jetbrains-bold-3-crisp halves far difference 8.986973
+jetbrains-bold-3-crisp halves far stray 23.969208
+jetbrains-bold-3-crisp halves near difference 10.011537
+jetbrains-bold-3-crisp halves near stray 29.906321
+jetbrains-bold-3-crisp quadrants far difference 6.052464
+jetbrains-bold-3-crisp quadrants far stray 15.469730
+jetbrains-bold-3-crisp quadrants near difference 7.080291
+jetbrains-bold-3-crisp quadrants near stray 21.794044
+jetbrains-bold-3-dark blocks far difference 3.430207
+jetbrains-bold-3-dark blocks far stray 8.091054
+jetbrains-bold-3-dark blocks near difference 5.050635
+jetbrains-bold-3-dark blocks near stray 13.609677
+jetbrains-bold-3-dark full far difference 2.757896
+jetbrains-bold-3-dark full far stray 5.945549
+jetbrains-bold-3-dark full near difference 4.236232
+jetbrains-bold-3-dark full near stray 11.242429
+jetbrains-bold-3-dark halves far difference 5.634696
+jetbrains-bold-3-dark halves far stray 12.452330
+jetbrains-bold-3-dark halves near difference 7.657670
+jetbrains-bold-3-dark halves near stray 19.401226
+jetbrains-bold-3-dark quadrants far difference 4.300821
+jetbrains-bold-3-dark quadrants far stray 9.727123
+jetbrains-bold-3-dark quadrants near difference 6.195933
+jetbrains-bold-3-dark quadrants near stray 15.630857
+jetbrains-bold-3-light blocks far difference 5.415933
+jetbrains-bold-3-light blocks far stray 8.878580
+jetbrains-bold-3-light blocks near difference 5.909017
+jetbrains-bold-3-light blocks near stray 12.412933
+jetbrains-bold-3-light full far difference 4.398531
+jetbrains-bold-3-light full far stray 5.081990
+jetbrains-bold-3-light full near difference 4.883624
+jetbrains-bold-3-light full near stray 8.173030
+jetbrains-bold-3-light halves far difference 8.693968
+jetbrains-bold-3-light halves far stray 13.776557
+jetbrains-bold-3-light halves near difference 9.212407
+jetbrains-bold-3-light halves near stray 17.556294
+jetbrains-bold-3-light quadrants far difference 6.800664
+jetbrains-bold-3-light quadrants far stray 10.372234
+jetbrains-bold-3-light quadrants near difference 7.342596
+jetbrains-bold-3-light quadrants near stray 14.076975
+jetbrains-bold-4-square-crisp blocks far difference 5.712950
+jetbrains-bold-4-square-crisp blocks far stray 13.929235
+jetbrains-bold-4-square-crisp blocks near difference 6.483527
+jetbrains-bold-4-square-crisp blocks near stray 19.013355
+jetbrains-bold-4-square-crisp full far difference 4.250410
+jetbrains-bold-4-square-crisp full far stray 8.780278
+jetbrains-bold-4-square-crisp full near difference 5.170893
+jetbrains-bold-4-square-crisp full near stray 13.245008
+jetbrains-bold-4-square-crisp halves far difference 10.558098
+jetbrains-bold-4-square-crisp halves far stray 20.146457
+jetbrains-bold-4-square-crisp halves near difference 10.815723
+jetbrains-bold-4-square-crisp halves near stray 24.931028
+jetbrains-bold-4-square-crisp quadrants far difference 6.703567
+jetbrains-bold-4-square-crisp quadrants far stray 15.754542
+jetbrains-bold-4-square-crisp quadrants near difference 7.688683
+jetbrains-bold-4-square-crisp quadrants near stray 20.612754
+jetbrains-bold-4-square-dark blocks far difference 3.875245
+jetbrains-bold-4-square-dark blocks far stray 9.690326
+jetbrains-bold-4-square-dark blocks near difference 5.603040
+jetbrains-bold-4-square-dark blocks near stray 13.801381
+jetbrains-bold-4-square-dark full far difference 3.422738
+jetbrains-bold-4-square-dark full far stray 7.789681
+jetbrains-bold-4-square-dark full near difference 5.112261
+jetbrains-bold-4-square-dark full near stray 11.000315
+jetbrains-bold-4-square-dark halves far difference 5.301972
+jetbrains-bold-4-square-dark halves far stray 10.272721
+jetbrains-bold-4-square-dark halves near difference 7.461278
+jetbrains-bold-4-square-dark halves near stray 14.750320
+jetbrains-bold-4-square-dark quadrants far difference 4.533254
+jetbrains-bold-4-square-dark quadrants far stray 9.150035
+jetbrains-bold-4-square-dark quadrants near difference 6.504672
+jetbrains-bold-4-square-dark quadrants near stray 13.678317
+jetbrains-bold-4-square-light blocks far difference 6.089912
+jetbrains-bold-4-square-light blocks far stray 8.556016
+jetbrains-bold-4-square-light blocks near difference 6.826531
+jetbrains-bold-4-square-light blocks near stray 12.069704
+jetbrains-bold-4-square-light full far difference 5.385685
+jetbrains-bold-4-square-light full far stray 6.764247
+jetbrains-bold-4-square-light full near difference 6.144624
+jetbrains-bold-4-square-light full near stray 10.033789
+jetbrains-bold-4-square-light halves far difference 8.731333
+jetbrains-bold-4-square-light halves far stray 11.511745
+jetbrains-bold-4-square-light halves near difference 9.607287
+jetbrains-bold-4-square-light halves near stray 15.195910
+jetbrains-bold-4-square-light quadrants far difference 7.471997
+jetbrains-bold-4-square-light quadrants far stray 9.190566
+jetbrains-bold-4-square-light quadrants near difference 8.294569
+jetbrains-bold-4-square-light quadrants near stray 12.484339
+jetbrains-bold-5-crisp blocks far difference 3.164533
+jetbrains-bold-5-crisp blocks far stray 12.849851
+jetbrains-bold-5-crisp blocks near difference 3.762113
+jetbrains-bold-5-crisp blocks near stray 17.544976
+jetbrains-bold-5-crisp full far difference 2.286317
+jetbrains-bold-5-crisp full far stray 6.442665
+jetbrains-bold-5-crisp full near difference 2.766152
+jetbrains-bold-5-crisp full near stray 10.334035
+jetbrains-bold-5-crisp halves far difference 6.823502
+jetbrains-bold-5-crisp halves far stray 22.373017
+jetbrains-bold-5-crisp halves near difference 7.968802
+jetbrains-bold-5-crisp halves near stray 28.883837
+jetbrains-bold-5-crisp quadrants far difference 5.339308
+jetbrains-bold-5-crisp quadrants far stray 19.254275
+jetbrains-bold-5-crisp quadrants near difference 6.070262
+jetbrains-bold-5-crisp quadrants near stray 23.867491
+jetbrains-bold-5-dark blocks far difference 3.622843
+jetbrains-bold-5-dark blocks far stray 12.944279
+jetbrains-bold-5-dark blocks near difference 4.960382
+jetbrains-bold-5-dark blocks near stray 17.824687
+jetbrains-bold-5-dark full far difference 2.964477
+jetbrains-bold-5-dark full far stray 10.228146
+jetbrains-bold-5-dark full near difference 4.185647
+jetbrains-bold-5-dark full near stray 14.771708
+jetbrains-bold-5-dark halves far difference 6.205825
+jetbrains-bold-5-dark halves far stray 18.780666
+jetbrains-bold-5-dark halves near difference 8.081786
+jetbrains-bold-5-dark halves near stray 25.303871
+jetbrains-bold-5-dark quadrants far difference 4.769378
+jetbrains-bold-5-dark quadrants far stray 14.958065
+jetbrains-bold-5-dark quadrants near difference 6.411906
+jetbrains-bold-5-dark quadrants near stray 20.568464
+jetbrains-bold-5-light blocks far difference 4.123381
+jetbrains-bold-5-light blocks far stray 9.218467
+jetbrains-bold-5-light blocks near difference 4.777788
+jetbrains-bold-5-light blocks near stray 13.801482
+jetbrains-bold-5-light full far difference 3.316977
+jetbrains-bold-5-light full far stray 6.041838
+jetbrains-bold-5-light full near difference 3.963018
+jetbrains-bold-5-light full near stray 10.251660
+jetbrains-bold-5-light halves far difference 7.467562
+jetbrains-bold-5-light halves far stray 14.478680
+jetbrains-bold-5-light halves near difference 8.330637
+jetbrains-bold-5-light halves near stray 19.656205
+jetbrains-bold-5-light quadrants far difference 5.641729
+jetbrains-bold-5-light quadrants far stray 11.465330
+jetbrains-bold-5-light quadrants near difference 6.463284
+jetbrains-bold-5-light quadrants near stray 16.006245
+jetbrains-bold-8-crisp blocks far difference 1.872282
+jetbrains-bold-8-crisp blocks far stray 8.514825
+jetbrains-bold-8-crisp blocks near difference 2.274244
+jetbrains-bold-8-crisp blocks near stray 13.223464
+jetbrains-bold-8-crisp full far difference 1.393576
+jetbrains-bold-8-crisp full far stray 5.241204
+jetbrains-bold-8-crisp full near difference 1.664560
+jetbrains-bold-8-crisp full near stray 7.973807
+jetbrains-bold-8-crisp halves far difference 5.639755
+jetbrains-bold-8-crisp halves far stray 19.210578
+jetbrains-bold-8-crisp halves near difference 6.218820
+jetbrains-bold-8-crisp halves near stray 26.500307
+jetbrains-bold-8-crisp quadrants far difference 4.001575
+jetbrains-bold-8-crisp quadrants far stray 15.452728
+jetbrains-bold-8-crisp quadrants near difference 4.476479
+jetbrains-bold-8-crisp quadrants near stray 21.693680
+jetbrains-bold-8-dark blocks far difference 2.461713
+jetbrains-bold-8-dark blocks far stray 10.329564
+jetbrains-bold-8-dark blocks near difference 3.039352
+jetbrains-bold-8-dark blocks near stray 13.310130
+jetbrains-bold-8-dark full far difference 1.909823
+jetbrains-bold-8-dark full far stray 8.200924
+jetbrains-bold-8-dark full near difference 2.434639
+jetbrains-bold-8-dark full near stray 10.248884
+jetbrains-bold-8-dark halves far difference 5.624254
+jetbrains-bold-8-dark halves far stray 18.777731
+jetbrains-bold-8-dark halves near difference 6.437316
+jetbrains-bold-8-dark halves near stray 22.327870
+jetbrains-bold-8-dark quadrants far difference 3.996189
+jetbrains-bold-8-dark quadrants far stray 15.204967
+jetbrains-bold-8-dark quadrants near difference 4.792933
+jetbrains-bold-8-dark quadrants near stray 18.961247
+jetbrains-bold-8-light blocks far difference 2.524309
+jetbrains-bold-8-light blocks far stray 7.735663
+jetbrains-bold-8-light blocks near difference 2.878362
+jetbrains-bold-8-light blocks near stray 11.184292
+jetbrains-bold-8-light full far difference 1.939736
+jetbrains-bold-8-light full far stray 5.395081
+jetbrains-bold-8-light full near difference 2.239745
+jetbrains-bold-8-light full near stray 7.670026
+jetbrains-bold-8-light halves far difference 5.972337
+jetbrains-bold-8-light halves far stray 14.268494
+jetbrains-bold-8-light halves near difference 6.523563
+jetbrains-bold-8-light halves near stray 18.831214
+jetbrains-bold-8-light quadrants far difference 4.261749
+jetbrains-bold-8-light quadrants far stray 11.401117
+jetbrains-bold-8-light quadrants near difference 4.788654
+jetbrains-bold-8-light quadrants near stray 15.507972
+jetbrains-bold-8-square-crisp blocks far difference 2.790373
+jetbrains-bold-8-square-crisp blocks far stray 11.360118
+jetbrains-bold-8-square-crisp blocks near difference 3.312878
+jetbrains-bold-8-square-crisp blocks near stray 15.372204
+jetbrains-bold-8-square-crisp full far difference 2.035180
+jetbrains-bold-8-square-crisp full far stray 9.274857
+jetbrains-bold-8-square-crisp full near difference 2.420924
+jetbrains-bold-8-square-crisp full near stray 11.721958
+jetbrains-bold-8-square-crisp halves far difference 7.634634
+jetbrains-bold-8-square-crisp halves far stray 24.315572
+jetbrains-bold-8-square-crisp halves near difference 8.835383
+jetbrains-bold-8-square-crisp halves near stray 30.245354
+jetbrains-bold-8-square-crisp quadrants far difference 5.069273
+jetbrains-bold-8-square-crisp quadrants far stray 14.151564
+jetbrains-bold-8-square-crisp quadrants near difference 5.718889
+jetbrains-bold-8-square-crisp quadrants near stray 20.060432
+jetbrains-bold-8-square-dark blocks far difference 3.160424
+jetbrains-bold-8-square-dark blocks far stray 10.644109
+jetbrains-bold-8-square-dark blocks near difference 4.289923
+jetbrains-bold-8-square-dark blocks near stray 14.556335
+jetbrains-bold-8-square-dark full far difference 2.607771
+jetbrains-bold-8-square-dark full far stray 8.613420
+jetbrains-bold-8-square-dark full near difference 3.652175
+jetbrains-bold-8-square-dark full near stray 11.500933
+jetbrains-bold-8-square-dark halves far difference 6.859671
+jetbrains-bold-8-square-dark halves far stray 18.008708
+jetbrains-bold-8-square-dark halves near difference 8.905615
+jetbrains-bold-8-square-dark halves near stray 24.945606
+jetbrains-bold-8-square-dark quadrants far difference 4.504284
+jetbrains-bold-8-square-dark quadrants far stray 13.623385
+jetbrains-bold-8-square-dark quadrants near difference 6.042910
+jetbrains-bold-8-square-dark quadrants near stray 18.228394
+jetbrains-bold-8-square-light blocks far difference 3.606605
+jetbrains-bold-8-square-light blocks far stray 8.570892
+jetbrains-bold-8-square-light blocks near difference 4.327370
+jetbrains-bold-8-square-light blocks near stray 12.387169
+jetbrains-bold-8-square-light full far difference 2.879245
+jetbrains-bold-8-square-light full far stray 5.855136
+jetbrains-bold-8-square-light full near difference 3.516968
+jetbrains-bold-8-square-light full near stray 9.194913
+jetbrains-bold-8-square-light halves far difference 8.260426
+jetbrains-bold-8-square-light halves far stray 15.716313
+jetbrains-bold-8-square-light halves near difference 9.431296
+jetbrains-bold-8-square-light halves near stray 20.473397
+jetbrains-bold-8-square-light quadrants far difference 5.287203
+jetbrains-bold-8-square-light quadrants far stray 10.517277
+jetbrains-bold-8-square-light quadrants near difference 6.312185
+jetbrains-bold-8-square-light quadrants near stray 14.762961
+lines blocks far difference 2.848643
+lines blocks far stray 4.903036
+lines blocks near difference 4.935367
+lines blocks near stray 6.537523
+lines full far difference 2.054849
+lines full far stray 2.863031
+lines full near difference 3.889318
+lines full near stray 4.534157
+lines halves far difference 3.861682
+lines halves far stray 5.690812
+lines halves near difference 6.212313
+lines halves near stray 6.899413
+lines quadrants far difference 3.435811
+lines quadrants far stray 5.296763
+lines quadrants near difference 5.708110
+lines quadrants near stray 6.836894
+noise blocks far difference 0.614819
+noise blocks far stray 0.575270
+noise blocks near difference 0.801428
+noise blocks near stray 0.793558
+noise full far difference 0.577313
+noise full far stray 0.528775
+noise full near difference 0.759045
+noise full near stray 0.728968
+noise halves far difference 0.678750
+noise halves far stray 0.628527
+noise halves near difference 0.878647
+noise halves near stray 0.870863
+noise quadrants far difference 0.640972
+noise quadrants far stray 0.595843
+noise quadrants near difference 0.829148
+noise quadrants near stray 0.822801
+photo blocks far difference 5.733248
+photo blocks far stray 4.828257
+photo blocks near difference 8.753999
+photo blocks near stray 6.442442
+photo full far difference 5.126759
+photo full far stray 3.123638
+photo full near difference 8.098486
+photo full near stray 4.465683
+photo halves far difference 6.918614
+photo halves far stray 7.582828
+photo halves near difference 10.038102
+photo halves near stray 9.121299
+photo quadrants far difference 6.162475
+photo quadrants far stray 6.022149
+photo quadrants near difference 9.244308
+photo quadrants near stray 7.522427
+ramps blocks far difference 0.110490
+ramps blocks far stray 0.087399
+ramps blocks near difference 0.162238
+ramps blocks near stray 0.131689
+ramps full far difference 0.110490
+ramps full far stray 0.087399
+ramps full near difference 0.162238
+ramps full near stray 0.131689
+ramps halves far difference 0.282376
+ramps halves far stray 0.386488
+ramps halves near difference 0.378619
+ramps halves near stray 0.566569
+ramps quadrants far difference 0.128014
+ramps quadrants far stray 0.098909
+ramps quadrants near difference 0.175096
+ramps quadrants near stray 0.144972
+shapes blocks far difference 1.156199
+shapes blocks far stray 10.301611
+shapes blocks near difference 1.424224
+shapes blocks near stray 11.925129
+shapes full far difference 0.809176
+shapes full far stray 6.324282
+shapes full near difference 1.017155
+shapes full near stray 7.351071
+shapes halves far difference 1.780887
+shapes halves far stray 13.300483
+shapes halves near difference 2.121154
+shapes halves near stray 15.327437
+shapes quadrants far difference 1.463500
+shapes quadrants far stray 12.170808
+shapes quadrants near difference 1.769083
+shapes quadrants near stray 14.183986
+tangerine-16-square-crisp blocks far difference 2.936834
+tangerine-16-square-crisp blocks far stray 8.226324
+tangerine-16-square-crisp blocks near difference 3.354550
+tangerine-16-square-crisp blocks near stray 11.996909
+tangerine-16-square-crisp full far difference 2.007748
+tangerine-16-square-crisp full far stray 5.120368
+tangerine-16-square-crisp full near difference 2.377884
+tangerine-16-square-crisp full near stray 7.993489
+tangerine-16-square-crisp halves far difference 6.828073
+tangerine-16-square-crisp halves far stray 20.632795
+tangerine-16-square-crisp halves near difference 7.268757
+tangerine-16-square-crisp halves near stray 23.947555
+tangerine-16-square-crisp quadrants far difference 3.404958
+tangerine-16-square-crisp quadrants far stray 9.355881
+tangerine-16-square-crisp quadrants near difference 3.887451
+tangerine-16-square-crisp quadrants near stray 13.611625
+tangerine-16-square-dark blocks far difference 2.144252
+tangerine-16-square-dark blocks far stray 7.971277
+tangerine-16-square-dark blocks near difference 3.241735
+tangerine-16-square-dark blocks near stray 11.883688
+tangerine-16-square-dark full far difference 1.775598
+tangerine-16-square-dark full far stray 6.503737
+tangerine-16-square-dark full near difference 2.777803
+tangerine-16-square-dark full near stray 10.353151
+tangerine-16-square-dark halves far difference 3.471157
+tangerine-16-square-dark halves far stray 11.883753
+tangerine-16-square-dark halves near difference 4.890969
+tangerine-16-square-dark halves near stray 17.615502
+tangerine-16-square-dark quadrants far difference 2.454728
+tangerine-16-square-dark quadrants far stray 9.224397
+tangerine-16-square-dark quadrants near difference 3.654778
+tangerine-16-square-dark quadrants near stray 13.353029
+tangerine-16-square-light blocks far difference 3.542677
+tangerine-16-square-light blocks far stray 6.191485
+tangerine-16-square-light blocks near difference 4.014802
+tangerine-16-square-light blocks near stray 9.117020
+tangerine-16-square-light full far difference 2.840270
+tangerine-16-square-light full far stray 4.499020
+tangerine-16-square-light full near difference 3.300735
+tangerine-16-square-light full near stray 7.107119
+tangerine-16-square-light halves far difference 5.794928
+tangerine-16-square-light halves far stray 11.737929
+tangerine-16-square-light halves near difference 6.363325
+tangerine-16-square-light halves near stray 14.745161
+tangerine-16-square-light quadrants far difference 4.014249
+tangerine-16-square-light quadrants far stray 7.146315
+tangerine-16-square-light quadrants near difference 4.577025
+tangerine-16-square-light quadrants near stray 10.203964
+tangerine-2-crisp blocks far difference 7.702428
+tangerine-2-crisp blocks far stray 0.042660
+tangerine-2-crisp blocks near difference 6.654632
+tangerine-2-crisp blocks near stray 0.059798
+tangerine-2-crisp full far difference 7.340489
+tangerine-2-crisp full far stray 0.460678
+tangerine-2-crisp full near difference 6.408124
+tangerine-2-crisp full near stray 0.641239
+tangerine-2-crisp halves far difference 7.895948
+tangerine-2-crisp halves far stray 0.000000
+tangerine-2-crisp halves near difference 6.811478
+tangerine-2-crisp halves near stray 0.000000
+tangerine-2-crisp quadrants far difference 7.895948
+tangerine-2-crisp quadrants far stray 0.000000
+tangerine-2-crisp quadrants near difference 6.811478
+tangerine-2-crisp quadrants near stray 0.000000
+tangerine-2-dark blocks far difference 1.278411
+tangerine-2-dark blocks far stray 2.456597
+tangerine-2-dark blocks near difference 1.676808
+tangerine-2-dark blocks near stray 3.273131
+tangerine-2-dark full far difference 1.209822
+tangerine-2-dark full far stray 2.151680
+tangerine-2-dark full near difference 1.592227
+tangerine-2-dark full near stray 2.991663
+tangerine-2-dark halves far difference 1.408609
+tangerine-2-dark halves far stray 2.787364
+tangerine-2-dark halves near difference 1.818321
+tangerine-2-dark halves near stray 3.315147
+tangerine-2-dark quadrants far difference 1.322514
+tangerine-2-dark quadrants far stray 2.600954
+tangerine-2-dark quadrants near difference 1.730174
+tangerine-2-dark quadrants near stray 3.328325
+tangerine-2-light blocks far difference 4.803263
+tangerine-2-light blocks far stray 2.691299
+tangerine-2-light blocks near difference 4.757254
+tangerine-2-light blocks near stray 3.683580
+tangerine-2-light full far difference 4.625749
+tangerine-2-light full far stray 2.306806
+tangerine-2-light full near difference 4.569122
+tangerine-2-light full near stray 3.288702
+tangerine-2-light halves far difference 5.218315
+tangerine-2-light halves far stray 3.080844
+tangerine-2-light halves near difference 5.158601
+tangerine-2-light halves near stray 3.796871
+tangerine-2-light quadrants far difference 4.996641
+tangerine-2-light quadrants far stray 2.791815
+tangerine-2-light quadrants near difference 4.939428
+tangerine-2-light quadrants near stray 3.695498
+tangerine-3-crisp blocks far difference 8.599148
+tangerine-3-crisp blocks far stray 1.137797
+tangerine-3-crisp blocks near difference 7.558851
+tangerine-3-crisp blocks near stray 1.913586
+tangerine-3-crisp full far difference 5.745109
+tangerine-3-crisp full far stray 4.522009
+tangerine-3-crisp full near difference 5.540750
+tangerine-3-crisp full near stray 7.048741
+tangerine-3-crisp halves far difference 8.972311
+tangerine-3-crisp halves far stray 1.028976
+tangerine-3-crisp halves near difference 7.821439
+tangerine-3-crisp halves near stray 1.604791
+tangerine-3-crisp quadrants far difference 8.599148
+tangerine-3-crisp quadrants far stray 1.137797
+tangerine-3-crisp quadrants near difference 7.558851
+tangerine-3-crisp quadrants near stray 1.913586
+tangerine-3-dark blocks far difference 1.725458
+tangerine-3-dark blocks far stray 4.190032
+tangerine-3-dark blocks near difference 2.389476
+tangerine-3-dark blocks near stray 5.122703
+tangerine-3-dark full far difference 1.511209
+tangerine-3-dark full far stray 3.228389
+tangerine-3-dark full near difference 2.133354
+tangerine-3-dark full near stray 4.549647
+tangerine-3-dark halves far difference 2.015593
+tangerine-3-dark halves far stray 4.300704
+tangerine-3-dark halves near difference 2.705178
+tangerine-3-dark halves near stray 4.866087
+tangerine-3-dark quadrants far difference 1.855541
+tangerine-3-dark quadrants far stray 4.150164
+tangerine-3-dark quadrants near difference 2.546596
+tangerine-3-dark quadrants near stray 4.993732
+tangerine-3-light blocks far difference 5.551342
+tangerine-3-light blocks far stray 4.192632
+tangerine-3-light blocks near difference 5.573885
+tangerine-3-light blocks near stray 5.787968
+tangerine-3-light full far difference 4.944104
+tangerine-3-light full far stray 3.349225
+tangerine-3-light full near difference 4.951078
+tangerine-3-light full near stray 5.112375
+tangerine-3-light halves far difference 6.414462
+tangerine-3-light halves far stray 4.828228
+tangerine-3-light halves near difference 6.400028
+tangerine-3-light halves near stray 5.919875
+tangerine-3-light quadrants far difference 6.069230
+tangerine-3-light quadrants far stray 4.619927
+tangerine-3-light quadrants near difference 6.029314
+tangerine-3-light quadrants near stray 5.881542
+tangerine-4-square-crisp blocks far difference 7.627419
+tangerine-4-square-crisp blocks far stray 1.402340
+tangerine-4-square-crisp blocks near difference 6.968501
+tangerine-4-square-crisp blocks near stray 2.262157
+tangerine-4-square-crisp full far difference 6.073799
+tangerine-4-square-crisp full far stray 3.023680
+tangerine-4-square-crisp full near difference 5.786312
+tangerine-4-square-crisp full near stray 4.629463
+tangerine-4-square-crisp halves far difference 9.356040
+tangerine-4-square-crisp halves far stray 1.201515
+tangerine-4-square-crisp halves near difference 8.212781
+tangerine-4-square-crisp halves near stray 1.825066
+tangerine-4-square-crisp quadrants far difference 9.356040
+tangerine-4-square-crisp quadrants far stray 1.201515
+tangerine-4-square-crisp quadrants near difference 8.212781
+tangerine-4-square-crisp quadrants near stray 1.825066
+tangerine-4-square-dark blocks far difference 1.620690
+tangerine-4-square-dark blocks far stray 2.991051
+tangerine-4-square-dark blocks near difference 2.137558
+tangerine-4-square-dark blocks near stray 3.812069
+tangerine-4-square-dark full far difference 1.512725
+tangerine-4-square-dark full far stray 2.618244
+tangerine-4-square-dark full near difference 1.982931
+tangerine-4-square-dark full near stray 3.440430
+tangerine-4-square-dark halves far difference 1.873039
+tangerine-4-square-dark halves far stray 3.621529
+tangerine-4-square-dark halves near difference 2.461860
+tangerine-4-square-dark halves near stray 4.195710
+tangerine-4-square-dark quadrants far difference 1.711720
+tangerine-4-square-dark quadrants far stray 3.414037
+tangerine-4-square-dark quadrants near difference 2.267837
+tangerine-4-square-dark quadrants near stray 4.289280
+tangerine-4-square-light blocks far difference 5.341936
+tangerine-4-square-light blocks far stray 3.176775
+tangerine-4-square-light blocks near difference 5.472837
+tangerine-4-square-light blocks near stray 4.376377
+tangerine-4-square-light full far difference 4.950955
+tangerine-4-square-light full far stray 2.760311
+tangerine-4-square-light full near difference 5.087205
+tangerine-4-square-light full near stray 4.050641
+tangerine-4-square-light halves far difference 6.232168
+tangerine-4-square-light halves far stray 4.108043
+tangerine-4-square-light halves near difference 6.349295
+tangerine-4-square-light halves near stray 4.996471
+tangerine-4-square-light quadrants far difference 5.710718
+tangerine-4-square-light quadrants far stray 3.706384
+tangerine-4-square-light quadrants near difference 5.847711
+tangerine-4-square-light quadrants near stray 4.966590
+tangerine-5-crisp blocks far difference 5.850846
+tangerine-5-crisp blocks far stray 7.871402
+tangerine-5-crisp blocks near difference 5.968422
+tangerine-5-crisp blocks near stray 11.118198
+tangerine-5-crisp full far difference 3.612756
+tangerine-5-crisp full far stray 5.451410
+tangerine-5-crisp full near difference 4.070127
+tangerine-5-crisp full near stray 8.119582
+tangerine-5-crisp halves far difference 9.903379
+tangerine-5-crisp halves far stray 9.943929
+tangerine-5-crisp halves near difference 9.061075
+tangerine-5-crisp halves near stray 12.940853
+tangerine-5-crisp quadrants far difference 6.052385
+tangerine-5-crisp quadrants far stray 7.710498
+tangerine-5-crisp quadrants near difference 6.143477
+tangerine-5-crisp quadrants near stray 10.971126
+tangerine-5-dark blocks far difference 2.137941
+tangerine-5-dark blocks far stray 5.240285
+tangerine-5-dark blocks near difference 3.197726
+tangerine-5-dark blocks near stray 6.904023
+tangerine-5-dark full far difference 1.695509
+tangerine-5-dark full far stray 3.428948
+tangerine-5-dark full near difference 2.619359
+tangerine-5-dark full near stray 5.275018
+tangerine-5-dark halves far difference 2.729839
+tangerine-5-dark halves far stray 6.635629
+tangerine-5-dark halves near difference 3.898974
+tangerine-5-dark halves near stray 7.550544
+tangerine-5-dark quadrants far difference 2.222591
+tangerine-5-dark quadrants far stray 5.083672
+tangerine-5-dark quadrants near difference 3.305750
+tangerine-5-dark quadrants near stray 6.619915
+tangerine-5-light blocks far difference 5.473361
+tangerine-5-light blocks far stray 6.603487
+tangerine-5-light blocks near difference 5.817826
+tangerine-5-light blocks near stray 8.583588
+tangerine-5-light full far difference 4.164230
+tangerine-5-light full far stray 3.967296
+tangerine-5-light full near difference 4.534092
+tangerine-5-light full near stray 6.144240
+tangerine-5-light halves far difference 6.764345
+tangerine-5-light halves far stray 7.925384
+tangerine-5-light halves near difference 7.051521
+tangerine-5-light halves near stray 10.003896
+tangerine-5-light quadrants far difference 5.678139
+tangerine-5-light quadrants far stray 6.432519
+tangerine-5-light quadrants near difference 6.034859
+tangerine-5-light quadrants near stray 8.383073
+tangerine-8-crisp blocks far difference 3.697779
+tangerine-8-crisp blocks far stray 8.283512
+tangerine-8-crisp blocks near difference 4.073155
+tangerine-8-crisp blocks near stray 12.184097
+tangerine-8-crisp full far difference 2.478867
+tangerine-8-crisp full far stray 4.956816
+tangerine-8-crisp full near difference 2.868292
+tangerine-8-crisp full near stray 7.908262
+tangerine-8-crisp halves far difference 7.223447
+tangerine-8-crisp halves far stray 18.352237
+tangerine-8-crisp halves near difference 7.361486
+tangerine-8-crisp halves near stray 21.767900
+tangerine-8-crisp quadrants far difference 4.527942
+tangerine-8-crisp quadrants far stray 10.430539
+tangerine-8-crisp quadrants near difference 4.865736
+tangerine-8-crisp quadrants near stray 14.226650
+tangerine-8-dark blocks far difference 2.114877
+tangerine-8-dark blocks far stray 6.281198
+tangerine-8-dark blocks near difference 3.277244
+tangerine-8-dark blocks near stray 10.994335
+tangerine-8-dark full far difference 1.726725
+tangerine-8-dark full far stray 4.709822
+tangerine-8-dark full near difference 2.775149
+tangerine-8-dark full near stray 9.405573
+tangerine-8-dark halves far difference 3.096959
+tangerine-8-dark halves far stray 9.151739
+tangerine-8-dark halves near difference 4.479160
+tangerine-8-dark halves near stray 14.940208
+tangerine-8-dark quadrants far difference 2.403603
+tangerine-8-dark quadrants far stray 7.068291
+tangerine-8-dark quadrants near difference 3.651234
+tangerine-8-dark quadrants near stray 12.033966
+tangerine-8-light blocks far difference 4.104597
+tangerine-8-light blocks far stray 6.423934
+tangerine-8-light blocks near difference 4.573369
+tangerine-8-light blocks near stray 9.197644
+tangerine-8-light full far difference 3.308307
+tangerine-8-light full far stray 4.382966
+tangerine-8-light full near difference 3.762187
+tangerine-8-light full near stray 6.882231
+tangerine-8-light halves far difference 5.896806
+tangerine-8-light halves far stray 10.477060
+tangerine-8-light halves near difference 6.367851
+tangerine-8-light halves near stray 13.384494
+tangerine-8-light quadrants far difference 4.656528
+tangerine-8-light quadrants far stray 7.478000
+tangerine-8-light quadrants near difference 5.151982
+tangerine-8-light quadrants near stray 10.229402
+tangerine-8-square-crisp blocks far difference 4.853520
+tangerine-8-square-crisp blocks far stray 7.490867
+tangerine-8-square-crisp blocks near difference 5.168765
+tangerine-8-square-crisp blocks near stray 10.339490
+tangerine-8-square-crisp full far difference 4.302097
+tangerine-8-square-crisp full far stray 5.053545
+tangerine-8-square-crisp full near difference 4.513563
+tangerine-8-square-crisp full near stray 7.650477
+tangerine-8-square-crisp halves far difference 9.760716
+tangerine-8-square-crisp halves far stray 11.226735
+tangerine-8-square-crisp halves near difference 9.215248
+tangerine-8-square-crisp halves near stray 13.946865
+tangerine-8-square-crisp quadrants far difference 6.223585
+tangerine-8-square-crisp quadrants far stray 8.984194
+tangerine-8-square-crisp quadrants near difference 6.404464
+tangerine-8-square-crisp quadrants near stray 11.890364
+tangerine-8-square-dark blocks far difference 1.916184
+tangerine-8-square-dark blocks far stray 4.631928
+tangerine-8-square-dark blocks near difference 2.883695
+tangerine-8-square-dark blocks near stray 6.351381
+tangerine-8-square-dark full far difference 1.735755
+tangerine-8-square-dark full far stray 3.509432
+tangerine-8-square-dark full near difference 2.626367
+tangerine-8-square-dark full near stray 5.047972
+tangerine-8-square-dark halves far difference 2.770308
+tangerine-8-square-dark halves far stray 6.312056
+tangerine-8-square-dark halves near difference 3.936417
+tangerine-8-square-dark halves near stray 7.635211
+tangerine-8-square-dark quadrants far difference 2.172488
+tangerine-8-square-dark quadrants far stray 5.046528
+tangerine-8-square-dark quadrants near difference 3.254444
+tangerine-8-square-dark quadrants near stray 6.858020
+tangerine-8-square-light blocks far difference 4.777058
+tangerine-8-square-light blocks far stray 5.166878
+tangerine-8-square-light blocks near difference 5.212943
+tangerine-8-square-light blocks near stray 7.278925
+tangerine-8-square-light full far difference 4.268658
+tangerine-8-square-light full far stray 4.185774
+tangerine-8-square-light full near difference 4.701010
+tangerine-8-square-light full near stray 5.956447
+tangerine-8-square-light halves far difference 6.729172
+tangerine-8-square-light halves far stray 7.759373
+tangerine-8-square-light halves near difference 7.147056
+tangerine-8-square-light halves near stray 9.630690
+tangerine-8-square-light quadrants far difference 5.381835
+tangerine-8-square-light quadrants far stray 5.856523
+tangerine-8-square-light quadrants near difference 5.833976
+tangerine-8-square-light quadrants near stray 8.070942
+zone-plate blocks far difference 15.771229
+zone-plate blocks far stray 8.790977
+zone-plate blocks near difference 21.946083
+zone-plate blocks near stray 12.724446
+zone-plate full far difference 12.845508
+zone-plate full far stray 5.987896
+zone-plate full near difference 18.658814
+zone-plate full near stray 8.834930
+zone-plate halves far difference 18.594702
+zone-plate halves far stray 12.018325
+zone-plate halves near difference 25.090933
+zone-plate halves near stray 15.965407
+zone-plate quadrants far difference 16.832540
+zone-plate quadrants far stray 10.139327
+zone-plate quadrants near difference 23.131980
+zone-plate quadrants near stray 13.776572

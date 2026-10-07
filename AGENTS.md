@@ -28,8 +28,13 @@
   there are no compatibility shims.
 - `cargo xtask smoke` runs every tracked smoke suite through `canopyctl`.
 - `cargo xtask score` scores the block mosaics on the standard suite against
-  `crates/mosaic-score/baseline.txt`; `--update` rewrites the baseline, and
-  `--sheets` writes contact sheets to `tmp/score`.
+  `crates/mosaic-score/baseline.txt`, by two metrics: difference, and stray
+  marks such as spurs that hang off strokes. `--check` fails when a group or
+  the suite regresses in any tier or metric. Run it after any change to the
+  matcher or its symbols, and update the baseline only for a change you
+  accept. `--update` rewrites the baseline, `--sheets` writes contact sheets
+  to `tmp/score`, and `--worst N --sheets` lists and draws the cells of most
+  stray.
 - `ncode api` refreshes the captures in `api/`; review their diff with every
   public API change.
 

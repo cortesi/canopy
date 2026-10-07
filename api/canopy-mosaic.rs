@@ -9,9 +9,10 @@
 //!
 //! Each terminal cell is an 8×8 matrix of pixels. For each cell, the matcher
 //! finds the symbol and the two pens, foreground and background, that
-//! reproduce the matrix with the least squared error. The symbols come from
-//! families of block mosaic characters, grouped into tiers by how widely
-//! terminals draw them well.
+//! reproduce the matrix at the least cost: the squared error, plus the stray
+//! of any mark that nothing near it in the matrix explains, such as a spur
+//! of ink below a stroke. The symbols come from families of block mosaic
+//! characters, grouped into tiers by how widely terminals draw them well.
 //!
 //! - [`geometry`] describes the shape of each character in cell coordinates.
 //!   The masks that the matcher searches, the screenshots that Canopy draws,
@@ -187,8 +188,8 @@ pub fn coverage_into(raster: &RasterView<'_, u8>, set: &SymbolSet, out: &mut Vec
 pub fn fixed_into(raster: &RasterView<'_, u8>, set: &SymbolSet, out: &mut Vec<Cell<u8>>);
 
 /// Match each cell of an opaque sRGB raster. Pens are the rounded means of
-/// the two parts of the best mask. Writes `cols × rows` cells, row by row,
-/// into `out`, replacing what it held.
+/// the two parts of the mask of least cost. Writes `cols × rows` cells, row
+/// by row, into `out`, replacing what it held.
 pub fn rgb_into(raster: &RasterView<'_, [u8; 3]>, set: &SymbolSet, out: &mut Vec<Cell<[u8; 3]>>);
 
 pub mod geometry {

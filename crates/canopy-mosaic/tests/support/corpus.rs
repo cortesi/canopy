@@ -1,5 +1,5 @@
-//! The quality corpus: images and text matched in each tier, and the metric
-//! that scores them. The quality test and the contact sheet example share
+//! The quality corpus: images and text matched in each tier, and the metrics
+//! that score them. The quality test and the contact sheet example share
 //! it.
 
 use std::{fs, path::PathBuf};
@@ -317,6 +317,45 @@ fn blur(pixels: &[[u8; 3]], width: usize, sigma: f32) -> Vec<[f32; 3]> {
     let input: Vec<[f32; 3]> = pixels.iter().map(|p| p.map(f32::from)).collect();
     let across = pass(&input, &kernel(sigma), true);
     pass(&across, &kernel(sigma / 2.0), false)
+}
+
+/// The display that the source explains: each pixel of `shown` clamped into
+/// the range of each channel that `source` holds within a matrix pixel across
+/// and half of one down, as the matcher's reach. Half a pixel down holds the
+/// values midway between a pixel and those above and below it, rounded down
+/// for the least and up for the greatest. What the clamp takes out is stray:
+/// a mark that nothing near in the source explains, such as a spur of ink
+/// below a stroke.
+pub fn explained(source: &[[u8; 3]], shown: &[[u8; 3]], width: usize) -> Vec<[u8; 3]> {
+    let height = source.len() / width;
+    shown
+        .iter()
+        .enumerate()
+        .map(|(i, pixel)| {
+            let (x, y) = (i % width, i / width);
+            let mut low = [u8::MAX; 3];
+            let mut high = [0u8; 3];
+            for u in x.saturating_sub(1)..(x + 2).min(width) {
+                let here = source[y * width + u];
+                for ch in 0..3 {
+                    low[ch] = low[ch].min(here[ch]);
+                    high[ch] = high[ch].max(here[ch]);
+                }
+                for v in [y.checked_sub(1), Some(y + 1).filter(|v| *v < height)]
+                    .into_iter()
+                    .flatten()
+                {
+                    let other = source[v * width + u];
+                    for ch in 0..3 {
+                        let sum = u16::from(here[ch]) + u16::from(other[ch]);
+                        low[ch] = low[ch].min((sum / 2) as u8);
+                        high[ch] = high[ch].max(sum.div_ceil(2) as u8);
+                    }
+                }
+            }
+            [0, 1, 2].map(|ch| pixel[ch].clamp(low[ch], high[ch]))
+        })
+        .collect()
 }
 
 /// PSNR in dB between two images after a display-space blur at `sigma`.
