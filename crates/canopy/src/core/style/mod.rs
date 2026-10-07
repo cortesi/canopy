@@ -75,6 +75,9 @@ pub enum WidgetState {
     Disabled,
     /// The widget is pressed or explicitly active.
     Pressed,
+    /// The widget holds a value its owner cannot use, such as an expression
+    /// that does not compile.
+    Invalid,
 }
 
 impl WidgetState {
@@ -85,6 +88,7 @@ impl WidgetState {
             Self::Selected => "selected",
             Self::Disabled => "disabled",
             Self::Pressed => "active",
+            Self::Invalid => "invalid",
         }
     }
 }

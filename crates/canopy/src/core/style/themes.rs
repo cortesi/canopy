@@ -328,6 +328,12 @@ impl Palette {
                     .bg(p.selection_bg)
                     .attrs(AttrSet::new(Attr::Bold)),
             )
+            // A value the owner cannot use reads red. Only the colour is set,
+            // so the field keeps the ground that its context gives it.
+            .style_all(
+                &["/input/invalid/text", "/input/focused/invalid/text"],
+                PartialStyle::new().fg(p.red),
+            )
             // A search bar is a field beside what it searches: its ground and
             // what the search found match the field, and lighten with it while
             // it takes keys. A search that found nothing says so in red.

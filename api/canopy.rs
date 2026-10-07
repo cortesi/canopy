@@ -5176,6 +5176,9 @@ pub mod style {
         Disabled,
         /// The widget is pressed or explicitly active.
         Pressed,
+        /// The widget holds a value its owner cannot use, such as an expression
+        /// that does not compile.
+        Invalid,
     }
 
     impl WidgetState {

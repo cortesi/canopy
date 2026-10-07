@@ -239,7 +239,10 @@ fn masked(text: &str) -> String {
 /// Single-line text input widget.
 ///
 /// The whole row changes style while the field takes keys, even when empty. A
-/// visible prompt can name the field independently of its editable value.
+/// visible prompt can name the field independently of its editable value. An
+/// owner that cannot use the value, such as an expression that does not
+/// compile, marks the field with [`Input::set_invalid`], and its text paints
+/// beneath the `invalid` layer.
 ///
 /// The field edits itself: text and paste insert, and Left, Right, Home, End,
 /// Backspace, and Delete move and delete. It consumes [`CLEAR_INTENT`]. Other
@@ -260,6 +263,8 @@ pub struct Input {
     value_exposure: ValueExposure,
     /// Whether the field shows as taking keys, overriding its focus.
     active: Option<bool>,
+    /// Whether the owner marked the value unusable.
+    invalid: bool,
     /// Call posted with the value appended after every edit.
     on_change: Option<CommandCall>,
     /// Call posted by Enter.
@@ -293,6 +298,7 @@ impl Input {
             label: None,
             value_exposure: ValueExposure::Omit,
             active: None,
+            invalid: false,
             on_change: None,
             on_submit: None,
             on_cancel: None,
@@ -352,6 +358,19 @@ impl Input {
     /// `None` follows focus again.
     pub fn set_active(&mut self, active: Option<bool>) {
         self.active = active;
+    }
+
+    /// Mark the value as one the owner cannot use, or clear the mark.
+    ///
+    /// The field still edits as before. Only its style changes, so the user
+    /// sees that the text needs fixing while typing.
+    pub fn set_invalid(&mut self, invalid: bool) {
+        self.invalid = invalid;
+    }
+
+    /// Return whether the owner marked the value unusable.
+    pub fn is_invalid(&self) -> bool {
+        self.invalid
     }
 
     /// Return whether the field shows as taking keys.
@@ -518,6 +537,9 @@ impl Widget for Input {
         if active {
             r.push_layer(WidgetState::Focused.layer());
         }
+        if self.invalid {
+            r.push_layer(WidgetState::Invalid.layer());
+        }
         let view = ctx.view();
         let view_rect = view.view_rect();
         let content_origin = view.content_origin();
@@ -650,8 +672,10 @@ mod tests {
     use canopy::{
         CanopyBuilder, EventOutcome, NodeId, Setup, ViewContextExt, Widget,
         error::Result,
+        geom::Point,
         input::{Event, key},
         runtime::TurnInput,
+        style::{ResolvedStyle, themes},
         testing::harness::Harness,
         text,
     };
@@ -705,6 +729,26 @@ mod tests {
         assert!(screen.starts_with("••••••"), "{screen:?}");
         assert!(!screen.contains("sk-123"), "{screen:?}");
         assert_eq!(super::masked("a界"), "•••");
+        Ok(())
+    }
+
+    #[test]
+    fn an_invalid_value_reads_red_on_the_field_ground() -> Result<()> {
+        let mut harness = Harness::builder(Input::new("(").with_prompt("> "))
+            .size(10, 1)
+            .build()?;
+        let text_style = |harness: &mut Harness| -> Result<ResolvedStyle> {
+            harness.render()?;
+            Ok(harness.buf().get(Point { x: 2, y: 0 }).expect("cell").style)
+        };
+        let valid = text_style(&mut harness)?;
+        harness.with_root_widget(|input: &mut Input| input.set_invalid(true));
+        let invalid = text_style(&mut harness)?;
+        assert_eq!(invalid.fg, themes::default_dark().red);
+        assert_ne!(invalid.fg, valid.fg);
+        assert_eq!(invalid.bg, valid.bg, "the field keeps its ground");
+        harness.with_root_widget(|input: &mut Input| input.set_invalid(false));
+        assert_eq!(text_style(&mut harness)?, valid);
         Ok(())
     }
 

@@ -1380,7 +1380,10 @@ impl Widget for ImageView {}
 /// Single-line text input widget.
 ///
 /// The whole row changes style while the field takes keys, even when empty. A
-/// visible prompt can name the field independently of its editable value.
+/// visible prompt can name the field independently of its editable value. An
+/// owner that cannot use the value, such as an expression that does not
+/// compile, marks the field with [`Input::set_invalid`], and its text paints
+/// beneath the `invalid` layer.
 ///
 /// The field edits itself: text and paste insert, and Left, Right, Home, End,
 /// Backspace, and Delete move and delete. It consumes [`CLEAR_INTENT`]. Other
@@ -1452,6 +1455,9 @@ impl Input {
     /// Insert `text` at the cursor, as a paste does.
     pub fn insert(&mut self, c: &mut dyn Context, text: String) -> canopy::error::Result<()>;
 
+    /// Return whether the owner marked the value unusable.
+    pub fn is_invalid(&self) -> bool;
+
     /// Move the cursor left.
     pub fn left(&mut self, _c: &mut dyn Context);
 
@@ -1467,6 +1473,12 @@ impl Input {
     /// as a picker whose list takes the keys, uses this to light it up.
     /// `None` follows focus again.
     pub fn set_active(&mut self, active: Option<bool>);
+
+    /// Mark the value as one the owner cannot use, or clear the mark.
+    ///
+    /// The field still edits as before. Only its style changes, so the user
+    /// sees that the text needs fixing while typing.
+    pub fn set_invalid(&mut self, invalid: bool);
 
     /// Replace the semantic label.
     pub fn set_label(&mut self, label: impl Into<String>);
