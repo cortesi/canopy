@@ -131,7 +131,7 @@ pub use selector::Selector;
 pub use sparkline::Sparkline;
 pub use spinner::Spinner;
 pub use status_bar::{KeyHint, StatusBar};
-pub use tabs::{Tabs, TabsLook};
+pub use tabs::{TabBar, Tabs, TabsLook};
 pub use text::{CanvasWidth, Text};
 
 /// List's supporting types.

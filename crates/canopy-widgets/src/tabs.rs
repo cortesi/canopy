@@ -1,11 +1,12 @@
-//! Tabbed pages beneath a one-row tab bar.
+//! Tabbed pages beneath a tab bar, and a tab bar alone for an owner that
+//! shows its own pages.
 
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, TypedId, ViewContext, Widget,
     commands::CommandCall,
     derive_commands,
     error::Result,
-    geom::{Line, Rect},
+    geom::{Line, Point, Rect},
     input::{Event, mouse},
     layout::{Edges, Layout, LayoutOverride},
     render::Render,
@@ -104,6 +105,98 @@ fn contains(c: &dyn Context, root: NodeId, node: NodeId) -> bool {
         current = c.parent_of(id);
     }
     false
+}
+
+/// Return each tab's index, padded label, first column, and width, border
+/// included.
+fn spans<'a>(
+    look: TabsLook,
+    labels: impl IntoIterator<Item = &'a str>,
+) -> impl Iterator<Item = (usize, String, u32, u32)> {
+    let border = match look {
+        TabsLook::Solid => 0,
+        TabsLook::Bordered(_) => 2,
+    };
+    let mut next = 0u32;
+    labels.into_iter().enumerate().map(move |(index, label)| {
+        let text = format!(" {label} ");
+        let width = text::width(&text) + border;
+        let start = next;
+        next = next.saturating_add(width).saturating_add(TAB_GAP);
+        (index, text, start, width)
+    })
+}
+
+/// Draw the bar of `labels` across the top rows of `outer`, with the tab at
+/// `active` marked, and lit while `focused`.
+fn draw_bar<'a>(
+    rndr: &mut Render,
+    outer: Rect,
+    look: TabsLook,
+    labels: impl IntoIterator<Item = &'a str>,
+    active: usize,
+    focused: bool,
+) -> Result<()> {
+    if outer.w == 0 || outer.h == 0 {
+        return Ok(());
+    }
+    let bar = Rect::new(outer.tl.x, outer.tl.y, outer.w, look.rows().min(outer.h));
+    let state = |index| match (index == active, focused) {
+        (false, _) => 0,
+        (true, false) => 1,
+        (true, true) => 2,
+    };
+    match look {
+        TabsLook::Solid => {
+            rndr.fill("tabs/bar", bar, ' ')?;
+            for (index, text, start, width) in spans(look, labels) {
+                let line = Line::new(bar.tl.x.saturating_add(start), bar.tl.y, width);
+                rndr.text(SOLID[state(index)], line, &text)?;
+            }
+        }
+        TabsLook::Bordered(glyphs) => {
+            rndr.fill("tabs/box", bar, ' ')?;
+            if bar.h < 3 {
+                return Ok(());
+            }
+            for (index, text, start, width) in spans(look, labels) {
+                let x = bar.tl.x.saturating_add(start);
+                let (border, label) = (BORDER[state(index)], LABEL[state(index)]);
+                let rule = glyphs.horizontal.to_string().repeat(width as usize - 2);
+                let vertical = glyphs.vertical.to_string();
+                let top = format!("{}{rule}{}", glyphs.topleft, glyphs.topright);
+                let bottom = format!("{}{rule}{}", glyphs.bottomleft, glyphs.bottomright);
+                rndr.text(border, Line::new(x, bar.tl.y, width), &top)?;
+                rndr.text(border, Line::new(x, bar.tl.y + 1, 1), &vertical)?;
+                rndr.text(label, Line::new(x + 1, bar.tl.y + 1, width - 2), &text)?;
+                rndr.text(border, Line::new(x + width - 1, bar.tl.y + 1, 1), &vertical)?;
+                rndr.text(border, Line::new(x, bar.tl.y + 2, width), &bottom)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Return the tab that a left press on the bar of `labels` lands on, if any.
+fn clicked<'a>(
+    event: &Event,
+    ctx: &dyn Context,
+    look: TabsLook,
+    labels: impl IntoIterator<Item = &'a str>,
+) -> Option<usize> {
+    let Event::Mouse(m) = event else {
+        return None;
+    };
+    if m.action != mouse::Action::Down || m.button != mouse::Button::Left {
+        return None;
+    }
+    let point: Point = ctx
+        .view()
+        .outer_point(m.location)
+        .filter(|point| point.y < look.rows())?;
+    spans(look, labels)
+        .find(|(_, _, start, width)| point.x >= *start && point.x < start + width)
+        .map(|(index, ..)| index)
 }
 
 #[derive_commands]
@@ -222,24 +315,9 @@ impl Tabs {
         Ok(())
     }
 
-    /// Return each tab's index, padded label, first column, and width,
-    /// border included.
-    fn spans(&self) -> impl Iterator<Item = (usize, String, u32, u32)> + '_ {
-        let border = match self.look {
-            TabsLook::Solid => 0,
-            TabsLook::Bordered(_) => 2,
-        };
-        let mut next = 0u32;
-        self.tabs
-            .iter()
-            .enumerate()
-            .map(move |(index, Tab { label, .. })| {
-                let text = format!(" {label} ");
-                let width = text::width(&text) + border;
-                let start = next;
-                next = next.saturating_add(width).saturating_add(TAB_GAP);
-                (index, text, start, width)
-            })
+    /// Return the tab labels, in bar order.
+    fn labels(&self) -> impl Iterator<Item = &str> {
+        self.tabs.iter().map(|tab| tab.label.as_str())
     }
 }
 
@@ -255,72 +333,13 @@ impl Widget for Tabs {
     }
 
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        let outer = ctx.view().outer_rect_local();
-        if outer.w == 0 || outer.h == 0 {
-            return Ok(());
-        }
-        let bar = Rect::new(
-            outer.tl.x,
-            outer.tl.y,
-            outer.w,
-            self.look.rows().min(outer.h),
-        );
         let focused = ctx.is_on_focus_path(ctx.node_id());
-        let state = |index| match (index == self.active, focused) {
-            (false, _) => 0,
-            (true, false) => 1,
-            (true, true) => 2,
-        };
-        match self.look {
-            TabsLook::Solid => {
-                rndr.fill("tabs/bar", bar, ' ')?;
-                for (index, text, start, width) in self.spans() {
-                    let line = Line::new(bar.tl.x.saturating_add(start), bar.tl.y, width);
-                    rndr.text(SOLID[state(index)], line, &text)?;
-                }
-            }
-            TabsLook::Bordered(glyphs) => {
-                rndr.fill("tabs/box", bar, ' ')?;
-                if bar.h < 3 {
-                    return Ok(());
-                }
-                for (index, text, start, width) in self.spans() {
-                    let x = bar.tl.x.saturating_add(start);
-                    let (border, label) = (BORDER[state(index)], LABEL[state(index)]);
-                    let rule = glyphs.horizontal.to_string().repeat(width as usize - 2);
-                    let vertical = glyphs.vertical.to_string();
-                    let top = format!("{}{rule}{}", glyphs.topleft, glyphs.topright);
-                    let bottom = format!("{}{rule}{}", glyphs.bottomleft, glyphs.bottomright);
-                    rndr.text(border, Line::new(x, bar.tl.y, width), &top)?;
-                    rndr.text(border, Line::new(x, bar.tl.y + 1, 1), &vertical)?;
-                    rndr.text(label, Line::new(x + 1, bar.tl.y + 1, width - 2), &text)?;
-                    rndr.text(border, Line::new(x + width - 1, bar.tl.y + 1, 1), &vertical)?;
-                    rndr.text(border, Line::new(x, bar.tl.y + 2, width), &bottom)?;
-                }
-            }
-        }
-        Ok(())
+        let outer = ctx.view().outer_rect_local();
+        draw_bar(rndr, outer, self.look, self.labels(), self.active, focused)
     }
 
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
-        let Event::Mouse(m) = event else {
-            return Ok(EventOutcome::Ignore);
-        };
-        if m.action != mouse::Action::Down || m.button != mouse::Button::Left {
-            return Ok(EventOutcome::Ignore);
-        }
-        let Some(point) = ctx
-            .view()
-            .outer_point(m.location)
-            .filter(|point| point.y < self.look.rows())
-        else {
-            return Ok(EventOutcome::Ignore);
-        };
-        let hit = self
-            .spans()
-            .find(|(_, _, start, width)| point.x >= *start && point.x < start + width)
-            .map(|(index, ..)| index);
-        match hit {
+        match clicked(event, ctx, self.look, self.labels()) {
             Some(index) => {
                 self.select(ctx, index)?;
                 Ok(EventOutcome::Handle)
@@ -331,6 +350,108 @@ impl Widget for Tabs {
 
     fn name(&self) -> NodeName {
         NodeName::convert("tabs")
+    }
+}
+
+/// A row of tabs with no pages of its own.
+///
+/// An owner that keeps its pages elsewhere and shows them itself draws their
+/// tabs with this bar. The owner sets the labels and the active tab with
+/// [`TabBar::set_tabs`], and follows clicks through
+/// [`TabBar::with_on_select`]. The bar draws as the bar of [`Tabs`] does,
+/// with the same style paths. Its active label takes the focused style while
+/// focus is within the node that [`TabBar::with_scope`] names.
+#[derive(Default)]
+pub struct TabBar {
+    /// The labels, in bar order.
+    labels: Vec<String>,
+    /// Index of the active tab.
+    active: usize,
+    /// How the bar draws.
+    look: TabsLook,
+    /// The node whose focus lights the active label.
+    scope: Option<NodeId>,
+    /// Call posted with the index of a clicked tab that is not active.
+    on_select: Option<CommandCall>,
+}
+
+impl TabBar {
+    /// Construct a bar with no tabs.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Draw the bar in `look`.
+    #[must_use]
+    pub fn with_look(mut self, look: TabsLook) -> Self {
+        self.look = look;
+        self
+    }
+
+    /// Light the active label while focus is within `scope`, such as the
+    /// region that shows the pages.
+    #[must_use]
+    pub fn with_scope(mut self, scope: NodeId) -> Self {
+        self.scope = Some(scope);
+        self
+    }
+
+    /// Post `call` with the index of a clicked tab appended, when that tab is
+    /// not the active one. The index is the last positional argument, or
+    /// `index` among named ones. The owner then shows that tab and sets it
+    /// active with [`TabBar::set_tabs`].
+    #[must_use]
+    pub fn with_on_select(mut self, call: CommandCall) -> Self {
+        self.on_select = Some(call);
+        self
+    }
+
+    /// Show `labels`, with the tab at `active` marked, clamped to the last.
+    pub fn set_tabs(&mut self, labels: Vec<String>, active: usize) {
+        self.active = active.min(labels.len().saturating_sub(1));
+        self.labels = labels;
+    }
+
+    /// Return the labels, in bar order.
+    pub fn labels(&self) -> &[String] {
+        &self.labels
+    }
+
+    /// Return the index of the active tab.
+    pub fn active(&self) -> usize {
+        self.active
+    }
+}
+
+impl Widget for TabBar {
+    fn layout(&self) -> Layout {
+        Layout::row()
+            .flex_horizontal(1)
+            .fixed_height(self.look.rows())
+    }
+
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        let focused = self.scope.is_some_and(|scope| ctx.is_on_focus_path(scope));
+        let outer = ctx.view().outer_rect_local();
+        let labels = self.labels.iter().map(String::as_str);
+        draw_bar(rndr, outer, self.look, labels, self.active, focused)
+    }
+
+    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
+        let labels = self.labels.iter().map(String::as_str);
+        let Some(index) = clicked(event, ctx, self.look, labels) else {
+            return Ok(EventOutcome::Ignore);
+        };
+        if let Some(call) = &self.on_select
+            && index != self.active
+        {
+            ctx.post(&call.with_arg("index", index))?;
+        }
+        Ok(EventOutcome::Handle)
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("tab_bar")
     }
 }
 
@@ -589,6 +710,103 @@ mod tests {
         })?;
         let changes = harness.with_root_widget(|owner: &mut Owner| owner.changes.clone());
         assert_eq!(changes, [1], "a click on the border of a box selects it");
+        Ok(())
+    }
+
+    /// Root that mounts a bar over two focusable pages that it shows itself.
+    #[derive(Default)]
+    struct BarOwner {
+        /// The bar, the page its scope names, and the other page.
+        nodes: Vec<NodeId>,
+        /// Indexes that the bar posted, in order.
+        selections: Vec<usize>,
+    }
+
+    #[derive_commands]
+    impl BarOwner {
+        /// Records a click on a tab, and makes that tab active.
+        /// @param index The clicked tab.
+        #[command]
+        fn selected(&mut self, c: &mut dyn Context, index: usize) -> Result<()> {
+            self.selections.push(index);
+            c.with_widget_mut(self.nodes[0], |bar: &mut TabBar, _| {
+                let labels = bar.labels().to_vec();
+                bar.set_tabs(labels, index);
+                Ok(())
+            })
+        }
+    }
+
+    impl Widget for BarOwner {
+        fn layout(&self) -> Layout {
+            Layout::column()
+        }
+
+        fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+            let owner = CommandTarget::Exact(c.node_id());
+            let scope = c.add_child(c.node_id(), Page)?;
+            let other = c.add_child(c.node_id(), Page)?;
+            let mut bar = TabBar::new()
+                .with_scope(scope.into())
+                .with_on_select(Self::spec_selected().call().with_target(owner));
+            bar.set_tabs(vec!["view".into(), "terminal".into()], 0);
+            let bar = c.add_child(c.node_id(), bar)?;
+            c.set_children(c.node_id(), vec![bar.into(), scope.into(), other.into()])?;
+            for page in [scope, other] {
+                c.set_layout_override(page.into(), LayoutOverride::new().fixed_height(1))?;
+            }
+            self.nodes = vec![bar.into(), scope.into(), other.into()];
+            Ok(())
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("bar_owner")
+        }
+    }
+
+    impl Register for BarOwner {
+        fn register(setup: &mut Setup) -> Result<()> {
+            setup.add_commands::<Self>()
+        }
+    }
+
+    #[test]
+    fn a_bar_draws_its_labels_lit_by_its_scope_and_posts_a_click() -> Result<()> {
+        let mut harness = Harness::builder(BarOwner::default())
+            .register::<BarOwner>()
+            .size(20, 5)
+            .build()?;
+        harness.render()?;
+        let nodes = harness.with_root_widget(|owner: &mut BarOwner| owner.nodes.clone());
+        assert_eq!(harness.tbuf().lines()[0].trim_end(), " view   terminal");
+
+        // The active label takes the focused style only while its scope holds
+        // focus.
+        let active_style = |harness: &mut Harness, focus: NodeId| -> Result<_> {
+            harness
+                .canopy
+                .with_root_context(|c| c.set_focus(focus).map(|_| ()))?;
+            harness.render()?;
+            Ok(harness.buf().get(Point { x: 1, y: 0 }).expect("cell").style)
+        };
+        let lit = active_style(&mut harness, nodes[1])?;
+        let unlit = active_style(&mut harness, nodes[2])?;
+        assert_ne!(lit, unlit);
+        let inactive = harness.buf().get(Point { x: 9, y: 0 }).expect("cell").style;
+        assert_ne!(unlit, inactive, "the active label stands out without focus");
+
+        let click = |harness: &mut Harness| {
+            harness.mouse(mouse::MouseEvent {
+                action: mouse::Action::Down,
+                button: mouse::Button::Left,
+                modifiers: key::Empty,
+                location: PointI32 { x: 9, y: 0 },
+            })
+        };
+        click(&mut harness)?;
+        click(&mut harness)?;
+        let selections = harness.with_root_widget(|owner: &mut BarOwner| owner.selections.clone());
+        assert_eq!(selections, [1], "a click on the active tab posts nothing");
         Ok(())
     }
 }

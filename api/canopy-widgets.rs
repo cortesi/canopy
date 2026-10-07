@@ -2681,6 +2681,49 @@ impl Widget for StatusBar {}
 impl !Send for StatusBar {}
 impl !Sync for StatusBar {}
 
+/// A row of tabs with no pages of its own.
+///
+/// An owner that keeps its pages elsewhere and shows them itself draws their
+/// tabs with this bar. The owner sets the labels and the active tab with
+/// [`TabBar::set_tabs`], and follows clicks through
+/// [`TabBar::with_on_select`]. The bar draws as the bar of [`Tabs`] does,
+/// with the same style paths. Its active label takes the focused style while
+/// focus is within the node that [`TabBar::with_scope`] names.
+#[derive(Default)]
+pub struct TabBar {/* private fields */}
+
+impl TabBar {
+    /// Return the index of the active tab.
+    pub fn active(&self) -> usize;
+
+    /// Return the labels, in bar order.
+    pub fn labels(&self) -> &[String];
+
+    /// Construct a bar with no tabs.
+    pub fn new() -> Self;
+
+    /// Show `labels`, with the tab at `active` marked, clamped to the last.
+    pub fn set_tabs(&mut self, labels: Vec<String>, active: usize);
+
+    /// Draw the bar in `look`.
+    #[must_use]
+    pub fn with_look(self, look: TabsLook) -> Self;
+
+    /// Post `call` with the index of a clicked tab appended, when that tab is
+    /// not the active one. The index is the last positional argument, or
+    /// `index` among named ones. The owner then shows that tab and sets it
+    /// active with [`TabBar::set_tabs`].
+    #[must_use]
+    pub fn with_on_select(self, call: CommandCall) -> Self;
+
+    /// Light the active label while focus is within `scope`, such as the
+    /// region that shows the pages.
+    #[must_use]
+    pub fn with_scope(self, scope: NodeId) -> Self;
+}
+
+impl Widget for TabBar {}
+
 /// A row of tabs over a set of pages, one page visible at a time.
 ///
 /// Each page is a child node. Tabs hides every page but the active one. When a
