@@ -900,7 +900,10 @@ mod tests {
             .notices()
             .last()
             .expect("the failed activation is a notice");
-        assert_eq!(notice.source, NoticeSource::Binding);
+        assert_eq!(
+            notice.failure.expect("a caught failure").source,
+            NoticeSource::Binding
+        );
         Ok(())
     }
 

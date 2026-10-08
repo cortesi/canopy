@@ -883,6 +883,13 @@ attached to the root. Detaching or removing it clears capture.
 Widgets define focusability. Directional focus depends on computed view
 rectangles, so it depends on layout.
 
+Hit testing finds the deepest visible node under the pointer. A widget whose
+`accept_pointer` returns false is skipped, but its children are still tested,
+so a pointer event over its empty area reaches the nodes beneath it. A
+full-size overlay that only places its children, such as Root's toast layer,
+uses this so it takes no click from what it covers. Focus, keys, and mouse
+capture do not change.
+
 ## Scripting Ownership
 
 Scripts share the runtime state used by native Rust code. A script callback may
@@ -931,18 +938,46 @@ delay its last successful poll requested. A fatal failure still returns from
 so it raises every failure as a script error; a key that a script sends is
 input, so a failure it causes is a notice.
 
-`Canopy::notices` and Luau `canopy.notices()` return the newest 32 notices,
-oldest first. A `Notice` holds the message, the failure's `ScriptErrorKind`, a
-`NoticeSource` (`Binding`, `Widget`, or `Poll`), and the node when known. The
-newest notice is shown from its record until the next key, paste, or mouse
-action other than a bare move. `ViewContext::notice` returns it while it is
-shown, and a notice hook runs whenever that changes, before the frame after a
-record, and before the dismissing input routes. Root's hook shows the notice as
-one row at the bottom of the main pane, styled `root/notice`, and hides the row
-otherwise, so the row takes no clicks while it is empty.
+The runtime records such a failure in the notice log as an error notice. The
+log is one ring buffer of the newest 100 notices of every level: info, warning,
+and error. `Canopy::notices` and Luau `canopy.notices()` return it, oldest
+first, and `ViewContext::notice_log` reads it. A `Notice` holds a `NoticeId`,
+the message, the level, the driver clock time of its latest post, its toast
+duration, its repeat count, and, for a caught failure, a `Failure` with the
+`ScriptErrorKind`, the `NoticeSource` (`Binding`, `Widget`, or `Poll`), and the
+node when known. A post that matches the newest entry by level, message, and
+failure joins it: the count rises and the time restarts.
+
+A widget posts its own notices with `Context::notify(NoticePost)`. A post joins
+the completion queue, so a dispatch that fails drops the notices it queued. The
+queue drains in order and does not roll back, so a notice it applied stays when
+a later posted call fails, and a command queues an outcome after the work it
+reports. The queue refuses work while the tree removes a node, so `pre_remove`
+and `on_unmount` cannot post. `Canopy::notify` posts at once, as a script does.
+
+An error shows from its record until the next key, paste, or mouse action other
+than a bare move. An info or warning notice is a toast: it shows from its post
+until its duration ends, two seconds by default, whatever the input. At most
+four toasts show, and a newer toast ends the oldest early. `Context::end_toast`
+ends one early too. The log keeps every notice that has stopped showing. The
+driver clock alone decides whether a toast shows, so a headless run and a
+`ManualClock` test see what a terminal shows.
+
+A notice hook runs whenever the log or what shows changes, before the frame
+after a post, and before the dismissing input routes. Changes before one
+synchronization run each hook once. Root's hook shows the shown error as one
+row at the bottom of the main pane, styled `root/notice`, and hides the row
+otherwise, so the row takes no clicks while it is empty. It stacks the live
+toasts at the bottom right, one row above the bottom row, newest lowest. The
+toast layer lets the pointer through, so only a toast's own box takes a click,
+which ends that toast. The layer owns the poll that ends each toast on time.
+While a modal is open, pointer routing admits only the modal, so a click on a
+toast does nothing. Root's `toggle_notices` opens the notice log panel, which
+lists the whole log, newest first, with each notice's age.
 
 A failed command changes no structure. Its completion boundary drops the
-removals and modal closes it queued, while changes to widget state stand. A
+removals, modal closes, and notices it queued, while changes to widget state
+stand. A
 command that closes a dialog and then does fallible work therefore does the
 work first, so a failure leaves the dialog open and consistent.
 

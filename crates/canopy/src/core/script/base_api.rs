@@ -36,6 +36,7 @@ use crate::{
     geom::PointI32,
     input::{BindingId, BindingTarget, KeyExpectation},
     render::Glyphs,
+    runtime::{NoticeLevel, NoticePost},
     style::Color,
     tree::FocusDirection,
 };
@@ -400,11 +401,25 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     BaseFunction {
         name: "notices",
         docs: Some(
-            "Return the retained notices, oldest first: failures from input bindings, widget \
-             handlers, and polls that the application reported and survived.",
+            "Return the notice log, oldest first: the newest 100 notices of every level. \
+             Errors include the failures from input bindings, widget handlers, and polls \
+             that the application reported and survived.",
         ),
         signature: || FunctionSignature::new().ret(Type::named("Notice").array()),
         handler: Handler::Sync(host_notices),
+    },
+    BaseFunction {
+        name: "notify",
+        docs: Some(
+            "Post a notice. An info or warning notice shows as a toast for its duration, \
+             two seconds by default, and an error shows until the next input event.",
+        ),
+        signature: || {
+            FunctionSignature::new()
+                .param(("message", Type::String))
+                .param(("options", Type::named("NotifyOptions").optional()))
+        },
+        handler: Handler::Sync(host_notify),
     },
     BaseFunction {
         name: "diagnostic_dump",
@@ -2107,6 +2122,53 @@ fn host_notices<'s>(
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     host_value(scope, |canopy, _| Ok(notices_to_arg(canopy)))
+}
+
+/// `canopy.notify`: post a notice to the log.
+fn host_notify<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    const OWNER: &str = "notify options";
+    let mut args = HostArgCursor::new(scope, args);
+    let message = args.required::<String>("message")?;
+    let mut post = NoticePost::info(message.clone());
+    if let Some(options) = args.optional::<Table<'_>>("options")? {
+        for (name, value) in option_fields(scope, &options, OWNER, &["level", "duration"])? {
+            if name == "level" {
+                let label = option_string(scope, value, OWNER, &name)?;
+                let level = NoticeLevel::from_label(&label).ok_or_else(|| {
+                    RuntimeError::runtime(format!(
+                        "{OWNER} field `level` must be info, warning, or error, got `{label}`"
+                    ))
+                })?;
+                post = NoticePost::new(level, message.clone()).with_duration(post.duration());
+            } else {
+                let seconds = match value {
+                    ScopedValue::Integer(_) | ScopedValue::Number(_) => {
+                        f64::from_lua(value, scope)?
+                    }
+                    other => {
+                        return Err(RuntimeError::runtime(format!(
+                            "{OWNER} field `duration` must be a number, got {}",
+                            other.type_name()
+                        )));
+                    }
+                };
+                let duration = Duration::try_from_secs_f64(seconds).map_err(|_| {
+                    RuntimeError::runtime(format!(
+                        "{OWNER} field `duration` must be a number of seconds, got {seconds}"
+                    ))
+                })?;
+                post = post.with_duration(duration);
+            }
+        }
+    }
+    with_current_canopy(scope, |canopy, _| {
+        canopy.notify(post);
+        Ok(())
+    })?;
+    Ok(ret_none())
 }
 
 /// `canopy.route_trace`: return the most recent input route trace.

@@ -22,7 +22,7 @@ use crate::{
     input::{BindingTarget, Event, ModalOptions, ModalToken, key::Key, mouse::MouseEvent},
     layout::{Layout, LayoutOverride},
     path::{Path, PathFilter},
-    runtime::{NodeWakeHandle, Notice, PollLifetime},
+    runtime::{NodeWakeHandle, NoticeId, NoticeLog, NoticePost, PollLifetime},
     style::{StyleChange, StyleMap, themes::Palette},
     tree::NodeIdentity,
     widget::Widget,
@@ -202,9 +202,9 @@ pub trait ViewContext: sealed::ViewContext {
     /// a new modal. Every node is admitted while no modal is open.
     fn modal_admits(&self, node: NodeId) -> bool;
 
-    /// Return the notice the application shows: the newest one, from its
-    /// record until the next input event.
-    fn notice(&self) -> Option<&Notice>;
+    /// Return the notice log, which also answers which notices show: the
+    /// error until the next input event, and the toasts in their time.
+    fn notice_log(&self) -> &NoticeLog;
 
     /// Return the path for a node relative to a root.
     fn path_of(&self, root: NodeId, node: NodeId) -> Path;
@@ -699,6 +699,26 @@ pub trait Context: ViewContext + sealed::Context {
     /// shows as one. One dispatch runs at most 1,024 posted calls.
     fn post(&mut self, call: &CommandCall) -> Result<()>;
 
+    /// Post a notice to the notice log.
+    ///
+    /// The notice joins the completion queue beside posted calls and modal
+    /// closes, so a dispatch that fails drops the notices it queued. The queue
+    /// drains in order and does not roll back: a notice that it applied stays
+    /// when a later posted call fails, so queue an outcome after the work it
+    /// reports. Outside a dispatch the notice posts at once. An error shows
+    /// until the next input event, and an info or warning notice shows as a
+    /// toast for its duration.
+    ///
+    /// # Errors
+    ///
+    /// The queue refuses work while the tree removes a node, so a
+    /// `pre_remove` or `on_unmount` hook cannot post a notice.
+    fn notify(&mut self, post: NoticePost) -> Result<()>;
+
+    /// End the toast of `id` before its time, as a click on it does. The log
+    /// keeps the notice. Returns whether the toast showed.
+    fn end_toast(&mut self, id: NoticeId) -> bool;
+
     /// Capture a thread-safe wake handle for this widget's work lifetime.
     /// Attachment handles require this node to be attached when acquired.
     fn wake_handle(&self, lifetime: PollLifetime) -> Result<NodeWakeHandle>;
@@ -1055,8 +1075,8 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.core.modal_admits(node)
     }
 
-    fn notice(&self) -> Option<&Notice> {
-        self.core.notices.shown()
+    fn notice_log(&self) -> &NoticeLog {
+        &self.core.notices
     }
 
     fn is_attached(&self, node: NodeId) -> bool {
@@ -1211,6 +1231,15 @@ impl Context for NodeCtx<&mut Core> {
 
     fn remove_after_dispatch(&mut self, node: NodeId) -> Result<()> {
         self.core.remove_after_dispatch(node)
+    }
+
+    fn notify(&mut self, post: NoticePost) -> Result<()> {
+        self.core.notify_after_dispatch(post)
+    }
+
+    fn end_toast(&mut self, id: NoticeId) -> bool {
+        let now = self.core.clock.now();
+        self.core.notices.end_toast(id, now)
     }
 
     fn post(&mut self, call: &CommandCall) -> Result<()> {

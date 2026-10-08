@@ -9,7 +9,7 @@ use crate::{
     commands::{CommandParamKind, CommandReturnSpec, CommandSet, CommandSpec, DeclRegistry},
     core::inputmap::IntentCatalog,
     input::RouteTraceKind,
-    runtime::NoticeSource,
+    runtime::{NoticeLevel, NoticeSource},
     script::FixtureInfo,
 };
 
@@ -531,19 +531,41 @@ fn register_observation_info(builder: &mut module::Builder) {
         ]),
     ));
     builder.alias(declaration::Alias::new(
+        "NoticeLevel",
+        declaration::Type::literals(NoticeLevel::ALL.map(NoticeLevel::label)),
+    ));
+    builder.alias(declaration::Alias::new(
         "Notice",
         declaration::Type::table([
+            declaration::Field::new("id", declaration::Type::Number)
+                .doc("Identity of this log entry."),
             declaration::Field::new("message", declaration::Type::String)
-                .doc("Human-readable failure message."),
-            declaration::Field::new("kind", declaration::Type::String)
-                .doc("Stable failure category, as script error payloads report it."),
+                .doc("Human-readable message."),
+            declaration::Field::new("level", declaration::Type::named("NoticeLevel"))
+                .doc("An info or warning notice shows as a toast; an error until the next input."),
+            declaration::Field::new("repeats", declaration::Type::Number)
+                .doc("How many posts this entry holds: 1 for a notice posted once."),
+            declaration::Field::new("live", declaration::Type::Boolean)
+                .doc("Whether the notice shows now: a toast in its time, or the shown error."),
+            declaration::Field::new("kind", declaration::Type::String.optional()).doc(
+                "Stable failure category of a caught failure, as script error payloads report it.",
+            ),
             declaration::Field::new(
                 "source",
-                declaration::Type::literals(NoticeSource::ALL.map(NoticeSource::label)),
+                declaration::Type::literals(NoticeSource::ALL.map(NoticeSource::label)).optional(),
             )
-            .doc("Where the failure arose: a binding, a widget handler, or a poll."),
+            .doc("Where a caught failure arose: a binding, a widget handler, or a poll."),
             declaration::Field::new("node", declaration::Type::named("NodeId").optional())
-                .doc("Node the binding, handler, or poll ran on, when known."),
+                .doc("Node the binding, handler, or poll of a caught failure ran on, when known."),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
+        "NotifyOptions",
+        declaration::Type::table([
+            declaration::Field::new("level", declaration::Type::named("NoticeLevel").optional())
+                .doc("How the notice reads and shows. Defaults to info."),
+            declaration::Field::new("duration", declaration::Type::Number.optional())
+                .doc("Seconds a toast shows. Defaults to two."),
         ]),
     ));
     builder.alias(declaration::Alias::new(

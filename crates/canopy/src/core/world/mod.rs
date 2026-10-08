@@ -13,7 +13,7 @@ use std::{
 use self::focus::DeferredFocusRepair;
 use super::{
     inputmap::InputMap,
-    notice::Notices,
+    notice::NoticeLog,
     poll::{Clock, SystemClock},
     wake::WakeRegistry,
     widget_access::{WidgetCellGuard, WidgetMutGuard, WidgetReadGuard},
@@ -100,7 +100,7 @@ pub struct Core {
     /// Events in scope for command injection, innermost last.
     event_scope: Vec<Event>,
     /// Recoverable failures and the one the application shows.
-    pub(crate) notices: Notices,
+    pub(crate) notices: NoticeLog,
     /// Driver clock that widgets read through [`crate::ViewContext::now`].
     pub(crate) clock: Arc<dyn Clock>,
     /// Whether cells move: the motion settings allow it, and the adapter
@@ -234,7 +234,7 @@ impl Core {
             commands: CommandSet::default(),
             input_map: InputMap::new(),
             event_scope: Vec::new(),
-            notices: Notices::default(),
+            notices: NoticeLog::default(),
             clock: Arc::new(SystemClock),
             motion_active: false,
             glyphs: Glyphs::default(),

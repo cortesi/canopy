@@ -20,7 +20,10 @@ use super::Core;
 use crate::{
     NodeId,
     commands::{self, CommandCall, CommandTarget},
-    core::{notice::NoticeSource, wake::PollOwner},
+    core::{
+        notice::{NoticePost, NoticeSource},
+        wake::PollOwner,
+    },
     error::{Error, Result},
     input::{Event, ModalToken},
     runtime::{NodeWakeHandle, PollLifetime},
@@ -76,6 +79,8 @@ pub(super) enum CompletionRequest {
     Remove(RemovalRequest),
     /// Close a modal and all its descendants.
     CloseModal(ModalToken),
+    /// Post a notice to the log.
+    Notify(NoticePost),
 }
 
 impl PostRequest {
@@ -95,6 +100,7 @@ impl CompletionRequest {
             Self::Post(_) => "posted call",
             Self::Remove(_) => "removal",
             Self::CloseModal(_) => "modal close",
+            Self::Notify(_) => "notice",
         }
     }
 }
@@ -203,6 +209,12 @@ impl Core {
     /// the same failure checkpoint as node removal.
     pub(crate) fn close_modal_after_dispatch(&mut self, token: ModalToken) -> Result<()> {
         self.enqueue_completion(CompletionRequest::CloseModal(token))
+    }
+
+    /// Post a notice when the outermost dispatch completes, with the same
+    /// failure checkpoint as node removal.
+    pub(crate) fn notify_after_dispatch(&mut self, post: NoticePost) -> Result<()> {
+        self.enqueue_completion(CompletionRequest::Notify(post))
     }
 
     /// Post `call` from `origin`, to run when the outermost dispatch
@@ -316,6 +328,10 @@ impl Core {
                     }
                 }
                 CompletionRequest::CloseModal(token) => self.close_modal_now(token)?,
+                CompletionRequest::Notify(post) => {
+                    let now = self.clock.now();
+                    self.notices.post(post, None, now);
+                }
                 CompletionRequest::Remove(request) => {
                     if self.is_incarnation(request.node, request.incarnation) {
                         self.remove_subtree(request.node)?;

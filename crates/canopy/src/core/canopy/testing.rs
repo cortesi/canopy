@@ -233,10 +233,11 @@ mod tests {
             .notices()
             .last()
             .expect("the failed poll is a notice");
-        assert_eq!(notice.source, NoticeSource::Poll);
-        assert_eq!(notice.kind, ScriptErrorKind::App);
+        let failure = notice.failure.expect("a caught failure");
+        assert_eq!(failure.source, NoticeSource::Poll);
+        assert_eq!(failure.kind, ScriptErrorKind::App);
         assert_eq!(notice.message, "poll failed");
-        assert_eq!(notice.node, Some(canopy.root_id()));
+        assert_eq!(failure.node, Some(canopy.root_id()));
         assert_eq!(
             canopy.next_deadline(),
             Some(clock.now() + Duration::from_millis(10)),
@@ -246,7 +247,12 @@ mod tests {
         clock.advance(Duration::from_millis(10))?;
         canopy.turn(TurnInput::Wake)?;
         assert_eq!(counter.count.get(), 3);
-        assert_eq!(canopy.notices().len(), 2);
+        assert_eq!(
+            canopy.notices().len(),
+            1,
+            "the same failure joins its entry"
+        );
+        assert_eq!(canopy.notices()[0].repeats, 2);
 
         counter.fail.set(Some(true));
         clock.advance(Duration::from_millis(10))?;

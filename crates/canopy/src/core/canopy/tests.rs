@@ -1,5 +1,6 @@
 use std::{
     any::Any,
+    cell::Cell,
     panic::{AssertUnwindSafe, catch_unwind},
     sync::{
         Arc,
@@ -26,7 +27,7 @@ use crate::{
     layout::{Edges, Layout},
     path::Path,
     render::{NopBackend, Render},
-    runtime::NoticeSource,
+    runtime::{NoticePost, NoticeSource},
     script::LuauFunctionId,
     style::Paint,
     testing::{
@@ -1038,8 +1039,9 @@ fn a_widget_handler_failure_is_a_notice_unless_it_is_a_runtime_failure() -> Resu
         .notices()
         .last()
         .expect("the handler failure is a notice");
-    assert_eq!(notice.source, NoticeSource::Widget);
-    assert_eq!(notice.node, Some(child));
+    let failure = notice.failure.expect("a caught failure");
+    assert_eq!(failure.source, NoticeSource::Widget);
+    assert_eq!(failure.node, Some(child));
     assert_eq!(notice.message, "handler failed");
     assert_eq!(
         canopy.route_trace().last().map(|entry| entry.kind),
@@ -1109,15 +1111,19 @@ fn binding_failures_become_notices_and_still_restore_the_event_scope() -> Result
     assert_eq!(gated_runs(&mut canopy, [root, child]), [0, 1]);
     assert!(canopy.core.current_event().is_none());
     let notice = canopy.notices().last().expect("the failure is a notice");
-    assert_eq!(notice.source, NoticeSource::Binding);
-    assert_eq!(notice.node, Some(child));
-    assert_eq!(notice.kind, ScriptErrorKind::CommandExecution);
+    let failure = notice.failure.expect("a caught failure");
+    assert_eq!(failure.source, NoticeSource::Binding);
+    assert_eq!(failure.node, Some(child));
+    assert_eq!(failure.kind, ScriptErrorKind::CommandExecution);
     assert_eq!(
         canopy.route_trace().last().map(|entry| entry.kind),
         Some(RouteTraceKind::Notice),
         "the route trace records the notice"
     );
-    assert!(canopy.core.notices.shown().is_some(), "the notice is shown");
+    assert!(
+        canopy.core.notices.shown_error().is_some(),
+        "the notice is shown"
+    );
 
     // An opaque script callback's failure becomes a notice the same way, and
     // the key dismisses the one shown before it.
@@ -1139,8 +1145,81 @@ fn binding_failures_become_notices_and_still_restore_the_event_scope() -> Result
 
     // Input with no failure dismisses the shown notice and keeps the record.
     canopy.key(None, 'z')?;
-    assert!(canopy.core.notices.shown().is_none());
+    assert!(canopy.core.notices.shown_error().is_none());
     assert_eq!(canopy.notices().len(), 2);
+    Ok(())
+}
+
+thread_local! {
+    /// Number of notice hook runs on this test thread.
+    static NOTICE_HOOK_RUNS: Cell<usize> = const { Cell::new(0) };
+}
+
+/// Count one notice hook run.
+fn count_notice_hook(_ctx: &mut dyn Context) -> Result<()> {
+    NOTICE_HOOK_RUNS.with(|runs| runs.set(runs.get() + 1));
+    Ok(())
+}
+
+#[test]
+fn notice_hooks_run_once_per_observed_generation() -> Result<()> {
+    NOTICE_HOOK_RUNS.with(|runs| runs.set(0));
+    let mut canopy = CanopyBuilder::new()
+        .configure(|setup| {
+            setup.register_notice_hook("count", count_notice_hook);
+            Ok(())
+        })
+        .build()?;
+    canopy.set_screen_size(Size::new(10, 2))?;
+    canopy.render(&mut NopBackend::new())?;
+    let start = NOTICE_HOOK_RUNS.with(Cell::get);
+
+    let root = canopy.root_id();
+    canopy.with_context(root, |ctx| {
+        ctx.notify(NoticePost::info("one"))?;
+        ctx.notify(NoticePost::warning("two"))?;
+        ctx.notify(NoticePost::error("three"))
+    })?;
+    assert_eq!(canopy.notices().len(), 3);
+    canopy.render(&mut NopBackend::new())?;
+    assert_eq!(
+        NOTICE_HOOK_RUNS.with(Cell::get),
+        start + 1,
+        "three changes before one synchronization run the hook once"
+    );
+    canopy.render(&mut NopBackend::new())?;
+    assert_eq!(
+        NOTICE_HOOK_RUNS.with(Cell::get),
+        start + 1,
+        "no change runs no hook"
+    );
+    Ok(())
+}
+
+#[test]
+fn notify_reads_its_level_and_duration_and_scripts_read_the_log() -> Result<()> {
+    let mut canopy = CanopyBuilder::new().build()?;
+    canopy.eval_script(
+        r#"
+        canopy.notify("saved")
+        canopy.notify("top of repo", { level = "warning", duration = 5 })
+        canopy.notify("top of repo", { level = "warning" })
+        local notices = canopy.notices()
+        canopy.assert(#notices == 2, "a repeat joins its entry")
+        canopy.assert(notices[1].level == "info" and notices[1].repeats == 1)
+        canopy.assert(notices[2].level == "warning" and notices[2].repeats == 2)
+        canopy.assert(notices[2].live, "the toast shows")
+        canopy.assert(notices[1].kind == nil, "a posted notice carries no failure")
+        "#,
+    )?;
+    let notices = canopy.notices();
+    assert_eq!(
+        notices[1].duration,
+        Duration::from_secs(2),
+        "the repeat's own time"
+    );
+    let failed = canopy.eval_script(r#"canopy.notify("x", { level = "loud" })"#);
+    assert!(failed.is_err(), "an unknown level fails");
     Ok(())
 }
 

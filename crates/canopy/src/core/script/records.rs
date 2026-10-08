@@ -573,29 +573,42 @@ pub(super) fn screen_text(canopy: &mut Canopy) -> Result<String> {
     Ok(buffer.screen_text())
 }
 
-/// Convert the retained notices to scripting records, oldest first.
+/// Convert the notice log to scripting records, oldest first.
 pub(super) fn notices_to_arg(canopy: &Canopy) -> ArgValue {
+    let log = canopy.notice_log();
+    let now = canopy.core.clock.now();
     ArgValue::Array(
-        canopy
-            .notices()
+        log.entries()
             .iter()
             .map(|notice| {
                 let mut record = BTreeMap::from([
+                    ("id".to_string(), ArgValue::UInt(notice.id.get())),
                     (
                         "message".to_string(),
                         ArgValue::String(notice.message.clone()),
                     ),
                     (
-                        "kind".to_string(),
-                        ArgValue::String(notice.kind.as_str().to_string()),
+                        "level".to_string(),
+                        ArgValue::String(notice.level.label().to_string()),
                     ),
                     (
-                        "source".to_string(),
-                        ArgValue::String(notice.source.label().to_string()),
+                        "repeats".to_string(),
+                        ArgValue::UInt(u64::from(notice.repeats)),
                     ),
+                    ("live".to_string(), ArgValue::Bool(log.is_live(notice, now))),
                 ]);
-                if let Some(node) = notice.node {
-                    record.insert("node".to_string(), ArgValue::Node(node));
+                if let Some(failure) = notice.failure {
+                    record.insert(
+                        "kind".to_string(),
+                        ArgValue::String(failure.kind.as_str().to_string()),
+                    );
+                    record.insert(
+                        "source".to_string(),
+                        ArgValue::String(failure.source.label().to_string()),
+                    );
+                    if let Some(node) = failure.node {
+                        record.insert("node".to_string(), ArgValue::Node(node));
+                    }
                 }
                 ArgValue::Map(record)
             })

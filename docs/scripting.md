@@ -475,14 +475,16 @@ callers must use the fixture tool before evaluating a script.
 
 `canopy.log(value)` appends a log line to the evaluation result.
 
-`canopy.notices()` returns the failures the application reported and survived,
-oldest first, up to the newest 32. A binding's command or callback, a widget's
-event or intent handler, or a widget's poll can fail this way. Each `Notice`
-record has a `message`, the failure's `kind` as script error payloads report
-it (`command_exec` for a failed command, `app` for an application error), a
-`source` of `binding`, `widget`, or `poll`, and the `node` when known. A key a
-script sends is input, so a failure it causes is a notice rather than a script
-error:
+`canopy.notices()` returns the notice log, oldest first: the newest 100
+notices of every level. Each `Notice` record has an `id`, a `message`, a
+`level` of `info`, `warning`, or `error`, a `repeats` count, and `live`, which
+is true while a toast shows or while an error is the shown one. An error that
+the application reported and survived also has the failure's `kind` as script
+error payloads report it (`command_exec` for a failed command, `app` for an
+application error), a `source` of `binding`, `widget`, or `poll`, and the
+`node` when known. A binding's command or callback, a widget's event or intent
+handler, or a widget's poll can fail this way. A key a script sends is input,
+so a failure it causes is a notice rather than a script error:
 
 ```luau
 canopy.send_key("d")
@@ -492,6 +494,18 @@ canopy.assert(notices[#notices].message:find("trash failed") ~= nil)
 
 A script call is not input, so `canopy.call` and the owner functions still
 raise a failing command's error in the script.
+
+`canopy.notify(message, options?)` posts a notice. `options.level` is `info`
+(the default), `warning`, or `error`, and `options.duration` is the number of
+seconds a toast shows, two by default. A configuration function can report its
+own outcome this way, and a script can read what a key reported after its
+toast has gone:
+
+```luau
+canopy.send_key("h")
+local notices = canopy.notices()
+canopy.assert(notices[#notices].message == "top of repo")
+```
 
 `canopy.assert(condition, message?)` records an assertion result. A failed
 assertion also fails the script.

@@ -148,6 +148,17 @@ pub trait Widget: Any {
         false
     }
 
+    /// Return whether a pointer event stops at this widget.
+    ///
+    /// Hit testing skips a widget that returns false, but still tests its
+    /// children. A pointer event over the widget's own area then reaches the
+    /// nodes beneath it, so a layer that only places its children, such as a
+    /// full-size overlay, does not take clicks from what it covers. Focus,
+    /// keys, and mouse capture do not change.
+    fn accept_pointer(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
+
     /// Return the rectangle of this widget's canvas that
     /// [`Context::reveal_anchor`] shows, given the final `content` size.
     ///

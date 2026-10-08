@@ -19,7 +19,7 @@ use crate::{
     geom::Size,
     input::{Event, InputSpec, key, mouse},
     layout::Layout,
-    runtime::NoticeSource,
+    runtime::{NoticeLevel, NoticePost, NoticeSource},
     widget::{EventOutcome, Widget},
 };
 
@@ -34,6 +34,8 @@ enum Act {
     DispatchIgnoring(CommandCall),
     /// Queue removal of a node after dispatch.
     RemoveAfter(NodeId),
+    /// Post an info notice.
+    Notify(&'static str),
     /// Fail the trigger.
     Fail,
 }
@@ -50,6 +52,7 @@ fn run(acts: &[Act], ctx: &mut dyn Context) -> Result<()> {
                 let _ignored = ctx.dispatch(call);
             }
             Act::RemoveAfter(node) => ctx.remove_after_dispatch(*node)?,
+            Act::Notify(message) => ctx.notify(NoticePost::info(*message))?,
             Act::Fail => return Err(Error::App("trigger failed".into())),
         }
     }
@@ -353,10 +356,22 @@ impl Site {
 
     /// Return the newest notice's source, node, and message.
     fn notice(&self) -> Option<(NoticeSource, Option<NodeId>, String)> {
+        self.canopy.notices().last().map(|notice| {
+            let failure = notice
+                .failure
+                .expect("the newest notice is a caught failure");
+            (failure.source, failure.node, notice.message.clone())
+        })
+    }
+
+    /// Return the messages of the info notices in the log, oldest first.
+    fn infos(&self) -> Vec<String> {
         self.canopy
             .notices()
-            .last()
-            .map(|notice| (notice.source, notice.node, notice.message.clone()))
+            .iter()
+            .filter(|notice| notice.level == NoticeLevel::Info)
+            .map(|notice| notice.message.clone())
+            .collect()
     }
 
     /// Lay the site out on a small screen, so mouse events can land.
@@ -608,6 +623,38 @@ fn a_failing_posted_command_stops_the_drain_and_drops_the_tail() -> Result<()> {
     site.set_acts(site.notifier, |n| n.acts = vec![Act::Post(note("again"))]);
     site.canopy.key(None, 'x')?;
     assert_eq!(site.log(), ["fail", "again"]);
+    Ok(())
+}
+
+#[test]
+fn a_failed_command_drops_the_notices_it_queued() -> Result<()> {
+    let mut site = Site::new(vec![Act::Notify("done"), Act::Fail])?;
+    site.canopy.key(None, 'x')?;
+    assert!(site.infos().is_empty(), "the outcome never happened");
+    let (_, _, message) = site.notice().expect("the failure is a notice");
+    assert!(message.contains("trigger failed"), "{message}");
+
+    site.set_acts(site.notifier, |n| n.acts = vec![Act::Notify("done")]);
+    site.canopy.key(None, 'x')?;
+    assert_eq!(site.infos(), ["done"]);
+    Ok(())
+}
+
+#[test]
+fn the_drain_keeps_an_applied_notice_and_drops_the_tail() -> Result<()> {
+    let mut site = Site::new(vec![
+        Act::Notify("before"),
+        Act::Post(Host::call_fail()),
+        Act::Notify("after"),
+    ])?;
+    site.canopy.key(None, 'x')?;
+    assert_eq!(
+        site.infos(),
+        ["before"],
+        "the queue applied the first notice before the post failed, and \
+         dropped the notice behind it"
+    );
+    assert!(site.notice().is_some(), "the failed post is a notice");
     Ok(())
 }
 
@@ -944,7 +991,7 @@ type Hooks = Rc<RefCell<Vec<(&'static str, bool)>>>;
 struct Lifecycle {
     /// Whether the mount's posted call ran.
     delivered: Rc<Cell<bool>>,
-    /// One entry per hook: whether it could post.
+    /// One entry per hook: whether it could post a call or a notice.
     hooks: Hooks,
     /// The call a hook tries to post.
     call: CommandCall,
@@ -965,13 +1012,14 @@ impl Widget for Lifecycle {
     }
 
     fn pre_remove(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let posted = ctx.post(&self.call).is_ok();
+        let posted =
+            ctx.post(&self.call).is_ok() | ctx.notify(NoticePost::info("removing")).is_ok();
         self.hooks.borrow_mut().push(("pre_remove", posted));
         Ok(())
     }
 
     fn on_unmount(&mut self, ctx: &mut dyn Context) {
-        let posted = ctx.post(&self.call).is_ok();
+        let posted = ctx.post(&self.call).is_ok() | ctx.notify(NoticePost::info("removed")).is_ok();
         self.hooks.borrow_mut().push(("on_unmount", posted));
     }
 

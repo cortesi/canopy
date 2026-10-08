@@ -14,7 +14,7 @@ use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 
 use super::{
     inputmap,
-    notice::{Notice, NoticeSource},
+    notice::{Notice, NoticeLog, NoticePost, NoticeSource},
     poll::Poller,
     snapshot::FrameSnapshot,
     termbuf::{RenderLimits, TermBuf},
@@ -28,6 +28,8 @@ pub use motion::MotionSettings;
 mod leave_tests;
 #[cfg(test)]
 mod motion_tests;
+#[cfg(test)]
+mod pointer_tests;
 mod rendering;
 #[cfg(test)]
 mod rendering_tests;
@@ -597,15 +599,27 @@ impl Canopy {
         Ok(())
     }
 
-    /// Return the retained notices, oldest first.
+    /// Return the notice log's entries, oldest first.
     ///
-    /// A failure from an input binding, a widget handler, or a poll that
+    /// The log keeps the newest 100 notices of every level. A failure from an
+    /// input binding, a widget handler, or a poll that
     /// [`Error::is_notice`](crate::error::Error::is_notice) classifies as a
-    /// notice is recorded here while the application keeps running. The
-    /// newest notice is shown until the next input event. The queue keeps the
-    /// newest 32.
+    /// notice is recorded here as an error while the application keeps
+    /// running, and shows until the next input event. A widget posts other
+    /// notices with [`Context::notify`](crate::Context::notify).
     pub fn notices(&self) -> &[Notice] {
         self.core.notices.entries()
+    }
+
+    /// Return the notice log, which also answers which notices show.
+    pub fn notice_log(&self) -> &NoticeLog {
+        &self.core.notices
+    }
+
+    /// Post a notice now, as a script does.
+    pub fn notify(&mut self, post: NoticePost) {
+        let now = self.core.clock.now();
+        self.core.notices.post(post, None, now);
     }
 
     /// Record a notice-class failure, or return any other failure.
@@ -618,14 +632,15 @@ impl Canopy {
         if !error.is_notice() {
             return Err(error);
         }
-        self.core.notices.record(Notice::new(&error, source, node));
+        let now = self.core.clock.now();
+        self.core.notices.record_failure(&error, source, node, now);
         Ok(())
     }
 
-    /// Stop showing the newest notice because input arrived, and sync its
+    /// Stop showing the shown error because input arrived, and sync its
     /// hooks at once, so an overlay that showed it hides before hit testing.
     fn dismiss_notice(&mut self) -> Result<()> {
-        if !self.core.notices.dismiss() {
+        if !self.core.notices.dismiss_error() {
             return Ok(());
         }
         for hook in self.notice_hooks.take_due(self.core.notices.generation()) {

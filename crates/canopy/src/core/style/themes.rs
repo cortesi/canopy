@@ -264,6 +264,20 @@ impl Palette {
             // A notice reports a failure the application survived, so it takes
             // the error colour on the chrome ground of the row it covers.
             .style("/root/notice", PartialStyle::new().fg(p.red).bg(p.panel_bg))
+            // A toast floats over the application, so it takes the raised
+            // element ground. A warning reads apart from an outcome by its
+            // colour and weight.
+            .style(
+                "/root/toast/info",
+                PartialStyle::new().fg(p.fg).bg(p.element_bg),
+            )
+            .style(
+                "/root/toast/warning",
+                PartialStyle::new()
+                    .fg(p.yellow)
+                    .bg(p.element_bg)
+                    .attrs(AttrSet::new(Attr::Bold)),
+            )
             .style(
                 "/status_bar/key",
                 PartialStyle::new()
@@ -289,6 +303,24 @@ impl Palette {
             .style_all(
                 &["/help/label"],
                 PartialStyle::new().fg(p.muted_fg).bg(p.panel_bg),
+            )
+            // The notice log reads as the help panel does. A row's level
+            // colors its message as the toast and the error row color it.
+            .style_all(
+                &["/notice_log/panel", "/notice_log/info"],
+                PartialStyle::new().fg(p.fg).bg(p.panel_bg),
+            )
+            .style_all(
+                &["/notice_log/age", "/notice_log/placeholder"],
+                PartialStyle::new().fg(p.muted_fg).bg(p.panel_bg),
+            )
+            .style(
+                "/notice_log/warning",
+                PartialStyle::new().fg(p.yellow).bg(p.panel_bg),
+            )
+            .style(
+                "/notice_log/error",
+                PartialStyle::new().fg(p.red).bg(p.panel_bg),
             )
             .style_all(
                 &["/picker/background", "/picker/text"],

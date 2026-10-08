@@ -2225,6 +2225,9 @@ impl Root {
     pub fn call_hide_inspector() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
+    pub fn call_hide_notices() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
     pub fn call_quit() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
@@ -2234,10 +2237,16 @@ impl Root {
     pub fn call_show_inspector() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
+    pub fn call_show_notices() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
     pub fn call_toggle_help() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
     pub fn call_toggle_inspector() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_toggle_notices() -> CommandCall;
 
     /// Return the command spec for this command.
     pub fn spec_focus() -> &'static CommandSpec;
@@ -2252,6 +2261,9 @@ impl Root {
     pub fn spec_hide_inspector() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
+    pub fn spec_hide_notices() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
     pub fn spec_quit() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
@@ -2261,10 +2273,16 @@ impl Root {
     pub fn spec_show_inspector() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
+    pub fn spec_show_notices() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
     pub fn spec_toggle_help() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_toggle_inspector() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_toggle_notices() -> &'static CommandSpec;
 }
 
 impl Root {
@@ -2286,6 +2304,9 @@ impl Root {
     /// Hide the inspector.
     pub fn hide_inspector(&mut self, c: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Hide the notice log.
+    pub fn hide_notices(&mut self, c: &mut dyn Context) -> canopy::error::Result<()>;
+
     /// Install the application, shared help, and enabled developer tools.
     pub fn install<W>(self, canopy: &mut Canopy, app: W) -> canopy::error::Result<TypedId<W>>
     where
@@ -2304,11 +2325,17 @@ impl Root {
     /// Show the inspector.
     pub fn show_inspector(&mut self, c: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Show the notice log: every notice the log keeps, newest first.
+    pub fn show_notices(&mut self, c: &mut dyn Context) -> canopy::error::Result<()>;
+
     /// Toggle help modal visibility.
     pub fn toggle_help(&mut self, c: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Toggle inspector visibility.
     pub fn toggle_inspector(&mut self, c: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Toggle the notice log.
+    pub fn toggle_notices(&mut self, c: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Start with the inspector open.
     #[must_use]

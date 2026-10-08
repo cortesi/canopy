@@ -18,6 +18,8 @@ use crate::inspector::Inspector;
 use crate::{
     Button, Container, KeyHint,
     help::{BindingList, Help, ModeHelp, Shown},
+    notice_log::{self, NoticeLog},
+    toast::ToastLayer,
 };
 
 /// Default root bindings exposed through `root.default_bindings()`.
@@ -60,6 +62,9 @@ const DEVTOOLS_BINDINGS: &str = "";
 /// Framework binding group used while contextual help is open.
 const HELP_BINDINGS: FrameworkBindingGroup = FrameworkBindingGroup::new("root.help");
 
+/// Framework binding group used while the notice log is open.
+const NOTICE_BINDINGS: FrameworkBindingGroup = FrameworkBindingGroup::new("root.notices");
+
 // Typed key for the inspector slot
 #[cfg(feature = "devtools")]
 canopy::slot!(InspectorSlot: Inspector);
@@ -70,14 +75,20 @@ canopy::slot!(HelpSlot: Help);
 // Typed key for the transient mode help slot
 canopy::slot!(ModeHelpSlot: ModeHelp);
 
+// Typed key for the notice log slot
+canopy::slot!(NoticeLogSlot: NoticeLog);
+
 /// Key for the application subtree under root (widget type varies).
 const KEY_APP: &str = "AppSlot";
 
 /// Key for the main pane container (app + inspector).
 const KEY_MAIN_PANE: &str = "MainPane";
 
-/// Key for the row that shows the notice the application shows.
+/// Key for the row that shows the error the application shows.
 const KEY_NOTICE: &str = "Notice";
+
+/// Key for the layer that stacks the live toasts.
+const KEY_TOASTS: &str = "Toasts";
 
 /// A Root widget that lives at the base of a Canopy app.
 pub struct Root {
@@ -86,6 +97,8 @@ pub struct Root {
     inspector_active: bool,
     /// Token for the open help modal, if any.
     help_token: Option<ModalToken>,
+    /// Token for the open notice log, if any.
+    notices_token: Option<ModalToken>,
 }
 
 impl Default for Root {
@@ -102,6 +115,7 @@ impl Root {
             #[cfg(feature = "devtools")]
             inspector_active: false,
             help_token: None,
+            notices_token: None,
         }
     }
 
@@ -109,6 +123,24 @@ impl Root {
     fn help_is_open(&self, context: &dyn ViewContext) -> bool {
         self.help_token
             .is_some_and(|token| context.modal_is_open(token))
+    }
+
+    /// Return true when the notice log is open.
+    fn notices_is_open(&self, context: &dyn ViewContext) -> bool {
+        self.notices_token
+            .is_some_and(|token| context.modal_is_open(token))
+    }
+
+    /// Return the owner for an overlay modal opened from the current focus.
+    ///
+    /// An overlay can open over another modal. The root owns it unless that
+    /// modal shuts the root out; then the focus inside the modal owns it, and
+    /// closing the modal closes the overlay too.
+    fn overlay_owner(c: &dyn Context, origin_focus: Option<NodeId>) -> NodeId {
+        match origin_focus {
+            Some(focus) if !c.modal_admits(c.node_id()) => focus,
+            _ => c.node_id(),
+        }
     }
 
     /// Start with the inspector open.
@@ -236,15 +268,8 @@ impl Root {
                 Ok((previous, scroll))
             })?;
 
-        // Help is an overlay, so it can open over another modal. The root
-        // owns it unless that modal shuts the root out; then the focus inside
-        // the modal owns it, and closing the modal closes help too.
-        let owner = match origin_focus {
-            Some(focus) if !c.modal_admits(c.node_id()) => focus,
-            _ => c.node_id(),
-        };
         let opened = c.open_modal(ModalOptions {
-            owner,
+            owner: Self::overlay_owner(c, origin_focus),
             modal: help,
             initial_focus: list.into(),
             dim_target: Some(self.main_pane_id(c)?),
@@ -289,6 +314,72 @@ impl Root {
         }
     }
 
+    #[command]
+    /// Show the notice log: every notice the log keeps, newest first.
+    pub fn show_notices(&mut self, c: &mut dyn Context) -> Result<()> {
+        if self.notices_is_open(c) {
+            return Ok(());
+        }
+        let panel: NodeId = c.get_slot::<NoticeLogSlot>(c.node_id())?.into();
+        let list = NoticeLog::list_id(c, panel)?;
+        let origin_focus = c.focused_node();
+        let rows = notice_log::rows(c);
+        let (previous_rows, previous_scroll) =
+            c.with_widget_mut(list, |list: &mut notice_log::NoticeList, context| {
+                let previous = list.replace_rows(rows);
+                let scroll = context.view().scroll;
+                context.scroll(ScrollOp::To(Point { x: 0, y: 0 }));
+                Ok((previous, scroll))
+            })?;
+        let opened = c.open_modal(ModalOptions {
+            owner: Self::overlay_owner(c, origin_focus),
+            modal: panel,
+            initial_focus: list.into(),
+            dim_target: Some(self.main_pane_id(c)?),
+            bindings: ModalBindings::Framework {
+                groups: &[NOTICE_BINDINGS],
+                intents: &[],
+            },
+        });
+        match opened {
+            Ok(token) => self.notices_token = Some(token),
+            Err(error) => {
+                c.with_widget_mut(list, |list: &mut notice_log::NoticeList, context| {
+                    list.replace_rows(previous_rows);
+                    context.scroll(ScrollOp::To(Point {
+                        x: previous_scroll.x,
+                        y: previous_scroll.y,
+                    }));
+                    Ok(())
+                })?;
+                return Err(error);
+            }
+        }
+        // The ages advance while the panel shows.
+        c.with_widget_mut(list, |_: &mut notice_log::NoticeList, context| {
+            context.request_poll()
+        })
+    }
+
+    #[command]
+    /// Hide the notice log.
+    pub fn hide_notices(&mut self, c: &mut dyn Context) -> Result<()> {
+        let Some(token) = self.notices_token else {
+            return Ok(());
+        };
+        c.close_modal(token)
+    }
+
+    #[command]
+    /// Toggle the notice log.
+    pub fn toggle_notices(&mut self, c: &mut dyn Context) -> Result<()> {
+        if self.notices_is_open(c) {
+            self.hide_notices(c)
+        } else {
+            self.show_notices(c)
+        }
+    }
+
     /// Install the application, shared help, and enabled developer tools.
     pub fn install<W>(self, canopy: &mut Canopy, app: W) -> Result<TypedId<W>>
     where
@@ -314,17 +405,24 @@ impl Root {
                 inspector
             };
 
-            // The notice row and mode help overlay the main pane, and the
-            // help modal overlays them all.
+            // The notice row, the toasts, and mode help overlay the main pane,
+            // and the help modal overlays them all. A modal that the
+            // application adds as it mounts comes before them, so the toasts
+            // draw over it.
             let notice: NodeId = context.create_detached(NoticeBar)?.into();
+            let toasts = ToastLayer::install(context)?;
             let mode_help = ModeHelp::install(context)?;
+            let notices = NoticeLog::install(context)?;
             let help = Help::install(context)?;
             context.attach_slot(root_id, KEY_MAIN_PANE, main_pane)?;
             context.attach_slot(root_id, KEY_NOTICE, notice)?;
+            context.attach_slot(root_id, KEY_TOASTS, toasts)?;
             context.attach_slot(root_id, ModeHelpSlot::KEY, mode_help)?;
+            context.attach_slot(root_id, NoticeLogSlot::KEY, notices)?;
             context.attach_slot(root_id, HelpSlot::KEY, help)?;
-            context.set_hidden(notice, context.notice().is_none())?;
+            context.set_hidden(notice, context.notice_log().shown_error().is_none())?;
             context.set_hidden(mode_help, true)?;
+            context.set_hidden(notices, true)?;
             context.set_hidden(help, true)?;
 
             #[cfg(feature = "devtools")]
@@ -367,16 +465,17 @@ impl Register for Root {
         Button::register(setup)?;
         Help::register(setup)?;
         register_help_bindings(setup)?;
+        register_notice_bindings(setup)?;
         setup.register_mode_hook("root.mode_help", sync_mode_help);
         setup.register_notice_hook("root.notice", sync_notice);
         Ok(())
     }
 }
 
-/// The row at the bottom of the main pane that shows the notice the
+/// The row at the bottom of the main pane that shows the error the
 /// application shows, until the next input event.
 ///
-/// Root's notice hook hides the row while no notice is shown, so it takes no
+/// Root's notice hook hides the row while no error is shown, so it takes no
 /// clicks then.
 struct NoticeBar;
 
@@ -389,7 +488,8 @@ impl Widget for NoticeBar {
         let rect = context.view().outer_rect_local();
         render.fill("root/notice", rect, ' ')?;
         let message = context
-            .notice()
+            .notice_log()
+            .shown_error()
             .and_then(|notice| notice.message.lines().next())
             .unwrap_or_default();
         render.text(
@@ -404,13 +504,18 @@ impl Widget for NoticeBar {
     }
 }
 
-/// Show the notice row while a notice is shown, and hide it after.
+/// Show the notice row while an error is shown, and the live toasts.
 fn sync_notice(context: &mut dyn Context) -> Result<()> {
-    let Some(row) = context.child_slot_of(context.node_id(), KEY_NOTICE) else {
-        return Ok(());
-    };
-    let hidden = context.notice().is_none();
-    context.set_hidden(row, hidden)?;
+    if let Some(row) = context.child_slot_of(context.node_id(), KEY_NOTICE) {
+        let hidden = context.notice_log().shown_error().is_none();
+        context.set_hidden(row, hidden)?;
+    }
+    if let Some(layer) = context.child_slot_of(context.node_id(), KEY_TOASTS) {
+        ToastLayer::sync(context, layer)?;
+    }
+    if let Some(panel) = context.child_slot_of(context.node_id(), NoticeLogSlot::KEY) {
+        NoticeLog::sync(context, panel)?;
+    }
     Ok(())
 }
 
@@ -439,40 +544,46 @@ fn sync_mode_help(context: &mut dyn Context) -> Result<()> {
     Ok(())
 }
 
-/// Register the Root-owned controls admitted by the help modal.
-fn register_help_bindings(setup: &mut Setup) -> Result<()> {
+/// One key a Root-owned panel admits: the key, its description, its action,
+/// and whether help lists it.
+type PanelKey = (&'static str, String, BindingAction, bool);
+
+/// Return the scroll keys of a read-only panel whose rows are `item`s.
+fn panel_scroll_keys(item: &str) -> Result<Vec<PanelKey>> {
     let nav = |intent: NavIntent| IntentName::new(intent.name()).map(BindingAction::Intent);
-    let bindings: [(&str, &str, BindingAction); 13] = [
-        ("Up", "Scroll up", nav(NavIntent::Up)?),
-        ("k", "Scroll up", nav(NavIntent::Up)?),
-        ("Down", "Scroll down", nav(NavIntent::Down)?),
-        ("j", "Scroll down", nav(NavIntent::Down)?),
-        ("PageUp", "Page up", nav(NavIntent::PageUp)?),
-        ("PageDown", "Page down", nav(NavIntent::PageDown)?),
-        ("Space", "Page down", nav(NavIntent::PageDown)?),
-        ("Home", "First binding", nav(NavIntent::First)?),
-        ("g", "First binding", nav(NavIntent::First)?),
-        ("End", "Last binding", nav(NavIntent::Last)?),
-        ("G", "Last binding", nav(NavIntent::Last)?),
-        (
-            "Esc",
-            "Close help",
-            BindingAction::Command(Root::call_hide_help()),
-        ),
-        (
-            "Ctrl+g",
-            "Close help",
-            BindingAction::Command(Root::call_toggle_help()),
-        ),
-    ];
-    for (key, description, action) in bindings {
+    let key = |key, description: &str, intent| -> Result<PanelKey> {
+        Ok((key, description.to_string(), nav(intent)?, true))
+    };
+    Ok(vec![
+        key("Up", "Scroll up", NavIntent::Up)?,
+        key("k", "Scroll up", NavIntent::Up)?,
+        key("Down", "Scroll down", NavIntent::Down)?,
+        key("j", "Scroll down", NavIntent::Down)?,
+        key("PageUp", "Page up", NavIntent::PageUp)?,
+        key("PageDown", "Page down", NavIntent::PageDown)?,
+        key("Space", "Page down", NavIntent::PageDown)?,
+        key("Home", &format!("First {item}"), NavIntent::First)?,
+        key("g", &format!("First {item}"), NavIntent::First)?,
+        key("End", &format!("Last {item}"), NavIntent::Last)?,
+        key("G", &format!("Last {item}"), NavIntent::Last)?,
+    ])
+}
+
+/// Bind `keys` in `group`, for the panel under `path`.
+fn bind_panel_keys(
+    setup: &mut Setup,
+    group: FrameworkBindingGroup,
+    path: &str,
+    keys: Vec<PanelKey>,
+) -> Result<()> {
+    for (key, description, action, show_in_help) in keys {
         setup.bind(
             Key::parse_spec(key)?,
             BindingOptions {
-                show_in_help: key != "Ctrl+g",
-                path: Some("/root/help/**/".parse()?),
-                tier: BindingTier::Framework(HELP_BINDINGS),
-                description: description.to_string(),
+                show_in_help,
+                path: Some(path.parse()?),
+                tier: BindingTier::Framework(group),
+                description,
                 source: None,
                 phase: Some(BindingPhase::BeforeWidget),
             },
@@ -480,6 +591,36 @@ fn register_help_bindings(setup: &mut Setup) -> Result<()> {
         )?;
     }
     Ok(())
+}
+
+/// Register the Root-owned controls admitted by the help modal.
+fn register_help_bindings(setup: &mut Setup) -> Result<()> {
+    let mut keys = panel_scroll_keys("binding")?;
+    keys.push((
+        "Esc",
+        "Close help".into(),
+        BindingAction::Command(Root::call_hide_help()),
+        true,
+    ));
+    keys.push((
+        "Ctrl+g",
+        "Close help".into(),
+        BindingAction::Command(Root::call_toggle_help()),
+        false,
+    ));
+    bind_panel_keys(setup, HELP_BINDINGS, "/root/help/**/", keys)
+}
+
+/// Register the Root-owned controls admitted by the notice log.
+fn register_notice_bindings(setup: &mut Setup) -> Result<()> {
+    let mut keys = panel_scroll_keys("notice")?;
+    keys.push((
+        "Esc",
+        "Close the notice log".into(),
+        BindingAction::Command(Root::call_hide_notices()),
+        true,
+    ));
+    bind_panel_keys(setup, NOTICE_BINDINGS, "/root/notice_log/**/", keys)
 }
 
 #[cfg(test)]

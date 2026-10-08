@@ -251,10 +251,20 @@ rows green, removed rows red, headers with the accent, and gaps muted.
 
 ## Notices
 
-`Root` shows the newest notice in one row at the bottom of the main pane,
+`Root` shows the shown error in one row at the bottom of the main pane,
 painted with `root/notice`. The built-in themes give it the red role on the
 panel ground, so a failure the application survived reads as an error without
 hiding what the row covers for long: the row goes at the next input.
+
+A toast paints `root/toast/info` or `root/toast/warning`. The built-in themes
+give both the raised element ground, so a toast reads as floating over the
+application. Info text takes the foreground, and warning text the yellow role
+in bold.
+
+The notice log panel pushes `notice_log` and paints `panel`, `age`,
+`placeholder`, and one role for each level: `info`, `warning`, and `error`. The
+built-in themes set the panel on the panel ground like help, mute the ages, and
+color warnings yellow and errors red.
 
 ## Images
 

@@ -62,6 +62,11 @@ mod list_view;
 mod meter;
 /// Block mosaics: the symbols of image views, font banners, and big text.
 pub mod mosaic;
+/// The notice log panel that the root opens for review.
+mod notice_log;
+/// A small application under the root, for notice tests.
+#[cfg(test)]
+mod notice_test_support;
 /// Provider-ordered paging and selection state for custom list renderers.
 pub mod paged;
 /// Modal filtered list of items.
@@ -101,6 +106,8 @@ pub mod terminal;
 mod text;
 /// Shared text editing machinery for Input and Editor.
 mod text_buffer;
+/// The toast stack that the root draws over the application.
+mod toast;
 
 pub use big_text::{BigFace, BigGrid, BigSize, BigText, BigWeight};
 pub use border::{Border, BoxGlyphs};

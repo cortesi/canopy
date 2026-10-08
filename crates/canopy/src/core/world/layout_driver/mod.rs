@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::*;
 use crate::{
-    core::view::View,
+    core::{context::CoreViewContext, view::View, widget_access::WidgetReadGuard},
     geom::{Point, PointI32, Rect, RectI32, Size},
     layout::{
         Align, CanvasChild, CanvasContext, Constraint, Direction as LayoutDirection, Layout,
@@ -975,8 +975,9 @@ fn locate_recursive(
         return Ok(None);
     }
 
+    let own = || pointer_acceptance(core, node_id).then_some(node_id);
     let Some(child_clip) = node.view.content.intersect_rect(parent_clip) else {
-        return Ok(Some(node_id));
+        return Ok(own());
     };
     for child in node.children.iter().rev() {
         if let Some(hit) = locate_recursive(core, *child, point, child_clip)? {
@@ -984,7 +985,21 @@ fn locate_recursive(
         }
     }
 
-    Ok(Some(node_id))
+    Ok(own())
+}
+
+/// Ask a widget whether a pointer event stops at it. A widget whose cell a
+/// callback holds counts as a target, as every widget did before the hook.
+fn pointer_acceptance(core: &Core, node_id: NodeId) -> bool {
+    let Some(node) = core.nodes.get(node_id) else {
+        return true;
+    };
+    let Ok(widget) = WidgetReadGuard::borrow(node_id, node) else {
+        return true;
+    };
+    widget
+        .widget()
+        .accept_pointer(&CoreViewContext::new(core, node_id))
 }
 
 /// Width fraction layout tests.

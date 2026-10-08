@@ -122,6 +122,10 @@ pub trait Context: ViewContext + Context {
         edit: &mut dyn FnMut(&mut dyn Context) -> crate::error::Result<()>,
     ) -> crate::error::Result<()>;
 
+    /// End the toast of `id` before its time, as a click on it does. The log
+    /// keeps the notice. Returns whether the toast showed.
+    fn end_toast(&mut self, id: NoticeId) -> bool;
+
     /// Request a cooperative shutdown with the provided status code.
     fn exit(&mut self, code: i32);
 
@@ -134,6 +138,22 @@ pub trait Context: ViewContext + Context {
         scope: FocusScope,
         direction: FocusDirection,
     ) -> crate::error::Result<ChangeOutcome>;
+
+    /// Post a notice to the notice log.
+    ///
+    /// The notice joins the completion queue beside posted calls and modal
+    /// closes, so a dispatch that fails drops the notices it queued. The queue
+    /// drains in order and does not roll back: a notice that it applied stays
+    /// when a later posted call fails, so queue an outcome after the work it
+    /// reports. Outside a dispatch the notice posts at once. An error shows
+    /// until the next input event, and an info or warning notice shows as a
+    /// toast for its duration.
+    ///
+    /// # Errors
+    ///
+    /// The queue refuses work while the tree removes a node, so a
+    /// `pre_remove` or `on_unmount` hook cannot post a notice.
+    fn notify(&mut self, post: NoticePost) -> crate::error::Result<()>;
 
     /// Open a modal that owns focus, input admission, and visual effects.
     fn open_modal(&mut self, options: ModalOptions) -> crate::error::Result<ModalToken>;
@@ -478,9 +498,9 @@ pub trait ViewContext: ViewContext {
     /// The node currently being rendered.
     fn node_id(&self) -> NodeId;
 
-    /// Return the notice the application shows: the newest one, from its
-    /// record until the next input event.
-    fn notice(&self) -> Option<&Notice>;
+    /// Return the notice log, which also answers which notices show: the
+    /// error until the next input event, and the toasts in their time.
+    fn notice_log(&self) -> &NoticeLog;
 
     /// Return the time of the driver clock. A test that installs a
     /// [`ManualClock`](crate::testing::ManualClock) moves it.
@@ -571,6 +591,15 @@ pub trait Widget: Any {
     /// Widgets can use the provided context to query their tree state (e.g.,
     /// whether they have children) when deciding whether to accept focus.
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
+
+    /// Return whether a pointer event stops at this widget.
+    ///
+    /// Hit testing skips a widget that returns false, but still tests its
+    /// children. A pointer event over the widget's own area then reaches the
+    /// nodes beneath it, so a layer that only places its children, such as a
+    /// full-size overlay, does not take clicks from what it covers. Focus,
+    /// keys, and mouse capture do not change.
+    fn accept_pointer(&self, _ctx: &dyn ViewContext) -> bool {}
 
     /// Return whether this widget consumes `intent` in its current state.
     ///
@@ -830,14 +859,21 @@ impl Canopy {
     /// mode.
     pub fn mode(&self) -> &str;
 
-    /// Return the retained notices, oldest first.
+    /// Return the notice log, which also answers which notices show.
+    pub fn notice_log(&self) -> &NoticeLog;
+
+    /// Return the notice log's entries, oldest first.
     ///
-    /// A failure from an input binding, a widget handler, or a poll that
+    /// The log keeps the newest 100 notices of every level. A failure from an
+    /// input binding, a widget handler, or a poll that
     /// [`Error::is_notice`](crate::error::Error::is_notice) classifies as a
-    /// notice is recorded here while the application keeps running. The
-    /// newest notice is shown until the next input event. The queue keeps the
-    /// newest 32.
+    /// notice is recorded here as an error while the application keeps
+    /// running, and shows until the next input event. A widget posts other
+    /// notices with [`Context::notify`](crate::Context::notify).
     pub fn notices(&self) -> &[Notice];
+
+    /// Post a notice now, as a script does.
+    pub fn notify(&mut self, post: NoticePost);
 
     /// Return the palette of the active theme.
     pub fn palette(&self) -> &Palette;
@@ -4180,6 +4216,23 @@ pub mod render {
 pub mod runtime {
     //! The runtime: turns, published frames, polls and wakes, and notices.
 
+    /// How long a toast shows unless its post names another duration.
+    pub const DEFAULT_TOAST_DURATION: Duration = _;
+
+    /// Maximum toasts that show at once. A newer toast ends the oldest early.
+    pub const TOAST_LIMIT: usize = 4;
+
+    /// What the runtime knows about a failure it caught.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct Failure {
+        /// Stable failure category, as script error payloads report it.
+        pub kind: ScriptErrorKind,
+        /// Where the failure arose.
+        pub source: NoticeSource,
+        /// Node the binding, handler, or poll ran on, when known.
+        pub node: Option<NodeId>,
+    }
+
     /// Identifier of an immutable publication.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub struct FrameId(pub u64);
@@ -4243,20 +4296,120 @@ pub mod runtime {
         pub fn wake(&self) -> crate::error::Result<WakeOutcome>;
     }
 
-    /// A recoverable failure, reported to the user and to scripts.
+    /// One entry in the notice log.
     #[derive(Clone, Debug, Eq, PartialEq)]
     pub struct Notice {
-        /// Human-readable failure message.
+        /// Identity of this entry.
+        pub id: NoticeId,
+        /// Human-readable message.
         pub message: String,
-        /// Stable failure category, as script error payloads report it.
-        pub kind: ScriptErrorKind,
-        /// Where the failure arose.
-        pub source: NoticeSource,
-        /// Node the binding, handler, or poll ran on, when known.
-        pub node: Option<NodeId>,
+        /// How the notice reads and shows.
+        pub level: NoticeLevel,
+        /// Driver clock time of the latest post this entry holds.
+        pub at: Instant,
+        /// How long the notice shows as a toast after `at`.
+        pub duration: Duration,
+        /// How many posts this entry holds: 1 for a notice posted once.
+        pub repeats: u32,
+        /// The caught failure, for a failure the runtime recorded.
+        pub failure: Option<Failure>,
     }
 
-    /// Where a notice arose.
+    impl Notice {
+        /// Return when the notice's toast time ends.
+        pub fn ends(&self) -> Instant;
+
+        /// Return the message, with the count when the notice repeated.
+        pub fn text(&self) -> String;
+    }
+
+    /// Identity of one entry in the notice log, unique for the life of the
+    /// runtime.
+    #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    pub struct NoticeId(_);
+
+    impl NoticeId {
+        /// Return the number scripts see.
+        pub fn get(self) -> u64;
+    }
+
+    /// How a notice reads, and how it shows.
+    #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+    pub enum NoticeLevel {
+        /// An outcome, such as an entry moved to the trash. It shows as a toast.
+        Info,
+        /// A refusal that needs no action, such as a key with nothing to act on.
+        /// It shows as a toast.
+        Warning,
+        /// A failure. It shows until the next input event.
+        Error,
+    }
+
+    impl NoticeLevel {
+        /// Return the level a scripting label names.
+        pub fn from_label(label: &str) -> Option<Self>;
+
+        /// Return whether a notice of this level shows as a toast.
+        pub fn is_toast(self) -> bool;
+
+        /// Return a stable scripting label.
+        pub fn label(self) -> &'static str;
+    }
+
+    /// The notice log, and which of its notices show.
+    #[derive(Debug, Default)]
+    pub struct NoticeLog {/* private fields */}
+
+    impl NoticeLog {
+        /// Return the retained notices, oldest first.
+        pub fn entries(&self) -> &[Notice];
+
+        /// Return whether `notice` shows at `now`: as a toast in its time, or as
+        /// the shown error.
+        pub fn is_live(&self, notice: &Notice, now: Instant) -> bool;
+
+        /// Return the toasts that show at `now`, oldest first.
+        pub fn live_toasts(&self, now: Instant) -> Vec<&Notice>;
+
+        /// Return when the next live toast ends, if one shows at `now`.
+        pub fn next_toast_end(&self, now: Instant) -> Option<Instant>;
+
+        /// Return the error that shows until the next input event, if one does.
+        pub fn shown_error(&self) -> Option<&Notice>;
+    }
+
+    /// A notice that a widget or script asks to show.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct NoticePost {/* private fields */}
+
+    impl NoticePost {
+        /// Return how long the notice shows as a toast.
+        pub fn duration(&self) -> Duration;
+
+        /// Post a failure, which shows until the next input event.
+        pub fn error(message: impl Into<String>) -> Self;
+
+        /// Post an outcome, such as an entry moved to the trash.
+        pub fn info(message: impl Into<String>) -> Self;
+
+        /// Return the level.
+        pub fn level(&self) -> NoticeLevel;
+
+        /// Return the message.
+        pub fn message(&self) -> &str;
+
+        /// Post a notice of `level`.
+        pub fn new(level: NoticeLevel, message: impl Into<String>) -> Self;
+
+        /// Post a refusal that needs no action.
+        pub fn warning(message: impl Into<String>) -> Self;
+
+        /// Show the toast for `duration` in place of the default two seconds.
+        #[must_use]
+        pub fn with_duration(self, duration: Duration) -> Self;
+    }
+
+    /// Where a failure arose.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum NoticeSource {
         /// A binding's command or callback failed.
