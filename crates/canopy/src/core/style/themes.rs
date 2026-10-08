@@ -278,6 +278,11 @@ impl Palette {
                     .bg(p.element_bg)
                     .attrs(AttrSet::new(Attr::Bold)),
             )
+            // A repeated notice's count reads apart from its message.
+            .style(
+                "/root/toast/count",
+                PartialStyle::new().fg(p.accent).bg(p.element_bg),
+            )
             .style(
                 "/status_bar/key",
                 PartialStyle::new()
@@ -321,6 +326,10 @@ impl Palette {
             .style(
                 "/notice_log/error",
                 PartialStyle::new().fg(p.red).bg(p.panel_bg),
+            )
+            .style(
+                "/notice_log/count",
+                PartialStyle::new().fg(p.accent).bg(p.panel_bg),
             )
             .style_all(
                 &["/picker/background", "/picker/text"],

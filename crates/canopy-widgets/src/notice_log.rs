@@ -96,17 +96,30 @@ impl Widget for NoticeLog {
 pub struct LogRow {
     /// When the notice last posted.
     at: Instant,
-    /// The message, with its count when it repeated.
-    text: String,
+    /// The message.
+    message: String,
+    /// The count after the message, when the notice repeated.
+    count: Option<String>,
     /// The level, which picks the style.
     level: NoticeLevel,
+}
+
+impl LogRow {
+    /// Return the columns the count takes after the message, with the blank
+    /// column before it, or 0 without a count.
+    fn count_width(&self) -> usize {
+        self.count
+            .as_deref()
+            .map_or(0, |count| text::width(count) as usize + 1)
+    }
 }
 
 impl From<&Notice> for LogRow {
     fn from(notice: &Notice) -> Self {
         Self {
             at: notice.at,
-            text: notice.text(),
+            message: notice.message.clone(),
+            count: notice.count_label(),
             level: notice.level,
         }
     }
@@ -167,7 +180,7 @@ impl NoticeList {
         let widest = self
             .rows
             .iter()
-            .map(|row| text::width(&row.text) as usize)
+            .map(|row| text::width(&row.message) as usize + row.count_width())
             .max()
             .map_or(text::width(PLACEHOLDER) as usize, |widest| {
                 AGE_WIDTH + AGE_GAP + widest
@@ -238,9 +251,18 @@ impl Widget for NoticeList {
                 NoticeLevel::Warning => "warning",
                 NoticeLevel::Error => "error",
             };
+            // A narrow panel cuts the message and keeps the count whole.
+            let count_width = row.count_width().min(budget);
+            let message = Truncate::End.apply(&row.message, budget - count_width);
+            let columns = |columns: usize| u32::try_from(columns).unwrap_or(0);
             let x = content.tl.x + u32::try_from(lead).unwrap_or(u32::MAX);
-            let line = Line::new(x, y, u32::try_from(budget).unwrap_or(0));
-            render.text(style, line, &Truncate::End.apply(&row.text, budget))?;
+            let line = Line::new(x, y, columns(budget - count_width));
+            render.text(style, line, &message)?;
+            if let Some(count) = &row.count {
+                let x = x + columns(text::width(&message) as usize + 1);
+                let line = Line::new(x, y, columns(count_width.saturating_sub(1)));
+                render.text("count", line, count)?;
+            }
         }
         Ok(())
     }
@@ -317,6 +339,27 @@ mod tests {
             .resolve_solid()
             .expect("a solid style");
         assert_eq!(cell.style.fg, warning.fg, "the level colors the message");
+
+        let row = &rows(&harness)[newest];
+        let at = row.find("×2").expect("the count shows");
+        let count_cell = harness
+            .buf()
+            .get(Point {
+                x: u32::try_from(row[..at].chars().count()).expect("a column"),
+                y: u32::try_from(newest).expect("a row"),
+            })
+            .expect("a count cell");
+        let count = harness
+            .canopy
+            .style()
+            .resolve("notice_log/count")
+            .resolve_solid()
+            .expect("a solid style");
+        assert_eq!(
+            count_cell.style.fg, count.fg,
+            "the count takes its own colour"
+        );
+        assert_ne!(count.fg, warning.fg);
         Ok(())
     }
 

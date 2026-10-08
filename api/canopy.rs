@@ -4316,11 +4316,13 @@ pub mod runtime {
     }
 
     impl Notice {
+        /// Return the count a repeated notice shows after its message, such as
+        /// "×3", or `None` for a notice posted once. A view styles the count apart
+        /// from the message.
+        pub fn count_label(&self) -> Option<String>;
+
         /// Return when the notice's toast time ends.
         pub fn ends(&self) -> Instant;
-
-        /// Return the message, with the count when the notice repeated.
-        pub fn text(&self) -> String;
     }
 
     /// Identity of one entry in the notice log, unique for the life of the

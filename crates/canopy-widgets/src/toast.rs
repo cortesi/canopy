@@ -73,7 +73,8 @@ impl ToastLayer {
             .into_iter()
             .map(|notice| Shown {
                 id: notice.id,
-                text: notice.text(),
+                message: notice.message.clone(),
+                count: notice.count_label(),
                 level: notice.level,
             })
             .collect::<Vec<_>>();
@@ -123,10 +124,22 @@ impl Widget for ToastLayer {
 struct Shown {
     /// The notice the toast shows.
     id: NoticeId,
-    /// The message, with its count when it repeated.
-    text: String,
+    /// The message.
+    message: String,
+    /// The count after the message, when the notice repeated.
+    count: Option<String>,
     /// The level, which picks the style.
     level: NoticeLevel,
+}
+
+impl Shown {
+    /// Return the columns the count takes after the message, with the blank
+    /// column before it, or 0 without a count.
+    fn count_width(&self) -> u32 {
+        self.count
+            .as_deref()
+            .map_or(0, |count| text::width(count).saturating_add(1))
+    }
 }
 
 /// One toast: a one-row box as wide as its message.
@@ -141,7 +154,9 @@ impl Widget for ToastBox {
         let width = self
             .shown
             .as_ref()
-            .map_or(0, |shown| text::width(&shown.text))
+            .map_or(0, |shown| {
+                text::width(&shown.message).saturating_add(shown.count_width())
+            })
             .saturating_add(2 * TOAST_PADDING);
         constraints.clamp(Size::new(width, 1))
     }
@@ -156,17 +171,26 @@ impl Widget for ToastBox {
         };
         let rect = context.view().outer_rect_local();
         render.fill(style, rect, ' ')?;
-        let budget = rect.w.saturating_sub(2 * TOAST_PADDING) as usize;
-        let message = Truncate::End.apply(&shown.text, budget);
+        // A narrow box cuts the message and keeps the count whole.
+        let budget = rect.w.saturating_sub(2 * TOAST_PADDING);
+        let count_width = shown.count_width().min(budget);
+        let message =
+            Truncate::End.apply(&shown.message, budget.saturating_sub(count_width) as usize);
+        let x = rect.tl.x.saturating_add(TOAST_PADDING);
         render.text(
             style,
-            Line::new(
-                rect.tl.x.saturating_add(TOAST_PADDING),
-                rect.tl.y,
-                rect.w.saturating_sub(TOAST_PADDING),
-            ),
+            Line::new(x, rect.tl.y, budget.saturating_sub(count_width)),
             &message,
-        )
+        )?;
+        if let Some(count) = &shown.count {
+            let x = x.saturating_add(text::width(&message)).saturating_add(1);
+            render.text(
+                "root/toast/count",
+                Line::new(x, rect.tl.y, count_width.saturating_sub(1)),
+                count,
+            )?;
+        }
+        Ok(())
     }
 
     fn on_event(&mut self, event: &Event, context: &mut dyn Context) -> Result<EventOutcome> {
@@ -281,6 +305,32 @@ mod tests {
             "a repeat joins its toast at the bottom: {rows:?}"
         );
         assert!(!rows.join("\n").contains("toast 4\n"));
+
+        // The count takes its own colour, apart from the message.
+        let column = |text: &str| {
+            let at = rows[6].find(text).expect("the text shows");
+            u32::try_from(rows[6][..at].chars().count()).expect("a column")
+        };
+        let fg = |x| {
+            harness
+                .buf()
+                .get(Point { x, y: 6 })
+                .expect("a toast cell")
+                .style
+                .fg
+        };
+        let style = |path: &str| {
+            harness
+                .canopy
+                .style()
+                .resolve(path)
+                .resolve_solid()
+                .expect("a solid style")
+                .fg
+        };
+        assert_eq!(fg(column("×2")), style("root/toast/count"));
+        assert_eq!(fg(column("toast 4")), style("root/toast/info"));
+        assert_ne!(style("root/toast/count"), style("root/toast/info"));
         Ok(())
     }
 

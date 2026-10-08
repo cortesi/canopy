@@ -259,12 +259,14 @@ hiding what the row covers for long: the row goes at the next input.
 A toast paints `root/toast/info` or `root/toast/warning`. The built-in themes
 give both the raised element ground, so a toast reads as floating over the
 application. Info text takes the foreground, and warning text the yellow role
-in bold.
+in bold. A repeated notice's count, such as `×3`, paints `root/toast/count`,
+which the built-in themes give the accent so it reads apart from the message.
 
 The notice log panel pushes `notice_log` and paints `panel`, `age`,
-`placeholder`, and one role for each level: `info`, `warning`, and `error`. The
-built-in themes set the panel on the panel ground like help, mute the ages, and
-color warnings yellow and errors red.
+`placeholder`, `count`, and one role for each level: `info`, `warning`, and
+`error`. The built-in themes set the panel on the panel ground like help, mute
+the ages, color warnings yellow and errors red, and give a repeat's count the
+accent.
 
 ## Images
 

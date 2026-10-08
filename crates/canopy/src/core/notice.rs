@@ -133,13 +133,11 @@ pub struct Notice {
 }
 
 impl Notice {
-    /// Return the message, with the count when the notice repeated.
-    pub fn text(&self) -> String {
-        if self.repeats > 1 {
-            format!("{} ×{}", self.message, self.repeats)
-        } else {
-            self.message.clone()
-        }
+    /// Return the count a repeated notice shows after its message, such as
+    /// "×3", or `None` for a notice posted once. A view styles the count apart
+    /// from the message.
+    pub fn count_label(&self) -> Option<String> {
+        (self.repeats > 1).then(|| format!("×{}", self.repeats))
     }
 
     /// Return when the notice's toast time ends.
@@ -430,7 +428,7 @@ mod tests {
         assert_eq!(first, again);
         assert_eq!(log.entries().len(), 1);
         assert_eq!(log.entries()[0].repeats, 2);
-        assert_eq!(log.entries()[0].text(), "top of repo ×2");
+        assert_eq!(log.entries()[0].count_label().as_deref(), Some("×2"));
         let past_first = now + Duration::from_millis(2500);
         assert_eq!(
             log.live_toasts(past_first).len(),
