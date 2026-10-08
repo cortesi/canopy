@@ -308,6 +308,15 @@ impl Palette {
                 &["/picker/placeholder", "/picker/muted"],
                 PartialStyle::new().fg(p.muted_fg).bg(p.panel_bg),
             )
+            // A group's heading names the items under it, so it reads as a
+            // title rather than as a row to choose.
+            .style(
+                "/picker/group",
+                PartialStyle::new()
+                    .fg(p.frame_title)
+                    .bg(p.panel_bg)
+                    .attrs(AttrSet::new(Attr::Bold)),
+            )
             // A field beside results, such as a picker's filter, takes the
             // element ground to set it apart from the rows. A field that has
             // been given stays legible without competing with the list that

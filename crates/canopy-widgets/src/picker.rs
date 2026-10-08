@@ -28,7 +28,8 @@ use canopy::{
         key::{self, Key, KeyCode},
     },
     layout::{
-        CanvasContext, Direction, Edges, Layout, MeasureConstraints, Measurement, ScrollOp, Sizing,
+        CanvasContext, Direction, Edges, Layout, MeasureConstraints, Measurement, RevealAlign,
+        ScrollOp, Sizing,
     },
     render::Render,
     style::roles,
@@ -39,11 +40,13 @@ use crate::{
     Dialog, ItemLabel,
     frame::Frame,
     input::{Input, register_clear_intent},
-    row_cursor::{CursorMove, RowCursor, label_rows, widest_label},
+    row_cursor::{CursorMove, RowCursor, label_rows},
 };
 
 /// Columns a row spends on its blank lead column and a trailing gutter.
 const ROW_PADDING: u32 = 2;
+/// What sets an item in a group in from its heading.
+const GROUP_INDENT: &str = "  ";
 /// Narrowest the modal frame gets, so a short list still reads as a dialog.
 const MIN_FRAME_WIDTH: u32 = 32;
 /// Rows and columns left around the frame, so the view shows through.
@@ -147,6 +150,15 @@ where
         let title = title.to_owned();
         context.with_widget_mut(list, |list: &mut PickerList<T>, context| {
             list.update_items(context, title, placeholder, items, same)
+        })
+    }
+
+    /// Show the item count in the title, or the label alone. A picker counts
+    /// its items until it is told otherwise.
+    pub fn set_counted(&mut self, context: &mut dyn Context, counted: bool) -> Result<()> {
+        let list = self.typed_list()?;
+        context.with_widget_mut(list, |list: &mut PickerList<T>, context| {
+            list.set_counted(context, counted)
         })
     }
 
@@ -316,11 +328,22 @@ impl Widget for PickerBody {
     }
 }
 
+/// One row of a picker's list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Row {
+    /// The heading of the group that opens with the item at this position in
+    /// `items`.
+    Heading(usize),
+    /// The item at this position in `shown`.
+    Item(usize),
+}
+
 /// A list of items, scrolled by its own view.
 ///
 /// The list shows the items its filter passes, one per row, trimmed to the
-/// width it is given. It titles the frame around it with its label and the row
-/// count, and writes the filter into the field below it.
+/// width it is given. An item in a group shows indented under its group's
+/// heading, which takes no selection. It titles the frame around it with its
+/// label and the item count, and writes the filter into the field below it.
 pub struct PickerList<T>
 where
     T: ItemLabel,
@@ -329,6 +352,9 @@ where
     items: Vec<T>,
     /// Positions in `items` that the filter passes, in order.
     shown: Vec<usize>,
+    /// The rows the list shows: each shown item, after its group's heading
+    /// where a group starts.
+    rows: Vec<Row>,
     /// Cursor over `shown`, giving a position within it, not within `items`.
     cursor: RowCursor,
     /// Text a label must contain, ignoring ASCII case.
@@ -347,6 +373,8 @@ where
     truncate: Truncate,
     /// Width that shows the widest label unclipped.
     fitted_width: u32,
+    /// Whether the title counts the items.
+    counted: bool,
 }
 
 #[derive_commands]
@@ -360,6 +388,7 @@ where
         Self {
             items: Vec::new(),
             shown: Vec::new(),
+            rows: Vec::new(),
             cursor: RowCursor::new(0),
             filter: String::new(),
             filtering: false,
@@ -369,6 +398,7 @@ where
             field: None,
             truncate: Truncate::default(),
             fitted_width: 0,
+            counted: true,
         }
     }
 
@@ -411,8 +441,9 @@ where
         self.republish(context)
     }
 
-    /// Show only the items containing `text`, ignoring ASCII case.
-    /// @param text Text a label must contain. Empty text shows every item.
+    /// Show only the items whose label or group contains `text`, ignoring
+    /// ASCII case.
+    /// @param text Text an item must contain. Empty text shows every item.
     #[command]
     pub fn set_filter(&mut self, context: &mut dyn Context, text: String) -> Result<()> {
         self.filter = text;
@@ -507,6 +538,12 @@ where
         self.refresh(context)
     }
 
+    /// Show the item count in the title, or the label alone.
+    pub fn set_counted(&mut self, context: &mut dyn Context, counted: bool) -> Result<()> {
+        self.counted = counted;
+        self.republish(context)
+    }
+
     /// Return the selected item.
     #[must_use]
     pub fn selected(&self) -> Option<&T> {
@@ -531,21 +568,36 @@ where
     }
 
     /// Rebuild the shown rows from the filter.
+    ///
+    /// A group's text passes all its items, so a filter can name a group.
     fn apply_filter(&mut self) {
         let needle = self.filter.to_ascii_lowercase();
+        let passes = |text: &str| text.to_ascii_lowercase().contains(&needle);
         self.shown = self
             .items
             .iter()
             .enumerate()
-            .filter(|(_, item)| item.label().to_ascii_lowercase().contains(&needle))
+            .filter(|(_, item)| passes(item.label()) || item.group().is_some_and(passes))
             .map(|(index, _)| index)
             .collect();
-        let labels = self
-            .shown
-            .iter()
-            .filter_map(|&item| self.items.get(item))
-            .map(ItemLabel::label);
-        let widest = widest_label(labels.chain(Some(self.placeholder)));
+        self.rows.clear();
+        let mut group = None;
+        let mut widest = text::width(self.placeholder);
+        for (position, &index) in self.shown.iter().enumerate() {
+            let item = &self.items[index];
+            let width = text::width(item.label());
+            if let Some(heading) = item.group() {
+                if group != Some(heading) {
+                    self.rows.push(Row::Heading(index));
+                    widest = widest.max(text::width(heading));
+                }
+                widest = widest.max(width.saturating_add(text::width(GROUP_INDENT)));
+            } else {
+                widest = widest.max(width);
+            }
+            group = item.group();
+            self.rows.push(Row::Item(position));
+        }
         self.fitted_width = widest.saturating_add(ROW_PADDING);
         // A filter that hides the selected row pulls the selection back into
         // range rather than leaving it past the end.
@@ -554,10 +606,32 @@ where
 
     /// Redraw the title and the field, re-measure, and reveal the selection.
     fn refresh(&self, context: &mut dyn Context) -> Result<()> {
+        self.reveal(context);
+        self.republish(context)
+    }
+
+    /// Scroll the selected item into view, with the heading above it when
+    /// it opens a group.
+    fn reveal(&self, context: &mut dyn Context) {
+        let Some(selected) = self.cursor.index() else {
+            return;
+        };
+        let Some(row) = self.rows.iter().position(|row| *row == Row::Item(selected)) else {
+            return;
+        };
+        let top = match row.checked_sub(1).map(|above| self.rows[above]) {
+            Some(Row::Heading(_)) => row - 1,
+            _ => row,
+        };
+        let (Ok(y), Ok(h)) = (u32::try_from(top), u32::try_from(row - top + 1)) else {
+            return;
+        };
         // Nearest keeps a long list still while the selection moves within the
         // rows already on screen.
-        self.cursor.reveal(context);
-        self.republish(context)
+        context.reveal_area(
+            Rect::new(context.view().scroll.x, y, 1, h),
+            RevealAlign::Nearest,
+        );
     }
 
     /// Write the current state into the frame's title and the filter field.
@@ -586,10 +660,14 @@ where
         })
     }
 
-    /// Return the title the frame shows: the label and the row count.
+    /// Return the title the frame shows: the label, and the item count
+    /// unless the list does not count.
     ///
     /// The filter is not named here, because the field below the list shows it.
     fn title(&self) -> String {
+        if !self.counted {
+            return self.label.clone();
+        }
         if self.filter.is_empty() {
             return format!("{} · {}", self.label, self.items.len());
         }
@@ -648,9 +726,10 @@ where
         }
     }
 
-    /// Return the row count, which is one per item or one placeholder row.
-    fn rows(&self) -> u32 {
-        u32::try_from(self.shown.len().max(1)).unwrap_or(u32::MAX)
+    /// Return the row count: one per item and heading, or one placeholder
+    /// row.
+    fn row_count(&self) -> u32 {
+        u32::try_from(self.rows.len().max(1)).unwrap_or(u32::MAX)
     }
 }
 
@@ -747,14 +826,14 @@ where
     fn measure(&self, c: MeasureConstraints) -> Measurement {
         c.clamp(Size::new(
             self.fitted_width.max(MIN_FRAME_WIDTH),
-            self.rows(),
+            self.row_count(),
         ))
     }
 
     fn canvas(&self, view: Size, _context: &CanvasContext) -> Size {
         // Rows are trimmed to the view rather than scrolled sideways, so only
         // the row count can exceed it.
-        Size::new(view.w, self.rows().max(view.h))
+        Size::new(view.w, self.row_count().max(view.h))
     }
 
     fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
@@ -773,18 +852,34 @@ where
         }
 
         let budget = (area.w as usize).saturating_sub(ROW_PADDING as usize);
-        for (offset, row) in label_rows(self.shown.len(), view.scroll.y, area.h) {
-            let item = &self.items[self.shown[row]];
+        for (offset, row) in label_rows(self.rows.len(), view.scroll.y, area.h) {
+            let line = Line::new(area.tl.x, area.tl.y.saturating_add(offset), area.w);
+            let position = match self.rows[row] {
+                Row::Heading(index) => {
+                    let heading = self.items[index].group().unwrap_or_default();
+                    let shown = self.truncate.apply(heading, budget);
+                    render.text("group", line, &format!(" {shown}"))?;
+                    continue;
+                }
+                Row::Item(position) => position,
+            };
+            let item = &self.items[self.shown[position]];
             // A filter taking keys leaves the list holding its place rather
             // than driving it, so the selection dims until the keys come back.
-            let style = if self.cursor.index() == Some(row) {
+            let style = if self.cursor.index() == Some(position) {
                 roles::selection(context.is_focused() && !self.filtering)
             } else if item.muted() {
                 "muted"
             } else {
                 "text"
             };
-            let line = Line::new(area.tl.x, area.tl.y.saturating_add(offset), area.w);
+            let indent = if item.group().is_some() {
+                GROUP_INDENT
+            } else {
+                ""
+            };
+            let lead = format!(" {indent}");
+            let budget = budget.saturating_sub(indent.len());
             let label = item.label();
             match item.runs() {
                 // A label that fits paints its runs beneath the style of the
@@ -796,11 +891,11 @@ where
                         .map(|(role, text)| (format!("{style}/{role}"), text))
                         .collect::<Vec<_>>();
                     let runs = styled.iter().map(|(role, text)| (role.as_str(), *text));
-                    render.runs(line, style, iter::once((style, " ")).chain(runs))?;
+                    render.runs(line, style, iter::once((style, lead.as_str())).chain(runs))?;
                 }
                 _ => {
                     let shown = self.truncate.apply(label, budget);
-                    render.text(style, line, &format!(" {shown}"))?;
+                    render.text(style, line, &format!("{lead}{shown}"))?;
                 }
             }
         }
@@ -1818,6 +1913,206 @@ mod tests {
             })?;
             harness.render()?;
         }
+        Ok(())
+    }
+
+    /// An item in a group.
+    #[derive(Clone)]
+    struct Grouped {
+        /// Group heading.
+        group: &'static str,
+        /// Label.
+        label: &'static str,
+    }
+
+    impl ItemLabel for Grouped {
+        fn label(&self) -> &str {
+            self.label
+        }
+
+        fn group(&self) -> Option<&str> {
+            Some(self.group)
+        }
+    }
+
+    /// Build a picker showing `items` as `(group, label)` pairs, rendered
+    /// once.
+    fn grouped(items: &[(&'static str, &'static str)], height: u32) -> Result<Harness> {
+        let mut harness = Harness::builder(Picker::<Grouped>::new())
+            .size(40, height)
+            .build()?;
+        harness.render()?;
+        let items = items
+            .iter()
+            .map(|&(group, label)| Grouped { group, label })
+            .collect();
+        harness.with_root_widget_context(|picker: &mut Picker<Grouped>, context| {
+            picker.set_items(context, "Terminals", "<none>", items)
+        })?;
+        harness.render()?;
+        Ok(harness)
+    }
+
+    /// Run `command` against the grouped list, and return what it returns.
+    fn on_grouped<R>(
+        harness: &mut Harness,
+        command: impl FnOnce(&mut PickerList<Grouped>, &mut dyn Context) -> Result<R>,
+    ) -> Result<R> {
+        let result =
+            harness.with_root_widget_context(|picker: &mut Picker<Grouped>, context| {
+                let list = picker.list()?;
+                context.with_widget_mut(list, command)
+            })?;
+        harness.render()?;
+        Ok(result)
+    }
+
+    /// Return the selected item of the grouped list, as `group/label`.
+    fn grouped_selection(harness: &mut Harness) -> Result<String> {
+        on_grouped(harness, |list, _| {
+            Ok(list
+                .selected()
+                .map(|item| format!("{}/{}", item.group, item.label))
+                .unwrap_or_default())
+        })
+    }
+
+    #[test]
+    fn a_group_shows_its_heading_above_its_items_indented() -> Result<()> {
+        let harness = grouped(
+            &[
+                ("~/fh", "terminal"),
+                ("~/fh", "editor"),
+                ("~/canopy", "terminal"),
+            ],
+            12,
+        )?;
+        let lines = harness.tbuf().lines();
+        let row = |text: &str| {
+            lines
+                .iter()
+                .position(|line| line.contains(text))
+                .unwrap_or_else(|| panic!("{text:?} renders in {lines:#?}"))
+        };
+        let (fh, editor, canopy) = (row("~/fh"), row("editor"), row("~/canopy"));
+        assert_eq!(editor, fh + 2, "the group's items follow its heading");
+        assert_eq!(canopy, editor + 1, "the next group's heading follows");
+        let column = |line: usize, text: &str| lines[line].find(text).expect("the text renders");
+        assert_eq!(
+            column(editor, "editor"),
+            column(fh, "~/fh") + GROUP_INDENT.len(),
+            "an item sits in from its heading"
+        );
+        let screen = lines.join("\n");
+        assert!(
+            screen.contains("Terminals · 3"),
+            "the title counts items, not headings"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_picker_told_not_to_count_shows_its_label_alone() -> Result<()> {
+        let mut harness = grouped(&[("~/fh", "terminal"), ("~/fh", "editor")], 12)?;
+        harness.with_root_widget_context(|picker: &mut Picker<Grouped>, context| {
+            picker.set_counted(context, false)
+        })?;
+        harness.render()?;
+        let title = |harness: &Harness| {
+            harness
+                .tbuf()
+                .lines()
+                .into_iter()
+                .find(|line| line.contains("Terminals"))
+                .expect("the frame carries the title")
+        };
+        assert!(!title(&harness).contains('·'), "got {:?}", title(&harness));
+        on_grouped(&mut harness, |list, context| {
+            list.set_filter(context, "edit".into())
+        })?;
+        assert!(
+            !title(&harness).contains("of"),
+            "a filter adds no count, got {:?}",
+            title(&harness)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_selection_passes_over_headings() -> Result<()> {
+        let mut harness = grouped(
+            &[
+                ("~/fh", "terminal"),
+                ("~/fh", "editor"),
+                ("~/canopy", "terminal"),
+            ],
+            12,
+        )?;
+        assert_eq!(grouped_selection(&mut harness)?, "~/fh/terminal");
+        on_grouped(&mut harness, |list, context| list.select_by(context, 2))?;
+        assert_eq!(
+            grouped_selection(&mut harness)?,
+            "~/canopy/terminal",
+            "two steps reach the next group's first item"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_filter_matches_a_group_and_keeps_the_heading() -> Result<()> {
+        let mut harness = grouped(
+            &[
+                ("~/fh", "terminal"),
+                ("~/fh", "editor"),
+                ("~/canopy", "terminal"),
+            ],
+            12,
+        )?;
+        let shown = on_grouped(&mut harness, |list, context| {
+            list.set_filter(context, "CANOPY".into())?;
+            Ok(list.shown_count())
+        })?;
+        assert_eq!(shown, 1, "a group's text passes its items");
+        assert!(harness.tbuf().contains_text("~/canopy"));
+        assert!(!harness.tbuf().contains_text("~/fh"));
+
+        let shown = on_grouped(&mut harness, |list, context| {
+            list.set_filter(context, "edit".into())?;
+            Ok(list.shown_count())
+        })?;
+        assert_eq!(shown, 1);
+        assert!(
+            harness.tbuf().contains_text("~/fh"),
+            "an item that passes keeps its heading"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn selecting_the_first_item_of_a_group_reveals_its_heading() -> Result<()> {
+        let items = [
+            ("~/one", "a"),
+            ("~/one", "b"),
+            ("~/one", "c"),
+            ("~/two", "d"),
+            ("~/two", "e"),
+            ("~/two", "f"),
+        ];
+        // The view holds four of the eight rows.
+        let mut harness = grouped(&items, 8)?;
+        on_grouped(&mut harness, PickerList::select_last)?;
+        assert!(!harness.tbuf().contains_text("~/one"));
+        on_grouped(&mut harness, PickerList::select_first)?;
+        assert!(
+            harness.tbuf().contains_text("~/one"),
+            "the first item brings its heading into view"
+        );
+        on_grouped(&mut harness, |list, context| list.select_by(context, 3))?;
+        assert_eq!(grouped_selection(&mut harness)?, "~/two/d");
+        assert!(
+            harness.tbuf().contains_text("~/two"),
+            "a group's first item scrolls its heading into view"
+        );
         Ok(())
     }
 }

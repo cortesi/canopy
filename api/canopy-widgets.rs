@@ -47,6 +47,15 @@ pub const CLEAR_INTENT: &str = "canopy.clear";
 
 /// An item that renders as one line of text.
 pub trait ItemLabel {
+    /// Return the heading of the group the item belongs to, or `None` for an
+    /// item in no group.
+    ///
+    /// A list that groups its items shows one heading above each run of
+    /// adjacent items in the same group, and indents those items under it.
+    /// Only the items take the selection, so the host orders the items to
+    /// keep each group together.
+    fn group(&self) -> Option<&str> {}
+
     /// Return the display label for this item.
     fn label(&self) -> &str;
 
@@ -1979,6 +1988,14 @@ where
     /// host reads the list as it is when the call runs.
     pub fn set_commands(&mut self, accept: CommandCall, cancel: CommandCall);
 
+    /// Show the item count in the title, or the label alone. A picker counts
+    /// its items until it is told otherwise.
+    pub fn set_counted(
+        &mut self,
+        context: &mut dyn Context,
+        counted: bool,
+    ) -> canopy::error::Result<()>;
+
     /// Show `items` under `title`, with `placeholder` in place of an empty
     /// list.
     ///
@@ -2017,8 +2034,9 @@ impl<T> Widget for Picker<T> where T: 'static + ItemLabel {}
 /// A list of items, scrolled by its own view.
 ///
 /// The list shows the items its filter passes, one per row, trimmed to the
-/// width it is given. It titles the frame around it with its label and the row
-/// count, and writes the filter into the field below it.
+/// width it is given. An item in a group shows indented under its group's
+/// heading, which takes no selection. It titles the frame around it with its
+/// label and the item count, and writes the filter into the field below it.
 #[derive(Default)]
 pub struct PickerList<T>
 where
@@ -2136,8 +2154,16 @@ where
     #[must_use]
     pub fn selected_name(&self) -> String;
 
-    /// Show only the items containing `text`, ignoring ASCII case.
-    /// @param text Text a label must contain. Empty text shows every item.
+    /// Show the item count in the title, or the label alone.
+    pub fn set_counted(
+        &mut self,
+        context: &mut dyn Context,
+        counted: bool,
+    ) -> canopy::error::Result<()>;
+
+    /// Show only the items whose label or group contains `text`, ignoring
+    /// ASCII case.
+    /// @param text Text an item must contain. Empty text shows every item.
     pub fn set_filter(
         &mut self,
         context: &mut dyn Context,

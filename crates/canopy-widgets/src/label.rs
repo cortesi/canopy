@@ -21,6 +21,17 @@ pub trait ItemLabel {
     fn runs(&self) -> Option<Vec<(&str, &str)>> {
         None
     }
+
+    /// Return the heading of the group the item belongs to, or `None` for an
+    /// item in no group.
+    ///
+    /// A list that groups its items shows one heading above each run of
+    /// adjacent items in the same group, and indents those items under it.
+    /// Only the items take the selection, so the host orders the items to
+    /// keep each group together.
+    fn group(&self) -> Option<&str> {
+        None
+    }
 }
 
 impl ItemLabel for String {
