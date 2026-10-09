@@ -541,6 +541,7 @@ where
     /// Show the item count in the title, or the label alone.
     pub fn set_counted(&mut self, context: &mut dyn Context, counted: bool) -> Result<()> {
         self.counted = counted;
+        self.apply_filter();
         self.republish(context)
     }
 
@@ -598,7 +599,10 @@ where
             group = item.group();
             self.rows.push(Row::Item(position));
         }
-        self.fitted_width = widest.saturating_add(ROW_PADDING);
+        // The frame draws the title with a space on each side, and one
+        // border cell beyond it shows that the title ends.
+        let title = text::width(&self.title()).saturating_add(3);
+        self.fitted_width = widest.saturating_add(ROW_PADDING).max(title);
         // A filter that hides the selected row pulls the selection back into
         // range rather than leaving it past the end.
         self.cursor.set_len(self.shown.len());
@@ -1150,6 +1154,22 @@ mod tests {
             .canopy
             .with_root_view(|ctx| ctx.type_id_of(picker).is_none());
         assert!(gone, "the host removed the picker that accepted");
+        Ok(())
+    }
+
+    #[test]
+    fn a_title_wider_than_the_rows_widens_the_frame() -> Result<()> {
+        let mut harness = picker(&["a"], 80, 12)?;
+        let title = "A title much wider than the only row of this picker";
+        harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
+            picker.set_items(context, title, "<none>", vec!["a".to_owned()])
+        })?;
+        harness.render()?;
+        let screen = harness.tbuf().lines().join("\n");
+        assert!(
+            screen.contains(&format!("{title} · 1 ─")),
+            "the whole title shows, and the border goes on past it:\n{screen}"
+        );
         Ok(())
     }
 
