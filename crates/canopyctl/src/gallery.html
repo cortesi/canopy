@@ -17,6 +17,11 @@
     --bad: #f7768e;
     --warn: #e0af68;
     --header: 57px;
+    /* The backdrop behind screenshots: lighter than the page and every
+       terminal background, with a faint grid, so a screen's edge shows. */
+    --backdrop: #2a2d35;
+    --backdrop-grid: rgba(255, 255, 255, 0.045);
+    --screen-edge: rgba(255, 255, 255, 0.22);
     --thumb: 240px;
   }
   * { box-sizing: border-box; }
@@ -158,8 +163,18 @@
   }
   .card:hover, .card:focus-visible { border-color: var(--accent); outline: none; }
   .card:hover img { filter: brightness(1.08); }
-  .card .thumb { background: #000; border-bottom: 1px solid var(--line); }
-  .card img { display: block; width: 100%; height: auto; }
+  .card .thumb {
+    padding: 8px;
+    background: var(--backdrop);
+    border-bottom: 1px solid var(--line);
+  }
+  .card img {
+    display: block;
+    width: 100%;
+    height: auto;
+    outline: 1px solid var(--screen-edge);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  }
   .card .absent {
     aspect-ratio: 16 / 9;
     display: grid;
@@ -222,8 +237,21 @@
     cursor: pointer;
   }
   #detail .nav button:hover { color: var(--fg); border-color: var(--accent); }
-  #detail .stage { flex: 1; overflow: auto; padding: 20px; text-align: center; }
-  #detail .stage img { box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6); }
+  #detail .stage {
+    flex: 1;
+    overflow: auto;
+    padding: 28px;
+    text-align: center;
+    background-color: var(--backdrop);
+    background-image:
+      linear-gradient(var(--backdrop-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--backdrop-grid) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  #detail .stage img {
+    outline: 1px solid var(--screen-edge);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+  }
   #detail .strip {
     display: flex;
     gap: 8px;
@@ -239,13 +267,13 @@
     border: 2px solid transparent;
     border-radius: 6px;
     overflow: hidden;
-    background: #000;
+    background: var(--backdrop);
     cursor: pointer;
     opacity: 0.6;
   }
   #detail .strip button:hover { opacity: 1; }
   #detail .strip button.on { border-color: var(--accent); opacity: 1; }
-  #detail .strip img { display: block; width: 100%; height: auto; }
+  #detail .strip img { display: block; width: 100%; height: auto; outline: 1px solid var(--screen-edge); outline-offset: -1px; }
   #detail .hint { color: var(--faint); font-size: 12px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 
   @media (max-width: 760px) {
