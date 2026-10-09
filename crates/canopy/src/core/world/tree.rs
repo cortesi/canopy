@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashSet, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, mem, rc::Rc};
 
 use super::{focus::FocusRecoveryHint, *};
 use crate::{
@@ -113,10 +113,22 @@ impl Core {
     /// Replace all persistent parent constraints for a node.
     pub fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()> {
         let current = self.nodes.get_mut(node).ok_or(Error::NodeNotFound(node))?;
-        let layout = overrides.apply(current.base_layout)?;
-        if current.layout_override != overrides || current.layout != layout {
-            current.layout_override = overrides;
+        overrides.apply(current.base_layout)?;
+        let previous = mem::replace(&mut current.layout_override, overrides);
+        let layout = current.effective_layout(current.base_layout)?;
+        if previous != overrides || current.layout != layout {
             current.layout = layout;
+            self.invalidate(crate::Invalidation::Layout);
+        }
+        Ok(())
+    }
+
+    /// Bound the content of `node` from below by the top edge of `floor`
+    /// while `floor` shows, or clear the bound with `None`.
+    pub fn set_layout_floor(&mut self, node: NodeId, floor: Option<NodeId>) -> Result<()> {
+        let current = self.nodes.get_mut(node).ok_or(Error::NodeNotFound(node))?;
+        if current.floor != floor {
+            current.floor = floor;
             self.invalidate(crate::Invalidation::Layout);
         }
         Ok(())
@@ -171,6 +183,7 @@ impl Core {
         node.layout = layout;
         node.base_layout = layout;
         node.layout_override = LayoutOverride::default();
+        node.floor_inset = 0;
         node.widget_type = widget_type;
         node.mounted = false;
         node.initialized = false;
@@ -499,7 +512,7 @@ impl Core {
 
     /// Validate cached layout and view state for a node.
     fn validate_cached_state(&self, node_id: NodeId, node: &Node) -> Result<()> {
-        if node.layout_override.apply(node.base_layout)? != node.layout {
+        if node.effective_layout(node.base_layout)? != node.layout {
             return Err(invariant_violation(format!(
                 "node {node_id:?} effective layout differs from its base and overrides"
             )));

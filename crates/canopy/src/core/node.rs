@@ -8,7 +8,7 @@ use crate::{
         world::scroll::{LocalReveal, NodeReveal},
     },
     geom::{Point, Rect, Size},
-    layout::{Layout, LayoutOverride},
+    layout::{Layout, LayoutOverride, LayoutValidationError},
     runtime::PollLifetime,
     widget::Widget,
 };
@@ -51,6 +51,13 @@ pub struct Node {
     /// Persistent parent constraints.
     pub(crate) layout_override: LayoutOverride,
 
+    /// Node whose top edge bounds this node's content from below while it
+    /// shows. See
+    /// [`Context::set_layout_floor`](crate::Context::set_layout_floor).
+    pub(crate) floor: Option<NodeId>,
+    /// Bottom padding that the floor asks for, from the last layout.
+    pub(crate) floor_inset: u32,
+
     /// Cached layout configuration for quick access.
     pub(crate) layout: Layout,
 
@@ -88,6 +95,16 @@ pub struct Node {
 }
 
 impl Node {
+    /// Return the layout that `base` takes with this node's overrides and
+    /// floor: the floor raises the bottom padding to its inset.
+    pub(crate) fn effective_layout(&self, base: Layout) -> Result<Layout, LayoutValidationError> {
+        let mut layout = self.layout_override.apply(base)?;
+        if self.floor_inset > layout.padding.bottom {
+            layout.padding.bottom = self.floor_inset;
+        }
+        Ok(layout)
+    }
+
     /// Construct a detached node for a boxed widget.
     ///
     /// The caller validates the widget's layout before insertion.
@@ -109,6 +126,8 @@ impl Node {
             layout,
             base_layout: layout,
             layout_override: LayoutOverride::default(),
+            floor: None,
+            floor_inset: 0,
             rect: Rect::ZERO,
             content_size: Size::default(),
             canvas: Size::default(),

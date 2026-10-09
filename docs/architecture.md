@@ -968,7 +968,14 @@ after a post, and before the dismissing input routes. Changes before one
 synchronization run each hook once. Root's hook shows the shown error as one
 row at the bottom of the main pane, styled `root/notice`, and hides the row
 otherwise, so the row takes no clicks while it is empty. It stacks the live
-toasts at the bottom right, one row above the bottom row, newest lowest. The
+toasts at the bottom right, one row above the bottom row, newest lowest. An
+application that keeps a band at the bottom of the window, such as a text
+editor, names it with `Root::set_toast_floor`, and the stack rests just above
+the band while the band shows. The floor is a layout bound:
+`Context::set_layout_floor` raises the bottom padding of a node to clear the
+rows from the top of another node down. After each layout pass, a node with a
+floor reads the floor's published view, and a changed inset takes one more
+pass, so the stack follows the band as it grows in the same frame. The
 toast layer lets the pointer through, so only a toast's own box takes a click,
 which ends that toast. The layer owns the poll that ends each toast on time.
 While a modal is open, pointer routing admits only the modal, so a click on a

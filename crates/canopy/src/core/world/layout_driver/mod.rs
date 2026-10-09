@@ -25,6 +25,14 @@ impl Core {
         );
         pass.update_views(root, screen_view)?;
 
+        // A node with a floor reads the floor's published view. A changed
+        // inset moves only the node's own content, so one more pass settles.
+        if self.settle_floors()? {
+            let mut pass = LayoutPass::new(self);
+            pass.layout_node(root, screen_size, Overflow::none(), Some(screen_size.w))?;
+            pass.update_views(root, screen_view)?;
+        }
+
         // Focus recovery reads the published views. Reveals then run against
         // the settled geometry, including the reveal of a recovered focus, and
         // the views they move are published again.
@@ -35,6 +43,40 @@ impl Core {
         self.validate_invariants()?;
 
         Ok(())
+    }
+
+    /// Set the floor inset of each node with a floor from the published
+    /// views: the rows from the top of the floor to the bottom of the node,
+    /// or none while the floor is detached, hidden, or empty. Returns whether
+    /// an inset changed.
+    fn settle_floors(&mut self) -> Result<bool> {
+        let floors = self
+            .nodes
+            .iter()
+            .filter_map(|(node_id, node)| node.floor.map(|floor| (node_id, floor)))
+            .collect::<Vec<_>>();
+        let mut changed = false;
+        for (node_id, floor) in floors {
+            let shown = self
+                .nodes
+                .get(floor)
+                .filter(|_| self.is_attached_to_root(floor))
+                .map(|floor| floor.view.outer)
+                .filter(|outer| outer.w > 0 && outer.h > 0);
+            let node = &self.nodes[node_id];
+            let inset = shown.map_or(0, |floor| {
+                let bottom = i64::from(node.view.outer.tl.y) + i64::from(node.view.outer.h);
+                let rows = bottom - i64::from(floor.tl.y);
+                u32::try_from(rows.clamp(0, i64::from(node.view.outer.h))).unwrap_or(0)
+            });
+            if inset != node.floor_inset {
+                let node = &mut self.nodes[node_id];
+                node.floor_inset = inset;
+                node.layout = node.effective_layout(node.base_layout)?;
+                changed = true;
+            }
+        }
+        Ok(changed)
     }
 
     /// Locate the deepest node under a screen-space point.
@@ -64,7 +106,7 @@ pub(super) fn refresh_layouts(core: &mut Core) -> Result<()> {
         )?;
         layout.validate()?;
         if let Some(node) = core.nodes.get_mut(node_id) {
-            let effective = node.layout_override.apply(layout)?;
+            let effective = node.effective_layout(layout)?;
             node.base_layout = layout;
             node.layout = effective;
             node.layout_dirty = false;

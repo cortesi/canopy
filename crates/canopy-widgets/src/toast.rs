@@ -1,7 +1,9 @@
 //! The toast stack that `Root` draws over the application.
 //!
 //! An info or warning notice shows as a toast: a one-row box at the right edge
-//! of the window, just above the bottom row, for the notice's duration. The
+//! of the window, just above the bottom row, for the notice's duration. With
+//! a toast floor, which [`Root::set_toast_floor`](crate::Root::set_toast_floor)
+//! sets, the stack rests just above the floor instead. The
 //! toasts stack, newest at the bottom, and each goes when its own time ends.
 //! The notice log in the core decides which toasts are live, so this module
 //! only shows them.
@@ -216,11 +218,15 @@ mod tests {
     use canopy::{
         error::Result,
         geom::{Point, Size},
+        layout::LayoutOverride,
         runtime::{NoticePost, TOAST_LIMIT},
         testing::harness::Harness,
     };
 
-    use crate::notice_test_support::{App, advance, app, click, notify, rows};
+    use crate::{
+        Root,
+        notice_test_support::{App, BandApp, advance, app, band_app, click, notify, rows},
+    };
 
     #[test]
     fn toasts_stack_at_the_right_above_the_bottom_row() -> Result<()> {
@@ -263,6 +269,60 @@ mod tests {
             style("root/toast/warning").fg,
             style("root/toast/info").fg,
             "a warning reads apart from an outcome"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_toast_floor_keeps_the_stack_above_a_band_as_it_grows_and_hides() -> Result<()> {
+        let (mut harness, band) = band_app(Size::new(30, 10))?;
+        let row_of = |harness: &Harness, text: &str| {
+            rows(harness)
+                .iter()
+                .position(|row| row.contains(text))
+                .expect("the toast shows")
+        };
+        let band_top = |harness: &Harness| {
+            rows(harness)
+                .iter()
+                .position(|row| row.starts_with('='))
+                .expect("the band shows")
+        };
+        notify(&mut harness, NoticePost::info("first"))?;
+        assert_eq!(
+            row_of(&harness, "first"),
+            8,
+            "without a floor, above the bottom row"
+        );
+
+        harness.with_unique(|_: &mut BandApp, ctx| Root::set_toast_floor(ctx, Some(band)))?;
+        harness.render()?;
+        assert_eq!(band_top(&harness), 7);
+        assert_eq!(row_of(&harness, "first"), 6, "the stack rests on the band");
+        notify(&mut harness, NoticePost::info("second"))?;
+        assert_eq!(row_of(&harness, "second"), 6, "the newest sits lowest");
+        assert_eq!(row_of(&harness, "first"), 5);
+
+        // The band grows, and the stack follows it at the next frame.
+        harness.with_unique(|_: &mut BandApp, ctx| {
+            ctx.set_layout_override(band, LayoutOverride::default().fixed_height(5))
+        })?;
+        harness.render()?;
+        assert_eq!(band_top(&harness), 5);
+        assert_eq!(row_of(&harness, "second"), 4, "{:?}", rows(&harness));
+
+        // A hidden band sets no floor.
+        harness.with_unique(|_: &mut BandApp, ctx| ctx.set_hidden(band, true))?;
+        harness.render()?;
+        assert_eq!(row_of(&harness, "second"), 8, "{:?}", rows(&harness));
+
+        harness.with_unique(|_: &mut BandApp, ctx| ctx.set_hidden(band, false))?;
+        harness.with_unique(|_: &mut BandApp, ctx| Root::set_toast_floor(ctx, None))?;
+        harness.render()?;
+        assert_eq!(
+            row_of(&harness, "second"),
+            8,
+            "clearing the floor restores the place"
         );
         Ok(())
     }

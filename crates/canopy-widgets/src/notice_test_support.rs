@@ -8,7 +8,7 @@ use canopy::{
     error::Result,
     geom::{PointI32, Size},
     input::{Event, ModalBindings, ModalOptions, ModalToken, key, mouse},
-    layout::Layout,
+    layout::{Direction, Layout},
     runtime::{NoticePost, TurnInput},
     testing::{ManualClock, harness::Harness},
 };
@@ -103,6 +103,68 @@ impl Widget for Cover {
     fn name(&self) -> NodeName {
         NodeName::convert("cover")
     }
+}
+
+/// An application with a band of rows at its bottom, as an editor is.
+#[derive(Default)]
+pub struct BandApp {
+    /// The band, after the application mounts.
+    pub(crate) band: Option<NodeId>,
+}
+
+impl Widget for BandApp {
+    fn layout(&self) -> Layout {
+        Layout::fill().direction(Direction::Column)
+    }
+
+    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        let app = ctx.node_id();
+        ctx.add_child(app, Filler)?;
+        self.band = Some(ctx.add_child(app, Band)?.into());
+        Ok(())
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("band_app")
+    }
+}
+
+/// The space above the band.
+struct Filler;
+
+impl Widget for Filler {
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
+}
+
+/// A band of `=` rows, three high until a test overrides its height.
+struct Band;
+
+impl Widget for Band {
+    fn layout(&self) -> Layout {
+        Layout::row().flex_horizontal(1).fixed_height(3)
+    }
+
+    fn render(&mut self, render: &mut canopy::render::Render, ctx: &dyn ViewContext) -> Result<()> {
+        render.fill("text", ctx.view().outer_rect_local(), '=')
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("band")
+    }
+}
+
+/// Build the band application under `Root` on a screen of `size`, and return
+/// it with the band's node.
+pub fn band_app(size: Size) -> Result<(Harness, NodeId)> {
+    let mut canopy: Canopy = CanopyBuilder::new().configure(Root::register).build()?;
+    Root::new().install(&mut canopy, BandApp::default())?;
+    canopy.set_clock_for_testing(Arc::new(ManualClock::new()))?;
+    let mut harness = Harness::from_canopy(canopy, size)?;
+    harness.render()?;
+    let band = harness.with_unique(|app: &mut BandApp, _| Ok(app.band.expect("mounted")))?;
+    Ok((harness, band))
 }
 
 /// Build the application under `Root` on a screen of `size`, with a clock

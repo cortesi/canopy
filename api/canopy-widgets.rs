@@ -2319,6 +2319,18 @@ impl Root {
     /// open, close them first.
     pub fn quit(&mut self, c: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Keep the toasts above `floor` while it shows, or at the bottom right
+    /// again with `None`.
+    ///
+    /// An application that keeps a band at the bottom of the window, such as
+    /// a text editor, names it here, and the toasts stack just above it, so
+    /// they never cover what the user types. Any widget may call this: it
+    /// finds the toast layer from the root. Without a `Root`, it does nothing.
+    pub fn set_toast_floor(
+        context: &mut dyn Context,
+        floor: Option<NodeId>,
+    ) -> canopy::error::Result<()>;
+
     /// Show the help modal with contextual bindings and commands.
     pub fn show_help(&mut self, c: &mut dyn Context) -> canopy::error::Result<()>;
 

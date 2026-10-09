@@ -275,6 +275,21 @@ pub trait Context: ViewContext + Context {
     /// Assign a unique identity within a containing subtree scope.
     fn set_identity(&mut self, node: NodeId, scope: NodeId, key: &str) -> crate::error::Result<()>;
 
+    /// Keep the content of `node` above `floor` while `floor` shows, or
+    /// clear the floor with `None`.
+    ///
+    /// After each layout, the bottom padding of `node` grows to cover the
+    /// rows from the top edge of `floor` to the bottom of `node`, so content
+    /// that a column aligns to the end rests just above the floor. The
+    /// padding never shrinks below the widget's own. A floor that is
+    /// detached, hidden, or empty sets no padding, and the floor follows
+    /// every change of its view. Use it for an overlay, such as a stack of
+    /// toasts, that must not cover a band of the application, such as an
+    /// editor at the bottom of the window. The floor's place must not depend
+    /// on `node`.
+    fn set_layout_floor(&mut self, node: NodeId, floor: Option<NodeId>)
+    -> crate::error::Result<()>;
+
     /// Replace persistent parent constraints without replacing widget layout
     /// fields.
     fn set_layout_override(

@@ -609,6 +609,20 @@ pub trait Context: ViewContext + sealed::Context {
     /// fields.
     fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()>;
 
+    /// Keep the content of `node` above `floor` while `floor` shows, or
+    /// clear the floor with `None`.
+    ///
+    /// After each layout, the bottom padding of `node` grows to cover the
+    /// rows from the top edge of `floor` to the bottom of `node`, so content
+    /// that a column aligns to the end rests just above the floor. The
+    /// padding never shrinks below the widget's own. A floor that is
+    /// detached, hidden, or empty sets no padding, and the floor follows
+    /// every change of its view. Use it for an overlay, such as a stack of
+    /// toasts, that must not cover a band of the application, such as an
+    /// editor at the bottom of the window. The floor's place must not depend
+    /// on `node`.
+    fn set_layout_floor(&mut self, node: NodeId, floor: Option<NodeId>) -> Result<()>;
+
     /// Create a new widget node detached from the tree.
     fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId>;
 
@@ -1172,6 +1186,10 @@ impl Context for NodeCtx<&mut Core> {
 
     fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()> {
         self.core.set_layout_override(node, overrides)
+    }
+
+    fn set_layout_floor(&mut self, node: NodeId, floor: Option<NodeId>) -> Result<()> {
+        self.core.set_layout_floor(node, floor)
     }
 
     fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId> {

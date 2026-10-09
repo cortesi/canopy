@@ -151,6 +151,21 @@ impl Root {
         self
     }
 
+    /// Keep the toasts above `floor` while it shows, or at the bottom right
+    /// again with `None`.
+    ///
+    /// An application that keeps a band at the bottom of the window, such as
+    /// a text editor, names it here, and the toasts stack just above it, so
+    /// they never cover what the user types. Any widget may call this: it
+    /// finds the toast layer from the root. Without a `Root`, it does nothing.
+    pub fn set_toast_floor(context: &mut dyn Context, floor: Option<NodeId>) -> Result<()> {
+        let root = context.root_id();
+        match context.child_slot_of(root, KEY_TOASTS) {
+            Some(layer) => context.set_layout_floor(layer, floor),
+            None => Ok(()),
+        }
+    }
+
     /// Main pane (app + inspector container) node id.
     fn main_pane_id(&self, c: &dyn Context) -> Result<NodeId> {
         c.child_slot_of(c.node_id(), KEY_MAIN_PANE)
