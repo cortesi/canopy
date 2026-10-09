@@ -37,7 +37,7 @@ use canopy::{
 };
 
 use crate::{
-    Dialog, ItemLabel,
+    Dialog, ItemLabel, ItemVisibility,
     frame::Frame,
     input::{Input, register_clear_intent},
     row_cursor::{CursorMove, RowCursor, label_rows},
@@ -159,6 +159,15 @@ where
         let list = self.typed_list()?;
         context.with_widget_mut(list, |list: &mut PickerList<T>, context| {
             list.set_counted(context, counted)
+        })
+    }
+
+    /// Show `note` in the title after the count. See
+    /// [`PickerList::set_note`].
+    pub fn set_note(&mut self, context: &mut dyn Context, note: String) -> Result<()> {
+        let list = self.typed_list()?;
+        context.with_widget_mut(list, |list: &mut PickerList<T>, context| {
+            list.set_note(context, note)
         })
     }
 
@@ -357,7 +366,7 @@ where
     rows: Vec<Row>,
     /// Cursor over `shown`, giving a position within it, not within `items`.
     cursor: RowCursor,
-    /// Text a label must contain, ignoring ASCII case.
+    /// Words that each shown item contains, ignoring case.
     filter: String,
     /// Whether the field is taking filter text.
     filtering: bool,
@@ -375,6 +384,8 @@ where
     fitted_width: u32,
     /// Whether the title counts the items.
     counted: bool,
+    /// Text the title shows after the count, or an empty string.
+    note: String,
 }
 
 #[derive_commands]
@@ -399,6 +410,7 @@ where
             truncate: Truncate::default(),
             fitted_width: 0,
             counted: true,
+            note: String::new(),
         }
     }
 
@@ -414,6 +426,18 @@ where
     pub fn select_last(&mut self, context: &mut dyn Context) -> Result<()> {
         self.cursor.select_last();
         self.refresh(context)
+    }
+
+    /// Select the item at `item` in the items the list holds, and return
+    /// whether the filter shows it. An item that the filter hides leaves the
+    /// selection alone.
+    pub fn select_item(&mut self, context: &mut dyn Context, item: usize) -> Result<bool> {
+        let Some(shown) = self.shown.iter().position(|&index| index == item) else {
+            return Ok(false);
+        };
+        self.cursor.set_index(shown);
+        self.refresh(context)?;
+        Ok(true)
     }
 
     /// Move the selection by a signed row count, saturating at both ends.
@@ -434,16 +458,17 @@ where
     }
 
     /// Open the filter field. Typed text narrows the list to the items that
-    /// contain it.
+    /// match it.
     #[command]
     pub fn start_filter(&mut self, context: &mut dyn Context) -> Result<()> {
         self.filtering = true;
         self.republish(context)
     }
 
-    /// Show only the items whose label or group contains `text`, ignoring
-    /// ASCII case.
-    /// @param text Text an item must contain. Empty text shows every item.
+    /// Show only the items that match `text`. The filter splits `text` at
+    /// spaces, and an item matches when each word is in its search text or
+    /// its group, ignoring case.
+    /// @param text Words an item must contain. Empty text shows every item.
     #[command]
     pub fn set_filter(&mut self, context: &mut dyn Context, text: String) -> Result<()> {
         self.filter = text;
@@ -545,6 +570,15 @@ where
         self.republish(context)
     }
 
+    /// Show `note` in the title after the count, such as the number of
+    /// items that the host leaves out. An empty note shows nothing. New
+    /// items keep the note.
+    pub fn set_note(&mut self, context: &mut dyn Context, note: String) -> Result<()> {
+        self.note = note;
+        self.apply_filter();
+        self.republish(context)
+    }
+
     /// Return the selected item.
     #[must_use]
     pub fn selected(&self) -> Option<&T> {
@@ -572,13 +606,16 @@ where
     ///
     /// A group's text passes all its items, so a filter can name a group.
     fn apply_filter(&mut self) {
-        let needle = self.filter.to_ascii_lowercase();
-        let passes = |text: &str| text.to_ascii_lowercase().contains(&needle);
+        let words: Vec<String> = self
+            .filter
+            .split_whitespace()
+            .map(str::to_lowercase)
+            .collect();
         self.shown = self
             .items
             .iter()
             .enumerate()
-            .filter(|(_, item)| passes(item.label()) || item.group().is_some_and(passes))
+            .filter(|(_, item)| matches_words(&words, *item))
             .map(|(index, _)| index)
             .collect();
         self.rows.clear();
@@ -669,18 +706,27 @@ where
     ///
     /// The filter is not named here, because the field below the list shows it.
     fn title(&self) -> String {
-        if !self.counted {
-            return self.label.clone();
+        let mut title = self.label.clone();
+        if self.counted {
+            // The count leaves out the items that show only with a filter, or
+            // only without one, whichever does not apply now.
+            let filtered = !self.filter.trim().is_empty();
+            let total = self
+                .items
+                .iter()
+                .filter(|item| visible(item.visibility(), filtered))
+                .count();
+            if filtered {
+                title.push_str(&format!(" · {} of {total}", self.shown.len()));
+            } else {
+                title.push_str(&format!(" · {total}"));
+            }
         }
-        if self.filter.is_empty() {
-            return format!("{} · {}", self.label, self.items.len());
+        if !self.note.is_empty() {
+            title.push_str(" · ");
+            title.push_str(&self.note);
         }
-        format!(
-            "{} · {} of {}",
-            self.label,
-            self.shown.len(),
-            self.items.len()
-        )
+        title
     }
 
     /// Edit the open filter with one event.
@@ -735,6 +781,32 @@ where
     fn row_count(&self) -> u32 {
         u32::try_from(self.rows.len().max(1)).unwrap_or(u32::MAX)
     }
+}
+
+/// Return whether an item of `visibility` can show while a filter is set,
+/// when `filtered` says so, or without one.
+fn visible(visibility: ItemVisibility, filtered: bool) -> bool {
+    match visibility {
+        ItemVisibility::Always => true,
+        ItemVisibility::WithoutFilter => !filtered,
+        ItemVisibility::WithFilter => filtered,
+    }
+}
+
+/// Return whether `item` shows under the filter `words`, which are in lower
+/// case: each word is in its search text or its group, ignoring case.
+fn matches_words<T: ItemLabel>(words: &[String], item: &T) -> bool {
+    if !visible(item.visibility(), !words.is_empty()) {
+        return false;
+    }
+    if words.is_empty() {
+        return true;
+    }
+    let text = item.search_text().to_lowercase();
+    let group = item.group().map(str::to_lowercase).unwrap_or_default();
+    words
+        .iter()
+        .all(|word| text.contains(word.as_str()) || group.contains(word.as_str()))
 }
 
 /// One open-filter action.
@@ -1943,6 +2015,10 @@ mod tests {
         group: &'static str,
         /// Label.
         label: &'static str,
+        /// Search text beyond the label, if any.
+        search: Option<&'static str>,
+        /// When the list shows the item.
+        shows: ItemVisibility,
     }
 
     impl ItemLabel for Grouped {
@@ -1952,6 +2028,14 @@ mod tests {
 
         fn group(&self) -> Option<&str> {
             Some(self.group)
+        }
+
+        fn search_text(&self) -> &str {
+            self.search.unwrap_or(self.label)
+        }
+
+        fn visibility(&self) -> ItemVisibility {
+            self.shows
         }
     }
 
@@ -1964,7 +2048,12 @@ mod tests {
         harness.render()?;
         let items = items
             .iter()
-            .map(|&(group, label)| Grouped { group, label })
+            .map(|&(group, label)| Grouped {
+                group,
+                label,
+                search: None,
+                shows: ItemVisibility::Always,
+            })
             .collect();
         harness.with_root_widget_context(|picker: &mut Picker<Grouped>, context| {
             picker.set_items(context, "Terminals", "<none>", items)
@@ -2133,6 +2222,169 @@ mod tests {
             harness.tbuf().contains_text("~/two"),
             "a group's first item scrolls its heading into view"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn each_filter_word_must_match_the_item_or_its_group() -> Result<()> {
+        let mut harness = grouped(
+            &[
+                ("~/fh", "terminal"),
+                ("~/fh", "editor"),
+                ("~/canopy", "terminal"),
+            ],
+            12,
+        )?;
+        let shown = |harness: &mut Harness, text: &str| {
+            let text = text.to_string();
+            on_grouped(harness, |list, context| {
+                list.set_filter(context, text)?;
+                Ok(list.shown_count())
+            })
+        };
+        assert_eq!(
+            shown(&mut harness, "Canopy  TERM")?,
+            1,
+            "one word matches the group, the other the label"
+        );
+        assert_eq!(grouped_selection(&mut harness)?, "~/canopy/terminal");
+        assert_eq!(shown(&mut harness, "term")?, 2);
+        assert_eq!(
+            shown(&mut harness, "term zzz")?,
+            0,
+            "a word that matches nothing hides every item"
+        );
+        assert_eq!(
+            shown(&mut harness, "   ")?,
+            3,
+            "spaces alone show every item"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_filter_searches_the_search_text_in_place_of_the_label() -> Result<()> {
+        let mut harness = grouped(&[], 12)?;
+        let items = vec![
+            Grouped {
+                group: "openrouter",
+                label: "Claude Sonnet",
+                search: Some("anthropic/claude-sonnet tools reasoning"),
+                shows: ItemVisibility::Always,
+            },
+            Grouped {
+                group: "openrouter",
+                label: "Llama",
+                search: Some("meta/llama free"),
+                shows: ItemVisibility::Always,
+            },
+        ];
+        harness.with_root_widget_context(|picker: &mut Picker<Grouped>, context| {
+            picker.set_items(context, "Models", "<none>", items)
+        })?;
+        let shown = |harness: &mut Harness, text: &str| {
+            let text = text.to_string();
+            on_grouped(harness, |list, context| {
+                list.set_filter(context, text)?;
+                Ok(list.shown_count())
+            })
+        };
+        assert_eq!(shown(&mut harness, "claude reasoning")?, 1);
+        assert_eq!(grouped_selection(&mut harness)?, "openrouter/Claude Sonnet");
+        assert_eq!(shown(&mut harness, "llama free")?, 1);
+        assert_eq!(
+            shown(&mut harness, "sonnet")?,
+            1,
+            "the search text replaces the label, so it holds the label's words"
+        );
+        assert_eq!(shown(&mut harness, "lla")?, 1);
+        assert_eq!(shown(&mut harness, "openrouter")?, 2);
+        Ok(())
+    }
+
+    #[test]
+    fn an_item_can_show_only_with_a_filter_or_only_without_one() -> Result<()> {
+        let mut harness = grouped(&[], 12)?;
+        let item = |group, label, shows| Grouped {
+            group,
+            label,
+            search: None,
+            shows,
+        };
+        let items = vec![
+            item("Recent", "sonnet high", ItemVisibility::WithoutFilter),
+            item("Providers", "openrouter", ItemVisibility::Always),
+            item("openrouter", "sonnet", ItemVisibility::WithFilter),
+            item("openrouter", "llama", ItemVisibility::WithFilter),
+        ];
+        harness.with_root_widget_context(|picker: &mut Picker<Grouped>, context| {
+            picker.set_items(context, "Providers", "<none>", items)
+        })?;
+        harness.render()?;
+        assert_eq!(
+            on_grouped(&mut harness, |list, _| Ok(list.shown_count()))?,
+            2
+        );
+        assert!(harness.tbuf().contains_text("Providers · 2"));
+        assert!(harness.tbuf().contains_text("sonnet high"));
+
+        let shown = on_grouped(&mut harness, |list, context| {
+            list.set_filter(context, "sonnet".into())?;
+            Ok(list.shown_count())
+        })?;
+        assert_eq!(shown, 1, "the filter finds the item in its own place");
+        assert_eq!(grouped_selection(&mut harness)?, "openrouter/sonnet");
+        assert!(
+            harness.tbuf().contains_text("Providers · 1 of 3"),
+            "{}",
+            harness.tbuf().lines().join("\n")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_note_follows_the_count_in_the_title() -> Result<()> {
+        let mut harness = grouped(&[("~/fh", "terminal"), ("~/fh", "editor")], 12)?;
+        harness.with_root_widget_context(|picker: &mut Picker<Grouped>, context| {
+            picker.set_note(context, "4 hidden".into())
+        })?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("Terminals · 2 · 4 hidden"));
+        on_grouped(&mut harness, |list, context| {
+            list.set_filter(context, "edit".into())
+        })?;
+        assert!(
+            harness
+                .tbuf()
+                .contains_text("Terminals · 1 of 2 · 4 hidden")
+        );
+        harness.with_root_widget_context(|picker: &mut Picker<Grouped>, context| {
+            picker.set_note(context, String::new())
+        })?;
+        harness.render()?;
+        assert!(!harness.tbuf().contains_text("hidden"));
+        Ok(())
+    }
+
+    #[test]
+    fn an_item_selects_by_its_place_among_the_items_under_a_filter() -> Result<()> {
+        let mut harness = grouped(
+            &[
+                ("~/fh", "terminal"),
+                ("~/fh", "editor"),
+                ("~/canopy", "terminal"),
+            ],
+            12,
+        )?;
+        let selected = on_grouped(&mut harness, |list, context| {
+            list.set_filter(context, "terminal".into())?;
+            list.select_item(context, 2)
+        })?;
+        assert!(selected);
+        assert_eq!(grouped_selection(&mut harness)?, "~/canopy/terminal");
+        let selected = on_grouped(&mut harness, |list, context| list.select_item(context, 1))?;
+        assert!(!selected, "the filter hides the editor");
+        assert_eq!(grouped_selection(&mut harness)?, "~/canopy/terminal");
         Ok(())
     }
 }

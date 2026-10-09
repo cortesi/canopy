@@ -32,6 +32,32 @@ pub trait ItemLabel {
     fn group(&self) -> Option<&str> {
         None
     }
+
+    /// Return the text a filter searches for this item. The default is the
+    /// label. An item can return more text, such as names or tags that its
+    /// label leaves out.
+    fn search_text(&self) -> &str {
+        self.label()
+    }
+
+    /// Return when a list shows the item. The default shows it always.
+    fn visibility(&self) -> ItemVisibility {
+        ItemVisibility::Always
+    }
+}
+
+/// When a list shows an item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ItemVisibility {
+    /// The item shows without a filter, and while a filter matches it.
+    #[default]
+    Always,
+    /// The item shows only without a filter, such as a shortcut to an item
+    /// that a filter finds in its own place.
+    WithoutFilter,
+    /// The item shows only while a filter matches it, such as an item that
+    /// a search reaches from a list of summaries.
+    WithFilter,
 }
 
 impl ItemLabel for String {

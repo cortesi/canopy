@@ -71,6 +71,14 @@ pub trait ItemLabel {
     /// A role without a rule of its own takes the style of the row, so a
     /// muted or selected row reads as one unless a theme says otherwise.
     fn runs(&self) -> Option<Vec<(&str, &str)>> {}
+
+    /// Return the text a filter searches for this item. The default is the
+    /// label. An item can return more text, such as names or tags that its
+    /// label leaves out.
+    fn search_text(&self) -> &str {}
+
+    /// Return when a list shows the item. The default shows it always.
+    fn visibility(&self) -> ItemVisibility {}
 }
 
 impl ItemLabel for &str {}
@@ -1548,6 +1556,20 @@ impl Register for Input {}
 
 impl Widget for Input {}
 
+/// When a list shows an item.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ItemVisibility {
+    /// The item shows without a filter, and while a filter matches it.
+    #[default]
+    Always,
+    /// The item shows only without a filter, such as a shortcut to an item
+    /// that a filter finds in its own place.
+    WithoutFilter,
+    /// The item shows only while a filter matches it, such as an item that
+    /// a search reaches from a list of summaries.
+    WithFilter,
+}
+
 /// A key and what it does, drawn for a status bar.
 ///
 /// The hint names an action, not a key: [`KeyHint::for_command`] and
@@ -2008,6 +2030,14 @@ where
         items: Vec<T>,
     ) -> canopy::error::Result<()>;
 
+    /// Show `note` in the title after the count. See
+    /// [`PickerList::set_note`].
+    pub fn set_note(
+        &mut self,
+        context: &mut dyn Context,
+        note: String,
+    ) -> canopy::error::Result<()>;
+
     /// Show `items` in place of the current items, and keep the filter and
     /// the selected item. See [`PickerList::update_items`].
     pub fn update_items(
@@ -2142,6 +2172,15 @@ where
     /// Select the first item.
     pub fn select_first(&mut self, context: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Select the item at `item` in the items the list holds, and return
+    /// whether the filter shows it. An item that the filter hides leaves the
+    /// selection alone.
+    pub fn select_item(
+        &mut self,
+        context: &mut dyn Context,
+        item: usize,
+    ) -> canopy::error::Result<bool>;
+
     /// Select the last item.
     pub fn select_last(&mut self, context: &mut dyn Context) -> canopy::error::Result<()>;
 
@@ -2161,9 +2200,10 @@ where
         counted: bool,
     ) -> canopy::error::Result<()>;
 
-    /// Show only the items whose label or group contains `text`, ignoring
-    /// ASCII case.
-    /// @param text Text an item must contain. Empty text shows every item.
+    /// Show only the items that match `text`. The filter splits `text` at
+    /// spaces, and an item matches when each word is in its search text or
+    /// its group, ignoring case.
+    /// @param text Words an item must contain. Empty text shows every item.
     pub fn set_filter(
         &mut self,
         context: &mut dyn Context,
@@ -2179,12 +2219,21 @@ where
         items: Vec<T>,
     ) -> canopy::error::Result<()>;
 
+    /// Show `note` in the title after the count, such as the number of
+    /// items that the host leaves out. An empty note shows nothing. New
+    /// items keep the note.
+    pub fn set_note(
+        &mut self,
+        context: &mut dyn Context,
+        note: String,
+    ) -> canopy::error::Result<()>;
+
     /// Return the number of items the filter passes, for automation.
     #[must_use]
     pub fn shown_count(&self) -> usize;
 
     /// Open the filter field. Typed text narrows the list to the items that
-    /// contain it.
+    /// match it.
     pub fn start_filter(&mut self, context: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Show `items` under `label` in place of the current items, and keep

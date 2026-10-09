@@ -126,7 +126,7 @@ pub use frame::Frame;
 pub use image_view::ImageView;
 pub use input::{CLEAR_INTENT, Input, ValueExposure, register_clear_intent};
 pub use keyed::KeyedChildren;
-pub use label::ItemLabel;
+pub use label::{ItemLabel, ItemVisibility};
 pub use list_view::{List, Selectable};
 pub use meter::Meter;
 pub use picker::{Picker, PickerList};
