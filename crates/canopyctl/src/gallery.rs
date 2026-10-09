@@ -65,10 +65,24 @@ struct Manifest {
     sizes: Vec<String>,
     /// Pages, in script and shot order.
     pages: Vec<Page>,
+    /// One section for each script, in script order.
+    #[serde(default)]
+    sections: Vec<Section>,
     /// Script runs that failed.
     failures: Vec<Failure>,
     /// Characters that the screenshot font lacks, in every image.
     missing_glyphs: Vec<char>,
+}
+
+/// One section of the viewer: the pages of one script.
+#[derive(Serialize, Deserialize)]
+struct Section {
+    /// Script, relative to the suite.
+    script: String,
+    /// Heading, from the script's file name.
+    title: String,
+    /// What the script shows, from its leading comment.
+    summary: Option<String>,
 }
 
 /// One page: the images of one shot at each size.
@@ -259,13 +273,14 @@ pub async fn run(
         scale: settings.scale,
         sizes: sizes.into_iter().map(|(label, _)| label).collect(),
         pages: run.pages,
+        sections: Vec::new(),
         failures: run.failures,
         missing_glyphs: Vec::new(),
     };
     if partial {
         keep_others(&settings.out, &staging, &ran, &mut manifest)?;
     }
-    finish(&mut manifest);
+    finish(&mut manifest, &settings.suite);
     let json = serde_json::to_string_pretty(&manifest)?;
     fs::write(staging.join(MANIFEST), &json).context("write the manifest")?;
     // JSON holds `<` only in strings, where the escape keeps any text, such
@@ -364,8 +379,25 @@ fn keep_others(
 }
 
 /// Derive the summaries of a manifest from its pages: the sizes that only
-/// kept pages have, and the characters that the font lacks.
-fn finish(manifest: &mut Manifest) {
+/// kept pages have, the characters that the font lacks, and one section for
+/// each script with pages or failures, read from the script in `suite`.
+fn finish(manifest: &mut Manifest, suite: &Path) {
+    let scripts = manifest
+        .pages
+        .iter()
+        .map(|page| &page.script)
+        .chain(manifest.failures.iter().map(|failure| &failure.script))
+        .collect::<BTreeSet<_>>();
+    manifest.sections = scripts
+        .into_iter()
+        .map(|script| Section {
+            script: script.clone(),
+            title: section_title(script),
+            summary: fs::read_to_string(suite.join(script))
+                .ok()
+                .and_then(|source| leading_comment(&source)),
+        })
+        .collect();
     let images = manifest.pages.iter().flat_map(|page| &page.shots);
     let mut missing = BTreeSet::new();
     for image in images {
@@ -375,6 +407,38 @@ fn finish(manifest: &mut Manifest) {
         missing.extend(image.missing.iter().copied());
     }
     manifest.missing_glyphs = missing.into_iter().collect();
+}
+
+/// Return the heading of a script: its file stem without an ordering prefix
+/// such as `10_`, with spaces for separators and a capital first letter.
+fn section_title(script: &str) -> String {
+    let stem = Path::new(script).file_stem().map_or_else(
+        || script.to_owned(),
+        |stem| stem.to_string_lossy().into_owned(),
+    );
+    let trimmed = stem.trim_start_matches(|c: char| c.is_ascii_digit());
+    let name = match trimmed.strip_prefix(['_', '-']) {
+        Some(rest) if trimmed.len() < stem.len() && !rest.is_empty() => rest,
+        _ => stem.as_str(),
+    };
+    let words = name.replace(['_', '-'], " ");
+    let mut chars = words.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
+}
+
+/// Return the leading `--` comment of a Luau script as one line, or `None`
+/// for a script that starts with code.
+fn leading_comment(source: &str) -> Option<String> {
+    let lines = source
+        .lines()
+        .map(str::trim)
+        .take_while(|line| line.starts_with("--") && !line.starts_with("--[["))
+        .map(|line| line.trim_start_matches('-').trim())
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    (!lines.is_empty()).then(|| lines.join(" "))
 }
 
 /// Read the shots of a script's return value. Luau returns an empty list as
@@ -450,6 +514,19 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn sections_take_their_title_from_the_name_and_their_summary_from_the_comment() {
+        assert_eq!(section_title("10_home.luau"), "Home");
+        assert_eq!(section_title("notices.luau"), "Notices");
+        assert_eq!(section_title("40-git_view.luau"), "Git view");
+        assert_eq!(section_title("2024.luau"), "2024");
+        assert_eq!(
+            leading_comment("-- One line.\n-- Two lines.\nlocal x = 1\n-- later\n").as_deref(),
+            Some("One line. Two lines.")
+        );
+        assert_eq!(leading_comment("local x = 1\n"), None);
+    }
 
     #[test]
     fn shots_read_lists_and_reject_other_values() {

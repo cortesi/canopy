@@ -6,50 +6,113 @@
 <title>Gallery</title>
 <style>
   :root {
-    --bg: #121316;
-    --panel: #1b1d22;
-    --line: #2c2f36;
+    --bg: #111216;
+    --panel: #1a1c21;
+    --raised: #22252c;
+    --line: #2b2e36;
     --fg: #e6e6e6;
     --muted: #9a9ea8;
+    --faint: #6c707a;
     --accent: #7aa2f7;
     --bad: #f7768e;
+    --warn: #e0af68;
+    --header: 57px;
+    --thumb: 240px;
   }
   * { box-sizing: border-box; }
+  html { scroll-padding-top: calc(var(--header) + 12px); }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--fg);
     font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
+  button, input { font: inherit; color: inherit; }
+  kbd {
+    font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+    padding: 1px 5px;
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    color: var(--muted);
+  }
+
+  /* Header: title, filter, thumbnail density, and screen size. */
   header {
     position: sticky;
     top: 0;
     z-index: 2;
     display: flex;
     flex-wrap: wrap;
-    gap: 12px 24px;
+    gap: 10px 20px;
     align-items: center;
-    padding: 12px 24px;
-    background: rgba(18, 19, 22, 0.92);
+    min-height: var(--header);
+    padding: 10px 20px;
+    background: rgba(17, 18, 22, 0.94);
     backdrop-filter: blur(6px);
     border-bottom: 1px solid var(--line);
   }
-  h1 { margin: 0; font-size: 17px; font-weight: 600; }
-  .meta { color: var(--muted); font-size: 12px; }
-  .sizes { display: flex; gap: 4px; margin-left: auto; }
-  .sizes button, .nav button {
+  h1 { margin: 0; font-size: 16px; font-weight: 600; white-space: nowrap; }
+  .meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .tools { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-left: auto; }
+  .search { position: relative; }
+  .search input {
+    width: 240px;
+    padding: 5px 30px 5px 10px;
+    background: var(--panel);
     border: 1px solid var(--line);
+    border-radius: 6px;
+    outline: none;
+  }
+  .search input:focus { border-color: var(--accent); }
+  .search kbd { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); }
+  .search input:focus + kbd, .search input:not(:placeholder-shown) + kbd { display: none; }
+  .group { display: flex; align-items: center; gap: 6px; }
+  .group .label { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button {
+    border: 0;
+    border-left: 1px solid var(--line);
     background: var(--panel);
     color: var(--muted);
-    border-radius: 6px;
-    padding: 4px 10px;
-    font: inherit;
+    padding: 4px 9px;
     font-size: 12px;
     cursor: pointer;
   }
-  .sizes button.on { color: var(--fg); border-color: var(--accent); }
-  main { padding: 20px 24px 48px; }
-  .notes { margin-bottom: 20px; display: grid; gap: 8px; }
+  .seg button:first-child { border-left: 0; }
+  .seg button:hover { color: var(--fg); }
+  .seg button.on { background: var(--raised); color: var(--fg); box-shadow: inset 0 -2px 0 var(--accent); }
+
+  /* Body: contents on the left, sections on the right. */
+  .layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); }
+  nav.toc {
+    position: sticky;
+    top: var(--header);
+    align-self: start;
+    max-height: calc(100vh - var(--header));
+    overflow-y: auto;
+    padding: 18px 8px 24px 16px;
+    border-right: 1px solid var(--line);
+  }
+  nav.toc a {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13px;
+  }
+  nav.toc a:hover { background: var(--panel); color: var(--fg); }
+  nav.toc a.current { background: var(--raised); color: var(--fg); }
+  nav.toc a.failed .name::after { content: " ●"; color: var(--bad); font-size: 10px; }
+  nav.toc a.none { opacity: 0.35; }
+  nav.toc .count { color: var(--faint); font-variant-numeric: tabular-nums; }
+  main { padding: 16px 24px 64px; min-width: 0; }
+
+  .notes { display: grid; gap: 8px; margin-bottom: 16px; }
+  .notes:empty { display: none; }
   .note {
     border: 1px solid var(--line);
     border-left: 3px solid var(--bad);
@@ -57,41 +120,83 @@
     border-radius: 6px;
     padding: 10px 14px;
   }
-  .note.warn { border-left-color: #e0af68; }
+  .note.warn { border-left-color: var(--warn); }
   .note pre { margin: 4px 0 0; white-space: pre-wrap; color: var(--muted); font-size: 12px; }
+
+  section { padding-top: 14px; margin-bottom: 26px; }
+  section > .head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 12px;
+  }
+  section h2 { margin: 0; font-size: 15px; font-weight: 600; }
+  section h2 a { color: inherit; text-decoration: none; }
+  section h2 a:hover { color: var(--accent); }
+  section .count { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+  section .file { margin-left: auto; color: var(--faint); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  section .summary { margin: -4px 0 12px; color: var(--muted); font-size: 13px; max-width: 90ch; }
+
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(var(--thumb), 1fr));
+    gap: 14px;
   }
   .card {
+    display: flex;
+    flex-direction: column;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 8px;
     overflow: hidden;
     cursor: pointer;
-    transition: border-color 120ms;
+    text-align: left;
+    padding: 0;
+    transition: border-color 120ms, transform 120ms;
   }
-  .card:hover { border-color: var(--accent); }
-  .card img { display: block; width: 100%; height: auto; background: #000; }
+  .card:hover, .card:focus-visible { border-color: var(--accent); outline: none; }
+  .card:hover img { filter: brightness(1.08); }
+  .card .thumb { background: #000; border-bottom: 1px solid var(--line); }
+  .card img { display: block; width: 100%; height: auto; }
   .card .absent {
     aspect-ratio: 16 / 9;
     display: grid;
     place-items: center;
-    color: var(--muted);
+    color: var(--faint);
+    font-size: 12px;
   }
-  .card .text { padding: 10px 14px 12px; }
-  .card h2 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
-  .card p { margin: 0; color: var(--muted); font-size: 12.5px; }
-  .card .script { margin-top: 6px; font-size: 11px; color: #6c707a; }
-  .empty { color: var(--muted); }
+  .card .text { padding: 8px 10px 10px; }
+  .card h3 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card p {
+    margin: 2px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  mark { background: rgba(122, 162, 247, 0.28); color: inherit; border-radius: 2px; }
+  .empty { color: var(--muted); padding: 24px 0; }
+
+  /* Detail: one page at full size. */
   #detail {
     position: fixed;
     inset: 0;
     z-index: 3;
     display: none;
     flex-direction: column;
-    background: rgba(10, 11, 13, 0.97);
+    background: var(--bg);
   }
   #detail.open { display: flex; }
   #detail .bar {
@@ -99,16 +204,69 @@
     flex-wrap: wrap;
     gap: 10px 20px;
     align-items: center;
-    padding: 12px 24px;
+    padding: 10px 20px;
     border-bottom: 1px solid var(--line);
   }
-  #detail .bar .titles { min-width: 240px; flex: 1; }
+  #detail .titles { min-width: 240px; flex: 1; }
+  #detail .crumb { color: var(--faint); font-size: 12px; }
+  #detail .crumb b { color: var(--muted); font-weight: 500; }
   #detail h2 { margin: 0; font-size: 16px; }
-  #detail p { margin: 2px 0 0; color: var(--muted); }
+  #detail p { margin: 2px 0 0; color: var(--muted); max-width: 110ch; }
   #detail .nav { display: flex; gap: 4px; }
-  #detail .stage { flex: 1; overflow: auto; padding: 24px; text-align: center; }
+  #detail .nav button {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  #detail .nav button:hover { color: var(--fg); border-color: var(--accent); }
+  #detail .stage { flex: 1; overflow: auto; padding: 20px; text-align: center; }
   #detail .stage img { box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6); }
-  #detail .hint { color: #6c707a; font-size: 12px; }
+  #detail .strip {
+    display: flex;
+    gap: 8px;
+    padding: 10px 20px;
+    overflow-x: auto;
+    border-top: 1px solid var(--line);
+    background: var(--bg);
+  }
+  #detail .strip button {
+    flex: 0 0 auto;
+    width: 128px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #000;
+    cursor: pointer;
+    opacity: 0.6;
+  }
+  #detail .strip button:hover { opacity: 1; }
+  #detail .strip button.on { border-color: var(--accent); opacity: 1; }
+  #detail .strip img { display: block; width: 100%; height: auto; }
+  #detail .hint { color: var(--faint); font-size: 12px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+  @media (max-width: 760px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    nav.toc {
+      position: static;
+      max-height: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 10px 16px;
+      border-right: 0;
+      border-bottom: 1px solid var(--line);
+    }
+    nav.toc a { background: var(--panel); }
+    main { padding: 12px 16px 48px; }
+    .search input { width: 100%; }
+    .tools { margin-left: 0; width: 100%; }
+    .search { flex: 1; }
+    #detail .hint { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -117,52 +275,139 @@
     <h1 id="title"></h1>
     <div class="meta" id="meta"></div>
   </div>
-  <div class="sizes" id="sizes"></div>
+  <div class="tools">
+    <label class="search">
+      <input id="filter" type="search" placeholder="Filter shots" autocomplete="off" spellcheck="false">
+      <kbd>/</kbd>
+    </label>
+    <div class="group">
+      <span class="label">Thumbs</span>
+      <div class="seg" id="density"></div>
+    </div>
+    <div class="group">
+      <span class="label">Screen</span>
+      <div class="seg" id="sizes"></div>
+    </div>
+  </div>
 </header>
-<main>
-  <div class="notes" id="notes"></div>
-  <div class="grid" id="grid"></div>
-</main>
+<div class="layout">
+  <nav class="toc" id="toc"></nav>
+  <main>
+    <div class="notes" id="notes"></div>
+    <div id="sections"></div>
+  </main>
+</div>
 <div id="detail">
   <div class="bar">
     <div class="titles">
+      <div class="crumb" id="detail-crumb"></div>
       <h2 id="detail-title"></h2>
       <p id="detail-caption"></p>
     </div>
-    <div class="sizes" id="detail-sizes"></div>
+    <div class="seg" id="detail-sizes"></div>
     <div class="nav">
-      <button id="prev" title="Previous page (←)">←</button>
-      <button id="next" title="Next page (→)">→</button>
+      <button id="prev" title="Previous shot (←)">←</button>
+      <button id="next" title="Next shot (→)">→</button>
       <button id="close" title="Close (Esc)">✕</button>
     </div>
-    <div class="hint">← → pages · 1–9 sizes · Esc closes</div>
+    <div class="hint"><kbd>←</kbd><kbd>→</kbd> shots <kbd>1</kbd>–<kbd>9</kbd> sizes <kbd>Esc</kbd> close</div>
   </div>
   <div class="stage" id="stage"></div>
+  <div class="strip" id="strip"></div>
 </div>
 <script>
 const GALLERY = /*GALLERY*/null;
 
-const state = { size: GALLERY.sizes[0], page: null };
+// Thumbnail widths, in CSS pixels.
+const DENSITIES = { S: 180, M: 240, L: 360 };
 
-const el = (tag, props = {}, children = []) => {
+const stored = (key, fallback) => {
+  try {
+    return localStorage.getItem(key) || fallback;
+  } catch {
+    return fallback;
+  }
+};
+const store = (key, value) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // A page without storage forgets the choice.
+  }
+};
+
+const state = {
+  size: GALLERY.sizes[0],
+  page: null,
+  query: "",
+  density: DENSITIES[stored("gallery-density", "M")] ? stored("gallery-density", "M") : "M",
+};
+
+const el = (tag, { dataset, ...props } = {}, children = []) => {
   const node = Object.assign(document.createElement(tag), props);
+  Object.assign(node.dataset, dataset || {});
   for (const child of children) node.append(child);
   return node;
 };
+
+// Sections in script order. A manifest without sections makes one for each
+// script, named by its file.
+const SECTIONS = (() => {
+  const known = new Map((GALLERY.sections || []).map((section) => [section.script, section]));
+  const scripts = [];
+  for (const page of GALLERY.pages) if (!scripts.includes(page.script)) scripts.push(page.script);
+  for (const failure of GALLERY.failures) if (!scripts.includes(failure.script)) scripts.push(failure.script);
+  return scripts.map((script, index) => ({
+    script,
+    title: known.get(script)?.title || script.replace(/\.luau$/, ""),
+    summary: known.get(script)?.summary || "",
+    anchor: `s-${index}`,
+    pages: GALLERY.pages.map((page, at) => ({ page, at })).filter(({ page }) => page.script === script),
+    failed: GALLERY.failures.some((failure) => failure.script === script),
+  }));
+})();
+const sectionOf = (page) => SECTIONS.find((section) => section.script === page.script);
 
 // The image of a page at the selected size, or at its first size.
 const imageOf = (page, size) =>
   page.shots.find((shot) => shot.size === size) || page.shots[0];
 
-const sizeButtons = (container, onPick) => {
+const matches = (page) => {
+  if (!state.query) return true;
+  const haystack = [page.title, page.caption || "", page.id, sectionOf(page).title]
+    .join(" ")
+    .toLowerCase();
+  return state.query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((word) => haystack.includes(word));
+};
+
+// The pages that the filter keeps, in order: the arrows step through them.
+const visible = () => GALLERY.pages.map((_, index) => index).filter((index) => matches(GALLERY.pages[index]));
+
+// Text with each word of the filter marked.
+const highlighted = (text) => {
+  const words = state.query.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [text];
+  const escaped = words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = new RegExp(`(${escaped.join("|")})`, "gi");
+  return text.split(pattern).map((part, index) =>
+    index % 2 === 1 ? el("mark", { textContent: part }) : part,
+  );
+};
+
+const segment = (container, values, current, onPick, titleOf) => {
   container.replaceChildren(
-    ...GALLERY.sizes.map((size) =>
+    ...values.map((value) =>
       el("button", {
-        textContent: size,
-        className: size === state.size ? "on" : "",
+        textContent: value,
+        title: titleOf ? titleOf(value) : value,
+        className: value === current ? "on" : "",
         onclick: (event) => {
           event.stopPropagation();
-          onPick(size);
+          onPick(value);
         },
       }),
     ),
@@ -171,41 +416,129 @@ const sizeButtons = (container, onPick) => {
 
 const pickSize = (size) => {
   state.size = size;
-  renderGrid();
+  renderSections();
   if (state.page !== null) renderDetail();
   remember();
 };
 
-const renderGrid = () => {
-  sizeButtons(document.getElementById("sizes"), pickSize);
-  const grid = document.getElementById("grid");
-  if (GALLERY.pages.length === 0) {
-    grid.replaceChildren(el("p", { className: "empty", textContent: "No pages." }));
+const pickDensity = (density) => {
+  state.density = density;
+  store("gallery-density", density);
+  renderControls();
+};
+
+const renderControls = () => {
+  document.documentElement.style.setProperty("--thumb", `${DENSITIES[state.density]}px`);
+  segment(document.getElementById("density"), Object.keys(DENSITIES), state.density, pickDensity,
+    (value) => ({ S: "Small thumbnails", M: "Medium thumbnails", L: "Large thumbnails" })[value]);
+  segment(document.getElementById("sizes"), GALLERY.sizes, state.size, pickSize);
+};
+
+const card = ({ page, at }) => {
+  const image = imageOf(page, state.size);
+  const picture = image
+    ? el("img", {
+        src: image.file,
+        loading: "lazy",
+        alt: page.title,
+        width: image.width,
+        height: image.height,
+      })
+    : el("div", { className: "absent", textContent: "no image" });
+  return el("button", {
+    className: "card",
+    title: `${page.title}\n${page.caption || ""}\n${page.id}`.trim(),
+    onclick: () => openPage(at),
+  }, [
+    el("div", { className: "thumb" }, [picture]),
+    el("div", { className: "text" }, [
+      el("h3", {}, highlighted(page.title)),
+      el("p", {}, highlighted(page.caption || "")),
+    ]),
+  ]);
+};
+
+const renderSections = () => {
+  const container = document.getElementById("sections");
+  const toc = document.getElementById("toc");
+  if (GALLERY.pages.length === 0 && SECTIONS.length === 0) {
+    container.replaceChildren(el("p", { className: "empty", textContent: "No shots." }));
+    toc.replaceChildren();
     return;
   }
-  grid.replaceChildren(
-    ...GALLERY.pages.map((page, index) => {
-      const image = imageOf(page, state.size);
-      const picture = image
-        ? el("img", { src: image.file, loading: "lazy", alt: page.title })
-        : el("div", { className: "absent", textContent: "no image" });
-      return el("div", { className: "card", onclick: () => openPage(index) }, [
-        picture,
-        el("div", { className: "text" }, [
-          el("h2", { textContent: page.title }),
-          el("p", { textContent: page.caption || "" }),
-          el("div", { className: "script", textContent: `${page.script} · ${page.id}` }),
+  const shown = [];
+  const links = [];
+  for (const section of SECTIONS) {
+    const pages = section.pages.filter(({ page }) => matches(page));
+    links.push(
+      el("a", {
+        href: `#${section.anchor}`,
+        className: [section.failed ? "failed" : "", pages.length === 0 ? "none" : ""].join(" "),
+        title: section.summary,
+        dataset: { anchor: section.anchor },
+        onclick: (event) => {
+          event.preventDefault();
+          document.getElementById(section.anchor)?.scrollIntoView({ behavior: "smooth" });
+        },
+      }, [
+        el("span", { className: "name", textContent: section.title }),
+        el("span", {
+          className: "count",
+          textContent: state.query ? `${pages.length}/${section.pages.length}` : `${section.pages.length}`,
+        }),
+      ]),
+    );
+    if (pages.length === 0 && (state.query || !section.failed)) continue;
+    shown.push(
+      el("section", { id: section.anchor }, [
+        el("div", { className: "head" }, [
+          el("h2", {}, [el("a", { href: `#${section.anchor}`, textContent: section.title })]),
+          el("span", { className: "count", textContent: `${pages.length} shot${pages.length === 1 ? "" : "s"}` }),
+          el("span", { className: "file", textContent: section.script }),
         ]),
-      ]);
-    }),
+        ...(section.summary ? [el("p", { className: "summary", textContent: section.summary })] : []),
+        el("div", { className: "grid" }, pages.map(card)),
+      ]),
+    );
+  }
+  toc.replaceChildren(...links);
+  container.replaceChildren(
+    ...(shown.length > 0
+      ? shown
+      : [el("p", { className: "empty", textContent: `No shots match “${state.query}”.` })]),
   );
+  spy();
+};
+
+// Mark the section at the top of the window in the contents.
+let observer = null;
+const spy = () => {
+  observer?.disconnect();
+  const links = new Map([...document.querySelectorAll("nav.toc a")].map((link) => [link.dataset.anchor, link]));
+  const current = (anchor) => {
+    for (const [key, link] of links) link.classList.toggle("current", key === anchor);
+  };
+  const tops = new Map();
+  observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) tops.set(entry.target.id, entry.isIntersecting);
+    const first = [...document.querySelectorAll("#sections section")].find((section) => tops.get(section.id));
+    if (first) current(first.id);
+  }, { rootMargin: "-60px 0px -55% 0px" });
+  for (const section of document.querySelectorAll("#sections section")) observer.observe(section);
 };
 
 const renderDetail = () => {
   const page = GALLERY.pages[state.page];
+  const section = sectionOf(page);
+  const order = section.pages.findIndex(({ at }) => at === state.page);
+  const crumb = document.getElementById("detail-crumb");
+  crumb.replaceChildren(
+    el("b", { textContent: section.title }),
+    ` · ${order + 1} of ${section.pages.length} · ${page.id}`,
+  );
   document.getElementById("detail-title").textContent = page.title;
   document.getElementById("detail-caption").textContent = page.caption || "";
-  sizeButtons(document.getElementById("detail-sizes"), pickSize);
+  segment(document.getElementById("detail-sizes"), GALLERY.sizes, state.size, pickSize);
   const image = imageOf(page, state.size);
   const stage = document.getElementById("stage");
   stage.replaceChildren();
@@ -220,29 +553,50 @@ const renderDetail = () => {
       }),
     );
   }
+  const strip = document.getElementById("strip");
+  strip.replaceChildren(
+    ...section.pages.map(({ page: other, at }) => {
+      const thumb = imageOf(other, state.size);
+      return el("button", {
+        className: at === state.page ? "on" : "",
+        title: other.title,
+        onclick: () => openPage(at),
+      }, thumb ? [el("img", { src: thumb.file, alt: other.title, loading: "lazy" })] : []);
+    }),
+  );
+  strip.querySelector("button.on")?.scrollIntoView({ block: "nearest", inline: "center" });
 };
 
 const openPage = (index) => {
   state.page = index;
   document.getElementById("detail").classList.add("open");
+  document.body.style.overflow = "hidden";
   renderDetail();
   remember();
 };
 
 const closePage = () => {
+  const page = state.page;
   state.page = null;
   document.getElementById("detail").classList.remove("open");
+  document.body.style.overflow = "";
   remember();
+  if (page !== null) {
+    document.querySelectorAll(".card")[visible().indexOf(page)]?.focus({ preventScroll: false });
+  }
 };
 
 const step = (delta) => {
-  if (state.page === null || GALLERY.pages.length === 0) return;
-  const count = GALLERY.pages.length;
-  openPage((state.page + delta + count) % count);
+  if (state.page === null) return;
+  const order = visible();
+  if (order.length === 0) return;
+  const at = order.indexOf(state.page);
+  const next = at < 0 ? 0 : (at + delta + order.length) % order.length;
+  openPage(order[next]);
 };
 
 // The location hash holds the open page and the size, so a reload or a link
-// returns to them.
+// returns to them. A section anchor scrolls to its section.
 const remember = () => {
   const page = state.page === null ? "" : GALLERY.pages[state.page].id;
   history.replaceState(null, "", `#${page}@${state.size}`);
@@ -258,9 +612,13 @@ const restore = () => {
   const [id, size] = hash.split("@");
   if (GALLERY.sizes.includes(size)) state.size = size;
   const index = GALLERY.pages.findIndex((page) => page.id === id);
-  renderGrid();
+  renderControls();
+  renderSections();
   if (index >= 0) openPage(index);
-  else if (state.page !== null) closePage();
+  else {
+    if (state.page !== null) closePage();
+    if (id) document.getElementById(id)?.scrollIntoView();
+  }
 };
 
 const renderNotes = () => {
@@ -290,12 +648,41 @@ document.title = GALLERY.title;
 document.getElementById("title").textContent = GALLERY.title;
 const images = GALLERY.pages.reduce((sum, page) => sum + page.shots.length, 0);
 document.getElementById("meta").textContent =
-  `${GALLERY.pages.length} pages · ${images} images · ${new Date(GALLERY.generated * 1000).toLocaleString()}`;
+  `${SECTIONS.length} sections · ${GALLERY.pages.length} shots · ${images} images · ${new Date(GALLERY.generated * 1000).toLocaleString()}`;
 document.getElementById("prev").onclick = () => step(-1);
 document.getElementById("next").onclick = () => step(1);
 document.getElementById("close").onclick = closePage;
+document.getElementById("detail").addEventListener("click", (event) => {
+  if (event.target.id === "stage") closePage();
+});
+
+const filter = document.getElementById("filter");
+filter.addEventListener("input", () => {
+  state.query = filter.value.trim();
+  renderSections();
+});
+filter.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    filter.value = "";
+    state.query = "";
+    renderSections();
+    filter.blur();
+  } else if (event.key === "Enter") {
+    const first = visible()[0];
+    if (first !== undefined) openPage(first);
+  }
+});
+
 document.addEventListener("keydown", (event) => {
-  if (state.page === null) return;
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  if (state.page === null) {
+    if (event.key === "/" && document.activeElement !== filter) {
+      event.preventDefault();
+      filter.focus();
+      filter.select();
+    }
+    return;
+  }
   if (event.key === "Escape") closePage();
   else if (event.key === "ArrowLeft") step(-1);
   else if (event.key === "ArrowRight") step(1);
