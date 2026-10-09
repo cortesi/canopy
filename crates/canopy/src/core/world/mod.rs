@@ -235,7 +235,7 @@ impl Core {
             input_map: InputMap::new(),
             event_scope: Vec::new(),
             notices: NoticeLog::default(),
-            clock: Arc::new(SystemClock),
+            clock: Arc::new(SystemClock::default()),
             motion_active: false,
             glyphs: Glyphs::default(),
         }

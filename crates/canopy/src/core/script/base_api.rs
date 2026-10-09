@@ -559,6 +559,16 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         handler: Handler::Sync(host_fixtures),
     },
     BaseFunction {
+        name: "advance",
+        docs: Some(
+            "Move the clock of the runtime forward by a number of milliseconds, so deadlines \
+             within that time fall due at once: toasts end, polls run, and timed states \
+             settle. Background work outside the runtime keeps its own time.",
+        ),
+        signature: || FunctionSignature::new().param(("ms", Type::Number)),
+        handler: Handler::Sync(host_advance),
+    },
+    BaseFunction {
         name: "wait_for",
         docs: Some("Wait until a predicate returns a truthy value."),
         signature: || {
@@ -2122,6 +2132,19 @@ fn host_notices<'s>(
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     host_value(scope, |canopy, _| Ok(notices_to_arg(canopy)))
+}
+
+/// `canopy.advance`: move the driver clock forward.
+fn host_advance<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = HostArgCursor::new(scope, args);
+    let ms = args.required::<f64>("ms")?;
+    let duration = Duration::try_from_secs_f64(ms / 1000.0)
+        .map_err(|_| RuntimeError::runtime(format!("advance takes a duration in ms, got {ms}")))?;
+    with_current_canopy(scope, |canopy, _| canopy.advance_clock(duration))?;
+    Ok(ret_none())
 }
 
 /// `canopy.notify`: post a notice to the log.

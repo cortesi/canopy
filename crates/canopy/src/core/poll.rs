@@ -4,7 +4,7 @@ use std::{
     cmp::Ordering,
     collections::{HashMap, binary_heap::BinaryHeap},
     fmt::Debug,
-    sync::Arc,
+    sync::{Arc, Mutex, PoisonError},
     time::{Duration, Instant},
 };
 
@@ -21,15 +21,32 @@ const MIN_POLL_INTERVAL: Duration = Duration::from_millis(1);
 pub trait Clock: Debug + Send + Sync {
     /// Return the current monotonic time.
     fn now(&self) -> Instant;
+
+    /// Move the clock forward by `duration`, so deadlines within it fall due
+    /// at once.
+    fn advance(&self, duration: Duration) -> Result<()>;
 }
 
-/// Production monotonic clock.
-#[derive(Debug)]
-pub struct SystemClock;
+/// Production monotonic clock: system time plus the time that scripts
+/// advanced it by, which stays zero unless a script calls `canopy.advance`.
+#[derive(Debug, Default)]
+pub struct SystemClock {
+    /// Total time that scripts advanced the clock by.
+    offset: Mutex<Duration>,
+}
 
 impl Clock for SystemClock {
     fn now(&self) -> Instant {
-        Instant::now()
+        let offset = *self.offset.lock().unwrap_or_else(PoisonError::into_inner);
+        Instant::now() + offset
+    }
+
+    fn advance(&self, duration: Duration) -> Result<()> {
+        let mut offset = self.offset.lock().unwrap_or_else(PoisonError::into_inner);
+        *offset = offset
+            .checked_add(duration)
+            .ok_or_else(|| Error::Invalid("clock offset overflow".into()))?;
+        Ok(())
     }
 }
 
@@ -134,11 +151,6 @@ pub struct Poller {
 }
 
 impl Poller {
-    /// Construct a scheduler using the system monotonic clock.
-    pub(crate) fn new() -> Self {
-        Self::with_clock(Arc::new(SystemClock))
-    }
-
     /// Construct a scheduler using an explicit monotonic clock.
     pub(crate) fn with_clock(clock: Arc<dyn Clock>) -> Self {
         Self {
@@ -273,7 +285,7 @@ mod tests {
 
     #[test]
     fn repeated_rescheduling_bounds_heap_storage() -> Result<()> {
-        let mut poller = Poller::new();
+        let mut poller = Poller::with_clock(Arc::new(SystemClock::default()));
         let owner = stamp();
         for delay in 0..10_000 {
             poller.schedule(owner, Duration::from_secs(delay))?;

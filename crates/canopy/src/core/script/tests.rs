@@ -683,6 +683,21 @@ fn wait_for_returns_when_predicate_is_truthy() -> Result<()> {
 }
 
 #[test]
+fn advance_ends_a_toast_without_waiting() -> Result<()> {
+    run_ttree(|c, _, _| {
+        let value = c.eval_script(
+            "canopy.notify('saved', { duration = 30 })\n\
+             local live = function() return canopy.notices()[1].live end\n\
+             canopy.assert(live(), 'the toast shows')\n\
+             canopy.advance(31000)\n\
+             return canopy.wait_for(function() return not live() end, 1000)",
+        )?;
+        assert_eq!(value, ArgValue::Bool(true));
+        Ok(())
+    })
+}
+
+#[test]
 fn wait_for_timeout_surfaces_as_script_timeout() -> Result<()> {
     run_ttree(|c, _, _| {
         let error = c

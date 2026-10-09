@@ -32,6 +32,22 @@ opt-level = 3
 [profile.dev.package.fontdue]
 opt-level = 3
 
+# Encoding gallery and screenshot PNGs is several times slower unoptimized.
+[profile.dev.package.png]
+opt-level = 3
+
+[profile.dev.package.fdeflate]
+opt-level = 3
+
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+
+[profile.dev.package.crc32fast]
+opt-level = 3
+
+[profile.dev.package.simd-adler32]
+opt-level = 3
+
 [workspace.package]
 authors = ["Aldo Cortesi <aldo@corte.si>"]
 edition = "2024"

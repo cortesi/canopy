@@ -8,6 +8,7 @@ use std::{
     collections::BTreeMap,
     sync::{Arc, mpsc},
     thread::{self, ThreadId},
+    time::Duration,
 };
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
@@ -15,7 +16,7 @@ use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use super::{
     inputmap,
     notice::{Notice, NoticeLog, NoticePost, NoticeSource},
-    poll::Poller,
+    poll::{Clock, Poller, SystemClock},
     snapshot::FrameSnapshot,
     termbuf::{RenderLimits, TermBuf},
 };
@@ -259,8 +260,12 @@ impl Canopy {
         let (automation_tx, automation_rx) = mpsc::sync_channel(AUTOMATION_QUEUE_CAPACITY);
         let mut core = Core::new();
         core.invalidate(crate::Invalidation::Paint);
+        // The poller and the core share one clock, so advancing it moves both
+        // the deadlines and the time that widgets read.
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock::default());
+        core.clock = Arc::clone(&clock);
         Self {
-            poller: Poller::new(),
+            poller: Poller::with_clock(clock),
             driver: turn::Driver::new(tx.clone()),
             event_tx: tx,
             event_rx: Some(rx),
@@ -285,6 +290,15 @@ impl Canopy {
             interrupt_hook: None,
             core,
         }
+    }
+
+    /// Move the driver clock forward by `duration`, and wake the driver, so
+    /// deadlines within it fall due at once: toasts end, polls run, and
+    /// timed states settle. Scripts reach it as `canopy.advance`.
+    pub fn advance_clock(&mut self, duration: Duration) -> Result<()> {
+        self.core.clock.advance(duration)?;
+        let _receiver_closed = self.event_tx.unbounded_send(AdapterEvent::Wake);
+        Ok(())
     }
 
     /// Return a handle for submitting automation work to this app's UI thread.

@@ -825,6 +825,11 @@ impl Canopy {
     /// Return the active modes, newest first. The default mode is not listed.
     pub fn active_modes(&self) -> Vec<&str>;
 
+    /// Move the driver clock forward by `duration`, and wake the driver, so
+    /// deadlines within it fall due at once: toasts end, polls run, and
+    /// timed states settle. Scripts reach it as `canopy.advance`.
+    pub fn advance_clock(&mut self, duration: Duration) -> crate::error::Result<()>;
+
     /// Return a handle for submitting automation work to this app's UI thread.
     pub fn automation_handle(&self) -> AutomationHandle;
 

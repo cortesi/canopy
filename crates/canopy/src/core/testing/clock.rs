@@ -57,4 +57,8 @@ impl Clock for ManualClock {
     fn now(&self) -> Instant {
         self.now()
     }
+
+    fn advance(&self, duration: Duration) -> Result<()> {
+        self.advance(duration)
+    }
 }
