@@ -732,7 +732,8 @@ where
     /// Edit the open filter with one event.
     ///
     /// Enter keeps the filter and closes the field, and escape drops it.
-    /// Other keys pass on, so the paging keys still reach their bindings.
+    /// Every character is filter text, `j` and `k` too, and the arrows, the
+    /// page keys, Home, and End move the selection. Other keys pass on.
     fn filter_event(&mut self, event: &Event, context: &mut dyn Context) -> Result<EventOutcome> {
         let mut text = self.filter.clone();
         match event {
@@ -750,6 +751,10 @@ where
                     let _ = text.pop();
                 }
                 Some(FilterCommand::Push(character)) => text.push(character),
+                Some(FilterCommand::Move(movement)) => {
+                    self.apply_move(context, movement)?;
+                    return Ok(EventOutcome::Handle);
+                }
                 None => return Ok(EventOutcome::Ignore),
             },
             Event::Paste(pasted) => {
@@ -772,7 +777,23 @@ where
             KeyCode::Backspace if self.filter.is_empty() => Some(FilterCommand::Clear),
             KeyCode::Backspace => Some(FilterCommand::Backspace),
             KeyCode::Char(_) => key.text_char().map(FilterCommand::Push),
+            KeyCode::Up => Some(FilterCommand::Move(CursorMove::By(-1))),
+            KeyCode::Down => Some(FilterCommand::Move(CursorMove::By(1))),
+            KeyCode::PageUp => Some(FilterCommand::Move(CursorMove::Page(-1))),
+            KeyCode::PageDown => Some(FilterCommand::Move(CursorMove::Page(1))),
+            KeyCode::Home => Some(FilterCommand::Move(CursorMove::First)),
+            KeyCode::End => Some(FilterCommand::Move(CursorMove::Last)),
             _ => None,
+        }
+    }
+
+    /// Moves the selection by `movement`.
+    fn apply_move(&mut self, context: &mut dyn Context, movement: CursorMove) -> Result<()> {
+        match movement {
+            CursorMove::By(delta) => self.select_by(context, delta),
+            CursorMove::Page(delta) => self.page(context, delta),
+            CursorMove::First => self.select_first(context),
+            CursorMove::Last => self.select_last(context),
         }
     }
 
@@ -820,6 +841,8 @@ enum FilterCommand {
     Backspace,
     /// Append one character to the filter.
     Push(char),
+    /// Move the selection, for a navigation key that is not text.
+    Move(CursorMove),
 }
 
 impl<T> Register for PickerList<T>
@@ -998,18 +1021,19 @@ where
     }
 
     fn accepts_intent(&self, intent: &str, _context: &dyn ViewContext) -> bool {
-        (self.filtering && intent == crate::CLEAR_INTENT)
-            || (!self.shown.is_empty() && CursorMove::of(intent).is_some())
+        // While the filter is open, a navigation intent could come from a
+        // letter such as `j`, which is filter text. The filter moves the
+        // selection for the navigation keys itself.
+        if self.filtering {
+            intent == crate::CLEAR_INTENT
+        } else {
+            !self.shown.is_empty() && CursorMove::of(intent).is_some()
+        }
     }
 
     fn on_intent(&mut self, intent: &str, context: &mut dyn Context) -> Result<EventOutcome> {
         if let Some(movement) = CursorMove::of(intent) {
-            match movement {
-                CursorMove::By(delta) => self.select_by(context, delta)?,
-                CursorMove::Page(delta) => self.page(context, delta)?,
-                CursorMove::First => self.select_first(context)?,
-                CursorMove::Last => self.select_last(context)?,
-            }
+            self.apply_move(context, movement)?;
             return Ok(EventOutcome::Handle);
         }
         if !self.filtering || intent != crate::CLEAR_INTENT {
@@ -1352,13 +1376,47 @@ mod tests {
     }
 
     #[test]
+    fn an_open_filter_types_letters_and_moves_on_the_navigation_keys() -> Result<()> {
+        let mut harness = picker(&["alpha", "jade", "kilo"], 40, 12)?;
+        let down = NavIntent::Down.name();
+        harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
+            let list = picker.list()?;
+            context.with_widget(list, |list: &PickerList<String>| {
+                assert!(list.accepts_intent(down, context), "a closed filter moves");
+                Ok(())
+            })
+        })?;
+        on_list(&mut harness, PickerList::start_filter)?;
+        harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
+            let list = picker.list()?;
+            context.with_widget_mut(list, |list: &mut PickerList<String>, context| {
+                assert!(
+                    !list.accepts_intent(down, context),
+                    "an open filter leaves j and k to the text"
+                );
+                list.on_event(&Event::Key(key::Key::parse_spec("down")?), context)?;
+                assert_eq!(list.selected_name(), "jade", "the arrow moves");
+                for character in ['j', 'k'] {
+                    list.on_event(&Event::Key(character.into()), context)?;
+                }
+                assert_eq!(list.filter(), "jk");
+                Ok(())
+            })
+        })?;
+        Ok(())
+    }
+
+    #[test]
     fn filter_keys_predict_their_handling() -> Result<()> {
         let keys = [
             "a",
+            "j",
             "enter",
             "esc",
             "backspace",
             "up",
+            "pagedown",
+            "end",
             "f1",
             "ctrl-a",
             "ctrl-x",
