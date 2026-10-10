@@ -5632,6 +5632,15 @@ pub mod text {
     /// Slice a string by display columns, returning the substring and its width.
     pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize);
 
+    /// Return the kept head and the marker that shorten `s` to `budget` display
+    /// columns by dropping its tail.
+    ///
+    /// The head borrows from `s`, so a caller can tell where it ends, as a row
+    /// painted in styled runs needs. Text that fits keeps no marker. A budget of
+    /// one or two columns holds the marker alone, as [`split_start`] describes.
+    #[must_use]
+    pub fn split_end(s: &str, budget: usize) -> (&str, &'static str);
+
     /// Return the marker and the kept tail that shorten `s` to `budget` display
     /// columns by dropping its head.
     ///

@@ -198,24 +198,37 @@ pub fn truncate_start(s: &str, budget: usize) -> Cow<'_, str> {
     }
 }
 
+/// Return the kept head and the marker that shorten `s` to `budget` display
+/// columns by dropping its tail.
+///
+/// The head borrows from `s`, so a caller can tell where it ends, as a row
+/// painted in styled runs needs. Text that fits keeps no marker. A budget of
+/// one or two columns holds the marker alone, as [`split_start`] describes.
+#[must_use]
+pub fn split_end(s: &str, budget: usize) -> (&str, &'static str) {
+    let width = cells(s);
+    if width <= budget {
+        return (s, "");
+    }
+    let marker = match budget {
+        0 => return (&s[..0], ""),
+        1 | 2 => return (&s[..0], ELLIPSIS),
+        _ => END_MARKER,
+    };
+    let head = budget - cells(marker);
+    (slice_by_columns(s, 0, head).0, marker)
+}
+
 /// Shorten `s` to `budget` display columns, marking a dropped tail.
 ///
 /// Text that already fits is returned as it is. This is the ordinary
 /// direction, for text whose opening identifies it. A blank cell separates
 /// the marker from the kept head, as [`split_start`] describes.
 pub fn truncate_end(s: &str, budget: usize) -> Cow<'_, str> {
-    let width = cells(s);
-    if width <= budget {
-        return Cow::Borrowed(s);
+    match split_end(s, budget) {
+        (kept, "") => Cow::Borrowed(kept),
+        (kept, marker) => Cow::Owned(format!("{kept}{marker}")),
     }
-    let marker = match budget {
-        0 => return Cow::Borrowed(""),
-        1 | 2 => return Cow::Borrowed(ELLIPSIS),
-        _ => END_MARKER,
-    };
-    let head = budget - cells(marker);
-    let (kept, _) = slice_by_columns(s, 0, head);
-    Cow::Owned(format!("{kept}{marker}"))
 }
 
 #[cfg(test)]

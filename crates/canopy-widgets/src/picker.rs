@@ -13,7 +13,7 @@
 //! owner: the list keeps its filter and selection under it, and takes the
 //! keyboard back when the overlay closes.
 
-use std::iter;
+use std::{iter, ops::Range};
 
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
@@ -804,6 +804,22 @@ where
     }
 }
 
+/// Return the parts of `runs` within the byte range `kept` of the text that
+/// the runs join to, each with its role. A run outside the range drops out.
+fn cut_runs<'a>(runs: &[(&'a str, &'a str)], kept: Range<usize>) -> Vec<(&'a str, &'a str)> {
+    let mut start = 0;
+    let mut cut = Vec::new();
+    for (role, text) in runs {
+        let end = start + text.len();
+        let (from, to) = (kept.start.max(start), kept.end.min(end));
+        if from < to {
+            cut.push((*role, &text[from - start..to - start]));
+        }
+        start = end;
+    }
+    cut
+}
+
 /// Return whether an item of `visibility` can show while a filter is set,
 /// when `filtered` says so, or without one.
 fn visible(visibility: ItemVisibility, filtered: bool) -> bool {
@@ -980,19 +996,40 @@ where
             let lead = format!(" {indent}");
             let budget = budget.saturating_sub(indent.len());
             let label = item.label();
-            match item.runs() {
-                // A label that fits paints its runs beneath the style of the
-                // row. One that must be cut paints as one run.
-                Some(runs) if text::width(label) as usize <= budget => {
+            // Runs that join to the label paint beneath the style of the row,
+            // cut to the budget at the end of the truncation. Other runs paint
+            // as one run.
+            match item.runs().filter(|runs| {
+                runs.iter()
+                    .flat_map(|(_, text)| text.chars())
+                    .eq(label.chars())
+            }) {
+                Some(runs) => {
+                    let (before, kept, after) = match self.truncate {
+                        Truncate::End => {
+                            let (kept, marker) = text::split_end(label, budget);
+                            ("", 0..kept.len(), marker)
+                        }
+                        Truncate::Start => {
+                            let (marker, kept) = text::split_start(label, budget);
+                            (marker, label.len() - kept.len()..label.len(), "")
+                        }
+                    };
                     render.fill(style, Rect::new(line.tl.x, line.tl.y, line.w, 1), ' ')?;
-                    let styled = runs
+                    let styled = cut_runs(&runs, kept)
                         .into_iter()
                         .map(|(role, text)| (format!("{style}/{role}"), text))
                         .collect::<Vec<_>>();
                     let runs = styled.iter().map(|(role, text)| (role.as_str(), *text));
-                    render.runs(line, style, iter::once((style, lead.as_str())).chain(runs))?;
+                    let lead =
+                        iter::once((style, lead.as_str())).chain(iter::once((style, before)));
+                    render.runs(
+                        line,
+                        style,
+                        lead.chain(runs).chain(iter::once((style, after))),
+                    )?;
                 }
-                _ => {
+                None => {
                     let shown = self.truncate.apply(label, budget);
                     render.text(style, line, &format!("{lead}{shown}"))?;
                 }
@@ -1668,6 +1705,80 @@ mod tests {
                     .collect(),
             )
         }
+    }
+
+    #[test]
+    fn a_cut_row_keeps_the_roles_of_its_runs_up_to_the_cut() -> Result<()> {
+        use canopy::style::Color;
+
+        for truncate in [Truncate::End, Truncate::Start] {
+            let mut harness = Harness::builder(Picker::<Styled>::new().with_truncate(truncate))
+                .configure(|setup| {
+                    setup.widget_styles(|_, rules| {
+                        rules
+                            .fg("text/red", Color::Red)
+                            .fg("text/green", Color::Green)
+                            .apply();
+                    });
+                    Ok(())
+                })
+                .size(24, 8)
+                .build()?;
+            harness.render()?;
+            let row = Styled::new(
+                &[
+                    ("red", "RRRR"),
+                    ("", " "),
+                    ("green", "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGG"),
+                    ("red", "ZZZZ"),
+                ],
+                false,
+            );
+            harness.with_root_widget_context(|picker: &mut Picker<Styled>, context| {
+                // The first row takes the selection, so the cut row reads in
+                // the text style.
+                picker.set_items(
+                    context,
+                    "Entries",
+                    "<none>",
+                    vec![Styled::new(&[("", "x")], false), row],
+                )
+            })?;
+            harness.render()?;
+            let snapshot = harness.canopy.snapshot().expect("published picker");
+            let colors = |needle: char| {
+                snapshot
+                    .buffer
+                    .cells()
+                    .iter()
+                    .filter(|cell| cell.ch == needle)
+                    .map(|cell| cell.style.fg)
+                    .collect::<Vec<_>>()
+            };
+            assert!(
+                snapshot.buffer.cells().iter().any(|cell| cell.ch == '…'),
+                "{truncate:?}: the row is cut"
+            );
+            let green = colors('G');
+            assert!(!green.is_empty(), "{truncate:?}");
+            assert!(
+                green.iter().all(|color| *color == Color::Green),
+                "{truncate:?}: a cut run keeps its role"
+            );
+            let (kept, dropped) = match truncate {
+                Truncate::End => ('R', 'Z'),
+                Truncate::Start => ('Z', 'R'),
+            };
+            assert!(
+                colors(kept).iter().all(|color| *color == Color::Red) && !colors(kept).is_empty(),
+                "{truncate:?}: the kept end keeps its role"
+            );
+            assert!(
+                colors(dropped).is_empty(),
+                "{truncate:?}: the cut end drops"
+            );
+        }
+        Ok(())
     }
 
     #[test]
