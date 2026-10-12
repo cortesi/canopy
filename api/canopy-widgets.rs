@@ -995,7 +995,7 @@ impl DiffView {
     /// Scroll to the previous change.
     pub fn prev_change(&mut self, c: &mut dyn Context);
 
-    /// Return the revision of the displayed diff text.
+    /// Return the revision of the diff text and its display layout.
     #[must_use]
     pub fn revision(&self) -> u64;
 
@@ -1050,6 +1050,17 @@ impl DiffView {
     /// and returns change movement to the first change.
     pub fn set_model(&mut self, model: DiffModel);
 
+    /// Change the display layout without replacing the model or highlighters.
+    ///
+    /// Search ranges need to be applied again because their display rows
+    /// changed. The revision advances so a host can refresh its held query.
+    /// Messages and loading state remain in place.
+    pub fn set_strategy(&mut self, strategy: Mode);
+
+    /// Return the current display layout.
+    #[must_use]
+    pub fn strategy(&self) -> Mode;
+
     /// Show a message in place of any diff, such as before one is chosen.
     #[must_use]
     pub fn with_message(self, message: impl Into<String>) -> Self;
@@ -1066,7 +1077,7 @@ impl DiffView {
     #[must_use]
     pub fn with_scope(self, scope: Scope) -> Self;
 
-    /// Set the display strategy.
+    /// Set the display strategy while constructing a view.
     #[must_use]
     pub fn with_strategy(self, strategy: Mode) -> Self;
 

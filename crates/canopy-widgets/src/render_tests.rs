@@ -696,10 +696,10 @@ mod tests {
         let mut harness = Harness::builder(root).size(24, 4).build()?;
         harness.render()?;
         harness.tbuf().assert_matches(buf![
-            " 1 one     │ 1 one"
-            "-2 two     │+2 changed"
-            " 3 three   │ 3 three"
-            ""
+            " 1 one     │  1 one"
+            "-2 two     │ +2 changed"
+            " 3 three   │  3 three"
+            "           │"
         ]);
         Ok(())
     }

@@ -9,7 +9,7 @@
 //! on the shared text buffer.
 
 /// Layout and wrapping cache.
-mod layout;
+pub(crate) mod layout;
 /// Search state and match helpers.
 mod search;
 /// Vi mode state helpers.
