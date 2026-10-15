@@ -575,18 +575,58 @@
       ]
     }
   ],
-  "failures": [],
-  "missing_glyphs": [],
   "sections": [
+    {
+      "script": "biggym.luau",
+      "title": "Biggym",
+      "summary": "The big text gym: the text fitted to the whole stage, then to a smaller area in the middle with a gradient, and its ladder of every face."
+    },
+    {
+      "script": "cedit.luau",
+      "title": "Cedit",
+      "summary": "The Code editor gym, as it opens."
+    },
+    {
+      "script": "chartgym.luau",
+      "title": "Chartgym",
+      "summary": "The Charts gym, as it opens, and its page of big text."
+    },
+    {
+      "script": "editorgym.luau",
+      "title": "Editorgym",
+      "summary": "The Editor gym, as it opens."
+    },
+    {
+      "script": "fontgym.luau",
+      "title": "Fontgym",
+      "summary": "The Font banners gym, as it opens in the full tier, then in the block elements."
+    },
+    {
+      "script": "imgview.luau",
+      "title": "Imgview",
+      "summary": "The Image viewer gym, as it opens in the full tier, then in the block elements, then its chart of the glyphs of each tier."
+    },
     {
       "script": "markdowngym.luau",
       "title": "Markdowngym",
       "summary": "Explicit targets keep queries valid from the automation root and modal focus."
     },
     {
+      "script": "stylegym.luau",
+      "title": "Stylegym",
+      "summary": "The style gym: the stock widgets, the palette of a theme, and its syntax colours."
+    },
+    {
       "script": "tablegym.luau",
       "title": "Tablegym",
       "summary": null
     }
+  ],
+  "failures": [],
+  "missing_glyphs": [
+    "↵",
+    "界",
+    "👩",
+    "💻"
   ]
 }
