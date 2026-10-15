@@ -185,3 +185,15 @@ fn membership_intersects_surviving_keys() {
     selection.reconcile(&TableData::builder("dataset", 3, ["none"]).build().unwrap());
     assert!(selection.is_empty());
 }
+
+#[test]
+fn membership_deduplicates_each_axis_in_first_seen_order() {
+    let selection = TableSelection::new(
+        Arc::from(["b".into(), "a".into(), "b".into()]),
+        Arc::from(["y".into(), "y".into(), "x".into()]),
+    );
+    assert_eq!(selection.rows(), [Arc::<str>::from("b"), "a".into()]);
+    assert_eq!(selection.columns(), [Arc::<str>::from("y"), "x".into()]);
+    assert!(selection.contains("b", "x"));
+    assert!(!selection.contains("missing", "x"));
+}

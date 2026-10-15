@@ -216,6 +216,61 @@ fn pending_switch_can_be_cancelled_without_publishing_its_held_result() {
 }
 
 #[test]
+fn source_only_cancels_an_in_flight_rendered_switch() {
+    let (mut harness, manual) = fixture("# Heading\n", ViewType::Source, false, false, false);
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_view_type(ctx, ViewType::Rendered)
+        })
+        .unwrap();
+    let held = next_work(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_source_only(ctx, true, Some("Partial source".into()))?;
+            assert_eq!(reader.requested_view_type(), ViewType::Source);
+            Ok(())
+        })
+        .unwrap();
+    held.finish();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            assert_eq!(reader.view_type(), ViewType::Source);
+            assert!(!reader.can_toggle_view_type(ctx)?);
+            reader.set_source_only(ctx, false, None)?;
+            reader.set_view_type(ctx, ViewType::Rendered)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    harness.with_root_widget(|reader: &mut Markdown| {
+        assert_eq!(reader.view_type(), ViewType::Rendered);
+    });
+}
+
+#[test]
+fn rejected_source_only_switch_preserves_policy_and_status() {
+    let (mut harness, manual) = fixture("# Heading\n", ViewType::Rendered, false, false, false);
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_source_only(ctx, false, Some("Complete document".into()))?;
+            reader.outline(ctx)?;
+            assert!(
+                reader
+                    .set_source_only(ctx, true, Some("Partial source".into()))
+                    .is_err()
+            );
+            assert!(!reader.options.source_only);
+            assert_eq!(reader.options.status.as_deref(), Some("Complete document"));
+            reader.dismiss_inspector(ctx)?;
+            assert!(reader.can_toggle_view_type(ctx)?);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
 fn switch_pins_outgoing_revision_while_append_does_not_move_its_minimum() {
     let (mut harness, manual) = fixture("First.\n\n", ViewType::Rendered, true, false, false);
     settle(&mut harness, &manual);
@@ -350,6 +405,162 @@ fn search_publication_does_not_navigate_and_pending_query_is_not_ready() {
 }
 
 #[test]
+fn search_activation_uses_the_matching_link_and_declines_plain_prose() {
+    let text = "[first](https://first.test) plainword [needle](https://second.test)";
+    let (mut harness, manual) = fixture(text, ViewType::Rendered, false, false, false);
+    settle(&mut harness, &manual);
+    for (query, destination) in [("needle", Some("https://second.test")), ("plainword", None)] {
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                reader.set_search(ctx, query.into(), false)
+            })
+            .unwrap();
+        settle(&mut harness, &manual);
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                reader.search_next(ctx, 1)?;
+                let expected = destination.map(|destination| {
+                    reader.last_document.as_ref().unwrap().objects.iter().find(|object| {
+                        matches!(&object.kind, ObjectKind::Link(link) if link.destination == destination)
+                    }).unwrap().id
+                });
+                assert_eq!(reader.shared.borrow().overlays.active_object, expected);
+                reader.activate(ctx)?;
+                assert_eq!(reader.inspector.as_ref().and_then(|open| open.object), expected);
+                if expected.is_none() {
+                    assert!(reader.inspector.is_none(), "plain prose must not open another link");
+                }
+                reader.dismiss_inspector(ctx)
+            })
+            .unwrap();
+    }
+}
+
+#[test]
+fn rendered_search_highlights_code_table_and_source_cards() {
+    use canopy::style::PartialStyle;
+
+    let text = "```\nneedle code\n```\n\n| Header |\n| --- |\n| needle table |\n\n<div>\nneedle source\n</div>\n";
+    let (mut harness, manual) = fixture(text, ViewType::Rendered, false, false, false);
+    harness.canopy.set_screen_size(Size::new(60, 30)).unwrap();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_search(ctx, "needle".into(), false)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    harness.with_root_widget(|reader: &mut Markdown| assert_eq!(reader.search_matches(), 3));
+    let style = harness.canopy.style().resolve("markdown/search");
+    for text in ["needle code", "needle table", "needle source"] {
+        assert!(
+            harness
+                .tbuf()
+                .contains_text_style(text, &PartialStyle::new().bg(style.bg.clone())),
+            "missing search highlight for {text}"
+        );
+    }
+}
+
+#[test]
+fn provisional_source_search_keeps_line_offsets_and_highlights_only_matching_text() {
+    use canopy::style::PartialStyle;
+
+    let text = "# Settled\n\n<div>\nfirst line\nneedle provisional\n";
+    let (mut harness, manual) = fixture(text, ViewType::Rendered, true, false, false);
+    harness.canopy.set_screen_size(Size::new(60, 20)).unwrap();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_search(ctx, "needle".into(), false)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    harness.with_root_widget(|reader: &mut Markdown| {
+        let state = reader.shared.borrow();
+        let document = &state.presentation.as_ref().unwrap().document;
+        let block = document
+            .blocks
+            .iter()
+            .find(|block| matches!(block.kind, BlockKind::Source { .. }))
+            .unwrap();
+        let unit = document.unit(block.unit_id).unwrap();
+        assert!(block.provisional && !unit.atomic);
+        let expected = unit.text.find("needle").unwrap();
+        assert!(expected > 0);
+        let found = &state.overlays.search[0];
+        assert_eq!(found.start.unit_id, unit.id);
+        assert_eq!(found.start.offset, expected);
+        assert_eq!(found.end.offset, expected + "needle".len());
+    });
+    let style = harness.canopy.style().resolve("markdown/search");
+    assert!(
+        harness
+            .tbuf()
+            .contains_text_style("needle", &PartialStyle::new().bg(style.bg.clone()))
+    );
+    assert!(
+        !harness
+            .tbuf()
+            .contains_text_style("first line", &PartialStyle::new().bg(style.bg))
+    );
+}
+
+#[test]
+fn changed_query_clears_source_highlights_before_work_and_cached_return() {
+    for clear_while_inactive in [false, true] {
+        let (mut harness, manual) =
+            fixture("needle in source", ViewType::Source, false, false, false);
+        settle(&mut harness, &manual);
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                reader.set_search(ctx, "needle".into(), false)
+            })
+            .unwrap();
+        settle(&mut harness, &manual);
+        if clear_while_inactive {
+            harness
+                .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                    reader.set_view_type(ctx, ViewType::Rendered)
+                })
+                .unwrap();
+            settle(&mut harness, &manual);
+        }
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                let source = reader.nodes.as_ref().unwrap().source.unwrap();
+                ctx.with_widget(source, |source: &MarkdownSource| {
+                    assert_eq!(source.search_matches(), 1);
+                    Ok(())
+                })?;
+                reader.set_search(ctx, String::new(), false)?;
+                assert_eq!(reader.search_matches(), 0);
+                ctx.with_widget(source, |source: &MarkdownSource| {
+                    assert_eq!(source.search_matches(), 0);
+                    Ok(())
+                })
+            })
+            .unwrap();
+        settle(&mut harness, &manual);
+        if clear_while_inactive {
+            harness
+                .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                    reader.set_view_type(ctx, ViewType::Source)?;
+                    assert!(reader.ready(), "return should reuse cached geometry");
+                    ctx.with_widget(
+                        reader.navigation_node().unwrap(),
+                        |source: &MarkdownSource| {
+                            assert_eq!(source.search_matches(), 0);
+                            Ok(())
+                        },
+                    )
+                })
+                .unwrap();
+        }
+    }
+}
+
+#[test]
 fn source_copy_jobs_keep_frozen_bytes_and_fifo_order_across_append() {
     let initial = "α\r\n\tstart\n";
     let suffix = "\tend\r\n";
@@ -391,6 +602,146 @@ fn source_copy_jobs_keep_frozen_bytes_and_fifo_order_across_append() {
         );
         assert!(reader.take_requests(10).is_empty());
     });
+}
+
+#[test]
+fn inspector_copy_survives_escape_and_direct_dismissal() {
+    for direct in [false, true] {
+        let text = "α\r\n\timmutable\n";
+        let (mut harness, manual) = fixture(text, ViewType::Source, false, true, false);
+        settle(&mut harness, &manual);
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| reader.inspect_source(ctx))
+            .unwrap();
+        manual.run_until_idle();
+        harness.canopy.turn(TurnInput::Prepare).unwrap();
+        harness
+            .with_unique(|inspector: &mut Inspector, ctx| inspector.copy_all(ctx))
+            .unwrap();
+        if direct {
+            // No owner poll has consumed the accepted inspector event yet.
+            harness
+                .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                    reader.dismiss_inspector(ctx)
+                })
+                .unwrap();
+        } else {
+            service(&mut harness);
+        }
+        let held = manual.start_next().expect("owner copy work");
+        assert!(held.copy_id().is_some());
+        if !direct {
+            harness.key(Key::parse_spec("Esc").unwrap()).unwrap();
+            service(&mut harness);
+        }
+        harness.with_root_widget(|reader: &mut Markdown| {
+            assert!(reader.inspector.is_none());
+            assert!(reader.take_requests(10).is_empty());
+        });
+        held.finish();
+        settle(&mut harness, &manual);
+        harness.with_root_widget(|reader: &mut Markdown| {
+            let requests = reader.take_requests(10);
+            assert_eq!(requests.len(), 1);
+            assert_eq!(requests[0].action, HostAction::CopyText(text.into()));
+        });
+        assert!(!manual.run_next(), "one serialization completes the copy");
+    }
+}
+
+#[test]
+fn inspector_copy_open_and_close_preserve_activation_order_while_copy_is_held() {
+    let url = "https://example.com/path";
+    let (mut harness, manual) = fixture(
+        "[Link](https://example.com/path)\n",
+        ViewType::Rendered,
+        false,
+        true,
+        true,
+    );
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.activate(ctx))
+        .unwrap();
+    manual.run_until_idle();
+    harness.canopy.turn(TurnInput::Prepare).unwrap();
+    harness
+        .with_unique(|inspector: &mut Inspector, ctx| {
+            inspector.copy_all(ctx)?;
+            inspector.open_url()?;
+            inspector.dismiss(ctx)
+        })
+        .unwrap();
+    service(&mut harness);
+    let held = manual.start_next().expect("owner copy work");
+    assert!(held.copy_id().is_some());
+    harness.with_root_widget(|reader: &mut Markdown| {
+        assert!(reader.inspector.is_none());
+        assert!(
+            reader.take_requests(10).is_empty(),
+            "later Open waits for earlier Copy"
+        );
+    });
+    held.finish();
+    settle(&mut harness, &manual);
+    harness.with_root_widget(|reader: &mut Markdown| {
+        let requests = reader.take_requests(10);
+        assert_eq!(requests.len(), 2);
+        assert!(requests[0].id < requests[1].id);
+        assert_eq!(requests[0].action, HostAction::CopyText(url.into()));
+        assert_eq!(requests[1].action, HostAction::OpenUrl(url.into()));
+    });
+}
+
+#[test]
+fn failed_inspector_copy_admission_does_not_discard_later_open_or_close() {
+    for direct in [false, true] {
+        let (mut harness, manual) = fixture(
+            "[Link](https://example.com/path)\n",
+            ViewType::Rendered,
+            false,
+            true,
+            true,
+        );
+        settle(&mut harness, &manual);
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| reader.activate(ctx))
+            .unwrap();
+        manual.run_until_idle();
+        harness.canopy.turn(TurnInput::Prepare).unwrap();
+        // Reject the owner's copy reservation without disabling later browser
+        // actions.
+        harness.with_root_widget(|reader: &mut Markdown| reader.options.copy_limit = usize::MAX);
+        harness
+            .with_unique(|inspector: &mut Inspector, ctx| {
+                inspector.copy_all(ctx)?;
+                inspector.open_url()?;
+                if !direct {
+                    inspector.dismiss(ctx)?;
+                }
+                Ok(())
+            })
+            .unwrap();
+        if direct {
+            harness
+                .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                    reader.dismiss_inspector(ctx)
+                })
+                .unwrap();
+        } else {
+            service(&mut harness);
+        }
+        harness.with_root_widget(|reader: &mut Markdown| {
+            assert!(reader.inspector.is_none());
+            assert!(reader.action_status().contains("Failed:"));
+            let requests = reader.take_requests(10);
+            assert_eq!(requests.len(), 1);
+            assert_eq!(
+                requests[0].action,
+                HostAction::OpenUrl("https://example.com/path".into())
+            );
+        });
+    }
 }
 
 #[test]

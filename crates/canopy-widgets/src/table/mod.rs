@@ -324,9 +324,24 @@ pub struct TableSelection {
 impl TableSelection {
     /// Construct explicit membership, removing duplicate keys.
     pub fn new(rows: Arc<[TableKey]>, columns: Arc<[TableKey]>) -> Self {
+        fn axis(keys: Arc<[TableKey]>) -> (Arc<[TableKey]>, Arc<HashSet<TableKey>>) {
+            let set: HashSet<_> = keys.iter().cloned().collect();
+            let keys = if set.len() == keys.len() {
+                keys
+            } else {
+                let mut seen = HashSet::new();
+                keys.iter()
+                    .filter(|key| seen.insert((*key).clone()))
+                    .cloned()
+                    .collect()
+            };
+            (keys, Arc::new(set))
+        }
+        let (rows, row_set) = axis(rows);
+        let (columns, column_set) = axis(columns);
         Self {
-            row_set: Arc::new(rows.iter().cloned().collect()),
-            column_set: Arc::new(columns.iter().cloned().collect()),
+            row_set,
+            column_set,
             rows,
             columns,
         }
@@ -709,7 +724,8 @@ impl PreparedTable {
             .saturating_sub(1);
         for column in from..self.widths.len() {
             let start = self.starts[column];
-            if start >= window.offset.x.saturating_add(body.w) {
+            let first = start.saturating_sub(u32::from(column > 0));
+            if first >= window.offset.x.saturating_add(body.w) {
                 break;
             }
             if start + self.widths[column] <= window.offset.x {
@@ -726,7 +742,7 @@ impl PreparedTable {
                     &self.data.columns[column].label,
                     "table/header",
                 )?;
-                stats.labels += 1;
+                stats.labels += usize::from(start < window.offset.x.saturating_add(body.w));
             }
             let rows = area.h.saturating_sub(u32::from(window.header));
             for y in 0..rows {
@@ -755,7 +771,7 @@ impl PreparedTable {
                     &data_row.cells[column],
                     style,
                 )?;
-                stats.cells += 1;
+                stats.cells += usize::from(start < window.offset.x.saturating_add(body.w));
             }
         }
         if gutter > 0 {
@@ -787,20 +803,20 @@ impl PreparedTable {
     ) -> Result<()> {
         let start = self.starts[column];
         let width = self.widths[column];
+        if column > 0 && start > offset && start - 1 < offset.saturating_add(area.w) {
+            render.text(
+                "table/separator",
+                Line::new(area.tl.x + (start - 1 - offset), y, 1),
+                &self.options.glyphs.separator.to_string(),
+            )?;
+        }
         let left = start.max(offset);
         let right = (start + width).min(offset.saturating_add(area.w));
         if right <= left {
             return Ok(());
         }
-        let line = Rect::new(area.tl.x + left - offset, y, right - left, 1);
+        let line = Rect::new(area.tl.x + (left - offset), y, right - left, 1);
         render.fill(path, line, ' ')?;
-        if column > 0 && start > offset && start - 1 < offset.saturating_add(area.w) {
-            render.text(
-                "table/separator",
-                Line::new(area.tl.x + start - 1 - offset, y, 1),
-                &self.options.glyphs.separator.to_string(),
-            )?;
-        }
         let measured = display_width(&cell.text, width);
         let padding = match self.data.columns[column].alignment {
             TableAlignment::Left => 0,
@@ -830,7 +846,7 @@ impl PreparedTable {
                 && x.saturating_add(cells) <= offset.saturating_add(area.w)
             {
                 let point = Point {
-                    x: area.tl.x + x - offset,
+                    x: area.tl.x + (x - offset),
                     y,
                 };
                 let mut style = render.resolve_style(path);

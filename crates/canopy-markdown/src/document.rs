@@ -609,6 +609,7 @@ fn collect(nodes: &[Node], context: &Context, out: &mut Vec<Leaf>) {
                 }
             }
             Some(Tag::Item) => {
+                let start = out.len();
                 let mut c = context.clone();
                 c.enclosing = node.range.start;
                 let mut inline = Vec::new();
@@ -621,6 +622,19 @@ fn collect(nodes: &[Node], context: &Context, out: &mut Vec<Leaf>) {
                     }
                 }
                 flush_inline(&mut inline, &c, out);
+                // Only the first leaf of this item owns its marker. Nested
+                // lists retain their own markers; quotes retain this item's
+                // list depth even though they add container depth.
+                let list_depth = c.depth.saturating_sub(c.quote_depth);
+                for leaf in out[start..]
+                    .iter_mut()
+                    .filter(|leaf| {
+                        leaf.context.depth.saturating_sub(leaf.context.quote_depth) == list_depth
+                    })
+                    .skip(1)
+                {
+                    leaf.context.marker = None;
+                }
             }
             Some(Tag::BlockQuote(kind)) => {
                 let start = out.len();
@@ -700,34 +714,15 @@ fn blank_boundary(text: &str) -> bool {
 fn complete_line(text: &str) -> bool {
     text.ends_with('\n') || text.ends_with('\r')
 }
-/// Remove quote and whitespace prefixes when classifying fence lines.
-fn strip_quote_prefix(mut line: &str) -> &str {
-    line = line.trim_start();
-    while let Some(rest) = line.strip_prefix('>') {
-        line = rest.trim_start();
-    }
-    line
-}
-/// Find the opening fence character and required closing run length.
-fn fence(text: &str) -> Option<(char, usize)> {
-    let line = strip_quote_prefix(text.lines().next()?);
-    let first = line.chars().next()?;
-    if first != '`' && first != '~' {
-        return None;
-    }
-    let count = line.chars().take_while(|c| *c == first).count();
-    (count >= 3).then_some((first, count))
-}
-/// Recognize a complete explicit closing fence in source.
-fn fence_closed(text: &str) -> bool {
-    let Some((ch, count)) = fence(text) else {
-        return false;
-    };
-    text.lines().skip(1).any(|line| {
-        let line = strip_quote_prefix(line);
-        let n = line.chars().take_while(|c| *c == ch).count();
-        n >= count && line[n..].trim().is_empty()
-    })
+/// A parser-recognized closing fence ends before its line terminator. EOF
+/// remains provisional until a terminator arrives, since an append can turn
+/// the apparent fence into code. Container-boundary closure ends after the
+/// preceding line terminator and is not an explicit fence.
+fn fence_closed(node: &Node, text: &str) -> bool {
+    text.as_bytes()
+        .get(node.range.end)
+        .is_some_and(|byte| matches!(byte, b'\n' | b'\r'))
+        && !text[..node.range.end].ends_with(['\n', '\r'])
 }
 /// Apply explicit HTML terminators and blank-line closure rules.
 fn html_closed(raw: &str) -> bool {
@@ -816,7 +811,7 @@ fn provisional_region(
     let leaf = leaf?;
     let raw = &text[leaf.node.range.start..];
     let closed = match leaf.node.tag.as_ref() {
-        Some(Tag::CodeBlock(CodeBlockKind::Fenced(_))) => fence_closed(raw),
+        Some(Tag::CodeBlock(CodeBlockKind::Fenced(_))) => fence_closed(&leaf.node, text),
         Some(Tag::CodeBlock(CodeBlockKind::Indented)) => {
             blank_boundary(&text[leaf.node.range.end..])
         }
@@ -1441,15 +1436,22 @@ pub fn parse_document(
         builder.leaf(leaf, &text);
     }
     let mut slugs = HashMap::<String, usize>::new();
+    let mut used_slugs = HashSet::new();
     for heading in &mut builder.document.outline {
         let base = heading_slug(&heading.text);
         let count = slugs.entry(base.clone()).or_default();
-        heading.slug = if *count == 0 {
-            base
-        } else {
-            format!("{base}-{count}")
-        };
-        *count += 1;
+        loop {
+            let slug = if *count == 0 {
+                base.clone()
+            } else {
+                format!("{base}-{count}")
+            };
+            *count += 1;
+            if used_slugs.insert(slug.clone()) {
+                heading.slug = slug;
+                break;
+            }
+        }
     }
     builder.document.estimated_bytes = builder.document.estimate_bytes();
     builder.document
@@ -1725,6 +1727,52 @@ mod tests {
         );
     }
     #[test]
+    fn receiving_fences_require_parser_closure_and_a_complete_closing_line() {
+        for text in [
+            "```\nx\n```",
+            "```\nx\n    ```\n",
+            "```\nx\n> ```\n",
+            "> ```\n> x\n>     ```\n",
+        ] {
+            let doc = receiving(text);
+            assert!(doc.provisional.is_some(), "{text:?}");
+            assert!(doc.objects.is_empty(), "{text:?}");
+            assert!(matches!(&doc.blocks[0].kind, BlockKind::Code(code) if code.receiving));
+            assert_eq!(&*doc.source.text(), text);
+        }
+        for text in [
+            "```\nx\n```\n",
+            "```\nx\n   ```\n",
+            "~~~\nx\n~~~~\r\n",
+            "> > ```\n> > x\n> > ```\n",
+            "- ```\n  x\n  ```\n",
+        ] {
+            let doc = receiving(text);
+            assert_eq!(doc.provisional, None, "{text:?}");
+            assert!(matches!(&doc.blocks[0].kind, BlockKind::Code(code) if !code.receiving));
+            assert!(
+                doc.objects
+                    .iter()
+                    .any(|object| matches!(object.kind, ObjectKind::Code))
+            );
+        }
+        let mut source = SourceStore::stream();
+        source.append("```\nx\n```").unwrap();
+        let first = parse_document(&source.snapshot(), &ParseLimits::default(), None);
+        assert!(first.objects.is_empty());
+        source.append("suffix\n").unwrap();
+        let next = parse_document(&source.snapshot(), &ParseLimits::default(), Some(&first));
+        assert!(next.objects.is_empty());
+        assert_eq!(next.units[0].text, "x\n```suffix\n");
+        source.finish(FinishOutcome::Completed);
+        let finished = parse_document(&source.snapshot(), &ParseLimits::default(), Some(&next));
+        assert!(finished.provisional.is_none());
+        assert_eq!(
+            finished.readable_text(),
+            complete("```\nx\n```suffix\n").readable_text()
+        );
+    }
+    #[test]
     fn identities_grow_reclassify_and_never_recycle() {
         let mut source = SourceStore::stream();
         source.append("same\n\ntext").unwrap();
@@ -1860,6 +1908,22 @@ mod tests {
         }
     }
     #[test]
+    fn heading_slugs_disambiguate_generated_suffixes_and_literal_headings() {
+        for (text, expected) in [
+            ("# A\n# A\n# A-1\n# A\n", vec!["a", "a-1", "a-1-1", "a-2"]),
+            ("# A-1\n# A\n# A\n", vec!["a-1", "a", "a-2"]),
+        ] {
+            let doc = complete(text);
+            assert_eq!(
+                doc.outline
+                    .iter()
+                    .map(|heading| heading.slug.as_str())
+                    .collect::<Vec<_>>(),
+                expected
+            );
+        }
+    }
+    #[test]
     fn rules_contribute_no_decoration_or_extra_copy_separators() {
         let doc = complete("---\n\none\n\n---\n\ntwo\n\n---\n");
         assert_eq!(doc.readable_text(), "one\n\ntwo");
@@ -1979,6 +2043,23 @@ mod tests {
         assert_eq!(doc.blocks[1].quote_depth, 1);
         assert_eq!(doc.blocks[2].list_marker.as_deref(), Some("3."));
         assert_eq!(doc.blocks[3].list_marker.as_deref(), Some("4."));
+    }
+    #[test]
+    fn loose_list_continuations_do_not_repeat_item_markers() {
+        let doc = complete(
+            "1. first\n\n   continuation\n\n   - nested\n\n     nested continuation\n\n   > quoted\n   >\n   > quote continuation\n\n2. next\n",
+        );
+        assert_eq!(
+            doc.blocks
+                .iter()
+                .map(|block| block.list_marker.as_deref())
+                .collect::<Vec<_>>(),
+            [Some("1."), None, Some("◦"), None, None, None, Some("2.")]
+        );
+        assert_eq!(doc.blocks[1].depth, doc.blocks[0].depth);
+        assert_eq!(doc.blocks[3].depth, doc.blocks[2].depth);
+        assert_eq!(doc.blocks[4].quote_depth, 1);
+        assert_eq!(doc.blocks[5].quote_depth, 1);
     }
     #[test]
     fn explicit_html_and_nested_quote_fences_close_before_finish() {

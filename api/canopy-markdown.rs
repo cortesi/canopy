@@ -1148,7 +1148,8 @@ pub mod executor {
         pub max_documents: usize,
         /// Maximum accepted copies, including running and undisposed results.
         pub max_copy_jobs: usize,
-        /// Aggregate reserved input and maximum output bytes of accepted copies.
+        /// Aggregate retained input payload/header estimates and maximum output
+        /// bytes of accepted copies, excluding allocator overhead.
         pub max_copy_bytes: usize,
     }
 

@@ -551,11 +551,13 @@ impl Markdown {
         source_only: bool,
         status: Option<String>,
     ) -> Result<()> {
-        self.options.source_only = source_only;
-        self.options.status = status;
-        if source_only && self.active != ViewType::Source {
+        if source_only
+            && (self.active != ViewType::Source || self.requested_view_type() != ViewType::Source)
+        {
             self.set_view_type(ctx, ViewType::Source)?;
         }
+        self.options.source_only = source_only;
+        self.options.status = status;
         self.update_chrome(ctx)
     }
     /// Change source wrap and number preferences without resetting the
@@ -836,6 +838,12 @@ impl Markdown {
         self.results = None;
         self.search_index = None;
         self.shared.borrow_mut().overlays.search.clear();
+        if let Some(node) = self.nodes.as_ref().and_then(|nodes| nodes.source) {
+            ctx.with_widget_mut(node, |source: &mut MarkdownSource, ctx| {
+                source.clear_search(ctx);
+                Ok(())
+            })?;
+        }
         self.last_submitted = None;
         self.schedule(ctx, true)
     }
@@ -935,12 +943,23 @@ impl Markdown {
             if let Some(unit) = unit {
                 let presentation = self.shared.borrow().presentation.clone();
                 if let Some(p) = presentation {
-                    self.shared.borrow_mut().overlays.active_object = p
-                        .document
-                        .objects
-                        .iter()
-                        .find(|o| o.unit_id == unit)
-                        .map(|o| o.id);
+                    self.shared.borrow_mut().overlays.active_object = match found.address {
+                        SearchAddress::Unit { .. } => p.document.unit(unit).and_then(|unit| {
+                            unit.spans
+                                .iter()
+                                .filter(|span| {
+                                    span.range.start < found.range.end
+                                        && found.range.start < span.range.end
+                                })
+                                .find_map(|span| span.object)
+                        }),
+                        _ => p
+                            .document
+                            .objects
+                            .iter()
+                            .find(|o| o.unit_id == unit)
+                            .map(|o| o.id),
+                    };
                     if let Some(node) = self.navigation_node() {
                         let row = p.row_for_unit(unit, found.range.start);
                         ctx.with_widget_mut(node, |_: &mut RenderedSurface, ctx| {
@@ -961,12 +980,13 @@ impl Markdown {
         }
         let p = self.shared.borrow().presentation.clone();
         let Some(p) = p else { return Ok(()) };
-        let id = self
-            .shared
-            .borrow()
-            .overlays
-            .active_object
-            .or_else(|| p.document.objects.first().map(|o| o.id));
+        let id = self.shared.borrow().overlays.active_object.or_else(|| {
+            if self.search_index.is_some() {
+                None
+            } else {
+                p.document.objects.first().map(|o| o.id)
+            }
+        });
         let Some(object) = id
             .and_then(|id| p.document.objects.iter().find(|o| o.id == id))
             .cloned()
@@ -1138,7 +1158,61 @@ impl Markdown {
     #[command]
     pub fn dismiss_inspector(&mut self, ctx: &mut dyn Context) -> Result<()> {
         if let Some(open) = self.inspector.take() {
+            let mut failure = None;
+            for event in open.handle.take_closing_events(ctx)? {
+                if let Err(error) =
+                    self.apply_inspector_event(ctx, event, open.epoch, open.revision)
+                {
+                    failure = Some(format!("Failed: {error}"));
+                }
+            }
             open.handle.close(ctx)?;
+            if let Some(failure) = failure {
+                self.action_status = failure;
+            }
+        }
+        self.update_chrome(ctx)
+    }
+    /// Admit explicit inspector effects on the document's ordered action lane.
+    fn apply_inspector_event(
+        &mut self,
+        ctx: &mut dyn Context,
+        event: InspectorEvent,
+        epoch: u64,
+        revision: u64,
+    ) -> Result<()> {
+        if epoch != self.epoch() {
+            return Ok(());
+        }
+        match event {
+            InspectorEvent::Close => self.dismiss_inspector(ctx)?,
+            InspectorEvent::Navigate(byte) => {
+                self.dismiss_inspector(ctx)?;
+                self.jump_source(ctx, byte)?;
+            }
+            InspectorEvent::CopyText(text) => {
+                self.queue_copy(ctx, CopyInput::Text(text.into()), None, revision)?;
+            }
+            InspectorEvent::CopySource { text, range } => {
+                self.queue_copy(ctx, CopyInput::Source { text, range }, None, revision)?;
+            }
+            InspectorEvent::OpenUrl(destination) if self.options.browser => {
+                let base = self
+                    .options
+                    .base_url
+                    .as_deref()
+                    .and_then(|b| url::Url::parse(b).ok());
+                if let ResolvedLink::External(url) = resolve_link(&destination, base.as_ref()) {
+                    let action = self
+                        .requests
+                        .reserve(epoch, revision, None, self.options.action_limit)
+                        .ok_or_else(|| invalid("The host request queue is full"))?;
+                    self.requests
+                        .publish(action.id, HostAction::OpenUrl(url.to_string()));
+                    self.action_status = "Opening".into();
+                }
+            }
+            InspectorEvent::OpenUrl(_) => {}
         }
         Ok(())
     }
@@ -1640,18 +1714,27 @@ impl Markdown {
                 self.shared.borrow_mut().overlays.search = results
                     .matches
                     .iter()
-                    .filter_map(|found| match found.address {
-                        SearchAddress::Unit { unit_id } => Some(ReadingRange {
+                    .filter_map(|found| {
+                        let (unit_id, range) = match found.address {
+                            SearchAddress::Unit { unit_id } => (unit_id, found.range.clone()),
+                            SearchAddress::CodeLine { unit_id, .. }
+                            | SearchAddress::SourceCardLine { unit_id, .. }
+                            | SearchAddress::TableCell { unit_id, .. } => {
+                                let unit = self.last_document.as_ref()?.unit(unit_id)?;
+                                (unit_id, 0..unit.text.len())
+                            }
+                            SearchAddress::SourceLine { .. } => return None,
+                        };
+                        Some(ReadingRange {
                             start: ReadingPosition {
                                 unit_id,
-                                offset: found.range.start,
+                                offset: range.start,
                             },
                             end: ReadingPosition {
                                 unit_id,
-                                offset: found.range.end,
+                                offset: range.end,
                             },
-                        }),
-                        _ => None,
+                        })
                     })
                     .collect();
                 self.results = Some(results);
@@ -1941,42 +2024,14 @@ impl Widget for Markdown {
                 self.shared.borrow_mut().follow = Follow::Paused;
             }
         }
+        let mut inspector_failure = None;
         if let Some(open) = &self.inspector {
             let events = open.handle.take_events(32);
             let epoch = open.epoch;
             let revision = open.revision;
             for event in events {
-                match event {
-                    InspectorEvent::Close => self.dismiss_inspector(ctx)?,
-                    InspectorEvent::Navigate(byte) => {
-                        self.dismiss_inspector(ctx)?;
-                        self.jump_source(ctx, byte)?;
-                    }
-                    InspectorEvent::CopyText(text) => {
-                        if epoch == self.epoch() {
-                            self.queue_copy(ctx, CopyInput::Text(text.into()), None, revision)?;
-                        }
-                    }
-                    InspectorEvent::OpenUrl(destination) => {
-                        if self.options.browser && epoch == self.epoch() {
-                            let base = self
-                                .options
-                                .base_url
-                                .as_deref()
-                                .and_then(|b| url::Url::parse(b).ok());
-                            if let ResolvedLink::External(url) =
-                                resolve_link(&destination, base.as_ref())
-                            {
-                                let action = self
-                                    .requests
-                                    .reserve(epoch, revision, None, self.options.action_limit)
-                                    .ok_or_else(|| invalid("The host request queue is full"))?;
-                                self.requests
-                                    .publish(action.id, HostAction::OpenUrl(url.to_string()));
-                                self.action_status = "Opening".into();
-                            }
-                        }
-                    }
+                if let Err(error) = self.apply_inspector_event(ctx, event, epoch, revision) {
+                    inspector_failure = Some(format!("Failed: {error}"));
                 }
             }
         }
@@ -2020,6 +2075,9 @@ impl Widget for Markdown {
                     self.action_status = error.to_string();
                 }
             }
+        }
+        if let Some(failure) = inspector_failure {
+            self.action_status = failure;
         }
         if self.dirty {
             if let Some(deadline) = self.deadline

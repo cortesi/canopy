@@ -1,8 +1,8 @@
 //! Private modal readers. Host actions leave through an owned bounded mailbox.
 
 use std::{
-    cell::RefCell, collections::VecDeque, io::Error as IoError, mem::size_of, rc::Rc, sync::Arc,
-    time::Duration,
+    cell::RefCell, collections::VecDeque, io::Error as IoError, mem::size_of, ops::Range, rc::Rc,
+    sync::Arc, time::Duration,
 };
 
 use canopy::{
@@ -31,10 +31,7 @@ use canopy_widgets::{
 use crate::{
     ViewType,
     document::ParseLimits,
-    executor::{
-        CopyInput, MarkdownExecutor, PreparedView, SearchOutput, WorkHandle, WorkRequest,
-        WorkSearch,
-    },
+    executor::{MarkdownExecutor, PreparedView, SearchOutput, WorkHandle, WorkRequest, WorkSearch},
     presentation::GeometryKey,
     search::{SearchLimits, SearchQuery},
     source_store::{SourceSnapshot, SourceStore},
@@ -43,7 +40,9 @@ use crate::{
 
 /// Maximum host actions retained before the controller drains the mailbox.
 const EVENT_COUNT: usize = 32;
-/// Maximum aggregate bytes retained by inspector host actions.
+/// Maximum aggregate bytes retained by inspector host actions. Frozen source
+/// requests charge their entire shared source, even when selecting a small
+/// range.
 const EVENT_BYTES: usize = 16 * 1024 * 1024;
 /// Default output budget for standalone inspector tests.
 const DEFAULT_COPY_BYTES: usize = 4 * 1024 * 1024;
@@ -105,6 +104,13 @@ pub enum InspectorEvent {
     Close,
     /// Copy these complete immutable bytes through the host.
     CopyText(String),
+    /// Serialize this exact frozen selection on the owning document's lane.
+    CopySource {
+        /// Immutable source retained until the controller admits the copy.
+        text: Arc<str>,
+        /// Exact UTF-8 byte interval selected at activation.
+        range: Range<usize>,
+    },
     /// Open this pinned immutable destination through the host.
     OpenUrl(String),
     /// Jump to this explicit source byte in the owning document.
@@ -120,10 +126,14 @@ struct Mailbox {
     bytes: usize,
 }
 impl Mailbox {
+    /// Whether one complete action fits without displacing queued actions.
+    fn has_capacity(&self, bytes: usize) -> bool {
+        self.events.len() < EVENT_COUNT && self.bytes.saturating_add(bytes) <= EVENT_BYTES
+    }
     /// Queue one complete action only when both mailbox bounds permit it.
     fn push(&mut self, event: InspectorEvent) -> Result<()> {
         let bytes = event_bytes(&event);
-        if self.events.len() >= EVENT_COUNT || self.bytes.saturating_add(bytes) > EVENT_BYTES {
+        if !self.has_capacity(bytes) {
             return Err(Error::App(
                 IoError::other("inspector request queue is full").into(),
             ));
@@ -145,6 +155,7 @@ impl Mailbox {
 fn event_bytes(event: &InspectorEvent) -> usize {
     match event {
         InspectorEvent::CopyText(text) | InspectorEvent::OpenUrl(text) => text.len(),
+        InspectorEvent::CopySource { text, .. } => text.len(),
         _ => 0,
     }
 }
@@ -186,6 +197,7 @@ impl InspectorHandle {
             let mut bytes = size_of::<Inspector>()
                 .saturating_add(inspector.title.capacity())
                 .saturating_add(inspector.mailbox.borrow().bytes)
+                .saturating_add(inspector.pending_copy.as_ref().map_or(0, String::capacity))
                 .saturating_add(
                     inspector
                         .pending_source
@@ -237,7 +249,38 @@ impl InspectorHandle {
     }
     /// Drain a bounded action batch for the owning controller.
     pub fn take_events(&self, limit: usize) -> Vec<InspectorEvent> {
-        self.mailbox.borrow_mut().take(limit)
+        let events = self.mailbox.borrow_mut().take(limit);
+        if !events.is_empty() {
+            // Released capacity lets a retained copy continue without a timer.
+            drop(self.wake.wake());
+        }
+        events
+    }
+    /// Transfer accepted actions before normal dismissal reclaims the modal.
+    /// Deferred table copies follow the already queued actions; table
+    /// activation is superseded by dismissal.
+    pub(crate) fn take_closing_events(&self, ctx: &mut dyn Context) -> Result<Vec<InspectorEvent>> {
+        let mut events = self.take_events(EVENT_COUNT);
+        ctx.with_widget_mut(self.node, |inspector: &mut Inspector, ctx| {
+            if let Some(text) = inspector.pending_copy.take() {
+                events.push(InspectorEvent::CopyText(text));
+            }
+            if let Some(Reader::Table(table)) = inspector.reader {
+                let pending = ctx.with_widget_mut(table, |table: &mut TableView, _| {
+                    Ok(table.take_events(EVENT_COUNT))
+                })?;
+                for event in pending {
+                    if let TableEvent::Copy { text, .. } = event
+                        && inspector.allow_copy
+                        && text.len() <= inspector.copy_limit
+                    {
+                        events.push(InspectorEvent::CopyText(text));
+                    }
+                }
+            }
+            Ok(())
+        })?;
+        Ok(events)
     }
     /// Replace outline headings while preserving its filter and selected
     /// heading key.
@@ -367,7 +410,7 @@ pub struct MarkdownInspector {
     reader_parent: Option<NodeId>,
     /// The fixed status and key-hint row.
     status: Option<TypedId<Text>>,
-    /// Bounded preparation and FIFO-copy lane owned by this overlay.
+    /// Bounded source preparation lane owned by this overlay.
     lane: Option<WorkHandle>,
     /// Immutable source awaiting worker preparation and publication.
     pending_source: Option<SourceSnapshot>,
@@ -389,14 +432,16 @@ pub struct MarkdownInspector {
     display_source: Option<SourceSnapshot>,
     /// The query awaiting worker matching over the fixed source.
     work_search: Option<WorkSearch>,
+    /// The current query's first forward match has not yet been revealed.
+    search_fresh: bool,
     /// Whether an explicitly activated cell is awaiting preparation.
     detail_loading: bool,
     /// Whether the host admits clipboard actions from this inspector.
     allow_copy: bool,
     /// Maximum bytes in one accepted complete copy payload.
     copy_limit: usize,
-    /// Monotonic identity for FIFO copy requests in this inspector lane.
-    next_copy: u64,
+    /// One accepted table copy awaiting capacity in the owner's action mailbox.
+    pending_copy: Option<String>,
     /// Source location retained until its asynchronous reader is ready.
     reveal: Option<InspectorReveal>,
 }
@@ -494,10 +539,11 @@ impl MarkdownInspector {
             generation: 0,
             display_source: None,
             work_search: None,
+            search_fresh: false,
             detail_loading: false,
             allow_copy: true,
             copy_limit: DEFAULT_COPY_BYTES,
-            next_copy: 0,
+            pending_copy: None,
             reveal: None,
         }
     }
@@ -551,6 +597,15 @@ impl MarkdownInspector {
         let _ = self.owner.wake()?;
         Ok(())
     }
+    /// Retain accepted copy output until the owner drains enough mailbox space.
+    fn emit_copy(&mut self, text: String) -> Result<bool> {
+        if !self.mailbox.borrow().has_capacity(text.len()) {
+            self.pending_copy = Some(text);
+            return Ok(false);
+        }
+        self.emit(InspectorEvent::CopyText(text))?;
+        Ok(true)
+    }
     /// Replace the fixed status row without rebuilding the content subtree.
     fn show_status(&self, ctx: &mut dyn Context, value: impl Into<String>) -> Result<()> {
         if let Some(status) = self.status {
@@ -595,6 +650,7 @@ impl MarkdownInspector {
                     Ok(())
                 })?;
                 self.work_search = None;
+                self.search_fresh = false;
                 self.generation += 1;
                 self.show_status(ctx, "Search cleared · Esc Close")?;
                 return Ok(());
@@ -610,6 +666,7 @@ impl MarkdownInspector {
         if let Some(detail) = self.detail.take() {
             self.generation += 1;
             self.work_search = None;
+            self.search_fresh = false;
             self.display_source = None;
             ctx.remove_after_dispatch(detail.into())?;
             if let Some(Reader::Table(table)) = self.reader {
@@ -619,21 +676,24 @@ impl MarkdownInspector {
         }
         self.emit(InspectorEvent::Close)
     }
-    /// Admit an immutable copy request through the bounded shared executor
-    /// lane.
-    fn submit_copy(&mut self, input: CopyInput) -> Result<()> {
+    /// Queue frozen selection bytes in activation order. Serialization belongs
+    /// to the document so accepted copies survive normal modal dismissal.
+    fn request_source_copy(&self, text: Arc<str>, range: Range<usize>) -> Result<()> {
         if !self.allow_copy {
             return Err(Error::App(
                 IoError::other("clipboard actions are disabled").into(),
             ));
         }
-        let lane = self
-            .lane
-            .as_ref()
-            .ok_or_else(|| Error::Invalid("inspector is not mounted".into()))?;
-        self.next_copy += 1;
-        lane.submit_copy(self.next_copy, input, self.copy_limit)
-            .map_err(|e| Error::App(Box::new(e)))
+        let selected = text
+            .get(range.clone())
+            .ok_or_else(|| Error::Invalid("Invalid source selection".into()))?;
+        if selected.len() > self.copy_limit {
+            return Err(Error::Invalid(format!(
+                "Copy exceeds {} bytes",
+                self.copy_limit
+            )));
+        }
+        self.emit(InspectorEvent::CopySource { text, range })
     }
     /// Describe whether this reader offers host clipboard actions.
     fn copy_status(&self, _ctx: &dyn ViewContext) -> Result<CommandStatus> {
@@ -694,9 +754,9 @@ impl MarkdownInspector {
                 } else {
                     selected
                 };
-                Ok(CopyInput::Source { text, range })
+                Ok((text, range))
             })?;
-            return self.submit_copy(input);
+            return self.request_source_copy(input.0, input.1);
         }
         if let Some(Reader::Table(table)) = self.reader {
             ctx.with_widget_mut(table, |table: &mut TableView, ctx| {
@@ -714,7 +774,7 @@ impl MarkdownInspector {
     #[command(enabled = "copy_status")]
     pub fn copy_all(&mut self, ctx: &mut dyn Context) -> Result<()> {
         if let Some(text) = &self.full_copy {
-            return self.submit_copy(CopyInput::Text(text.clone()));
+            return self.request_source_copy(text.clone(), 0..text.len());
         }
         let source = self.detail.or({
             if let Some(Reader::Source(id)) = self.reader {
@@ -724,10 +784,10 @@ impl MarkdownInspector {
             }
         });
         if let Some(source) = source {
-            let input = ctx.with_widget(source, |source: &MarkdownSource| {
-                Ok(CopyInput::Text(source.source_text()))
-            })?;
-            return self.submit_copy(input);
+            let text =
+                ctx.with_widget(source, |source: &MarkdownSource| Ok(source.source_text()))?;
+            let range = 0..text.len();
+            return self.request_source_copy(text, range);
         }
         if let Some(Reader::Table(id)) = self.reader {
             ctx.with_widget_mut(id, |table: &mut TableView, ctx| table.copy_all(ctx))?;
@@ -766,7 +826,7 @@ impl MarkdownInspector {
     }
     /// Reveal the next or previous prepared source match.
     #[command(enabled = "line_status")]
-    pub fn next_match(&self, ctx: &mut dyn Context, delta: i32) -> Result<()> {
+    pub fn next_match(&mut self, ctx: &mut dyn Context, delta: i32) -> Result<()> {
         let source = self.detail.or({
             if let Some(Reader::Source(id)) = self.reader {
                 Some(id)
@@ -775,10 +835,16 @@ impl MarkdownInspector {
             }
         });
         if let Some(source) = source {
+            let delta = if self.search_fresh && delta > 0 {
+                delta - 1
+            } else {
+                delta
+            };
             ctx.with_widget_mut(source, |source: &mut MarkdownSource, ctx| {
                 source.search_next(ctx, delta);
                 Ok(())
             })?;
+            self.search_fresh = false;
         }
         Ok(())
     }
@@ -804,17 +870,21 @@ impl MarkdownInspector {
     /// Forward immutable table copies and prepare explicitly activated cell
     /// details.
     fn drain_table(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        if self.pending_copy.is_some() {
+            return Ok(());
+        }
         let Some(Reader::Table(table)) = self.reader else {
             return Ok(());
         };
-        let events = ctx.with_widget_mut(table, |table: &mut TableView, _| {
-            Ok(table.take_events(EVENT_COUNT))
-        })?;
-        for event in events {
+        for _ in 0..EVENT_COUNT {
+            let event = ctx.with_widget_mut(table, |table: &mut TableView, _| {
+                Ok(table.take_events(1).pop())
+            })?;
+            let Some(event) = event else { break };
             match event {
                 TableEvent::Copy { text, .. } => {
-                    if self.allow_copy && text.len() <= self.copy_limit {
-                        self.emit(InspectorEvent::CopyText(text))?;
+                    if self.allow_copy && text.len() <= self.copy_limit && !self.emit_copy(text)? {
+                        break;
                     }
                 }
                 TableEvent::Activate { cell, .. } => {
@@ -1159,12 +1229,14 @@ impl Widget for Inspector {
             ctx.remove_after_dispatch(ctx.node_id())?;
             return Ok(None);
         }
+        if let Some(text) = self.pending_copy.take()
+            && !self.emit_copy(text)?
+        {
+            return Ok(None);
+        }
         self.drain_table(ctx)?;
-        while let Some(copy) = self.lane.as_ref().and_then(WorkHandle::take_copy_completed) {
-            match copy.result {
-                Ok(text) => self.emit(InspectorEvent::CopyText(text))?,
-                Err(error) => self.show_status(ctx, error.to_string())?,
-            }
+        if self.pending_copy.is_some() {
+            return Ok(None);
         }
         if let Some(result) = self.lane.as_ref().and_then(WorkHandle::take_completed) {
             if let Some(lane) = &self.lane {
@@ -1192,6 +1264,7 @@ impl Widget for Inspector {
                                     .publish_matches(matches)
                                     .map_err(|e| Error::Invalid(e.to_string()))
                             })?;
+                            self.search_fresh = true;
                             self.show_status(
                                 ctx,
                                 format!(
@@ -1322,8 +1395,9 @@ impl Widget for Inspector {
                     }
                     PromptKind::Search => {
                         if let Some(Reader::Outline(id)) = self.reader {
-                            ctx.with_widget_mut(id, |outline: &mut OutlineBody, _| {
+                            ctx.with_widget_mut(id, |outline: &mut OutlineBody, ctx| {
                                 outline.filter(&prompt.value);
+                                ctx.reveal_anchor(RevealAlign::Nearest);
                                 Ok(())
                             })?;
                         } else if self.display_source.is_some() {
@@ -1722,13 +1796,132 @@ mod tests {
                 inspector.copy_all(ctx)
             })
         })?;
-        assert!(handle.take_events(8).is_empty());
-        assert!(manual.run_next());
-        harness.canopy.turn(TurnInput::Prepare)?;
         assert_eq!(
             handle.take_events(8),
-            vec![InspectorEvent::CopyText("é\r\n\tend\n".into())]
+            vec![InspectorEvent::CopySource {
+                text: Arc::from("é\r\n\tend\n"),
+                range: 0..9,
+            }]
         );
+        assert!(
+            !manual.run_next(),
+            "the owner serializes the frozen copy once"
+        );
+        Ok(())
+    }
+    #[test]
+    fn source_copy_admission_preserves_requests_and_rejects_mailbox_overflow() -> Result<()> {
+        let (mut harness, _, handle, _) = fixture(InspectorContent::Code {
+            info: String::new(),
+            text: Arc::from(""),
+        })?;
+        harness.canopy.with_context(handle.node, |ctx| {
+            ctx.with_widget_mut(handle.node, |inspector: &mut Inspector, ctx| {
+                for index in 0..4 {
+                    inspector.full_copy = Some(Arc::from(
+                        char::from(b'a' + index)
+                            .to_string()
+                            .repeat(DEFAULT_COPY_BYTES),
+                    ));
+                    inspector.copy_all(ctx)?;
+                }
+                inspector.full_copy = Some(Arc::from("e".repeat(DEFAULT_COPY_BYTES)));
+                assert!(
+                    inspector
+                        .copy_all(ctx)
+                        .unwrap_err()
+                        .to_string()
+                        .contains("queue is full")
+                );
+                Ok(())
+            })
+        })?;
+        let first = handle.take_events(EVENT_COUNT);
+        assert_eq!(first.len(), 4);
+        for (index, event) in first.into_iter().enumerate() {
+            let InspectorEvent::CopySource { text, range } = event else {
+                panic!("copy event")
+            };
+            assert_eq!(range, 0..DEFAULT_COPY_BYTES);
+            assert_eq!(text.len(), DEFAULT_COPY_BYTES);
+            assert!(text.bytes().all(|byte| byte == b'a' + index as u8));
+        }
+        // A rejected request can be retried after the owner releases capacity.
+        harness.canopy.with_context(handle.node, |ctx| {
+            ctx.with_widget_mut(handle.node, |inspector: &mut Inspector, ctx| {
+                inspector.copy_all(ctx)
+            })
+        })?;
+        let last = handle.take_events(EVENT_COUNT);
+        assert_eq!(last.len(), 1);
+        let InspectorEvent::CopySource { text, .. } = &last[0] else {
+            panic!("copy event")
+        };
+        assert_eq!(text.len(), DEFAULT_COPY_BYTES);
+        assert!(text.bytes().all(|byte| byte == b'e'));
+        Ok(())
+    }
+    #[test]
+    fn configured_copy_limit_never_admits_output_larger_than_the_mailbox() -> Result<()> {
+        let (executor, _) = MarkdownExecutor::manual(ExecutorOptions::default());
+        let mut harness = Harness::builder(TestRoot)
+            .register::<Inspector>()
+            .size(80, 24)
+            .build()?;
+        let owner = harness.find_nodes("**/inspector_owner/")?[0];
+        let handle = harness.canopy.with_context(owner, |ctx| {
+            Inspector::open_configured(
+                ctx,
+                executor,
+                InspectorContent::Code {
+                    info: String::new(),
+                    text: Arc::from(""),
+                },
+                true,
+                usize::MAX,
+                0,
+            )
+        })?;
+        harness.canopy.turn(TurnInput::Prepare)?;
+        for bytes in [EVENT_BYTES, EVENT_BYTES + 1] {
+            let admission = harness.canopy.with_context(handle.node, |ctx| {
+                ctx.with_widget_mut(handle.node, |inspector: &mut Inspector, ctx| {
+                    assert_eq!(inspector.copy_limit, EVENT_BYTES);
+                    inspector.full_copy = Some(Arc::from("x".repeat(bytes)));
+                    inspector.copy_all(ctx)
+                })
+            });
+            let events = handle.take_events(EVENT_COUNT);
+            if bytes == EVENT_BYTES {
+                admission?;
+                assert_eq!(events.len(), 1);
+                let InspectorEvent::CopySource { text, .. } = &events[0] else {
+                    panic!("copy event")
+                };
+                assert_eq!(text.len(), EVENT_BYTES);
+            } else {
+                assert!(admission.unwrap_err().to_string().contains("Copy exceeds"));
+                assert!(events.is_empty());
+                harness.canopy.with_root_context(|ctx| {
+                    ctx.with_widget(handle.node, |inspector: &Inspector| {
+                        assert!(
+                            inspector
+                                .request_source_copy(inspector.full_copy.clone().unwrap(), 0..1)
+                                .unwrap_err()
+                                .to_string()
+                                .contains("queue is full")
+                        );
+                        Ok(())
+                    })
+                })?;
+            }
+            harness.canopy.with_root_context(|ctx| {
+                ctx.with_widget(handle.node, |inspector: &Inspector| {
+                    assert!(inspector.pending_copy.is_none());
+                    Ok(())
+                })
+            })?;
+        }
         Ok(())
     }
     #[test]
@@ -1995,8 +2188,38 @@ mod interaction_tests {
     }
 
     #[test]
+    fn outline_filter_reveals_fallback_selection_from_a_scrolled_view() -> Result<()> {
+        let entries = (0..200)
+            .map(|index| OutlineEntry {
+                id: index,
+                level: 1,
+                text: format!("{} {index}", if index < 100 { "keep" } else { "drop" }),
+                source_byte: index as usize,
+            })
+            .collect();
+        let (mut harness, _, _, _) = fixture(InspectorContent::Outline { entries })?;
+        harness.key(KeyCode::End)?;
+        harness.render()?;
+        harness.with_unique(|_: &mut OutlineBody, ctx| {
+            assert!(ctx.view().scroll.y > 0);
+            Ok(())
+        })?;
+        harness.key(Key::parse_spec("ctrl-f")?)?;
+        harness.type_text("keep")?;
+        harness.key(KeyCode::Enter)?;
+        harness.render()?;
+        harness.with_unique(|outline: &mut OutlineBody, ctx| {
+            assert_eq!(outline.selected_id(), Some(0));
+            assert_eq!(outline.visible.len(), 100);
+            assert_eq!(ctx.view().scroll.y, 0);
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    #[test]
     fn source_search_is_worker_prepared_and_escape_clears_it_first() -> Result<()> {
-        let snapshot = SourceStore::static_text("first\nneedle\nlast\n")
+        let snapshot = SourceStore::static_text("first\nneedle\nlast\nneedle\n")
             .unwrap()
             .snapshot();
         let (mut harness, _, handle, manual) = fixture(InspectorContent::Source { snapshot })?;
@@ -2008,13 +2231,18 @@ mod interaction_tests {
         assert!(manual.run_next());
         harness.canopy.turn(TurnInput::Prepare)?;
         harness.with_unique(|source: &mut MarkdownSource, _| {
-            assert_eq!(source.search_matches(), 1);
+            assert_eq!(source.search_matches(), 2);
             assert_eq!(source.source_anchor().byte, 0);
             Ok(())
         })?;
         harness.key(key::KeyCode::F(3))?;
         harness.with_unique(|source: &mut MarkdownSource, _| {
             assert_eq!(source.source_anchor().byte, 6);
+            Ok(())
+        })?;
+        harness.key(key::KeyCode::F(3))?;
+        harness.with_unique(|source: &mut MarkdownSource, _| {
+            assert_eq!(source.source_anchor().byte, 18);
             Ok(())
         })?;
         harness.key(key::KeyCode::Esc)?;
@@ -2158,6 +2386,43 @@ mod table_tests {
             vec![InspectorEvent::CopyText(
                 "Source\tready\nParse\tready\n".into()
             )]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn table_copies_wait_for_mailbox_capacity_without_dropping_events() -> Result<()> {
+        let (mut harness, _, handle, _) = fixture(InspectorContent::Table {
+            table: prepared("table", 1, "cell"),
+        })?;
+        harness.canopy.with_context(handle.node, |ctx| {
+            ctx.with_widget_mut(handle.node, |inspector: &mut Inspector, ctx| {
+                for _ in 0..EVENT_COUNT {
+                    inspector.mailbox.borrow_mut().push(InspectorEvent::Close)?;
+                }
+                let Some(Reader::Table(table)) = inspector.reader else {
+                    panic!("table reader")
+                };
+                ctx.with_widget_mut(table, |table: &mut TableView, ctx| {
+                    table.copy_cell(ctx)?;
+                    table.copy_cell(ctx)
+                })?;
+                inspector.drain_table(ctx)?;
+                assert_eq!(inspector.pending_copy.as_deref(), Some("cell"));
+                ctx.with_widget(table, |table: &TableView| {
+                    assert_eq!(table.pending_events().0, 1);
+                    Ok(())
+                })
+            })
+        })?;
+        assert_eq!(handle.take_events(EVENT_COUNT).len(), EVENT_COUNT);
+        harness.canopy.turn(TurnInput::Prepare)?;
+        assert_eq!(
+            handle.take_events(EVENT_COUNT),
+            vec![
+                InspectorEvent::CopyText("cell".into()),
+                InspectorEvent::CopyText("cell".into()),
+            ]
         );
         Ok(())
     }

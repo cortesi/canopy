@@ -801,6 +801,11 @@ impl MarkdownSource {
         result.complete = scanned == source.len();
         let mut offset = 0;
         for line in source[..scanned].split_inclusive('\n') {
+            // A truncated logical line has no known ending within the work
+            // budget, so it cannot safely supply regex end/word context.
+            if !result.complete && !line.ends_with('\n') && offset + line.len() == scanned {
+                break;
+            }
             let raw = line
                 .strip_suffix('\n')
                 .map(|raw| raw.strip_suffix('\r').unwrap_or(raw))
@@ -1203,6 +1208,27 @@ mod tests {
             MarkdownSource::find_matches(1, 2, source, &query),
             Err(SourceError::Regex(_))
         ));
+    }
+
+    #[test]
+    fn scan_cutoff_does_not_invent_regex_endings() {
+        for pattern in ["foo$", r"foo\b"] {
+            let query = SourceQuery {
+                mode: SourceSearchMode::Regex,
+                max_scan_bytes: 3,
+                ..SourceQuery::literal(pattern)
+            };
+            let found = MarkdownSource::find_matches(1, 0, "foobar", &query).unwrap();
+            assert!(found.ranges.is_empty());
+            assert!(!found.complete);
+            let query = SourceQuery {
+                max_scan_bytes: 7,
+                ..query
+            };
+            let found = MarkdownSource::find_matches(1, 0, "foo\nfoobar", &query).unwrap();
+            assert_eq!(found.ranges, vec![0..3]);
+            assert!(!found.complete);
+        }
     }
 
     #[test]

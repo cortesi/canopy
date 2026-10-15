@@ -81,6 +81,23 @@ fn heading_inline_roles_link_hits_and_copy_have_independent_expected_values() {
 }
 
 #[test]
+fn enclosing_inline_styles_preserve_link_hit_targets() {
+    for text in [
+        "**[site](https://example.test)**",
+        "*[site](https://example.test)*",
+        "~~[site](https://example.test)~~",
+    ] {
+        let p = prepared(text, 40);
+        let object = p.document.objects[0].id;
+        let row = p.row(0).unwrap();
+        let run = row.runs.iter().find(|run| run.text == "site").unwrap();
+        for x in run.x..run.x + run.width {
+            assert_eq!(p.hit(Point { x, y: 0 }).unwrap().object, Some(object));
+        }
+    }
+}
+
+#[test]
 fn word_wrap_hanging_lists_and_quote_rails_survive_continuations() {
     let p = prepared("> - alpha beta gamma delta\n", 18);
     let rows = (0..p.height()).map(|i| row_text(&p, i)).collect::<Vec<_>>();

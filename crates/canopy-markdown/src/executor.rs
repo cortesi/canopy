@@ -7,7 +7,7 @@ use std::{
     collections::{HashMap, VecDeque},
     error::Error as StdError,
     fmt, io,
-    mem::take,
+    mem::{size_of, take},
     ops::Range,
     panic::{AssertUnwindSafe, catch_unwind},
     sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError},
@@ -38,7 +38,8 @@ pub struct ExecutorOptions {
     pub max_documents: usize,
     /// Maximum accepted copies, including running and undisposed results.
     pub max_copy_jobs: usize,
-    /// Aggregate reserved input and maximum output bytes of accepted copies.
+    /// Aggregate retained input payload/header estimates and maximum output
+    /// bytes of accepted copies, excluding allocator overhead.
     pub max_copy_bytes: usize,
 }
 
@@ -264,25 +265,17 @@ pub enum CopyInput {
 }
 
 impl CopyInput {
-    /// Conservatively charge shared retained input without scanning payload
-    /// text.
+    /// Charge shared retained payloads and Arc headers without scanning text.
+    /// Allocator bookkeeping and rounding are excluded.
     fn retained_bytes(&self) -> usize {
+        let arc_header = 2 * size_of::<usize>();
         match self {
-            Self::Source { text, .. } | Self::Text(text) => text.len(),
-            Self::Reading { document, .. } | Self::Object { document, .. } => {
-                // Parsed snapshots retain accepted chunks and, for multi-chunk
-                // sources, a separate contiguous parser input allocation.
-                let source_bytes =
-                    document
-                        .source
-                        .len()
-                        .saturating_mul(if document.source.chunk_count() > 1 {
-                            2
-                        } else {
-                            1
-                        });
-                source_bytes.saturating_add(document.derived_bytes())
-            }
+            Self::Source { text, .. } | Self::Text(text) => text.len().saturating_add(arc_header),
+            Self::Reading { document, .. } | Self::Object { document, .. } => document
+                .source
+                .retained_bytes()
+                .saturating_add(document.derived_bytes())
+                .saturating_add(arc_header),
         }
     }
 }
@@ -1418,7 +1411,7 @@ mod tests {
             worker_count: 1,
             max_documents: 1,
             max_copy_jobs: 2,
-            max_copy_bytes: 32,
+            max_copy_bytes: 64,
         });
         let handle = executor.register(None).unwrap();
         let text: Arc<str> = "é\r\n\t".into();
@@ -1448,6 +1441,43 @@ mod tests {
         assert_eq!((first.id, first.result.unwrap()), (7, text.to_string()));
         assert_eq!((second.id, second.result.unwrap()), (8, "second".into()));
         assert_eq!(executor.stats().copy_jobs, 0);
+        assert_eq!(executor.stats().copy_bytes, 0);
+    }
+
+    #[test]
+    fn copy_admission_charges_many_small_source_chunk_headers() {
+        let text = "x".repeat(128);
+        let single = SourceStore::static_text(text.clone()).unwrap();
+        let mut chunks = SourceStore::stream();
+        for _ in 0..text.len() {
+            chunks.append("x").unwrap();
+        }
+        chunks.finish(crate::FinishOutcome::Completed);
+        let input = |store: &SourceStore| CopyInput::Reading {
+            document: Arc::new(parse_document(
+                &store.snapshot(),
+                &ParseLimits::default(),
+                None,
+            )),
+            selection: None,
+        };
+        let single_input = input(&single);
+        let chunked_input = input(&chunks);
+        let single_bytes = single_input.retained_bytes();
+        assert!(chunked_input.retained_bytes() > single_bytes + text.len());
+        let (executor, driver) = MarkdownExecutor::manual(ExecutorOptions {
+            max_copy_bytes: single_bytes + text.len(),
+            ..ExecutorOptions::default()
+        });
+        let handle = executor.register(None).unwrap();
+        assert_eq!(
+            handle.submit_copy(1, chunked_input, text.len()),
+            Err(SubmitError::Capacity)
+        );
+        assert_eq!(executor.stats().copy_bytes, 0);
+        handle.submit_copy(2, single_input, text.len()).unwrap();
+        driver.run_until_idle();
+        assert_eq!(handle.take_copy_completed().unwrap().result.unwrap(), text);
         assert_eq!(executor.stats().copy_bytes, 0);
     }
 

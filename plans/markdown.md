@@ -19,35 +19,44 @@ remain conceptual; current declarations live in the source and generated API cap
 
 Current acceptance evidence:
 
-- Canopy's full suite passes 1,729 tests with one existing skip (`r2f006`). Tidy and
-  production feature checks pass (`r4cbd3`); the isolated Markdown build without default
-  features passes 119 tests. The unchanged TableView minimum-feature suite passes 23 tests.
-- fh's full suite passes 484 tests with three existing skips (`r8465b`). Its tidy passes
-  (`rce630`), and all 25 tracked smoke scripts pass both natively and through the external
+- After full-range diffcheck, Canopy's suite passes 1,753 tests with one existing skip
+  (`rb716d`). Tidy and production feature checks pass (`rd9d73`); the isolated Markdown
+  build without default features passes 139 tests. TableView's minimum-feature suite
+  passes 27 tests.
+- fh's full suite passes 487 tests with three existing skips (`rf5104`). Its tidy passes
+  (`r12439`), and all 25 tracked smoke scripts pass both natively and through the external
   runner. The browser server remains in fh.
 - Canopy's five smoke suites pass all 11 scenarios. The gallery contains 36 pages across
   nine sections, with the new readers and TableView also captured at 80×24 and 160×50.
   Inspected output includes Source, code/table/cell inspectors, narrow layouts, light
   syntax colors, and unavailable actions. The capture font lacks some CJK/emoji glyphs;
   byte mapping and copying have separate Unicode tests.
-- Canopy API refresh and freshness checks pass (`r001f2`, `rdb8f7`), as do fh's
-  (`rd682d`, `r341bf`). fh's gallery passes all seven sections: 80 pages and 240 images
+- Canopy API refresh and freshness checks pass (`rf51f5`, `r7595b`), as do fh's
+  (`redcc1`, `r4a0f8`). fh's gallery passes all seven sections: 80 pages and 240 images
   across three sizes, including visible host search status and partial-file metadata.
-- Both syntax-enabled and plain release benchmarks pass all 28 measured p95 targets on
-  an Apple M2 Max: each input/append workload uses 1,000 events and cold operations use ten
-  repeats. Worst input p95 is 3.06 ms against 16 ms; worst stream-publication p95 is
-  71.78 ms against 100 ms.
-- The ten-minute lifetime soak completed 718 cycles. Drained source/model/layout estimates
-  and node counts remained constant; inspectors and executor jobs returned to zero after
+- After diffcheck, the syntax repeat and plain release benchmarks each pass all 28 timing
+  targets on an Apple M2 Max: input/append workloads use 1,000 events and cold operations
+  use ten repeats. Worst input p95 is 3.50 ms against 16 ms; worst stream-publication p95
+  is 75.27 ms against 100 ms. The first syntax run passed 27 targets but its single final
+  Finish sample took 157.45 ms against 100 ms; the unchanged-binary repeat took 60.68 ms.
+  Both runs are retained. The passing repeat does not erase the original miss.
+- Before diffcheck, the ten-minute lifetime soak completed 718 cycles. Drained
+  source/model/layout estimates and node counts remained constant; inspectors and executor jobs returned to zero after
   removal. Instruments saved the allocation trace, but both its exporter and UI reject it
   as malformed with missing run data. Actual allocator peak and retained-byte attribution
   remain unqualified. RSS is recorded separately.
 - PTY keyboard/mouse switching, inspector open/close, and terminal cleanup pass. Desktop
   Terminal inspection is unqualified because the computer-use tool rejected access.
 
-Detailed local receipts and limitations are retained under `tmp/markdown-acceptance` and
-`tmp/markdown-qualification`. The [fixture manifest](../crates/canopy-markdown/tests/README.md)
-distinguishes independent expected outputs from static/streamed equivalence checks.
+Full-range diffcheck covers Canopy `65fc709d..ec01fa90` and fh `57cafd1..cde4a5e`.
+The resulting fixes cover inspector copy lifetime/order, bounded search,
+source accounting, heading and link identity, table clipping, and fh reader retention.
+Post-review smoke runs pass all 11 Canopy scenarios and 25 fh scripts; refreshed galleries
+pass 60 Markdown/Table images and 75 fh browser images across three sizes.
+
+Detailed local receipts and limitations are retained under `tmp/markdown-acceptance`,
+`tmp/markdown-qualification`, and `tmp/markdown-diffcheck-qualification`. The
+[fixture manifest](../crates/canopy-markdown/tests/README.md) distinguishes independent expected outputs from static/streamed equivalence checks.
 
 Inactive surface layouts share a configurable 32 MiB cache budget. Accepted source,
 semantic identity, active Editor buffers, in-flight work, inspectors, and action payloads

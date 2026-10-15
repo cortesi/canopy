@@ -3,6 +3,7 @@
 use std::{
     error::Error as StdError,
     fmt,
+    mem::size_of,
     ops::Range,
     sync::{
         Arc, OnceLock,
@@ -172,6 +173,27 @@ impl SourceSnapshot {
     /// Return the number of nonempty accepted append chunks.
     pub fn chunk_count(&self) -> usize {
         self.chunk_count
+    }
+    /// Estimate retained payloads and Arc headers in constant time. Shared
+    /// allocations are charged in full; allocator bookkeeping and rounding
+    /// are excluded. The snapshot value itself belongs to its containing model.
+    pub(crate) fn retained_bytes(&self) -> usize {
+        let arc_header = 2 * size_of::<usize>();
+        let chunk_headers = size_of::<Chunk>() + 2 * arc_header;
+        let shared_state =
+            size_of::<OnceLock<Arc<str>>>() + size_of::<AtomicU64>() + 2 * arc_header;
+        let flattened = if self.chunk_count != 1 {
+            self.flattened
+                .get()
+                .map_or(0, |text| text.len().saturating_add(arc_header))
+        } else {
+            // The one-chunk cache shares the chunk's text allocation.
+            0
+        };
+        self.len
+            .saturating_add(self.chunk_count.saturating_mul(chunk_headers))
+            .saturating_add(shared_state)
+            .saturating_add(flattened)
     }
     /// Allocate an opaque identity that cannot be reused in this epoch.
     pub(crate) fn allocate_id(&self) -> u64 {

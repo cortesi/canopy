@@ -966,6 +966,7 @@ impl Widget for TableView {
                         .checked_sub(self.gutter())
                         .and_then(|x| self.table.column_at(x.saturating_add(view.scroll.x)))
                 {
+                    ctx.set_focus(body.into())?;
                     self.move_to(ctx, self.cursor.map_or(0, |(r, _)| r), column, false)?;
                     self.select_column(ctx)?;
                     return Ok(EventOutcome::Handle);
@@ -977,6 +978,7 @@ impl Widget for TableView {
                         .saturating_add(point.y - u32::from(self.options.header))
                         as usize;
                     if row < self.table.data().rows().len() {
+                        ctx.set_focus(body.into())?;
                         self.move_to(ctx, row, self.cursor.map_or(0, |(_, c)| c), false)?;
                         self.select_row(ctx)?;
                         return Ok(EventOutcome::Handle);

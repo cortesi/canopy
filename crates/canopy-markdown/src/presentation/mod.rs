@@ -1449,6 +1449,7 @@ fn wrap(
             .iter()
             .max_by_key(|(index, _)| *index)
             .map(|(_, span)| *span);
+        let object = active.iter().find_map(|(_, span)| span.object);
         let run_role = span.map_or(role, |s| match s.role {
             InlineRole::Emphasis => "markdown/emphasis",
             InlineRole::Strong => "markdown/strong",
@@ -1462,7 +1463,7 @@ fn wrap(
             safe_value,
             Some(offset..offset + g.len()),
             run_role,
-            span.and_then(|s| s.object),
+            object,
             None,
         );
         column += width;

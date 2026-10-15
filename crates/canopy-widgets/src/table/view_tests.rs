@@ -5,7 +5,7 @@ use canopy::{
 };
 
 use super::*;
-use crate::table::{TableColumn, TableLayoutOptions, TableRow, prepare};
+use crate::table::{TableAlignment, TableColumn, TableLayoutOptions, TableRow, prepare};
 fn table(dataset: &str, revision: u64, rows: usize) -> Arc<PreparedTable> {
     Arc::new(
         prepare(
@@ -474,9 +474,15 @@ fn mounted_navigation_reuses_preparation_and_visits_only_visible_rows() -> Resul
             assert_eq!(v.table().sampled_bytes(), sample_bytes);
             assert_eq!(c.children_of(c.node_id()).len(), 1);
             let stats = v.paint_stats();
-            assert!(stats.columns_visited <= 2);
+            assert!(
+                stats.columns_visited <= 3,
+                "at most two cells and a trailing separator"
+            );
             assert_eq!(stats.rows_visited, stats.columns_visited * 5);
-            assert_eq!(stats.cells, stats.rows_visited);
+            assert!(
+                stats.rows_visited - stats.cells <= 5,
+                "only a trailing separator can lack cell content"
+            );
             assert!(
                 stats.cells <= 10,
                 "{rows} rows still paint at most ten body cells"
@@ -619,5 +625,113 @@ fn missing_keys_clamp_axes_and_clear_empty_selection_membership() -> Result<()> 
         assert!(v.selection.is_empty());
         Ok(())
     })?;
+    Ok(())
+}
+
+#[test]
+fn header_and_gutter_selection_focus_the_body_for_keyboard_actions() -> Result<()> {
+    let mut h = Harness::builder(crate::Container::stack().focusable())
+        .register::<TableView>()
+        .size(25, 7)
+        .build()?;
+    h.canopy.with_root_context(|c| {
+        c.add_child(
+            c.node_id(),
+            TableView::new(table("d", 1, 5), Default::default()),
+        )?;
+        Ok(())
+    })?;
+    h.render()?;
+    for (x, y, selected_rows, selected_columns) in [(3, 0, 5, 1), (0, 2, 1, 3)] {
+        h.canopy
+            .with_root_context(|c| c.set_focus(c.node_id()).map(|_| ()))?;
+        h.mouse(mouse(mouse::Action::Down, x, y))?;
+        h.with_unique(|v: &mut TableView, c| {
+            assert_eq!(c.focused_node(), v.initial_focus());
+            assert_eq!(v.selection().rows().len(), selected_rows);
+            assert_eq!(v.selection().columns().len(), selected_columns);
+            Ok(())
+        })?;
+        h.key('y')?;
+        h.with_unique(|v: &mut TableView, _| {
+            assert!(matches!(
+                v.take_events(1).as_slice(),
+                [TableEvent::Copy { .. }]
+            ));
+            Ok(())
+        })?;
+    }
+    Ok(())
+}
+
+struct ClippedPreview {
+    table: Arc<PreparedTable>,
+    area: Rect,
+    offset: Point,
+}
+impl Widget for ClippedPreview {
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
+    fn render(&mut self, render: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        self.table.paint(
+            render,
+            self.area,
+            TableWindow {
+                offset: self.offset,
+                header: true,
+                row_numbers: false,
+            },
+            None,
+            &TableSelection::default(),
+        )?;
+        Ok(())
+    }
+}
+
+#[test]
+fn separator_paints_when_next_column_is_outside_the_clip() -> Result<()> {
+    for (offset, width) in [(0, 6), (5, 1)] {
+        let mut h = Harness::builder(ClippedPreview {
+            table: table("d", 1, 2),
+            area: Rect::new(2, 0, width, 3),
+            offset: Point::new(offset, 0),
+        })
+        .size(10, 3)
+        .build()?;
+        h.render()?;
+        for y in 0..3 {
+            assert_eq!(h.buf().get(Point::new(2 + width - 1, y)).unwrap().ch, '│');
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn large_canvas_offsets_translate_before_adding_the_render_origin() -> Result<()> {
+    let mut column = TableColumn::new("c", "H");
+    column.alignment = TableAlignment::Right;
+    let prepared = Arc::new(prepare(
+        Arc::new(TableData::new(
+            "d",
+            1,
+            vec![column],
+            vec![TableRow::new("r", vec!["V".into()])],
+        )?),
+        TableLayoutOptions {
+            widths: vec![u32::MAX],
+            ..Default::default()
+        },
+    )?);
+    let mut h = Harness::builder(ClippedPreview {
+        table: prepared,
+        area: Rect::new(10, 0, 4, 2),
+        offset: Point::new(u32::MAX - 4, 0),
+    })
+    .size(14, 2)
+    .build()?;
+    h.render()?;
+    assert_eq!(h.buf().get(Point::new(13, 0)).unwrap().ch, 'H');
+    assert_eq!(h.buf().get(Point::new(13, 1)).unwrap().ch, 'V');
     Ok(())
 }

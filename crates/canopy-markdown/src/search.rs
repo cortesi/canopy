@@ -268,12 +268,12 @@ impl<'a> Run<'a> {
             .limits
             .max_scan_bytes
             .saturating_sub(self.result.scanned_bytes);
-        let mut end = line.len().min(remaining);
-        while !line.is_char_boundary(end) {
-            end -= 1;
+        if line.len() > remaining {
+            self.result.coverage_complete = false;
+            return false;
         }
-        let covered = &line[..end];
-        self.result.scanned_bytes += end;
+        let covered = line;
+        self.result.scanned_bytes += line.len();
         let mut at = 0;
         while at <= covered.len() {
             let found = match self.query.find_at(covered, at) {
@@ -309,10 +309,6 @@ impl<'a> Run<'a> {
             }
             at = found.end;
         }
-        if end < line.len() {
-            self.result.coverage_complete = false;
-            return false;
-        }
         true
     }
     /// Scan line-local matches while charging separators to the byte budget.
@@ -323,8 +319,20 @@ impl<'a> Run<'a> {
         unit_offsets: bool,
         source_base: Option<usize>,
     ) -> bool {
+        if self.query.matcher.is_none() {
+            return true;
+        }
+        let remaining = self
+            .limits
+            .max_scan_bytes
+            .saturating_sub(self.result.scanned_bytes);
+        let mut end = text.len().min(remaining);
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        let truncated = end < text.len();
         let mut offset = 0;
-        for (index, raw) in text.split('\n').enumerate() {
+        for (index, raw) in text[..end].split('\n').enumerate() {
             let line = raw.strip_suffix('\r').unwrap_or(raw);
             let separator = usize::from(index > 0) + usize::from(raw.ends_with('\r'));
             if separator
@@ -337,6 +345,14 @@ impl<'a> Run<'a> {
                 return false;
             }
             self.result.scanned_bytes += separator;
+            // A budget boundary is not an actual line ending. Matching its
+            // prefix would invent `$` and word-boundary matches. Do not scan
+            // beyond the budget to find the rest of this logical line.
+            if truncated && offset + raw.len() == end {
+                self.result.scanned_bytes += line.len();
+                self.result.coverage_complete = false;
+                return false;
+            }
             if !self.line(
                 line,
                 &address(index),
@@ -532,12 +548,51 @@ mod tests {
             &limits,
         )
         .unwrap();
-        let source = SourceStore::static_text("aaaaaa").unwrap().snapshot();
+        let source = SourceStore::static_text("aaaa\nx").unwrap().snapshot();
         let result = search_source(&source, &query, 1, &limits);
-        assert_eq!(result.count, 5);
+        assert_eq!(result.count, 4);
         assert_eq!(result.matches.len(), 1);
         assert!(!result.coverage_complete);
         assert!(result.storage_limited);
+    }
+
+    #[test]
+    fn scan_cutoff_does_not_invent_regex_line_or_word_endings() {
+        for pattern in ["foo$", r"foo\b"] {
+            let limits = SearchLimits {
+                max_scan_bytes: 3,
+                ..Default::default()
+            };
+            let query = CompiledQuery::new(
+                &SearchQuery {
+                    text: pattern.into(),
+                    mode: SearchMode::Regex,
+                    ..Default::default()
+                },
+                &limits,
+            )
+            .unwrap();
+            let source = SourceStore::static_text("foobar").unwrap().snapshot();
+            let document = parse_document(&source, &Default::default(), None);
+            for result in [
+                search_source(&source, &query, 1, &limits),
+                search_document(&document, &query, 1, &limits),
+            ] {
+                assert_eq!(result.count, 0);
+                assert!(result.matches.is_empty());
+                assert!(!result.coverage_complete);
+                assert_eq!(result.scanned_bytes, 3);
+            }
+            let source = SourceStore::static_text("foo\nfoobar").unwrap().snapshot();
+            let limits = SearchLimits {
+                max_scan_bytes: 7,
+                ..limits
+            };
+            let result = search_source(&source, &query, 1, &limits);
+            assert_eq!(result.count, 1);
+            assert_eq!(result.matches[0].source_range, Some(0..3));
+            assert!(!result.coverage_complete);
+        }
     }
     #[test]
     fn rendered_search_is_cell_and_line_addressed_and_source_finds_destinations() {
