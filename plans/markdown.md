@@ -39,8 +39,9 @@ Current acceptance evidence:
   71.78 ms against 100 ms.
 - The ten-minute lifetime soak completed 718 cycles. Drained source/model/layout estimates
   and node counts remained constant; inspectors and executor jobs returned to zero after
-  removal. Allocation-trace finalization is still pending, so actual allocator peak and
-  retained-byte attribution remain unqualified. RSS is recorded separately.
+  removal. Instruments saved the allocation trace, but both its exporter and UI reject it
+  as malformed with missing run data. Actual allocator peak and retained-byte attribution
+  remain unqualified. RSS is recorded separately.
 - PTY keyboard/mouse switching, inspector open/close, and terminal cleanup pass. Desktop
   Terminal inspection is unqualified because the computer-use tool rejected access.
 
