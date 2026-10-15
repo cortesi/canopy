@@ -217,6 +217,11 @@ fn top_offsets_place_the_start_past_the_viewport_origin() {
         (50, 8, 24, 1, 3, 21),
         (0, 8, 1, 1, 3, 0),
         (0, 8, 2, 1, 3, 0),
+        (0, 1, 24, 1, 3, 24),
+        (0, 2, 24, 1, 3, 23),
+        (0, 3, 24, 2, 3, 23),
+        (0, 4, 24, 4, 3, 24),
+        (0, 4, 24, 8, 3, 24),
         (0, u32::MAX, u32::MAX - 1, 1, 3, u32::MAX - 4),
     ] {
         assert_eq!(
@@ -385,6 +390,32 @@ fn requests_queued_before_the_first_layout_wait_for_geometry() -> Result<()> {
     core.reveal_node(target, RevealAlign::Center)?;
     core.update_layout(SCREEN)?;
     assert_eq!(offset(&core, viewport), 38, "row 40 lands on view row 2");
+    Ok(())
+}
+
+#[test]
+fn queued_top_context_uses_settled_geometry_and_keeps_small_views_visible() -> Result<()> {
+    for height in [1, 2, 4, 8] {
+        let mut core = Core::new();
+        let viewport = root_viewport(&mut core, Some(Rect::new(0, 40, 1, 1)))?;
+        spacer(&mut core, viewport, 80)?;
+        let mut ctx = CoreContext::new(&mut core, viewport);
+        assert_eq!(
+            ctx.view().view_rect().h,
+            0,
+            "layout has not assigned a viewport yet"
+        );
+        ctx.reveal_anchor(RevealAlign::Top(3));
+        core.update_layout(Size::new(10, height))?;
+        let context = 3.min(height - 1);
+        assert_eq!(
+            offset(&core, viewport),
+            40 - context,
+            "settled height {height}"
+        );
+        let visible = CoreContext::new(&mut core, viewport).view().view_rect();
+        assert!(visible.contains_point(Point::new(0, 40)));
+    }
     Ok(())
 }
 

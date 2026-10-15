@@ -125,8 +125,10 @@ fn run_smoke(workspace_root: &Path) -> bool {
 /// The gallery of the README: each gallery script of `examples/gyms/gallery`,
 /// and the arguments of the gym that it runs against. Paths are relative to
 /// `examples/gyms`, where the gyms run.
-const GALLERY: [(&str, &[&str]); 7] = [
+const GALLERY: [(&str, &[&str]); 9] = [
     ("stylegym.luau", &["stylegym"]),
+    ("tablegym.luau", &["tablegym"]),
+    ("markdowngym.luau", &["markdowngym"]),
     ("chartgym.luau", &["chartgym"]),
     ("biggym.luau", &["biggym"]),
     (
@@ -221,6 +223,13 @@ fn run_feature_check(workspace_root: &Path) -> bool {
         if let Some(capability) = capability {
             args.extend(["--features", capability]);
         }
+        if !run_cargo_command(workspace_root, &args) {
+            return false;
+        }
+    }
+    for features in [vec![], vec!["--no-default-features"]] {
+        let mut args = vec!["check", "-p", "canopy-markdown"];
+        args.extend(features);
         if !run_cargo_command(workspace_root, &args) {
             return false;
         }

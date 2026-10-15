@@ -1,0 +1,34 @@
+[package]
+name = "canopy-markdown"
+version = "0.0.1"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Interactive terminal Markdown and exact source viewing for Canopy"
+
+[lib]
+doctest = false
+
+[features]
+default = ["syntax"]
+syntax = ["canopy-widgets/syntax"]
+
+[dependencies]
+canopy.workspace = true
+canopy-widgets.workspace = true
+pulldown-cmark = { version = "0.13.4", default-features = false }
+url = "2.5"
+grep-matcher = "0.1.9"
+grep-regex = "0.1.14"
+unicode-segmentation.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+canopy = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "qualification"
+harness = false

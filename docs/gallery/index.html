@@ -142,7 +142,7 @@
 <script>
 const GALLERY = {
   "title": "Canopy widgets",
-  "generated": 1791334249,
+  "generated": 1792044601,
   "font_size": 14.0,
   "scale": 2.0,
   "sizes": [
@@ -332,6 +332,285 @@ const GALLERY = {
       ]
     },
     {
+      "id": "rendered",
+      "title": "Markdown",
+      "caption": "Rendered hierarchy, links, code cards, and shared table previews.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "rendered-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界",
+            "👩",
+            "💻"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "selected-link",
+      "title": "Selected link",
+      "caption": "The object cursor selects a readable label with an inspectable destination.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "selected-link-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界",
+            "👩",
+            "💻"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "code-inspector",
+      "title": "Complete code",
+      "caption": "The code inspector includes the lines omitted from the card and preserves its payload.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "code-inspector-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界",
+            "👩",
+            "💻"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "table-inspector",
+      "title": "Table rectangle",
+      "caption": "The shared TableView inspector navigates and selects the complete dataset.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "table-inspector-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界",
+            "👩",
+            "💻"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cell-detail",
+      "title": "Full cell detail",
+      "caption": "Full values remain readable and copyable beyond one-line previews.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "cell-detail-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "search",
+      "title": "Search hidden payloads",
+      "caption": "Search covers complete code, table, and source-card content.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "search-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界",
+            "👩",
+            "💻"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "source-inspector",
+      "title": "Pinned source",
+      "caption": "The source inspector pins the displayed revision and retains original syntax.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "source-inspector-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界",
+            "👩",
+            "💻"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "source",
+      "title": "Source presentation",
+      "caption": "A sibling Source surface over the same accepted bytes and epoch.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "source-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界",
+            "👩",
+            "💻"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "receiving-code",
+      "title": "Receiving code",
+      "caption": "A receiving code card is visible while earlier content remains interactive.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "receiving-code-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "literal-table",
+      "title": "Open table",
+      "caption": "Trailing tables remain literal Markdown until their interpretation is stable.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "literal-table-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界",
+            "👩",
+            "💻"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "complete-table",
+      "title": "Published grid",
+      "caption": "A following block publishes the shared prepared table and its inspector together.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "complete-table-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界",
+            "👩",
+            "💻"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aborted",
+      "title": "Aborted stream",
+      "caption": "Accepted source stays available after an explicit abort.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "aborted-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界",
+            "👩",
+            "💻"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unavailable",
+      "title": "Unavailable browser action",
+      "caption": "An unsafe destination remains inspectable with Open disabled.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "unavailable-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "syntax-limit",
+      "title": "Syntax limit",
+      "caption": "A large immutable code payload opens as plain text above the syntax cap.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "syntax-limit-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "partial-source",
+      "title": "Partial file",
+      "caption": "A labeled retained prefix offers Source while Rendered is unavailable.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "partial-source-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "ascii-light-narrow",
+      "title": "ASCII, light, narrow",
+      "caption": "The 40-cell reading region uses portable decoration and the light palette.",
+      "script": "markdowngym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "ascii-light-narrow-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界",
+            "👩",
+            "💻"
+          ]
+        }
+      ]
+    },
+    {
       "id": "widgets",
       "title": "Widgets",
       "caption": "Buttons in each look and state, inputs, a selector, and a dropdown.",
@@ -372,10 +651,86 @@ const GALLERY = {
           "height": 1332
         }
       ]
+    },
+    {
+      "id": "tablegym",
+      "title": "TableView",
+      "caption": "Fixed headers and row numbers over a keyed table, with full Unicode cell values.",
+      "script": "tablegym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "tablegym-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "↵",
+            "界"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "table-selection",
+      "title": "Table selection",
+      "caption": "Rectangle membership spans rows and columns; TSV copy preserves the full values.",
+      "script": "tablegym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "table-selection-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "↵",
+            "界"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "table-scrolled",
+      "title": "Table scrolling",
+      "caption": "The body scrolls on both axes while the header and gutter remain fixed.",
+      "script": "tablegym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "table-scrolled-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "table-ascii",
+      "title": "ASCII table",
+      "caption": "The same data revision uses compact widths and the ASCII glyph preset.",
+      "script": "tablegym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "table-ascii-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
     }
   ],
   "failures": [],
-  "missing_glyphs": []
+  "missing_glyphs": [],
+  "sections": [
+    {
+      "script": "markdowngym.luau",
+      "title": "Markdowngym",
+      "summary": "Explicit targets keep queries valid from the automation root and modal focus."
+    },
+    {
+      "script": "tablegym.luau",
+      "title": "Tablegym",
+      "summary": null
+    }
+  ]
 };
 
 const state = { size: GALLERY.sizes[0], page: null };

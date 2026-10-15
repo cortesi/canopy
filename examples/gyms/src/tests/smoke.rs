@@ -66,6 +66,8 @@ fn the_gallery_scripts_run() -> Result<()> {
             "cedit.luau",
         ),
         (Demo::Editorgym, "editorgym.luau"),
+        (Demo::Markdowngym, "markdowngym.luau"),
+        (Demo::Tablegym, "tablegym.luau"),
         (Demo::Fontgym, "fontgym.luau"),
         (
             Demo::Imgview {
@@ -109,4 +111,14 @@ fn the_font_gym_script_passes() -> Result<()> {
 #[test]
 fn the_big_text_gym_script_passes() -> Result<()> {
     run_gym_script(Demo::Biggym, "biggym.luau")
+}
+
+#[test]
+fn the_markdown_gym_script_passes() -> Result<()> {
+    run_script(Demo::Markdowngym, "markdown-smoke", "markdowngym.luau")
+}
+
+#[test]
+fn the_table_gym_script_passes() -> Result<()> {
+    run_script(Demo::Tablegym, "table-smoke", "tablegym.luau")
 }

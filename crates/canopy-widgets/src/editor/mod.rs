@@ -18,9 +18,9 @@ mod vi;
 pub(crate) mod widget;
 
 pub use vi::{ViMode, VisualMode};
-pub use widget::Editor;
+pub use widget::{Editor, PreparedEditorView};
 
-pub use crate::text_buffer::{TextPosition, TextRange};
+pub use crate::text_buffer::{Selection, TextPosition, TextRange};
 
 #[cfg(test)]
 mod tests;

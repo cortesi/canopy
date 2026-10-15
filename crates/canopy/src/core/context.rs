@@ -500,8 +500,9 @@ pub enum RevealAlign {
     /// and use `Nearest` on the others.
     Center,
     /// Place the rectangle's start `context` cells past the viewport origin,
-    /// clamping to the scrollable range. Text reads top to bottom, so only
-    /// the vertical axis offsets; the horizontal axis uses `Nearest`.
+    /// reducing context to keep a fitting rectangle visible in the settled
+    /// viewport, and clamping to the scrollable range. Only the vertical axis
+    /// offsets; the horizontal axis uses `Nearest`.
     Top(u32),
 }
 

@@ -10,6 +10,7 @@ description = "Canopy's widget gyms, one binary driveable through MCP"
 [dependencies]
 canopy.workspace = true
 canopy-mcp.workspace = true
+canopy-markdown = { workspace = true, default-features = true }
 canopy-widgets = { workspace = true, default-features = true }
 clap.workspace = true
 rand.workspace = true

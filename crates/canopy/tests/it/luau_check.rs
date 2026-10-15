@@ -77,6 +77,8 @@ mod tests {
                 || file.starts_with("examples/todo/smoke/")
                 || file.starts_with("examples/hello/smoke/")
                 || file.starts_with("examples/gyms/smoke/")
+                || file.starts_with("examples/gyms/markdown-smoke/")
+                || file.starts_with("examples/gyms/table-smoke/")
                 // The gyms' tests run each script against its own demo.
                 || file.starts_with("examples/gyms/scripts/")
                 || file.starts_with("examples/gyms/gallery/")

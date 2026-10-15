@@ -19,10 +19,13 @@
 
 use std::{borrow::Cow, ops::Range};
 
-use canopy::{render::Render, style::Style};
+use canopy::{
+    render::Render,
+    style::{AttrSet, PartialStyle, Style, StyleRules, themes::Palette},
+};
 
 /// How a highlight span paints.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SpanStyle {
     /// A style the highlighter chose, as a syntax theme gives it.
     Fixed(Style),
@@ -30,6 +33,69 @@ pub enum SpanStyle {
     /// with a path follows a theme switch, and takes the rules its host sets
     /// for the path, such as `syntax/keyword`.
     Path(Cow<'static, str>),
+}
+
+/// Generate borrowed role paths for all syntect font-attribute combinations.
+macro_rules! palette_paths {
+    ($role:literal) => {
+        [
+            concat!("syntax/", $role, "/plain"),
+            concat!("syntax/", $role, "/bold"),
+            concat!("syntax/", $role, "/italic"),
+            concat!("syntax/", $role, "/bold-italic"),
+            concat!("syntax/", $role, "/underline"),
+            concat!("syntax/", $role, "/bold-underline"),
+            concat!("syntax/", $role, "/italic-underline"),
+            concat!("syntax/", $role, "/bold-italic-underline"),
+        ]
+    };
+}
+
+/// Shared role order used by palette registration and built-in classification.
+const PALETTE_PATHS: [[&str; 8]; 11] = [
+    palette_paths!("text"),
+    palette_paths!("keyword"),
+    palette_paths!("operator"),
+    palette_paths!("string"),
+    palette_paths!("escape"),
+    palette_paths!("constant"),
+    palette_paths!("function"),
+    palette_paths!("type"),
+    palette_paths!("variable"),
+    palette_paths!("macro"),
+    palette_paths!("comment"),
+];
+
+/// Install palette-aware syntax roles. Register with `Setup::widget_styles` so
+/// already prepared spans follow theme switches without syntax work.
+pub fn palette_style_rules(palette: &Palette, mut rules: StyleRules<'_>) {
+    let colors = [
+        palette.fg,
+        palette.magenta,
+        palette.cyan,
+        palette.green,
+        palette.cyan,
+        palette.orange,
+        palette.blue,
+        palette.yellow,
+        palette.red,
+        palette.violet,
+        palette.muted_fg,
+    ];
+    let grounds = [palette.bg, palette.panel_bg, palette.focus_bg()];
+    for (paths, color) in PALETTE_PATHS.iter().zip(colors) {
+        let color = color.with_contrast(&grounds, 4.5);
+        for (bits, path) in paths.iter().enumerate() {
+            let attrs = AttrSet {
+                bold: bits & 1 != 0,
+                italic: bits & 2 != 0,
+                underline: bits & 4 != 0,
+                ..AttrSet::default()
+            };
+            rules = rules.style(path, PartialStyle::new().fg(color).attrs(attrs));
+        }
+    }
+    rules.apply();
 }
 
 /// A highlighted span for a single line.
@@ -117,7 +183,7 @@ mod syntect_highlighter {
     };
     use two_face::syntax::extra_newlines;
 
-    use super::{HighlightSpan, Highlighter};
+    use super::{HighlightSpan, Highlighter, PALETTE_PATHS, SpanStyle};
 
     /// Syntax colours, apart from the style palette's named colours, which are
     /// too soft to tell code apart at a glance. The colours sit near one OKLCH
@@ -627,6 +693,8 @@ mod syntect_highlighter {
     pub struct SyntectHighlighter {
         /// Theme used for highlighting.
         theme: &'static Theme,
+        /// Resolve built-in semantic roles through the live widget palette.
+        palette_roles: bool,
         /// Grammar selected by the file name or extension, before source
         /// detection.
         grammar: Cell<Grammar>,
@@ -640,6 +708,7 @@ mod syntect_highlighter {
         pub fn new(extension: impl AsRef<str>) -> Self {
             let highlighter = Self {
                 theme: theme(DEFAULT_THEME),
+                palette_roles: false,
                 grammar: Cell::new(Grammar::plain()),
                 source: RefCell::new(None),
             };
@@ -658,11 +727,55 @@ mod syntect_highlighter {
         /// Use the named theme, falling back to [`DEFAULT_THEME`].
         #[must_use]
         pub fn with_theme(mut self, name: impl AsRef<str>) -> Self {
+            self.palette_roles = false;
             self.theme = theme(name.as_ref());
             if let Some(source) = self.source.get_mut().as_mut() {
                 source.restart(self.theme);
             }
             self
+        }
+
+        /// Prepare borrowed semantic style paths using the built-in Canopy
+        /// classifier. Colors resolve through `palette_style_rules` when
+        /// painted; bold, italic, and underline survive without
+        /// reparsing on theme changes. A later `with_theme` call
+        /// restores fixed named-theme colors.
+        #[must_use]
+        pub fn with_palette_roles(self) -> Self {
+            let mut result = self.with_theme(DEFAULT_THEME);
+            result.palette_roles = true;
+            result
+        }
+
+        /// Convert built-in fixed token identities to borrowed palette paths.
+        fn paint_spans(&self, mut spans: Vec<HighlightSpan>) -> Vec<HighlightSpan> {
+            if self.palette_roles {
+                let colors = [
+                    code::PINK,
+                    code::CYAN,
+                    code::GREEN,
+                    code::TEAL,
+                    code::ORANGE,
+                    code::BLUE,
+                    code::YELLOW,
+                    code::CORAL,
+                    code::AQUA,
+                    code::SLATE,
+                ];
+                for span in &mut spans {
+                    if let SpanStyle::Fixed(style) = &span.style {
+                        let role = colors
+                            .iter()
+                            .position(|color| Some(*color) == style.fg.solid_color())
+                            .map_or(0, |index| index + 1);
+                        let attrs = usize::from(style.attrs.bold)
+                            | usize::from(style.attrs.italic) << 1
+                            | usize::from(style.attrs.underline) << 2;
+                        span.style = SpanStyle::Path(PALETTE_PATHS[role][attrs].into());
+                    }
+                }
+            }
+            spans
         }
 
         /// Select the syntax for `extension`, discarding any prepared source.
@@ -705,7 +818,7 @@ mod syntect_highlighter {
         }
 
         /// Install `grammar` and drop state built with the previous one.
-        fn set_grammar(&self, grammar: Grammar) {
+        pub fn set_grammar(&self, grammar: Grammar) {
             self.grammar.set(grammar);
             self.source.replace(None);
         }
@@ -736,10 +849,10 @@ mod syntect_highlighter {
             if let Some(source) = self.source.borrow_mut().as_mut()
                 && let Some(spans) = source.spans_for(line)
             {
-                return spans;
+                return self.paint_spans(spans);
             }
             // No prepared source, or a line beyond it: highlight on its own.
-            Engine::new(self.current_grammar(), self.theme).spans(text)
+            self.paint_spans(Engine::new(self.current_grammar(), self.theme).spans(text))
         }
     }
 
@@ -805,8 +918,10 @@ mod syntect_highlighter {
 
     #[cfg(test)]
     mod tests {
+        use std::borrow::Cow;
+
         use super::*;
-        use crate::highlight::SpanStyle;
+        use crate::highlight::{SpanStyle, palette_style_rules};
 
         /// Return the foreground colors of a line's spans.
         fn colors(highlighter: &SyntectHighlighter, line: usize, text: &str) -> Vec<Paint> {
@@ -818,6 +933,42 @@ mod syntect_highlighter {
                     SpanStyle::Path(path) => panic!("syntect spans are fixed, not {path}"),
                 })
                 .collect()
+        }
+
+        #[test]
+        fn palette_roles_preserve_font_attributes_and_leave_named_themes_fixed() {
+            let text = "# Heading\n\n**bold** and *italic*\n";
+            let fixed = SyntectHighlighter::new("md");
+            let roles = SyntectHighlighter::new("md").with_palette_roles();
+            fixed.prepare(text);
+            roles.prepare(text);
+            let mut map = themes::solarized_light().style_map();
+            palette_style_rules(&themes::solarized_light(), map.rules());
+            for (line, text) in text.lines().enumerate() {
+                let fixed = fixed.highlight_line(line, text);
+                let roles = roles.highlight_line(line, text);
+                assert_eq!(fixed.len(), roles.len());
+                for (fixed, role) in fixed.iter().zip(&roles) {
+                    let SpanStyle::Fixed(style) = &fixed.style else {
+                        panic!("fixed theme")
+                    };
+                    let SpanStyle::Path(path) = &role.style else {
+                        panic!("palette path")
+                    };
+                    assert!(matches!(path, Cow::Borrowed(_)));
+                    assert_eq!(fixed.range, role.range);
+                    assert_eq!(style.attrs, map.resolve(path).attrs);
+                }
+            }
+            let named = SyntectHighlighter::new("rs")
+                .with_palette_roles()
+                .with_theme("Solarized (light)");
+            assert!(
+                named
+                    .highlight_line(0, "let value = 1;")
+                    .iter()
+                    .all(|span| matches!(span.style, SpanStyle::Fixed(_)))
+            );
         }
 
         #[test]
@@ -1144,6 +1295,30 @@ mod syntect_highlighter {
                 .range
                 .end;
             assert_eq!(end, text.chars().count());
+        }
+    }
+}
+
+#[cfg(test)]
+mod palette_tests {
+    use canopy::style::themes;
+
+    use super::*;
+
+    #[test]
+    fn every_syntax_role_has_readable_contrast_on_dark_and_light_code_grounds() {
+        for palette in [themes::default_dark(), themes::solarized_light()] {
+            let mut map = palette.style_map();
+            palette_style_rules(&palette, map.rules());
+            for path in PALETTE_PATHS.iter().flatten() {
+                let foreground = map.resolve(path).fg.solid_color().unwrap();
+                for ground in [palette.bg, palette.panel_bg, palette.focus_bg()] {
+                    assert!(
+                        foreground.contrast_ratio(ground) >= 4.49,
+                        "{path}: {foreground:?} on {ground:?}"
+                    );
+                }
+            }
         }
     }
 }

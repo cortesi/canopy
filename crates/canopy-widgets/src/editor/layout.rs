@@ -120,6 +120,28 @@ pub struct LayoutCache {
 }
 
 impl LayoutCache {
+    /// Account retained line and wrap vectors on the preparing worker.
+    pub(super) fn storage_bytes(&self) -> usize {
+        use std::mem::size_of;
+        let mut bytes = self
+            .lines
+            .capacity()
+            .saturating_mul(size_of::<LineLayout>())
+            .saturating_add(
+                self.line_offsets
+                    .capacity()
+                    .saturating_mul(size_of::<usize>()),
+            );
+        for line in &self.lines {
+            bytes = bytes.saturating_add(
+                line.segments
+                    .capacity()
+                    .saturating_mul(size_of::<WrapSegment>()),
+            );
+        }
+        bytes
+    }
+
     /// Construct a new layout cache.
     pub fn new() -> Self {
         Self {

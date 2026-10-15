@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, mem::size_of};
 
 use canopy::{
     Context, EventOutcome, NodeName, Register, Setup, ViewContext, Widget, derive_commands,
@@ -110,6 +110,34 @@ pub struct Editor {
     pub(super) highlighter: Option<Box<dyn Highlighter>>,
     /// Cached syntax highlight spans.
     pub(super) highlight_cache: HighlightCache,
+    /// Fixed geometry of a prepared view until its next publication.
+    prepared_width: Option<u32>,
+}
+
+/// Owned text and wrapping prepared before publication to a read-only editor.
+///
+/// Construct this on a worker when scanning or wrapping a large source would
+/// interrupt interaction. The width includes the line-number gutter.
+#[derive(Debug)]
+pub struct PreparedEditorView {
+    /// Owned text and initial cursor state for the next publication.
+    buffer: TextBuffer,
+    /// Prepared logical lines and soft-wrap segments.
+    layout: LayoutCache,
+    /// Editor preferences captured by the preparation.
+    config: EditorConfig,
+    /// Allocated content width, including any line-number gutter.
+    width: u32,
+    /// Conservative retained-storage estimate computed on the worker.
+    derived_bytes: usize,
+}
+
+impl PreparedEditorView {
+    /// Conservative retained storage estimate, computed during preparation.
+    /// Includes rope text/tree storage, wrapping, and the mounted Editor value.
+    pub fn derived_bytes(&self) -> usize {
+        self.derived_bytes
+    }
 }
 
 /// Mouse selection tracking state.
@@ -237,6 +265,7 @@ impl Editor {
             mouse: MouseState::new(),
             highlighter: None,
             highlight_cache: HighlightCache::new(),
+            prepared_width: None,
         }
     }
 
@@ -247,6 +276,7 @@ impl Editor {
 
     /// Replace the editor configuration.
     pub fn set_config(&mut self, config: EditorConfig) {
+        self.prepared_width = None;
         self.config = config;
         self.update_preferred_column();
     }
@@ -258,12 +288,123 @@ impl Editor {
 
     /// Replace the buffer contents.
     pub fn set_text(&mut self, text: impl Into<String>) {
+        self.prepared_width = None;
         self.buffer = TextBuffer::new(text);
         self.buffer.set_cursor(TextPosition::new(0, 0));
         self.update_preferred_column();
         self.highlight_cache.clear();
         self.layout = LayoutCache::new();
         self.search = SearchState::new();
+    }
+
+    /// Prepare text and wrapping without a mounted editor or UI context.
+    pub fn prepare_view(
+        text: impl Into<String>,
+        config: EditorConfig,
+        width: u32,
+    ) -> PreparedEditorView {
+        let mut editor = Self::with_config(text, config);
+        let wrap = editor.wrap(width);
+        editor.layout.sync(&mut editor.buffer, wrap);
+        let derived_bytes = size_of::<Self>()
+            .saturating_add(editor.buffer.storage_bytes())
+            .saturating_add(editor.layout.storage_bytes());
+        PreparedEditorView {
+            buffer: editor.buffer,
+            layout: editor.layout,
+            config: editor.config,
+            width,
+            derived_bytes,
+        }
+    }
+
+    /// Publish prepared text without requesting focus or revealing the cursor.
+    ///
+    /// With `preserve`, selection and interaction state survive. The caller
+    /// must preserve the selected prefix or remap the selection afterwards.
+    /// Undo history belongs to the replaced buffer and is discarded.
+    pub fn publish_view(&mut self, prepared: PreparedEditorView, preserve: bool) {
+        let selection = self.buffer.selection();
+        self.buffer = prepared.buffer;
+        self.layout = prepared.layout;
+        self.config = prepared.config;
+        self.prepared_width = Some(prepared.width);
+        if preserve {
+            self.buffer.set_selection(selection);
+        } else {
+            self.vi = ViState::new();
+            self.mouse = MouseState::new();
+            self.prompt = None;
+            self.yank.clear();
+            self.yank_linewise = false;
+        }
+        self.search = SearchState::new();
+        self.highlighter = None;
+        self.highlight_cache.clear();
+        self.cursor_view_point = None;
+        self.update_preferred_column();
+    }
+
+    /// Return the selection endpoints in logical character coordinates.
+    pub fn selection(&self) -> Selection {
+        self.buffer.selection()
+    }
+
+    /// Replace selection endpoints without scrolling or taking focus.
+    pub fn set_selection(&mut self, selection: Selection) {
+        self.buffer.set_selection(selection);
+        self.update_preferred_column();
+    }
+
+    /// Return whether the pointer currently owns an unfinished selection.
+    pub fn selection_drag_active(&self) -> bool {
+        self.mouse.selecting
+    }
+
+    /// End an unfinished pointer gesture, retaining its selected text.
+    /// The host that owns pointer capture must release it separately.
+    pub fn end_selection_drag(&mut self) {
+        self.mouse.selecting = false;
+        self.mouse.anchor = None;
+    }
+
+    /// Map a prepared content point to a logical text position.
+    ///
+    /// The point includes the line-number gutter. Prepare or render a view
+    /// before using this mapping.
+    pub fn position_at(&self, point: Point) -> TextPosition {
+        self.layout.position_in_row(
+            &self.buffer,
+            point.y as usize,
+            point.x.saturating_sub(self.gutter_width()) as usize,
+        )
+    }
+
+    /// Map a logical text position to its prepared content point.
+    pub fn point_at(&self, position: TextPosition) -> Point {
+        let mut point = self.layout.point_for_position(&self.buffer, position);
+        point.x = point.x.saturating_add(self.gutter_width());
+        point
+    }
+
+    /// Install already prepared highlighting without a whole-source render
+    /// scan.
+    pub fn set_highlight_spans(&mut self, lines: Vec<Vec<HighlightSpan>>) {
+        struct PreparedSpans(Vec<Vec<HighlightSpan>>);
+        impl Highlighter for PreparedSpans {
+            fn highlight_line(&self, line: usize, _text: &str) -> Vec<HighlightSpan> {
+                self.0.get(line).cloned().unwrap_or_default()
+            }
+        }
+        self.highlighter = Some(Box::new(PreparedSpans(lines)));
+        self.highlight_cache.clear();
+        self.highlight_cache.revision = Some(self.buffer.revision());
+    }
+
+    /// Install matches without revealing them or moving the selection.
+    pub fn set_matches_preserving_position(&mut self, matches: Vec<TextRange>) {
+        let cursor = self.buffer.cursor();
+        self.search.set_matches(&self.buffer, matches, cursor);
     }
 
     /// Clear what the editor edits, for [`CLEAR_INTENT`]: the field of an
@@ -394,6 +535,7 @@ impl Editor {
     /// Return how the layout wraps lines for a content width. The text
     /// fills the width less the gutter and the caret column.
     pub(super) fn wrap(&self, width: u32) -> Wrap {
+        let width = self.prepared_width.unwrap_or(width);
         let caret = self.caret_column();
         let text_width = width
             .saturating_sub(self.gutter_width())

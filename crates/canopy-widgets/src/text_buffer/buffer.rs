@@ -82,6 +82,12 @@ impl TextBuffer {
         self.revision
     }
 
+    /// Estimate retained rope text and tree storage for worker preparation.
+    /// Rope capacity scans chunks; the factor covers tree metadata and slack.
+    pub(crate) fn storage_bytes(&self) -> usize {
+        self.rope.capacity().saturating_mul(2)
+    }
+
     /// Return the current selection.
     pub fn selection(&self) -> Selection {
         self.selection

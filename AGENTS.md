@@ -13,6 +13,7 @@
 ## Repository map
 
 - `crates/canopy` is the runtime; `crates/canopy-widgets` the stock widgets;
+  `crates/canopy-markdown` the rendered and exact-source Markdown readers;
   `crates/canopy-mosaic` the block mosaic matcher, which depends on no other
   workspace crate; `crates/mosaic-score` the perceptual score of its drawing;
   `crates/canopy-mcp` the MCP launcher, config homes, and smoke suites;

@@ -59,6 +59,7 @@ canopy = { path = "crates/canopy" }
 canopy-derive = { path = "crates/canopy-derive" }
 canopy-geom = { path = "crates/canopy-geom" }
 canopy-mcp = { path = "crates/canopy-mcp" }
+canopy-markdown = { path = "crates/canopy-markdown", default-features = false }
 canopy-mosaic = { path = "crates/canopy-mosaic" }
 canopy-widgets = { path = "crates/canopy-widgets", default-features = false }
 

@@ -10,7 +10,7 @@ use std::{
 use canopy::{
     CanopyBuilder, Context, ContextExt, NodeName, Register, Setup, Widget, buf, derive_commands,
     error::Result,
-    geom::{Point, PointI32, Size},
+    geom::{Point, PointI32, Rect, Size},
     input::{Event, key, mouse},
     layout::{Edges, Layout, ScrollAxis, ScrollMark, ScrollOp},
     style::{AttrSet, Color, Paint, PartialStyle, Style, effects, themes},
@@ -2113,4 +2113,65 @@ fn natural_width_is_the_widest_unwrapped_line_its_gutter_and_caret_column() {
         7,
         "an editor that accepts focus keeps a column for the caret"
     );
+}
+
+#[test]
+fn prepared_view_append_preserves_selection_focus_and_paused_scroll() {
+    let config = EditorConfig::new()
+        .with_interaction(Interaction::View)
+        .with_wrap(WrapMode::None);
+    let text = "zero\r\none\r\ntwo\r\nthree\r\nfour\r\n";
+    let mut harness = build_harness(text, config.clone(), 12, 2);
+    let selection = Selection::new(TextPosition::new(1, 1), TextPosition::new(2, 2));
+    with_editor(&mut harness, |editor| editor.set_selection(selection));
+    scroll_editor_to(&mut harness, 0, 2);
+    let focus = harness.canopy.with_root_view(|view| view.focused_node());
+    let prepared = Editor::prepare_view(format!("{text}five\r\n"), config, 12);
+    with_editor(&mut harness, |editor| editor.publish_view(prepared, true));
+    harness.render().unwrap();
+    assert_eq!(editor_selection(&mut harness), selection);
+    assert_eq!(editor_view_scroll(&mut harness), Point::new(0, 2));
+    assert_eq!(
+        harness.canopy.with_root_view(|view| view.focused_node()),
+        focus
+    );
+    assert_eq!(
+        with_editor(&mut harness, |editor| editor
+            .buffer
+            .range_text(selection.range())),
+        "ne\r\ntw"
+    );
+}
+
+#[test]
+fn prepared_view_keeps_its_wrap_geometry_until_next_publication() {
+    let config = EditorConfig::new().with_interaction(Interaction::View);
+    let prepared = Editor::prepare_view("one two three four", config.clone(), 6);
+    let mut editor = Editor::with_config("", config);
+    editor.publish_view(prepared, false);
+    let before = editor.layout.total_lines();
+    editor.update_layout(Rect::new(0, 0, 50, 10), 0);
+    assert_eq!(editor.layout.total_lines(), before);
+    assert_eq!(editor.wrap(50).width, 5);
+}
+
+#[test]
+fn search_context_keeps_the_match_visible_in_a_single_row_view() {
+    let text = format!("{}needle", "filler\n".repeat(30));
+    let mut harness = build_harness(
+        &text,
+        EditorConfig::new().with_interaction(Interaction::View),
+        12,
+        1,
+    );
+    harness
+        .with_root_widget_context(|_: &mut EditorHost, ctx| {
+            ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |editor, ctx| {
+                editor.search(ctx, "needle".into());
+                Ok(())
+            })
+        })
+        .unwrap();
+    harness.render().unwrap();
+    assert_eq!(editor_view_scroll(&mut harness).y, 30);
 }

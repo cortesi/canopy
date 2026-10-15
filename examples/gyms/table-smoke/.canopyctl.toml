@@ -1,0 +1,9 @@
+[app]
+headless = ["cargo", "run", "-p", "gyms", "--", "tablegym", "--headless"]
+run = ["cargo", "run", "-p", "gyms", "--", "tablegym"]
+mcp_args = ["--mcp={socket}"]
+
+[smoke]
+suite = "."
+fail_fast = true
+timeout_ms = 5000

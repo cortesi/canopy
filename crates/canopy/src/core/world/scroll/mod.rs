@@ -426,13 +426,17 @@ fn align_viewport(viewport: &mut Node, area: Rect, align: RevealAlign, order: u6
 ///
 /// `Nearest` makes the smallest move, and keeps a viewport that already lies
 /// inside an oversized area. `Center` centers an area shorter than the
-/// viewport. `Top` puts the start `context` cells past the viewport origin.
+/// viewport. `Top` puts the start `context` cells past the viewport origin,
+/// reducing context so the start and any fitting area remain visible.
 /// Wide arithmetic keeps end coordinates intact.
 fn reveal_offset(offset: u32, view: u32, start: u32, length: u32, align: RevealAlign) -> u32 {
     let (start, length, view) = (u64::from(start), u64::from(length), u64::from(view));
     let offset = match align {
         RevealAlign::Center if length < view => (2 * start + length).saturating_sub(view) / 2,
-        RevealAlign::Top(context) => start.saturating_sub(u64::from(context)),
+        RevealAlign::Top(context) => {
+            let context = u64::from(context).min(view.saturating_sub(length.min(view)));
+            start.saturating_sub(context)
+        }
         _ => {
             let end_aligned = (start + length).saturating_sub(view);
             u64::from(offset).clamp(start.min(end_aligned), start.max(end_aligned))

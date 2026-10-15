@@ -89,6 +89,7 @@ images in [`docs/gallery`](./docs/gallery), beside a viewer.
 - [Agent loop](./docs/agent-loop.md)
 - [Fixtures](./docs/fixtures.md)
 - [Stock widget styles](./docs/styles.md)
+- [Markdown and source readers](./docs/markdown.md)
 
 
 # Demos

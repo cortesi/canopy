@@ -42,11 +42,15 @@ mod imgview;
 mod intervals;
 /// List gym example nodes.
 mod listgym;
+/// Interactive Markdown and controlled streaming fixtures.
+mod markdowngym;
 mod motiongym;
 /// Pager example nodes.
 mod pager;
 /// Stylegym example nodes.
 mod stylegym;
+/// Keyed table navigation and rectangle selection.
+mod tablegym;
 /// Terminal gym example nodes.
 mod termgym;
 /// Text gym example nodes.
@@ -135,6 +139,10 @@ impl<T: Widget + 'static> DemoShell<T> {
 }
 
 impl<T: Widget + 'static> Widget for DemoShell<T> {
+    fn name(&self) -> canopy::NodeName {
+        canopy::NodeName::convert("demo_shell")
+    }
+
     fn layout(&self) -> Layout {
         Layout::fill().direction(Direction::Column)
     }
@@ -248,6 +256,8 @@ enum Demo {
     Intervals,
     /// Explore the list widget.
     Listgym,
+    /// Read Markdown, inspect cards, and publish controlled stream chunks.
+    Markdowngym,
     /// Watch colors change over time.
     Motiongym,
     /// Page through a text file.
@@ -257,6 +267,8 @@ enum Demo {
     },
     /// Explore themes and render effects.
     Stylegym,
+    /// Inspect a keyed table with two-axis navigation and exact copying.
+    Tablegym,
     /// Run a shell inside the terminal widget.
     Termgym,
     /// Explore text wrapping and tab expansion.
@@ -318,10 +330,16 @@ impl Demo {
                 intervals::binding_setup(builder.configure(intervals::Intervals::register))
             }
             Self::Listgym => listgym::binding_setup(builder.configure(listgym::ListGym::register)),
+            Self::Markdowngym => {
+                markdowngym::binding_setup(builder.configure(markdowngym::MarkdownGym::register))
+            }
             Self::Motiongym => motiongym::binding_setup(builder),
             Self::Pager { .. } => pager::binding_setup(builder.configure(pager::Pager::register)),
             Self::Stylegym => {
                 stylegym::binding_setup(builder.configure(stylegym::Stylegym::register))
+            }
+            Self::Tablegym => {
+                tablegym::binding_setup(builder.configure(tablegym::TableGym::register))
             }
             Self::Termgym => termgym::binding_setup(builder.configure(termgym::TermGym::register)),
             Self::Textgym => textgym::binding_setup(builder),
@@ -358,9 +376,11 @@ impl Demo {
             ),
             Self::Intervals => install(builder, intervals::Intervals::new(), inspector),
             Self::Listgym => install(builder, listgym::ListGym::new(), inspector),
+            Self::Markdowngym => install(builder, markdowngym::MarkdownGym::new(), inspector),
             Self::Motiongym => install(builder, motiongym::MotionGym::new(), inspector),
             Self::Pager { file } => install(builder, pager::Pager::new(&read(file)?), inspector),
             Self::Stylegym => install(builder, stylegym::Stylegym::new(), inspector),
+            Self::Tablegym => install(builder, tablegym::TableGym::new(), inspector),
             Self::Termgym => install(builder, termgym::TermGym::new(), inspector),
             Self::Textgym => install(builder, textgym::TextGym::new(), inspector),
         };

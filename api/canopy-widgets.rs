@@ -4,7 +4,7 @@
 // Publish: crates.io
 // Declared features: default, devtools, graphics, syntax, terminal-widget
 // Workspace dependencies: canopy, canopy-mosaic
-// Workspace dependents: canopyctl, gyms, hello, todo
+// Workspace dependents: canopy-markdown, canopyctl, gyms, hello, todo
 // Unnameable: crate::image_view::ZoomDirection
 
 //! Built-in widgets for canopy applications.
@@ -18,6 +18,7 @@ use std::{
     hash::Hash,
     ops::Range,
     path::{Path, PathBuf},
+    sync::Arc,
     time::Duration,
 };
 
@@ -28,7 +29,8 @@ use canopy::{
     input::{FrameworkBindingGroup, IntentName, ModalToken, mouse::MouseEvent},
     layout::{Align, Edges, Layout, ScrollAxis, ScrollDirection},
     render::{Glyphs, Render, ScreenCapture},
-    style::Style,
+    runtime::NodeWakeHandle,
+    style::{Style, StyleRules, themes::Palette},
     text::Truncate,
     tree::FocusDirection,
 };
@@ -2849,6 +2851,203 @@ impl TabBar {
 
 impl Widget for TabBar {}
 
+/// A reusable read-only spreadsheet surface. Its body owns both runtime scroll
+/// offsets. Header, gutter, and tracks stay outside that body's canvas.
+pub struct TableView {/* private fields */}
+
+impl TableView {
+    /// Build a positional call with typed user arguments.
+    pub fn call_activate() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_clear_selection() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_coordinate_prompt() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_copy_all() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_copy_cell() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_copy_rows(include_header: bool) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_copy_selection(include_header: bool) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_goto(row: usize, column: usize) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_move_cursor(rows: i32, columns: i32, extend: bool) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_select_all() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_select_column() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_select_row() -> CommandCall;
+
+    /// Return the command spec for this command.
+    pub fn spec_activate() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_clear_selection() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_coordinate_prompt() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_copy_all() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_copy_cell() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_copy_rows() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_copy_selection() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_goto() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_move_cursor() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_select_all() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_select_column() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_select_row() -> &'static CommandSpec;
+}
+
+impl TableView {
+    /// Emit one activation carrying the displayed revision and stable keys.
+    pub fn activate(&mut self, _ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Clear explicit membership.
+    pub fn clear_selection(&mut self, _ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Start a one-based `row,column` coordinate prompt.
+    pub fn coordinate_prompt(&mut self, _ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Copy all labels and body rows as exact TSV.
+    pub fn copy_all(&mut self, _ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Copy the full current value, with no TSV framing.
+    pub fn copy_cell(&mut self, _ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Copy selected rows, or the cursor row, across every column.
+    pub fn copy_rows(
+        &mut self,
+        _ctx: &mut dyn Context,
+        include_header: bool,
+    ) -> canopy::error::Result<()>;
+
+    /// Copy selected body fields as exact TSV.
+    pub fn copy_selection(
+        &mut self,
+        _ctx: &mut dyn Context,
+        include_header: bool,
+    ) -> canopy::error::Result<()>;
+
+    /// Current stable cell keys, or no cursor for an empty axis.
+    pub fn cursor(&self) -> Option<CellKey>;
+
+    /// Indexed cursor position, useful for bounded status reporting.
+    pub fn cursor_index(&self) -> Option<(usize, usize)>;
+
+    /// Jump to one-based coordinates. Coordinates beyond the data clamp.
+    pub fn goto(
+        &mut self,
+        ctx: &mut dyn Context,
+        row: usize,
+        column: usize,
+    ) -> canopy::error::Result<()>;
+
+    /// Mounted body node that receives focus and owns both scroll offsets.
+    pub fn initial_focus(&self) -> Option<NodeId>;
+
+    /// Move by cells, clamping at every edge. Empty data consumes a no-op.
+    pub fn move_cursor(
+        &mut self,
+        ctx: &mut dyn Context,
+        rows: i32,
+        columns: i32,
+        extend: bool,
+    ) -> canopy::error::Result<()>;
+
+    /// Construct a view around one atomic prepared publication.
+    pub fn new(table: Arc<PreparedTable>, options: TableViewOptions) -> Self;
+
+    /// Work performed by the most recent body paint, independent of dataset
+    /// size.
+    pub fn paint_stats(&self) -> TablePaintStats;
+
+    /// Pending host event count and aggregate text/key bytes.
+    pub fn pending_events(&self) -> (usize, usize);
+
+    /// Display one coherent snapshot. Older revisions of the same dataset
+    /// reject without changing data, geometry, cursor, selection, or
+    /// offsets.
+    pub fn publish(
+        &mut self,
+        ctx: &mut dyn Context,
+        table: Arc<PreparedTable>,
+    ) -> canopy::error::Result<()>;
+
+    /// Select all axis keys without allocating a record for each cell.
+    pub fn select_all(&mut self, _ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Select the current column across all rows.
+    pub fn select_column(&mut self, _ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Select the current row across all columns.
+    pub fn select_row(&mut self, _ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Explicit selection membership, independent of cursor and clipping.
+    pub fn selection(&self) -> &TableSelection;
+
+    /// Enable copy admission when the host provides a clipboard or copy sink.
+    pub fn set_copy_enabled(&mut self, enabled: bool);
+
+    /// Set the host's maximum complete copy payload size in UTF-8 bytes.
+    pub fn set_copy_limit(&mut self, bytes: usize);
+
+    /// Move to an existing keyed cell and reveal it.
+    pub fn set_cursor(
+        &mut self,
+        ctx: &mut dyn Context,
+        cell: &CellKey,
+    ) -> canopy::error::Result<()>;
+
+    /// Wake an owner whenever a complete host event enters the queue.
+    pub fn set_event_wake(&mut self, wake: NodeWakeHandle);
+
+    /// Displayed geometry and data.
+    pub fn table(&self) -> &Arc<PreparedTable>;
+
+    /// Drain at most `limit` pending host actions.
+    pub fn take_events(&mut self, limit: usize) -> Vec<TableEvent>;
+}
+
+impl CommandNode for TableView {}
+
+impl Register for TableView {}
+
+impl Widget for TableView {}
+
+impl !Send for TableView {}
+impl !Sync for TableView {}
+
 /// A row of tabs over a set of pages, one page visible at a time.
 ///
 /// Each page is a child node. Tabs hides every page but the active one. When a
@@ -3433,6 +3632,10 @@ pub mod editor {
         /// Return the cursor position.
         pub fn cursor(&self) -> TextPosition;
 
+        /// End an unfinished pointer gesture, retaining its selected text.
+        /// The host that owns pointer capture must release it separately.
+        pub fn end_selection_drag(&mut self);
+
         /// Insert `text` at the cursor, as a paste does. A vi editor takes the
         /// text only in insert mode, and a read-only editor never takes it.
         /// @param text Text to insert.
@@ -3449,6 +3652,29 @@ pub mod editor {
         /// A host that sizes the editor to this width shows the text as one
         /// unbroken block, such as a column centred in a wider pane.
         pub fn natural_width(&self) -> u32;
+
+        /// Map a logical text position to its prepared content point.
+        pub fn point_at(&self, position: TextPosition) -> Point;
+
+        /// Map a prepared content point to a logical text position.
+        ///
+        /// The point includes the line-number gutter. Prepare or render a view
+        /// before using this mapping.
+        pub fn position_at(&self, point: Point) -> TextPosition;
+
+        /// Prepare text and wrapping without a mounted editor or UI context.
+        pub fn prepare_view(
+            text: impl Into<String>,
+            config: EditorConfig,
+            width: u32,
+        ) -> PreparedEditorView;
+
+        /// Publish prepared text without requesting focus or revealing the cursor.
+        ///
+        /// With `preserve`, selection and interaction state survive. The caller
+        /// must preserve the selected prefix or remap the selection afterwards.
+        /// Undo history belongs to the replaced buffer and is discarded.
+        pub fn publish_view(&mut self, prepared: PreparedEditorView, preserve: bool);
 
         /// Redo the last undone edit.
         pub fn redo(&mut self, _ctx: &mut dyn Context);
@@ -3472,12 +3698,22 @@ pub mod editor {
         /// @return The position, or 0 when there is no current match.
         pub fn search_position(&self) -> usize;
 
+        /// Return the selection endpoints in logical character coordinates.
+        pub fn selection(&self) -> Selection;
+
+        /// Return whether the pointer currently owns an unfinished selection.
+        pub fn selection_drag_active(&self) -> bool;
+
         /// Replace the editor configuration.
         pub fn set_config(&mut self, config: EditorConfig);
 
         /// Move the cursor to `position`, and scroll it into view. A position
         /// past the end of its line or of the text clamps to that end.
         pub fn set_cursor(&mut self, ctx: &mut dyn Context, position: TextPosition);
+
+        /// Install already prepared highlighting without a whole-source render
+        /// scan.
+        pub fn set_highlight_spans(&mut self, lines: Vec<Vec<HighlightSpan>>);
 
         /// Install a syntax highlighter.
         ///
@@ -3494,6 +3730,12 @@ pub mod editor {
         /// the ranges need not come from a literal query, so callers can
         /// highlight regular-expression matches.
         pub fn set_matches(&mut self, ctx: &mut dyn Context, matches: Vec<TextRange>);
+
+        /// Install matches without revealing them or moving the selection.
+        pub fn set_matches_preserving_position(&mut self, matches: Vec<TextRange>);
+
+        /// Replace selection endpoints without scrolling or taking focus.
+        pub fn set_selection(&mut self, selection: Selection);
 
         /// Replace the buffer contents.
         pub fn set_text(&mut self, text: impl Into<String>);
@@ -3639,6 +3881,46 @@ pub mod editor {
         Absolute,
         /// Render relative line numbers (current line stays absolute).
         Relative,
+    }
+
+    /// Owned text and wrapping prepared before publication to a read-only editor.
+    ///
+    /// Construct this on a worker when scanning or wrapping a large source would
+    /// interrupt interaction. The width includes the line-number gutter.
+    #[derive(Debug)]
+    pub struct PreparedEditorView {/* private fields */}
+
+    impl PreparedEditorView {
+        /// Conservative retained storage estimate, computed during preparation.
+        /// Includes rope text/tree storage, wrapping, and the mounted Editor value.
+        pub fn derived_bytes(&self) -> usize;
+    }
+
+    /// A text selection expressed as an anchor and head position.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct Selection {/* private fields */}
+
+    impl Selection {
+        /// Return the anchor position.
+        pub fn anchor(self) -> TextPosition;
+
+        /// Construct a collapsed selection at a position.
+        pub fn caret(position: TextPosition) -> Self;
+
+        /// Return the head position.
+        pub fn head(self) -> TextPosition;
+
+        /// Return true if the selection is empty.
+        pub fn is_empty(self) -> bool;
+
+        /// Construct a selection from anchor and head positions.
+        pub fn new(anchor: TextPosition, head: TextPosition) -> Self;
+
+        /// Return the selection range as a normalized text range.
+        pub fn range(self) -> TextRange;
+
+        /// Update the head position.
+        pub fn set_head(&mut self, head: TextPosition);
     }
 
     /// A position in the text buffer expressed as a logical line and a char index.
@@ -3845,6 +4127,8 @@ pub mod highlight {
         fn prepare(&self, text: &str) {}
     }
 
+    impl Highlighter for PreparedSpans {}
+
     /// A grammar: a syntax, and the set that holds it.
     ///
     /// A syntax parses only against its own set, so the two travel together.
@@ -3889,7 +4173,7 @@ pub mod highlight {
     }
 
     /// How a highlight span paints.
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, PartialEq)]
     pub enum SpanStyle {
         /// A style the highlighter chose, as a syntax theme gives it.
         Fixed(Style),
@@ -3919,6 +4203,9 @@ pub mod highlight {
         /// Select the syntax for `extension`, discarding any prepared source.
         pub fn set_extension(&self, extension: &str);
 
+        /// Install `grammar` and drop state built with the previous one.
+        pub fn set_grammar(&self, grammar: Grammar);
+
         /// Select the syntax for `path`, discarding any prepared source.
         ///
         /// A file name is tried first, so `Makefile` and `Dockerfile` resolve,
@@ -3929,6 +4216,14 @@ pub mod highlight {
         #[must_use]
         pub fn syntax_name(&self) -> String;
 
+        /// Prepare borrowed semantic style paths using the built-in Canopy
+        /// classifier. Colors resolve through `palette_style_rules` when
+        /// painted; bold, italic, and underline survive without
+        /// reparsing on theme changes. A later `with_theme` call
+        /// restores fixed named-theme colors.
+        #[must_use]
+        pub fn with_palette_roles(self) -> Self;
+
         /// Use the named theme, falling back to [`DEFAULT_THEME`].
         #[must_use]
         pub fn with_theme(self, name: impl AsRef<str>) -> Self;
@@ -3938,6 +4233,10 @@ pub mod highlight {
 
     impl !Send for SyntectHighlighter {}
     impl !Sync for SyntectHighlighter {}
+
+    /// Install palette-aware syntax roles. Register with `Setup::widget_styles` so
+    /// already prepared spans follow theme switches without syntax work.
+    pub fn palette_style_rules(palette: &Palette, rules: StyleRules<'_>);
 }
 
 pub mod list {
@@ -4392,6 +4691,394 @@ pub mod scrollbar {
         owner: NodeId,
         axis: ScrollAxis,
     ) -> canopy::error::Result<Option<ScrollTarget>>;
+}
+
+pub mod table {
+    //! Immutable keyed tables, grid preparation, and viewer events.
+    //! Immutable keyed table snapshots and their shared, clipped grid renderer.
+
+    /// A body cell's stable keys.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct CellKey {
+        /// Row identity.
+        pub row: TableKey,
+        /// Column identity.
+        pub column: TableKey,
+    }
+
+    /// A pure prepared grid, retaining exactly the snapshot it measured.
+    #[derive(Debug)]
+    pub struct PreparedTable {/* private fields */}
+
+    impl PreparedTable {
+        /// Body rectangle for one indexed cell.
+        pub fn cell_rect(&self, row: usize, column: usize) -> Option<Rect>;
+
+        /// Resolve a canvas column with a binary prefix-sum lookup.
+        pub fn column_at(&self, x: u32) -> Option<usize>;
+
+        /// Snapshot retained by this geometry.
+        pub fn data(&self) -> &Arc<TableData>;
+
+        /// Conservative retained geometry bytes, computed during preparation.
+        /// This excludes the immutable TableData model and its full cell payloads.
+        pub fn derived_bytes(&self) -> usize;
+
+        /// Stable key for these layout options and measured widths.
+        pub fn geometry_key(&self) -> u64;
+
+        /// Glyph preset retained by this prepared snapshot.
+        pub fn glyphs(&self) -> TableGlyphs;
+
+        /// Fixed gutter width, excluding the body grid.
+        pub fn gutter_width(&self) -> u32;
+
+        /// Hit a grid using the same offsets and decoration widths as paint.
+        pub fn hit_test(&self, area: Rect, window: TableWindow, point: Point) -> Option<TableHit>;
+
+        /// Paint only the visible row/column window. No per-cell nodes or hit
+        /// rectangles exist.
+        pub fn paint(
+            &self,
+            render: &mut Render<'_>,
+            area: Rect,
+            window: TableWindow,
+            cursor: Option<&CellKey>,
+            selection: &TableSelection,
+        ) -> canopy::error::Result<TablePaintStats>;
+
+        /// Bytes inspected for automatic measurement.
+        pub fn sampled_bytes(&self) -> usize;
+
+        /// Total body canvas dimensions, excluding fixed chrome.
+        pub fn size(&self) -> Size;
+
+        /// Serialize selected body cells in current display order, with optional
+        /// labels. The limit applies to UTF-8 output bytes; overflow returns no
+        /// partial payload.
+        pub fn tsv(
+            &self,
+            selection: &TableSelection,
+            include_header: bool,
+            limit: usize,
+        ) -> canopy::error::Result<String>;
+
+        /// Prepared column widths.
+        pub fn widths(&self) -> &[u32];
+    }
+
+    /// Horizontal placement within a column.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub enum TableAlignment {
+        /// Align at the start.
+        #[default]
+        Left,
+        /// Center short values.
+        Center,
+        /// Align at the end.
+        Right,
+    }
+
+    /// Convenience builder for plain keyed rows.
+    pub struct TableBuilder {/* private fields */}
+
+    impl TableBuilder {
+        /// Validate and freeze the snapshot.
+        pub fn build(self) -> canopy::error::Result<TableData>;
+
+        /// Append one keyed row in display order.
+        #[must_use]
+        pub fn row(
+            self,
+            key: impl Into<TableKey>,
+            values: impl IntoIterator<Item = impl Into<TableCell>>,
+        ) -> Self;
+    }
+
+    /// A full cell value and optional presentation spans.
+    #[derive(Clone, Debug)]
+    pub struct TableCell {/* private fields */}
+
+    impl TableCell {
+        /// Construct a plain value, preserving every byte for detail and copy.
+        pub fn plain(text: impl Into<Arc<str>>) -> Self;
+
+        /// Share the full value without copying its bytes on the input path.
+        pub fn shared_text(&self) -> Arc<str>;
+
+        /// Return validated presentation spans.
+        pub fn spans(&self) -> &[TableSpan];
+
+        /// Validate ordered, nonoverlapping style spans on UTF-8 boundaries.
+        pub fn styled(
+            text: impl Into<Arc<str>>,
+            spans: Vec<TableSpan>,
+        ) -> canopy::error::Result<Self>;
+
+        /// Return the full, unmodified value.
+        pub fn text(&self) -> &str;
+    }
+
+    impl From<&str> for TableCell {}
+
+    impl From<String> for TableCell {}
+
+    /// One ordered column. Duplicate labels are permitted.
+    #[derive(Clone, Debug)]
+    pub struct TableColumn {
+        /// Stable identity within the column axis.
+        pub key: TableKey,
+        /// Full label.
+        pub label: TableCell,
+        /// Placement of labels and body values.
+        pub alignment: TableAlignment,
+    }
+
+    impl TableColumn {
+        /// Construct a left-aligned column.
+        pub fn new(key: impl Into<TableKey>, label: impl Into<TableCell>) -> Self;
+    }
+
+    /// Copy operation interpreted against the displayed snapshot.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum TableCopy {
+        /// Current full value, without TSV framing.
+        Cell,
+        /// Explicit body membership.
+        Selection,
+        /// Rows intersecting the selection, or the cursor row.
+        Rows,
+        /// All rows, with labels exactly once.
+        All,
+    }
+
+    /// A validated immutable snapshot. Construction indexes each axis once.
+    #[derive(Debug)]
+    pub struct TableData {/* private fields */}
+
+    impl TableData {
+        /// Start a plain table with stable numeric column keys, independent of
+        /// labels.
+        pub fn builder(
+            dataset: impl Into<TableKey>,
+            revision: u64,
+            labels: impl IntoIterator<Item = impl Into<TableCell>>,
+        ) -> TableBuilder;
+
+        /// Resolve a keyed cell in this snapshot.
+        pub fn cell(&self, cell: &CellKey) -> Option<&TableCell>;
+
+        /// Return the key of an indexed body cell.
+        pub fn cell_key(&self, row: usize, column: usize) -> Option<CellKey>;
+
+        /// Find a stable column key without scanning the dataset.
+        pub fn column_index(&self, key: &str) -> Option<usize>;
+
+        /// Shared column keys.
+        pub fn column_keys(&self) -> Arc<[TableKey]>;
+
+        /// Ordered columns.
+        pub fn columns(&self) -> &[TableColumn];
+
+        /// Dataset identity.
+        pub fn dataset(&self) -> &TableKey;
+
+        /// Validate unique keys and rectangular body data.
+        pub fn new(
+            dataset: impl Into<TableKey>,
+            revision: u64,
+            columns: Vec<TableColumn>,
+            rows: Vec<TableRow>,
+        ) -> canopy::error::Result<Self>;
+
+        /// Data revision, increasing within a dataset.
+        pub fn revision(&self) -> u64;
+
+        /// Find a stable row key without scanning the dataset.
+        pub fn row_index(&self, key: &str) -> Option<usize>;
+
+        /// Shared axis keys, suitable for select-all without per-cell records.
+        pub fn row_keys(&self) -> Arc<[TableKey]>;
+
+        /// Ordered rows.
+        pub fn rows(&self) -> &[TableRow];
+    }
+
+    /// Host-facing events. Clipboard access belongs to the host.
+    #[derive(Clone, Debug)]
+    pub enum TableEvent {
+        /// One activation of a full cell value.
+        Activate {
+            /// Dataset identity.
+            dataset: TableKey,
+            /// Displayed revision.
+            revision: u64,
+            /// Activated keys.
+            cell: CellKey,
+        },
+        /// One complete payload; never a truncated prefix.
+        Copy {
+            /// Dataset identity.
+            dataset: TableKey,
+            /// Displayed revision.
+            revision: u64,
+            /// Exact requested bytes.
+            text: String,
+        },
+    }
+
+    /// Separator and control-substitution glyphs.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct TableGlyphs {
+        /// Column boundary.
+        pub separator: char,
+        /// A newline inside a value.
+        pub newline: char,
+        /// A tab inside a value.
+        pub tab: char,
+        /// Other terminal controls.
+        pub control: char,
+    }
+
+    impl TableGlyphs {
+        /// Portable ASCII substitutions.
+        pub const ASCII: Self = _;
+        /// Thin Unicode separators and visible whitespace substitutions.
+        pub const UNICODE: Self = _;
+    }
+
+    /// A hit names data only. Separators and empty space return no hit.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum TableHit {
+        /// Column label.
+        Header(usize),
+        /// Row-number gutter.
+        Row(usize),
+        /// Body cell.
+        Cell {
+            /// Row index.
+            row: usize,
+            /// Column index.
+            column: usize,
+        },
+    }
+
+    /// A stable dataset, row, or column identity. Labels are independent of keys.
+    pub type TableKey = Arc<str>;
+
+    /// Deterministic width preparation. The default samples at most 64 rows and
+    /// 64 KiB of text across all columns. Large snapshots belong on a host worker.
+    #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct TableLayoutOptions {
+        /// Exact widths, or bounded automatic measurement when empty.
+        pub widths: Vec<u32>,
+        /// Minimum automatic width, at least one cell.
+        pub min_width: u32,
+        /// Maximum preferred automatic width.
+        pub max_width: u32,
+        /// Maximum initial body rows measured.
+        pub sample_rows: usize,
+        /// Maximum bytes measured across labels and body cells.
+        pub sample_bytes: usize,
+        /// Shared grid glyphs.
+        pub glyphs: TableGlyphs,
+    }
+
+    /// Visible-work counters returned by grid painting.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub struct TablePaintStats {
+        /// Painted body cells.
+        pub cells: usize,
+        /// Painted labels.
+        pub labels: usize,
+        /// Visible columns visited after the binary prefix-sum lookup.
+        pub columns_visited: usize,
+        /// Body-row lookups, including an end-of-data probe when present.
+        pub rows_visited: usize,
+    }
+
+    /// One ordered keyed row, containing exactly one cell per column.
+    #[derive(Clone, Debug)]
+    pub struct TableRow {
+        /// Stable identity within the row axis.
+        pub key: TableKey,
+        /// Full cell values, in column order.
+        pub cells: Vec<TableCell>,
+    }
+
+    impl TableRow {
+        /// Construct a row. The dataset validates its cell count.
+        pub fn new(key: impl Into<TableKey>, cells: Vec<TableCell>) -> Self;
+    }
+
+    /// Explicit Cartesian membership. Storage grows by axes, never by cells.
+    #[derive(Clone, Debug, Default)]
+    pub struct TableSelection {/* private fields */}
+
+    impl TableSelection {
+        /// Selected column keys in their captured order.
+        pub fn columns(&self) -> &[TableKey];
+
+        /// Whether a keyed cell belongs to the selection.
+        pub fn contains(&self, row: &str, column: &str) -> bool;
+
+        /// Whether either membership axis is empty.
+        pub fn is_empty(&self) -> bool;
+
+        /// Construct explicit membership, removing duplicate keys.
+        pub fn new(rows: Arc<[TableKey]>, columns: Arc<[TableKey]>) -> Self;
+
+        /// Selected row keys in their captured order.
+        pub fn rows(&self) -> &[TableKey];
+    }
+
+    /// A style over a half-open UTF-8 byte range of a cell's original text.
+    #[derive(Clone, Debug)]
+    pub struct TableSpan {
+        /// Bytes of the full value.
+        pub range: Range<usize>,
+        /// Presentation only, with no action metadata.
+        pub style: Style,
+    }
+
+    /// Interactive behavior and resource limits.
+    #[derive(Clone, Debug, Default)]
+    pub struct TableViewOptions {
+        /// Enable cursor input and focus.
+        pub interactive: bool,
+        /// Fixed row-number gutter.
+        pub row_numbers: bool,
+        /// Fixed header row.
+        pub header: bool,
+        /// Maximum pending host events.
+        pub event_capacity: usize,
+        /// Maximum aggregate pending event text bytes.
+        pub event_bytes: usize,
+        /// Maximum bytes in one copy.
+        pub copy_bytes: usize,
+    }
+
+    /// The scroll window and fixed decorations of a grid paint or hit query.
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct TableWindow {
+        /// Body canvas offset. Header follows x, gutter follows y.
+        pub offset: Point,
+        /// Include a fixed one-row header.
+        pub header: bool,
+        /// Include fixed row numbers.
+        pub row_numbers: bool,
+    }
+
+    /// Prepare widths once. Explicit widths require one positive width per column.
+    pub fn prepare(
+        data: Arc<TableData>,
+        options: TableLayoutOptions,
+    ) -> canopy::error::Result<PreparedTable>;
+
+    /// Install the shared table palette roles, including standalone views and
+    /// previews. Pass this callback to `Setup::widget_styles` to follow theme
+    /// changes.
+    pub fn style_rules(palette: &Palette, rules: StyleRules<'_>);
 }
 
 pub mod terminal {

@@ -3,9 +3,11 @@ mod focusgym;
 mod framegym;
 mod help;
 mod listgym;
+mod markdowngym;
 mod shell;
 mod smoke;
 mod stylegym;
+mod tablegym;
 mod termgym;
 
 use canopy::{CanopyBuilder, Widget, error::Result, geom::Size, testing::harness::Harness};

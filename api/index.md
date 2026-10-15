@@ -32,7 +32,7 @@ Canopy: A terminal UI library.
 - Publish: crates.io
 - Declared features: testing
 - Workspace dependencies: canopy-derive, canopy-geom
-- Workspace dependents: canopy (dev), canopy-derive (dev), canopy-mcp, canopy-widgets, canopyctl, gyms, hello, mosaic-score, todo
+- Workspace dependents: canopy (dev), canopy-derive (dev), canopy-markdown, canopy-mcp, canopy-widgets, canopyctl, gyms, hello, mosaic-score, todo
 - Unnameable: crate::core::commands::sealed::Inject, crate::core::context::sealed::Context, crate::core::context::sealed::ViewContext
 - Items: 707
 - Exposes: canopy-geom, futures-channel, ruau, ruau-declaration, schemars, serde_core, serde_json
@@ -64,10 +64,21 @@ Built-in widgets for canopy applications.
 - Publish: crates.io
 - Declared features: default, devtools, graphics, syntax, terminal-widget
 - Workspace dependencies: canopy, canopy-mosaic
-- Workspace dependents: canopyctl, gyms, hello, todo
+- Workspace dependents: canopy-markdown, canopyctl, gyms, hello, todo
 - Unnameable: crate::image_view::ZoomDirection
-- Items: 767
-- Exposes: canopy, canopy-mosaic, grep-regex, image, syntect
+- Items: 903
+- Exposes: PreparedSpans, canopy, canopy-mosaic, grep-regex, image, syntect
+
+## canopy-markdown
+
+Interactive Markdown reading and exact source viewing for Canopy.
+
+- Publish: crates.io
+- Declared features: default, syntax
+- Workspace dependencies: canopy, canopy-widgets
+- Workspace dependents: gyms
+- Items: 307
+- Exposes: canopy, canopy-widgets, pulldown-cmark, url
 
 ## hello
 
@@ -95,7 +106,7 @@ Todo application used as Canopy's end-to-end example and smoke-test target.
 
 - canopyctl: workspace dependencies: canopy, canopy-mcp, canopy-widgets
 
-- gyms: workspace dependencies: canopy, canopy-mcp, canopy-widgets
+- gyms: workspace dependencies: canopy, canopy-markdown, canopy-mcp, canopy-widgets
 
 - mosaic-score: workspace dependencies: canopy, canopy-mosaic
 

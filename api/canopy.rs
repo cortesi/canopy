@@ -4,7 +4,7 @@
 // Publish: crates.io
 // Declared features: testing
 // Workspace dependencies: canopy-derive, canopy-geom
-// Workspace dependents: canopy (dev), canopy-derive (dev), canopy-mcp, canopy-widgets, canopyctl, gyms, hello, mosaic-score, todo
+// Workspace dependents: canopy (dev), canopy-derive (dev), canopy-markdown, canopy-mcp, canopy-widgets, canopyctl, gyms, hello, mosaic-score, todo
 // Unnameable: crate::core::commands::sealed::Inject, crate::core::context::sealed::Context, crate::core::context::sealed::ViewContext
 
 //! Canopy: A terminal UI library.
@@ -3490,8 +3490,9 @@ pub mod layout {
         /// and use `Nearest` on the others.
         Center,
         /// Place the rectangle's start `context` cells past the viewport origin,
-        /// clamping to the scrollable range. Text reads top to bottom, so only
-        /// the vertical axis offsets; the horizontal axis uses `Nearest`.
+        /// reducing context to keep a fitting rectangle visible in the settled
+        /// viewport, and clamping to the scrollable range. Only the vertical axis
+        /// offsets; the horizontal axis uses `Nearest`.
         Top(u32),
     }
 
