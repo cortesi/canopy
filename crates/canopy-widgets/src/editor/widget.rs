@@ -140,6 +140,15 @@ impl PreparedEditorView {
     }
 }
 
+/// Highlight spans prepared off the render path, one list per logical line.
+struct PreparedSpans(Vec<Vec<HighlightSpan>>);
+
+impl Highlighter for PreparedSpans {
+    fn highlight_line(&self, line: usize, _text: &str) -> Vec<HighlightSpan> {
+        self.0.get(line).cloned().unwrap_or_default()
+    }
+}
+
 /// Mouse selection tracking state.
 #[derive(Debug, Clone)]
 pub(super) struct MouseState {
@@ -390,12 +399,6 @@ impl Editor {
     /// Install already prepared highlighting without a whole-source render
     /// scan.
     pub fn set_highlight_spans(&mut self, lines: Vec<Vec<HighlightSpan>>) {
-        struct PreparedSpans(Vec<Vec<HighlightSpan>>);
-        impl Highlighter for PreparedSpans {
-            fn highlight_line(&self, line: usize, _text: &str) -> Vec<HighlightSpan> {
-                self.0.get(line).cloned().unwrap_or_default()
-            }
-        }
         self.highlighter = Some(Box::new(PreparedSpans(lines)));
         self.highlight_cache.clear();
         self.highlight_cache.revision = Some(self.buffer.revision());

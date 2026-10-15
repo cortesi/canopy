@@ -23,7 +23,8 @@ use crate::{
     scrollbar::Scrollbar,
     table::{
         CellKey, PreparedTable, TableCopy, TableData, TableEvent, TableGlyphs, TableHit,
-        TablePaintStats, TableSelection, TableViewOptions, TableWindow, style_rules,
+        TablePaintStats, TableSelection, TableViewOptions, TableWindow, display_control,
+        style_rules,
     },
 };
 
@@ -211,23 +212,18 @@ impl TableView {
         self.prompt = None;
         self.sync_paint();
         if let Some(body) = self.body {
-            let y = if same {
-                top.and_then(|key| self.table.data().row_index(&key))
-                    .unwrap_or(offset.y as usize) as u32
+            let origin = if same {
+                let y = top
+                    .and_then(|key| self.table.data().row_index(&key))
+                    .map_or(offset.y, |row| row as u32);
+                Point::new(offset.x, y)
             } else {
-                0
+                Point::ZERO
             };
-            ctx.scroll_node(
-                body.into(),
-                ScrollOp::To(Point {
-                    x: if same { offset.x } else { 0 },
-                    y,
-                }),
-            )?;
-            let x = if same { offset.x } else { 0 };
+            ctx.scroll_node(body.into(), ScrollOp::To(origin))?;
             ctx.with_widget_mut(body, |_: &mut TableBody, ctx| {
                 let width = ctx.view().content.w.max(1);
-                ctx.reveal_area(Rect::new(x, y, width, 1), RevealAlign::Top(0));
+                ctx.reveal_area(Rect::new(origin.x, origin.y, width, 1), RevealAlign::Top(0));
                 Ok(())
             })?;
         }
@@ -610,7 +606,24 @@ impl TableView {
                 | KeyCode::Tab
                 | KeyCode::BackTab
                 | KeyCode::Enter
-                | KeyCode::Char('h' | 'j' | 'k' | 'l' | 'g' | 'G' | 'y' | 'Y' | 'v' | 'V')
+                | KeyCode::Char(
+                    'h' | 'j'
+                        | 'k'
+                        | 'l'
+                        | 'H'
+                        | 'J'
+                        | 'K'
+                        | 'L'
+                        | 'g'
+                        | 'G'
+                        | '0'
+                        | '$'
+                        | ':'
+                        | 'y'
+                        | 'Y'
+                        | 'v'
+                        | 'V'
+                )
         )
     }
     /// Perform one admitted navigation, selection, prompt, or host action.
@@ -689,12 +702,20 @@ impl TableView {
             KeyCode::Right | KeyCode::Char('l') => self.move_cursor(ctx, 0, 1, key.mods.shift),
             KeyCode::Up | KeyCode::Char('k') => self.move_cursor(ctx, -1, 0, key.mods.shift),
             KeyCode::Down | KeyCode::Char('j') => self.move_cursor(ctx, 1, 0, key.mods.shift),
+            // Shifted letters extend the selection, like shifted arrows.
+            KeyCode::Char('H') => self.move_cursor(ctx, 0, -1, true),
+            KeyCode::Char('L') => self.move_cursor(ctx, 0, 1, true),
+            KeyCode::Char('K') => self.move_cursor(ctx, -1, 0, true),
+            KeyCode::Char('J') => self.move_cursor(ctx, 1, 0, true),
             KeyCode::PageUp => self.move_cursor(ctx, -page, 0, key.mods.shift),
             KeyCode::PageDown => self.move_cursor(ctx, page, 0, key.mods.shift),
             KeyCode::Home => self.move_to(ctx, r, 0, key.mods.shift),
             KeyCode::End => self.move_to(ctx, r, usize::MAX, key.mods.shift),
+            KeyCode::Char('0') => self.move_to(ctx, r, 0, false),
+            KeyCode::Char('$') => self.move_to(ctx, r, usize::MAX, false),
+            KeyCode::Char('g') => self.move_to(ctx, 0, c, false),
             KeyCode::Char('G') => self.move_to(ctx, usize::MAX, c, false),
-            KeyCode::Char('g') => self.coordinate_prompt(ctx),
+            KeyCode::Char(':') => self.coordinate_prompt(ctx),
             KeyCode::Tab | KeyCode::BackTab => {
                 let columns = self.table.data().columns().len();
                 if columns == 0 {
@@ -746,13 +767,7 @@ fn safe_prefix(value: &str, width: u32) -> String {
     value
         .chars()
         .take((width as usize).saturating_mul(4))
-        .map(|c| {
-            if c.is_control() || matches!(c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}') {
-                ' '
-            } else {
-                c
-            }
-        })
+        .map(|c| if display_control(c) { ' ' } else { c })
         .collect()
 }
 /// Select the first body cell when both data axes are nonempty.
@@ -938,53 +953,49 @@ impl Widget for TableView {
         let Some(view) = ctx.view_of(body.into()) else {
             return Ok(EventOutcome::Ignore);
         };
-        if mouse.action == mouse::Action::Down && mouse.button == mouse::Button::Left {
-            if let Some(point) = view.outer_point(mouse.location)
-                && let Some(TableHit::Cell { row, column }) = self.table.hit_test(
-                    Rect::new(0, 0, view.content.w, view.content.h),
-                    TableWindow {
-                        offset: view.scroll,
-                        header: false,
-                        row_numbers: false,
-                    },
-                    point,
-                )
-            {
-                ctx.set_focus(body.into())?;
-                self.move_to(ctx, row, column, mouse.modifiers.shift)?;
-                self.anchor = Some((row, column));
-                self.drag = true;
-                ctx.capture_mouse()?;
-                return Ok(EventOutcome::Handle);
-            }
-            let shell = ctx.view();
-            if let Some(point) = shell.outer_point(mouse.location) {
-                if self.options.header
-                    && point.y == 0
-                    && let Some(column) = point
-                        .x
-                        .checked_sub(self.gutter())
-                        .and_then(|x| self.table.column_at(x.saturating_add(view.scroll.x)))
-                {
-                    ctx.set_focus(body.into())?;
+        // Header, gutter, and body hits share the painted grid area, which
+        // excludes the scrollbar row and column.
+        let header = u32::from(self.options.header);
+        if mouse.action == mouse::Action::Down
+            && mouse.button == mouse::Button::Left
+            && let Some(point) = ctx.view().outer_point(mouse.location)
+            && let Some(hit) = self.table.hit_test(
+                Rect::new(
+                    0,
+                    0,
+                    self.gutter().saturating_add(view.content.w),
+                    header.saturating_add(view.content.h),
+                ),
+                TableWindow {
+                    offset: view.scroll,
+                    header: self.options.header,
+                    row_numbers: self.options.row_numbers,
+                },
+                point,
+            )
+        {
+            ctx.set_focus(body.into())?;
+            match hit {
+                TableHit::Cell { row, column } => {
+                    let extend = mouse.modifiers.shift;
+                    self.move_to(ctx, row, column, extend)?;
+                    // A shift-click extends from the existing anchor.
+                    if !extend {
+                        self.anchor = Some((row, column));
+                    }
+                    self.drag = true;
+                    ctx.capture_mouse()?;
+                }
+                TableHit::Header(column) => {
                     self.move_to(ctx, self.cursor.map_or(0, |(r, _)| r), column, false)?;
                     self.select_column(ctx)?;
-                    return Ok(EventOutcome::Handle);
                 }
-                if point.x < self.gutter() && point.y >= u32::from(self.options.header) {
-                    let row = view
-                        .scroll
-                        .y
-                        .saturating_add(point.y - u32::from(self.options.header))
-                        as usize;
-                    if row < self.table.data().rows().len() {
-                        ctx.set_focus(body.into())?;
-                        self.move_to(ctx, row, self.cursor.map_or(0, |(_, c)| c), false)?;
-                        self.select_row(ctx)?;
-                        return Ok(EventOutcome::Handle);
-                    }
+                TableHit::Row(row) => {
+                    self.move_to(ctx, row, self.cursor.map_or(0, |(_, c)| c), false)?;
+                    self.select_row(ctx)?;
                 }
             }
+            return Ok(EventOutcome::Handle);
         }
         if self.drag && mouse.action == mouse::Action::Drag {
             let point = view.viewport_to_outer(mouse.location)?.clamped_point();

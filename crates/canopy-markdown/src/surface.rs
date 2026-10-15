@@ -7,11 +7,11 @@ use std::{
 };
 
 use canopy::{
-    Context, EventOutcome, NodeName, ViewContext, Widget,
+    ChangeOutcome, Context, EventOutcome, NodeName, ViewContext, Widget,
     error::Result,
     geom::{Point, Rect, Size},
     input::{Event, NavIntent, mouse},
-    layout::{CanvasContext, Layout, MeasureConstraints, Measurement, RevealAlign, ScrollOp},
+    layout::{CanvasContext, Layout, MeasureConstraints, Measurement, RevealAlign, ScrollOp, View},
     render::Render,
     runtime::NodeWakeHandle,
     text::grapheme_width,
@@ -20,7 +20,7 @@ use canopy::{
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    document::{DocumentSnapshot, ReadingPosition, ReadingRange},
+    document::{DocumentSnapshot, Object, ReadingPosition, ReadingRange},
     options::{Follow, Mode},
     presentation::{PaintOverlays, PresentationSnapshot},
 };
@@ -69,6 +69,26 @@ impl SurfaceState {
     fn navigated(&mut self) {
         self.navigation = self.navigation.wrapping_add(1);
         self.reveal = None;
+    }
+
+    /// Record a moved viewport as navigation, pausing follow only when the
+    /// offset leaves the tail.
+    fn scrolled(&mut self, view: &View) {
+        self.navigated();
+        if view.scroll.y < view.canvas.h.saturating_sub(view.content.h) {
+            self.follow = Follow::Paused;
+        }
+    }
+
+    /// Whether selection or object navigation, rather than the viewport,
+    /// consumes a navigation intent.
+    pub fn claims(&self, nav: NavIntent) -> bool {
+        self.overlays.selection.is_some() && !matches!(nav, NavIntent::PageUp | NavIntent::PageDown)
+            || self.mode == Mode::Interact
+                && matches!(
+                    nav,
+                    NavIntent::Up | NavIntent::Down | NavIntent::First | NavIntent::Last
+                )
     }
 }
 
@@ -170,28 +190,32 @@ impl RenderedSurface {
             state.navigation = state.navigation.wrapping_add(1);
             ctx.release_mouse()?;
         }
-        let target = if state.follow == Follow::Following {
-            Some((next.height().saturating_sub(1), None))
-        } else if same_epoch {
-            anchor.and_then(|(position, source, viewport_row)| {
-                next.document
-                    .resolve_anchor(position.unit_id, source, position.offset)
-                    .map(|p| (next.row_for_unit(p.unit_id, p.offset), Some(viewport_row)))
-            })
-        } else {
-            Some((0, Some(0)))
-        };
-        self.pending_reading = if same_epoch && state.follow == Follow::Paused {
+        let resolved = if same_epoch && state.follow == Follow::Paused {
             anchor.and_then(|(position, source, viewport_row)| {
                 let position =
                     next.document
                         .resolve_anchor(position.unit_id, source, position.offset)?;
                 let source = next.document.unit(position.unit_id)?.source.start;
-                Some((state.navigation, position, source, viewport_row))
+                Some((position, source, viewport_row))
             })
         } else {
             None
         };
+        let target = if state.follow == Follow::Following {
+            Some((next.height().saturating_sub(1), None))
+        } else if same_epoch {
+            resolved.map(|(position, _, viewport_row)| {
+                (
+                    next.row_for_unit(position.unit_id, position.offset),
+                    Some(viewport_row),
+                )
+            })
+        } else {
+            Some((0, Some(0)))
+        };
+        self.pending_reading = resolved.map(|(position, source, viewport_row)| {
+            (state.navigation, position, source, viewport_row)
+        });
         state.document = Some(next.document.clone());
         state.presentation = Some(next);
         if let Some((row, viewport_row)) = target {
@@ -208,20 +232,18 @@ impl RenderedSurface {
         state.mode = Mode::Interact;
         if let Some(presentation) = state.presentation.clone() {
             let visible = ctx.view().view_rect();
-            let object_row = |id| object_row(&presentation, id);
-            let remembered_visible = state
-                .overlays
-                .active_object
-                .and_then(object_row)
+            let objects = &presentation.document.objects;
+            let remembered_visible = objects
+                .iter()
+                .find(|o| Some(o.id) == state.overlays.active_object)
+                .and_then(|o| object_row(&presentation, o))
                 .is_some_and(|row| {
                     row >= visible.tl.y && row < visible.tl.y.saturating_add(visible.h)
                 });
             if !remembered_visible {
-                state.overlays.active_object = presentation
-                    .document
-                    .objects
+                state.overlays.active_object = objects
                     .iter()
-                    .find(|o| object_row(o.id).is_some_and(|row| row >= visible.tl.y))
+                    .find(|o| object_row(&presentation, o).is_some_and(|row| row >= visible.tl.y))
                     .or_else(|| presentation.document.objects.last())
                     .map(|o| o.id);
             }
@@ -241,16 +263,7 @@ impl RenderedSurface {
                     .objects
                     .iter()
                     .find(|o| Some(o.id) == state.overlays.active_object)?;
-                let unit = p.document.unit(object.unit_id)?;
-                let offset = unit
-                    .spans
-                    .iter()
-                    .find(|s| s.object == Some(object.id))
-                    .map_or(0, |s| s.range.start);
-                Some(ReadingPosition {
-                    unit_id: unit.id,
-                    offset,
-                })
+                object_position(&p.document, object)
             });
             if let Some(position) = object_position.or(reading) {
                 state.overlays.selection = Some(ReadingRange {
@@ -346,9 +359,10 @@ impl RenderedSurface {
             state.follow = Follow::Paused;
             state.navigated();
             drop(state);
-            self.reveal_object(ctx)?;
-        } else if leave_at_boundary {
-            drop(state);
+            return self.reveal_object(ctx);
+        }
+        drop(state);
+        if leave_at_boundary {
             ctx.focus_move(
                 FocusScope::Root,
                 if delta < 0 {
@@ -357,8 +371,6 @@ impl RenderedSurface {
                     FocusDirection::Next
                 },
             )?;
-        } else {
-            return state.notify();
         }
         self.state.borrow().notify()
     }
@@ -375,7 +387,7 @@ impl RenderedSurface {
         {
             state.reveal = Some(Rect::new(
                 0,
-                object_row(presentation, object.id).unwrap_or(0),
+                object_row(presentation, object).unwrap_or(0),
                 1,
                 1,
             ));
@@ -479,10 +491,7 @@ impl RenderedSurface {
         let view = ctx.view();
         let mut state = self.state.borrow_mut();
         if before != view.scroll {
-            state.navigated();
-            if view.scroll.y < view.canvas.h.saturating_sub(view.content.h) {
-                state.follow = Follow::Paused;
-            }
+            state.scrolled(&view);
         }
         self.observed_scroll = Some((view.scroll, view.content_size()));
         state.notify()
@@ -498,12 +507,7 @@ impl RenderedSurface {
             return Ok(());
         };
         let current = selection.end;
-        let Some(unit_index) = presentation
-            .document
-            .units
-            .iter()
-            .position(|u| u.id == current.unit_id)
-        else {
+        let Some(unit_index) = presentation.document.unit_position(current.unit_id) else {
             return Ok(());
         };
         let units = &presentation.document.units;
@@ -697,9 +701,7 @@ impl RenderedSurface {
                 let key = |p: ReadingPosition| {
                     presentation
                         .document
-                        .units
-                        .iter()
-                        .position(|u| u.id == p.unit_id)
+                        .unit_position(p.unit_id)
                         .map(|i| (i, p.offset))
                 };
                 if key(position) >= key(anchor) {
@@ -755,10 +757,7 @@ impl Widget for RenderedSurface {
             && size == view.content_size()
             && before != view.scroll
         {
-            state.navigated();
-            if view.scroll.y < view.canvas.h.saturating_sub(view.content.h) {
-                state.follow = Follow::Paused;
-            }
+            state.scrolled(&view);
             state.notify()?;
         }
         self.observed_scroll = Some((view.scroll, view.content_size()));
@@ -776,64 +775,11 @@ impl Widget for RenderedSurface {
         Ok(())
     }
     fn accepts_intent(&self, intent: &str, ctx: &dyn ViewContext) -> bool {
-        let Some(nav) = NavIntent::from_name(intent) else {
-            return false;
-        };
-        let state = self.state.borrow();
-        if state.overlays.selection.is_some()
-            && !matches!(nav, NavIntent::PageUp | NavIntent::PageDown)
-        {
-            return true;
-        }
-        if state.mode == Mode::Interact
-            && matches!(
-                nav,
-                NavIntent::Up | NavIntent::Down | NavIntent::First | NavIntent::Last
-            )
-        {
-            return true;
-        }
-        let view = ctx.view();
-        let mut target = match nav {
-            NavIntent::Up => Point {
-                x: view.scroll.x,
-                y: view.scroll.y.saturating_sub(1),
-            },
-            NavIntent::Down => Point {
-                x: view.scroll.x,
-                y: view.scroll.y.saturating_add(1),
-            },
-            NavIntent::Left => Point {
-                x: view.scroll.x.saturating_sub(1),
-                y: view.scroll.y,
-            },
-            NavIntent::Right => Point {
-                x: view.scroll.x.saturating_add(1),
-                y: view.scroll.y,
-            },
-            NavIntent::PageUp => Point {
-                x: view.scroll.x,
-                y: view
-                    .scroll
-                    .y
-                    .saturating_sub(view.content.h.saturating_sub(1).max(1)),
-            },
-            NavIntent::PageDown => Point {
-                x: view.scroll.x,
-                y: view
-                    .scroll
-                    .y
-                    .saturating_add(view.content.h.saturating_sub(1).max(1)),
-            },
-            NavIntent::First => Point::ZERO,
-            NavIntent::Last => Point {
-                x: view.scroll.x,
-                y: u32::MAX,
-            },
-        };
-        target.x = target.x.min(view.canvas.w.saturating_sub(view.content.w));
-        target.y = target.y.min(view.canvas.h.saturating_sub(view.content.h));
-        target != view.scroll
+        NavIntent::from_name(intent).is_some_and(|nav| {
+            self.state.borrow().claims(nav)
+                || ctx.scroll_outcome(ctx.node_id(), nav_scroll(nav))
+                    == Some(ChangeOutcome::Changed)
+        })
     }
     fn on_intent(&mut self, intent: &str, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Some(nav) = NavIntent::from_name(intent)
@@ -869,7 +815,7 @@ impl Widget for RenderedSurface {
 }
 
 /// Translate navigation into explicit local viewport operations.
-fn nav_scroll(intent: NavIntent) -> ScrollOp {
+pub fn nav_scroll(intent: NavIntent) -> ScrollOp {
     match intent {
         NavIntent::Up => ScrollOp::By(0, -1),
         NavIntent::Down => ScrollOp::By(0, 1),
@@ -901,14 +847,8 @@ fn same_projection(old: &DocumentSnapshot, next: &DocumentSnapshot, range: &Read
         if !valid_position(document, range.start) || !valid_position(document, range.end) {
             return None;
         }
-        let a = document
-            .units
-            .iter()
-            .position(|u| u.id == range.start.unit_id)?;
-        let b = document
-            .units
-            .iter()
-            .position(|u| u.id == range.end.unit_id)?;
+        let a = document.unit_position(range.start.unit_id)?;
+        let b = document.unit_position(range.end.unit_id)?;
         let (start, end) = if (a, range.start.offset) <= (b, range.end.offset) {
             ((a, range.start.offset), (b, range.end.offset))
         } else {
@@ -942,20 +882,25 @@ fn same_projection(old: &DocumentSnapshot, next: &DocumentSnapshot, range: &Read
     old.flat_map(str::bytes).eq(next.flat_map(str::bytes))
 }
 
-/// Find the first prepared row of an object or its inline reading span.
-fn object_row(presentation: &PresentationSnapshot, id: u64) -> Option<u32> {
-    let object = presentation
-        .document
-        .objects
-        .iter()
-        .find(|object| object.id == id)?;
-    let unit = presentation.document.unit(object.unit_id)?;
+/// Locate an object's inline reading span, or the start of its card unit.
+fn object_position(document: &DocumentSnapshot, object: &Object) -> Option<ReadingPosition> {
+    let unit = document.unit(object.unit_id)?;
     let offset = unit
         .spans
         .iter()
-        .find(|span| span.object == Some(id))
+        .find(|span| span.object == Some(object.id))
         .map_or(0, |span| span.range.start);
-    let mut row = presentation.row_for_unit(unit.id, offset);
+    Some(ReadingPosition {
+        unit_id: unit.id,
+        offset,
+    })
+}
+
+/// Find the first prepared row of an object or its inline reading span.
+fn object_row(presentation: &PresentationSnapshot, object: &Object) -> Option<u32> {
+    let position = object_position(&presentation.document, object)?;
+    let unit = presentation.document.unit(position.unit_id)?;
+    let mut row = presentation.row_for_unit(unit.id, position.offset);
     if unit.atomic {
         while row > 0
             && presentation

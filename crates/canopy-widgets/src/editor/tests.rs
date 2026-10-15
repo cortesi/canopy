@@ -2042,25 +2042,29 @@ canopy.bind("q", {
 
 #[test]
 fn read_only_editor_leaves_edit_keys_to_bindings() {
-    let config = EditorConfig::new()
-        .with_mode(EditMode::Text)
-        .with_interaction(Interaction::View);
-    let mut harness = build_harness("text", config, 6, 1);
-    harness
-        .canopy
-        .eval_script(
-            r#"
-canopy.bind("q", {
+    // `a` enters insert and `d` starts a delete in a writable vi buffer.
+    for mode in [EditMode::Text, EditMode::Vi] {
+        let config = EditorConfig::new()
+            .with_mode(mode)
+            .with_interaction(Interaction::View);
+        let mut harness = build_harness("text", config, 6, 1);
+        harness
+            .canopy
+            .eval_script(
+                r#"
+canopy.keymap({
     path = "editor_host",
     phase = "after_widget",
-    description = "Record binding",
-}, command.editor_host.record_binding())
+    { key = { "a", "d" }, description = "Record binding", action = command.editor_host.record_binding() },
+})
 "#,
-        )
-        .unwrap();
-    harness.key('q').unwrap();
-    assert_eq!(editor_text(&mut harness), "text");
-    assert_eq!(host_binding_hits(&mut harness), 1);
+            )
+            .unwrap();
+        harness.key('a').unwrap();
+        harness.key('d').unwrap();
+        assert_eq!(editor_text(&mut harness), "text");
+        assert_eq!(host_binding_hits(&mut harness), 2, "{mode:?}");
+    }
 }
 
 #[derive(Clone)]

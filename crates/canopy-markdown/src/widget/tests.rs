@@ -405,6 +405,59 @@ fn search_publication_does_not_navigate_and_pending_query_is_not_ready() {
 }
 
 #[test]
+fn search_without_matches_keeps_follow_and_saved_anchors() {
+    let (mut harness, manual) = fixture("alpha", ViewType::Rendered, true, false, false);
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.follow(ctx)?;
+            reader.set_search(ctx, "absent".into(), false)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            assert_eq!(reader.search_matches(), 0);
+            let navigation = reader.shared.borrow().navigation;
+            reader.search_next(ctx, 1)?;
+            assert_eq!(reader.search_position(), 0);
+            assert_eq!(reader.shared.borrow().navigation, navigation);
+            assert_eq!(reader.follow_state(), Follow::Following);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn search_failure_replaces_matches_and_success_clears_the_error() {
+    let (mut harness, manual) =
+        fixture("needle and needle", ViewType::Rendered, false, false, false);
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_search(ctx, "needle".into(), false)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.search_next(ctx, 1)?;
+            assert_eq!(reader.search_position(), 1);
+            let results = reader.results.clone().unwrap();
+            reader.apply_search(ctx, Err("scan failed".into()))?;
+            assert_eq!(reader.search_error(), Some("scan failed"));
+            assert_eq!(reader.search_matches(), 0);
+            assert_eq!(reader.search_position(), 0);
+            assert!(reader.shared.borrow().overlays.search.is_empty());
+            reader.apply_search(ctx, Ok(SearchOutput::Rendered(results)))?;
+            assert_eq!(reader.search_error(), None);
+            assert_eq!(reader.search_matches(), 2);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
 fn search_activation_uses_the_matching_link_and_declines_plain_prose() {
     let text = "[first](https://first.test) plainword [needle](https://second.test)";
     let (mut harness, manual) = fixture(text, ViewType::Rendered, false, false, false);
@@ -1471,4 +1524,44 @@ fn accepted_publication_wakes_host_but_stale_results_and_queries_do_not() {
         harness.canopy.turn(TurnInput::Wake).unwrap();
     }
     assert_eq!(polls.get(), 3, "accepted failure status must wake the host");
+}
+
+#[test]
+fn vi_letters_jump_to_document_edges_in_both_views() {
+    let (mut harness, manual) = fixture(&long_document(), ViewType::Rendered, false, false, false);
+    settle(&mut harness, &manual);
+    for view in [ViewType::Rendered, ViewType::Source] {
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                reader.set_view_type(ctx, view)?;
+                Ok(())
+            })
+            .unwrap();
+        settle(&mut harness, &manual);
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                ctx.set_focus(reader.navigation_node().unwrap())?;
+                Ok(())
+            })
+            .unwrap();
+        harness.key(Key::parse_spec("G").unwrap()).unwrap();
+        service(&mut harness);
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                assert!(reader.view_offset(ctx) > 0, "{view:?}");
+                Ok(())
+            })
+            .unwrap();
+        // Source's vi editor reaches the start with `gg`; a second `g` is
+        // harmless in Rendered.
+        harness.key(Key::parse_spec("g").unwrap()).unwrap();
+        harness.key(Key::parse_spec("g").unwrap()).unwrap();
+        service(&mut harness);
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                assert_eq!(reader.view_offset(ctx), 0, "{view:?}");
+                Ok(())
+            })
+            .unwrap();
+    }
 }

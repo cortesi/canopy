@@ -35,21 +35,44 @@ const STREAM: &[&str] = &[
 canopy::slot!(pub(crate) ReaderSlot: Markdown);
 canopy::slot!(StatusSlot: Text);
 
-/// Gym controls installed in addition to the standard reader bindings.
+/// Gym controls installed in addition to the standard reader bindings. Plain
+/// letters the reader leaves free open which-key menus; `a` stays one key
+/// because a stream is appended repeatedly.
 const BINDINGS: &str = r#"
 root.default_bindings()
 canopy.keymap({
     path = "markdown_gym",
-    { key = "alt-a", description = "Append next stream chunk", action = command.markdown_gym.append_chunk() },
-    { key = "alt-f", description = "Finish stream", action = command.markdown_gym.finish() },
-    { key = "alt-x", description = "Abort stream", action = command.markdown_gym.abort() },
-    { key = "alt-r", description = "Replace with complete fixture", action = command.markdown_gym.replace() },
-    { key = "alt-s", description = "Begin controlled stream", action = command.markdown_gym.begin_stream() },
-    { key = "alt-w", description = "Toggle narrow reader", action = command.markdown_gym.narrow() },
-    { key = "alt-t", description = "Toggle light theme", action = command.markdown_gym.theme() },
-    { key = "alt-u", description = "Toggle ASCII decorations", action = command.markdown_gym.glyphs() },
+    { key = "a", description = "Append next stream chunk", action = command.markdown_gym.append_chunk() },
+    { key = "s", description = "Stream", action = canopy.menu("stream") },
+    { key = "d", description = "Document", action = canopy.menu("document") },
+    { key = "p", description = "Presentation", action = canopy.menu("presentation") },
+})
+canopy.keymap({
+    mode = "stream",
+    { key = "s", description = "Start a controlled stream", action = command.markdown_gym.begin_stream() },
+    { key = "a", description = "Append next chunk", action = command.markdown_gym.append_chunk() },
+    { key = "f", description = "Finish", action = command.markdown_gym.finish() },
+    { key = "x", description = "Abort", action = command.markdown_gym.abort() },
+})
+canopy.keymap({
+    mode = "document",
+    { key = "f", description = "Full fixture", action = command.markdown_gym.replace() },
+    { key = "e", description = "Exact CRLF source", action = command.markdown_gym.exact_source() },
+    { key = "l", description = "Over the syntax limit", action = command.markdown_gym.syntax_limit() },
+    { key = "p", description = "Partial source prefix", action = command.markdown_gym.partial_source() },
+    { key = "u", description = "Unsafe link", action = command.markdown_gym.unavailable() },
+})
+canopy.keymap({
+    mode = "presentation",
+    { key = "w", description = "Narrow / full width", action = command.markdown_gym.narrow() },
+    { key = "t", description = "Light / dark theme", action = command.markdown_gym.theme() },
+    { key = "g", description = "ASCII / Unicode glyphs", action = command.markdown_gym.glyphs() },
 })
 "#;
+/// Host requests drained and acknowledged per collection.
+const REQUEST_BATCH: usize = 16;
+/// Recorded host requests retained for queries.
+const REQUEST_LOG: usize = 64;
 
 /// Access the mounted document controller in its own context.
 fn reader<R>(
@@ -125,6 +148,32 @@ impl MarkdownGym {
             Ok(())
         })
     }
+    /// Record a lifecycle state and publish it to the status line.
+    fn set_state(
+        &mut self,
+        ctx: &mut dyn Context,
+        state: impl Into<String>,
+        receiving: bool,
+    ) -> Result<()> {
+        self.state = state.into();
+        self.receiving = receiving;
+        self.show_status(ctx)
+    }
+    /// Replace the document in a new epoch with both presentations available.
+    fn load(
+        &mut self,
+        ctx: &mut dyn Context,
+        input: DocumentInput,
+        state: impl Into<String>,
+    ) -> Result<()> {
+        let receiving = matches!(input, DocumentInput::Receiving(_));
+        reader(ctx, |md, ctx| {
+            md.set_source_only(ctx, false, None)?;
+            md.replace(ctx, input).map(|_| ())
+        })?;
+        self.next_chunk = usize::from(receiving);
+        self.set_state(ctx, state, receiving)
+    }
     /// Choose the full-width or narrow reader region.
     fn reader_layout(&self) -> LayoutOverride {
         let mut layout = flex_row(1);
@@ -132,6 +181,24 @@ impl MarkdownGym {
             layout = layout.fixed_width(40);
         }
         layout
+    }
+    /// Mount a reader over the complete fixture with the current options and
+    /// region.
+    fn mount_reader(&self, ctx: &mut dyn Context) -> Result<()> {
+        let node = ctx.add_slot::<ReaderSlot>(
+            ctx.node_id(),
+            Markdown::new(FIXTURE.into(), self.options())?,
+        )?;
+        ctx.set_layout_override(node.into(), self.reader_layout())
+    }
+    /// Return the most recent recorded action that `pick` accepts.
+    fn last_action(&self, pick: impl Fn(&HostAction) -> Option<&String>) -> String {
+        self.requests
+            .iter()
+            .rev()
+            .find_map(|request| pick(&request.action))
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// A worker/publication readiness predicate, independent of frame timing.
@@ -203,15 +270,11 @@ impl MarkdownGym {
     /// Start a new receiving epoch at the first controlled chunk.
     #[command]
     pub fn begin_stream(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        reader(ctx, |md, ctx| {
-            md.set_source_only(ctx, false, None)?;
-            md.replace(ctx, DocumentInput::Receiving(STREAM[0].into()))
-                .map(|_| ())
-        })?;
-        self.next_chunk = 1;
-        self.receiving = true;
-        self.state = "receiving 1/6".into();
-        self.show_status(ctx)
+        self.load(
+            ctx,
+            DocumentInput::Receiving(STREAM[0].into()),
+            format!("receiving 1/{}", STREAM.len()),
+        )
     }
     /// Accept exactly one known chunk. This command never advances a clock.
     #[command]
@@ -224,8 +287,8 @@ impl MarkdownGym {
         };
         reader(ctx, |md, ctx| md.append(ctx, chunk).map(|_| ()))?;
         self.next_chunk += 1;
-        self.state = format!("receiving {}/{}", self.next_chunk, STREAM.len());
-        self.show_status(ctx)
+        let state = format!("receiving {}/{}", self.next_chunk, STREAM.len());
+        self.set_state(ctx, state, true)
     }
     #[command]
     /// Complete the current stream without accepting additional bytes.
@@ -236,9 +299,7 @@ impl MarkdownGym {
         reader(ctx, |md, ctx| {
             md.finish(ctx, FinishOutcome::Completed).map(|_| ())
         })?;
-        self.state = "finished".into();
-        self.receiving = false;
-        self.show_status(ctx)
+        self.set_state(ctx, "finished", false)
     }
     #[command]
     /// Retain accepted bytes and finish with an explicit abort outcome.
@@ -250,47 +311,33 @@ impl MarkdownGym {
             md.finish(ctx, FinishOutcome::Aborted("Controlled gym abort".into()))
                 .map(|_| ())
         })?;
-        self.state = "aborted".into();
-        self.receiving = false;
-        self.show_status(ctx)
+        self.set_state(ctx, "aborted", false)
     }
     #[command]
     /// Replace the document with the complete rich fixture in a new epoch.
     pub fn replace(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        reader(ctx, |md, ctx| {
-            md.set_source_only(ctx, false, None)?;
-            md.replace(ctx, DocumentInput::Complete(FIXTURE.into()))
-                .map(|_| ())
-        })?;
-        self.next_chunk = 0;
-        self.receiving = false;
-        self.state = "complete fixture".into();
-        self.show_status(ctx)
+        self.load(
+            ctx,
+            DocumentInput::Complete(FIXTURE.into()),
+            "complete fixture",
+        )
     }
     /// Show exact CRLF, a tab, and a final newline for Source copy checks.
     #[command]
     pub fn exact_source(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        reader(ctx, |md, ctx| {
-            md.set_source_only(ctx, false, None)?;
-            md.replace(ctx, DocumentInput::Complete(EXACT_SOURCE.into()))?;
-            md.set_view_type(ctx, ViewType::Source)
-        })?;
-        self.state = "exact CRLF fixture".into();
-        self.receiving = false;
-        self.show_status(ctx)
+        self.load(
+            ctx,
+            DocumentInput::Complete(EXACT_SOURCE.into()),
+            "exact CRLF fixture",
+        )?;
+        reader(ctx, |md, ctx| md.set_view_type(ctx, ViewType::Source))
     }
     /// A large code payload deliberately exceeds automatic syntax preparation.
     #[command]
     pub fn syntax_limit(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let payload = "let plain_above_syntax_cap = 42;\n".repeat(9000);
         let source = format!("# Syntax limit\n\n```rust\n{payload}```\n");
-        reader(ctx, |md, ctx| {
-            md.set_source_only(ctx, false, None)?;
-            md.replace(ctx, DocumentInput::Complete(source)).map(|_| ())
-        })?;
-        self.state = "syntax limit fixture".into();
-        self.receiving = false;
-        self.show_status(ctx)
+        self.load(ctx, DocumentInput::Complete(source), "syntax limit fixture")
     }
     /// Demonstrate a host-limited prefix without presenting it as a complete
     /// parse.
@@ -301,31 +348,24 @@ impl MarkdownGym {
             "Partial file · retained bytes 0..{} · Rendered unavailable",
             prefix.len()
         );
-        reader(ctx, |md, ctx| {
-            md.replace(ctx, DocumentInput::Complete(prefix))?;
-            md.set_source_only(ctx, true, Some(status))
-        })?;
-        self.state = "partial source prefix".into();
-        self.receiving = false;
-        self.show_status(ctx)
+        self.load(
+            ctx,
+            DocumentInput::Complete(prefix),
+            "partial source prefix",
+        )?;
+        reader(ctx, |md, ctx| md.set_source_only(ctx, true, Some(status)))
     }
     /// A dangerous scheme stays inspectable but cannot publish an Open action.
     #[command]
     pub fn unavailable(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        reader(ctx, |md, ctx| {
-            md.set_source_only(ctx, false, None)?;
-            md.replace(
-                ctx,
-                DocumentInput::Complete(
-                    "# Unavailable actions\n\n[Unsafe destination](javascript:alert%281%29)\n"
-                        .into(),
-                ),
-            )?;
-            md.set_view_type(ctx, ViewType::Rendered)
-        })?;
-        self.state = "unavailable browser action".into();
-        self.receiving = false;
-        self.show_status(ctx)
+        self.load(
+            ctx,
+            DocumentInput::Complete(
+                "# Unavailable actions\n\n[Unsafe destination](javascript:alert%281%29)\n".into(),
+            ),
+            "unavailable browser action",
+        )?;
+        reader(ctx, |md, ctx| md.set_view_type(ctx, ViewType::Rendered))
     }
     #[command]
     /// Whether the current host policy allows switching presentations.
@@ -352,22 +392,20 @@ impl MarkdownGym {
         });
         Ok(())
     }
-    /// Reset the fixture with the other geometry preset.
+    /// Reset the fixture with the other geometry preset. Focus moves to the
+    /// new reader when the old one held it.
     #[command]
     pub fn glyphs(&mut self, ctx: &mut dyn Context) -> Result<()> {
         self.ascii = !self.ascii;
+        let focused = self.focused(ctx)?;
         if let Some(node) = ctx.child_slot_of(ctx.node_id(), <ReaderSlot as ChildSlot>::KEY) {
             ctx.remove_subtree(node)?;
         }
-        let node = ctx.add_slot::<ReaderSlot>(
-            ctx.node_id(),
-            Markdown::new(FIXTURE.into(), self.options())?,
-        )?;
-        ctx.set_layout_override(node.into(), self.reader_layout())?;
-        self.state = "complete fixture".into();
-        self.next_chunk = 0;
-        self.receiving = false;
-        self.show_status(ctx)
+        self.mount_reader(ctx)?;
+        if focused {
+            self.focus_reader(ctx)?;
+        }
+        self.set_state(ctx, "complete fixture", false)
     }
 
     #[command]
@@ -389,7 +427,7 @@ impl MarkdownGym {
     /// Record pending immutable host requests and acknowledge them once.
     pub fn collect_host(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let requests = reader(ctx, |md, ctx| {
-            let requests = md.take_requests(16);
+            let requests = md.take_requests(REQUEST_BATCH);
             for request in &requests {
                 md.complete_request(
                     ctx,
@@ -403,9 +441,8 @@ impl MarkdownGym {
         })?;
         if !requests.is_empty() {
             self.requests.extend(requests);
-            if self.requests.len() > 64 {
-                self.requests.drain(..self.requests.len() - 64);
-            }
+            let excess = self.requests.len().saturating_sub(REQUEST_LOG);
+            self.requests.drain(..excess);
             self.show_status(ctx)?;
         }
         Ok(())
@@ -418,32 +455,18 @@ impl MarkdownGym {
     #[command]
     /// Most recently recorded complete copy payload.
     pub fn last_copy(&self) -> String {
-        self.requests
-            .iter()
-            .rev()
-            .find_map(|r| {
-                if let HostAction::CopyText(text) = &r.action {
-                    Some(text.clone())
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_default()
+        self.last_action(|action| match action {
+            HostAction::CopyText(text) => Some(text),
+            HostAction::OpenUrl(_) => None,
+        })
     }
     #[command]
     /// Most recently recorded resolved browser destination.
     pub fn last_url(&self) -> String {
-        self.requests
-            .iter()
-            .rev()
-            .find_map(|r| {
-                if let HostAction::OpenUrl(url) = &r.action {
-                    Some(url.clone())
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_default()
+        self.last_action(|action| match action {
+            HostAction::OpenUrl(url) => Some(url),
+            HostAction::CopyText(_) => None,
+        })
     }
     #[command]
     /// Displayed revision pinned by the most recent host action.
@@ -463,13 +486,7 @@ impl Widget for MarkdownGym {
         let status =
             ctx.add_slot::<StatusSlot>(ctx.node_id(), Text::new("").with_style("markdown/status"))?;
         ctx.set_layout_override(status.into(), fixed_row(1))?;
-        let controls=ctx.add_child(ctx.node_id(),Text::new("Alt: s stream · a append · f finish · x abort · r replace · w width · t theme · u glyphs"))?;
-        ctx.set_layout_override(controls.into(), fixed_row(1))?;
-        let node = ctx.add_slot::<ReaderSlot>(
-            ctx.node_id(),
-            Markdown::new(FIXTURE.into(), self.options())?,
-        )?;
-        ctx.set_layout_override(node.into(), self.reader_layout())?;
+        self.mount_reader(ctx)?;
         self.show_status(ctx)
     }
     fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {

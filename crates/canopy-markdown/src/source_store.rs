@@ -296,12 +296,6 @@ impl SourceStore {
     }
     /// Start a new epoch atomically, preserving the old one on rejection.
     pub fn replace(&mut self, text: &str, receiving: bool) -> Result<(), SourceError> {
-        if text.len() > self.limit {
-            return Err(SourceError::Limit {
-                limit: self.limit,
-                attempted: text.len(),
-            });
-        }
         let mut next = Self::with_limit(self.limit);
         next.append(text)?;
         if !receiving {

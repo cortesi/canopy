@@ -42,7 +42,8 @@ const HEIGHT: u32 = 40;
 
 /// One qualification run's reproducible workload choices.
 struct Config {
-    /// Artifact destination.
+    /// Artifact destination; a relative path resolves against the workspace
+    /// root.
     output: PathBuf,
     /// Navigation and accepted-append samples.
     events: usize,
@@ -1396,13 +1397,16 @@ fn command(program: &str, args: &[&str], cwd: &Path) -> String {
 
 /// Run explicit release measurements and preserve raw sample summaries.
 fn main() {
-    let config = Config::read();
-    fs::create_dir_all(&config.output).unwrap();
+    let mut config = Config::read();
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
         .parent()
         .unwrap();
+    // Cargo runs benches from the package directory; relative output paths
+    // name workspace locations.
+    config.output = root.join(&config.output);
+    fs::create_dir_all(&config.output).unwrap();
     let fh = root.parent().unwrap().join("fh");
     let metadata = format!(
         "qualification={}\ncanopy_revision={}\nfh_revision={}\ncanopy_status={:?}\nfh_status={:?}\nrust={}\nmachine={}\nsyntax_feature={}\nseed={SEED:#x}\nviewport={WIDTH}x{HEIGHT}\nevents={}\ncold_repeats={}\nstream_requested={}\nsoak_seconds={:?}\ncache=phase-named; fresh derived state for cold phases; OS and dependency caches warm\n",

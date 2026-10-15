@@ -211,6 +211,11 @@ mod syntect_highlighter {
         pub(super) const AQUA: Color = rgb!("#28d6df");
         /// Comments and fence markers, which recede.
         pub(super) const SLATE: Color = rgb!("#7a879c");
+
+        /// Role colors in `PALETTE_PATHS` order, after the plain text role.
+        pub(super) const ROLES: [Color; 10] = [
+            PINK, CYAN, GREEN, TEAL, ORANGE, BLUE, YELLOW, CORAL, AQUA, SLATE,
+        ];
     }
 
     /// Theme used when the caller names none, matching the Canopy style theme.
@@ -750,21 +755,9 @@ mod syntect_highlighter {
         /// Convert built-in fixed token identities to borrowed palette paths.
         fn paint_spans(&self, mut spans: Vec<HighlightSpan>) -> Vec<HighlightSpan> {
             if self.palette_roles {
-                let colors = [
-                    code::PINK,
-                    code::CYAN,
-                    code::GREEN,
-                    code::TEAL,
-                    code::ORANGE,
-                    code::BLUE,
-                    code::YELLOW,
-                    code::CORAL,
-                    code::AQUA,
-                    code::SLATE,
-                ];
                 for span in &mut spans {
                     if let SpanStyle::Fixed(style) = &span.style {
-                        let role = colors
+                        let role = code::ROLES
                             .iter()
                             .position(|color| Some(*color) == style.fg.solid_color())
                             .map_or(0, |index| index + 1);

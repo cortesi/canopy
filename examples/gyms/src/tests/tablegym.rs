@@ -3,23 +3,17 @@ use canopy::{Register, commands::ArgValue, error::Result, geom::Size, testing::h
 use super::{Mount, root_harness};
 use crate::tablegym::{TableGym, binding_setup};
 
-fn gym(width: u32, height: u32) -> Result<Harness> {
+fn gym() -> Result<Harness> {
     root_harness(
         TableGym::new(),
         |builder| binding_setup(builder.configure(TableGym::register)),
-        Size::new(width, height),
+        Size::new(80, 24),
         Mount::Wrap,
     )
 }
 #[test]
-fn public_table_journey_preserves_exact_payloads_and_keyed_state() -> Result<()> {
-    let mut harness = gym(80, 24)?;
-    harness.script(include_str!("../../table-smoke/tablegym.luau"))?;
-    Ok(())
-}
-#[test]
 fn table_gym_has_no_per_cell_nodes_and_survives_tiny_layouts() -> Result<()> {
-    let mut harness = gym(80, 24)?;
+    let mut harness = gym()?;
     assert_eq!(harness.find_nodes("**/table_body")?.len(), 1);
     let first = harness.canopy.snapshot().unwrap().nodes.len();
     for _ in 0..10 {
@@ -44,7 +38,7 @@ fn table_gym_has_no_per_cell_nodes_and_survives_tiny_layouts() -> Result<()> {
 }
 #[test]
 fn activation_records_full_value_without_using_the_clipboard() -> Result<()> {
-    let mut harness = gym(80, 24)?;
+    let mut harness = gym()?;
     harness.script("local gym = canopy.find_node('**/table_gym')\nif not gym then error('table gym missing') end\ncanopy.call_exact(gym, 'table_gym::cursor', 1, 6)\ncanopy.send_key('Enter')\ncanopy.prepare()")?;
     harness.with_unique(|gym: &mut TableGym, ctx| {
         let ArgValue::Map(state) = gym.state(ctx)? else {

@@ -6,9 +6,8 @@ use canopy::{CommandEnum, runtime::NodeWakeHandle};
 use canopy_widgets::editor::{LineNumbers, WrapMode};
 
 use crate::{
-    document::ParseLimits,
-    executor::{ExecutorOptions, MarkdownExecutor},
-    presentation::GlyphPreset,
+    document::ParseLimits, executor::MarkdownExecutor, presentation::GlyphPreset,
+    source_store::DEFAULT_SOURCE_LIMIT,
 };
 
 /// The document representation displayed by the reader.
@@ -98,7 +97,7 @@ pub struct MarkdownOptions {
 impl Default for MarkdownOptions {
     fn default() -> Self {
         Self {
-            executor: MarkdownExecutor::new(ExecutorOptions::default()),
+            executor: MarkdownExecutor::default(),
             publication_wake: None,
             initial_view: ViewType::Rendered,
             source_only: false,
@@ -108,7 +107,7 @@ impl Default for MarkdownOptions {
             line_numbers: LineNumbers::None,
             glyphs: GlyphPreset::Unicode,
             prose_width: 88,
-            source_limit: 16 * 1024 * 1024,
+            source_limit: DEFAULT_SOURCE_LIMIT,
             parse_limits: ParseLimits::default(),
             cache_limit: 32 * 1024 * 1024,
             syntax_limit: 256 * 1024,

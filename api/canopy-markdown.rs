@@ -603,7 +603,8 @@ impl MarkdownSource {
         epoch: u64,
         revision: u64,
         source: &str,
-        query: &SourceQuery,
+        query: &SearchQuery,
+        limits: &SearchLimits,
     ) -> Result<SourceMatches, crate::source_view::SourceError>;
 
     /// Mount already prepared data without scanning its text.
@@ -663,8 +664,9 @@ impl MarkdownSource {
     /// Return the current one-based match index, or zero when there is none.
     pub fn search_position(&self) -> usize;
 
-    /// Return exact source-byte selection endpoints, preserving drag direction.
-    /// Hosts can retain these when evicting an inactive prepared surface.
+    /// Return exact source-byte selection endpoints, preserving drag direction,
+    /// even inside hidden CRLF boundaries. Hosts can retain these when
+    /// evicting an inactive prepared surface.
     pub fn selection_bytes(&self) -> (usize, usize);
 
     /// Return whether publication must wait for a pointer drag to finish.
@@ -1552,9 +1554,6 @@ pub mod presentation {
         pub syntax_bytes: usize,
     }
 
-    /// The prepared rendered surface, suitable for worker publication.
-    pub type PreparedPresentation = PresentationSnapshot;
-
     /// One document row. Decoration has no reading range and never enters copy.
     #[derive(Clone, Debug)]
     pub struct PreparedRow {
@@ -1676,11 +1675,6 @@ pub mod search {
     /// The readable location containing one search match.
     #[derive(Clone, Debug, Eq, PartialEq)]
     pub enum SearchAddress {
-        /// A raw source line.
-        SourceLine {
-            /// Zero-based line index within the addressed payload.
-            line: usize,
-        },
         /// A prose reading unit.
         Unit {
             /// Identity of the associated reading unit.
@@ -1797,14 +1791,6 @@ pub mod search {
     /// Search readable units, code lines, and table cells independently.
     pub fn search_document(
         document: &DocumentSnapshot,
-        query: &CompiledQuery,
-        generation: u64,
-        limits: &SearchLimits,
-    ) -> SearchResults;
-
-    /// Search exact source lines with bounded scanning and storage.
-    pub fn search_source(
-        source: &SourceSnapshot,
         query: &CompiledQuery,
         generation: u64,
         limits: &SearchLimits,
@@ -2019,36 +2005,5 @@ pub mod source_view {
         /// names, extensions, aliases, and comma suffixes such as `rust,ignore`.
         /// Markdown uses `md`; unknown languages remain plain text.
         pub language: Option<Arc<str>>,
-    }
-
-    /// A bounded source query, suitable for preparation on a worker.
-    #[derive(Clone, Debug)]
-    pub struct SourceQuery {
-        /// Raw query, retained by the host even when compilation fails.
-        pub text: String,
-        /// Literal or regular-expression matching.
-        pub mode: SourceSearchMode,
-        /// Sensitive, insensitive, or smart-case matching.
-        pub case: SearchCase,
-        /// Maximum query bytes before compilation.
-        pub max_query_bytes: usize,
-        /// Maximum stored nonempty matches.
-        pub max_matches: usize,
-        /// Maximum source bytes covered by this search.
-        pub max_scan_bytes: usize,
-    }
-
-    impl SourceQuery {
-        /// Construct a literal query with bounded work and result storage.
-        pub fn literal(text: impl Into<String>) -> Self;
-    }
-
-    /// Matching semantics over raw source lines.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum SourceSearchMode {
-        /// Case-sensitive literal matching.
-        Literal,
-        /// The shared ripgrep regular-expression matcher.
-        Regex,
     }
 }

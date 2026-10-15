@@ -100,11 +100,7 @@ fn anchor(position: ReaderPosition) -> ArgValue {
 /// counters.
 pub(super) fn state(reader: &Markdown, ctx: &dyn ViewContext) -> Result<ArgValue> {
     let accepted = reader.store.snapshot();
-    let lifecycle_state = if matches!(
-        accepted.lifecycle,
-        Lifecycle::Complete(FinishOutcome::Completed)
-    ) && reader.displayed_revision() < accepted.revision
-    {
+    let lifecycle_state = if reader.finishing(&accepted) {
         map([("state", text("finishing")), ("reason", ArgValue::Null)])
     } else {
         lifecycle(&accepted.lifecycle)
@@ -112,9 +108,7 @@ pub(super) fn state(reader: &Markdown, ctx: &dyn ViewContext) -> Result<ArgValue
     let position = reader.position(ctx)?;
     let shared = reader.shared.borrow();
     let rendered = shared.presentation.as_ref();
-    let document = rendered
-        .map(|presentation| &presentation.document)
-        .or(reader.last_document.as_ref());
+    let document = reader.last_document.as_ref();
     let model_bytes = document.map_or(0, |document| document.derived_bytes());
     let rendered_layout_bytes = rendered.map_or(0, |presentation| presentation.derived_bytes());
     let source_derived_bytes =
@@ -307,11 +301,7 @@ impl Window {
 /// Return a bounded Rendered object page, retaining its semantic revision.
 pub(super) fn objects(reader: &Markdown, offset: usize, limit: usize) -> ArgValue {
     let shared = reader.shared.borrow();
-    let document = shared
-        .presentation
-        .as_ref()
-        .map(|presentation| &presentation.document)
-        .or(reader.last_document.as_ref());
+    let document = reader.last_document.as_ref();
     let window = Window::new(
         offset,
         limit,
@@ -355,12 +345,7 @@ pub(super) fn objects(reader: &Markdown, offset: usize, limit: usize) -> ArgValu
 
 /// Return a bounded heading page, retaining its semantic revision.
 pub(super) fn outline(reader: &Markdown, offset: usize, limit: usize) -> ArgValue {
-    let shared = reader.shared.borrow();
-    let document = shared
-        .presentation
-        .as_ref()
-        .map(|presentation| &presentation.document)
-        .or(reader.last_document.as_ref());
+    let document = reader.last_document.as_ref();
     let window = Window::new(
         offset,
         limit,
@@ -421,29 +406,22 @@ fn search_coverage(reader: &Markdown) -> ArgValue {
 /// Encode one unit, line, or keyed table-cell match address.
 fn address(address: &SearchAddress) -> ArgValue {
     let (kind, unit_id, line, row_key, column_key) = match address {
-        SearchAddress::SourceLine { line } => ("source_line", None, Some(*line), None, None),
-        SearchAddress::Unit { unit_id } => ("unit", Some(*unit_id), None, None, None),
+        SearchAddress::Unit { unit_id } => ("unit", *unit_id, None, None, None),
         SearchAddress::CodeLine { unit_id, line } => {
-            ("code_line", Some(*unit_id), Some(*line), None, None)
+            ("code_line", *unit_id, Some(*line), None, None)
         }
         SearchAddress::SourceCardLine { unit_id, line } => {
-            ("source_card_line", Some(*unit_id), Some(*line), None, None)
+            ("source_card_line", *unit_id, Some(*line), None, None)
         }
         SearchAddress::TableCell {
             unit_id,
             row_key,
             column_key,
-        } => (
-            "table_cell",
-            Some(*unit_id),
-            None,
-            *row_key,
-            Some(*column_key),
-        ),
+        } => ("table_cell", *unit_id, None, *row_key, Some(*column_key)),
     };
     map([
         ("kind", text(kind)),
-        ("unit_id", optional_number(unit_id)),
+        ("unit_id", ArgValue::UInt(unit_id)),
         ("line", line.map_or(ArgValue::Null, number)),
         ("row_key", optional_number(row_key)),
         ("column_key", optional_number(column_key)),

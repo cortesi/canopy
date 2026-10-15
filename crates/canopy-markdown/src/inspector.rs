@@ -195,7 +195,6 @@ impl InspectorHandle {
     pub fn resource_bytes(&self, ctx: &dyn ViewContext) -> Result<usize> {
         ctx.with_widget(self.node, |inspector: &Inspector| {
             let mut bytes = size_of::<Inspector>()
-                .saturating_add(inspector.title.capacity())
                 .saturating_add(inspector.mailbox.borrow().bytes)
                 .saturating_add(inspector.pending_copy.as_ref().map_or(0, String::capacity))
                 .saturating_add(
@@ -284,11 +283,15 @@ impl InspectorHandle {
     }
     /// Replace outline headings while preserving its filter and selected
     /// heading key.
-    pub fn publish_outline(&self, ctx: &mut dyn Context, entries: Vec<OutlineEntry>) -> Result<()> {
+    pub fn publish_outline(
+        &self,
+        ctx: &mut dyn Context,
+        entries: impl FnOnce() -> Vec<OutlineEntry>,
+    ) -> Result<()> {
         ctx.with_widget_mut(self.node, |inspector: &mut Inspector, ctx| {
             if let Some(Reader::Outline(outline)) = inspector.reader {
                 ctx.with_widget_mut(outline, |outline: &mut OutlineBody, _| {
-                    outline.publish(entries);
+                    outline.publish(entries());
                     Ok(())
                 })?;
             }
@@ -424,8 +427,6 @@ pub struct MarkdownInspector {
     full_copy: Option<Arc<str>>,
     /// Pinned destination admitted for an explicit host Open action.
     open_url: Option<String>,
-    /// Inspector frame title, sanitized before mounting.
-    title: String,
     /// Latest preparation generation used to reject superseded results.
     generation: u64,
     /// Immutable source retained by the currently displayed source reader.
@@ -477,16 +478,13 @@ impl MarkdownInspector {
         inspector.copy_limit = copy_limit.min(EVENT_BYTES);
         inspector.source_options.syntax_limit = syntax_limit;
         let node = ctx.add_modal(inspector)?;
-        let (mut focus, wake, reader) = ctx.with_widget(node, |widget: &Self| {
+        let view: &dyn ViewContext = ctx;
+        let (focus, wake) = view.with_widget(node, |widget: &Self| {
             Ok((
-                widget.initial_focus(),
+                widget.focus_target(view)?,
                 widget.wake.clone().expect("mounted inspector wake"),
-                widget.reader,
             ))
         })?;
-        if let Some(Reader::Table(table)) = reader {
-            focus = ctx.with_widget(table, |table: &TableView| Ok(table.initial_focus()))?;
-        }
         let token = match ctx.open_modal(ModalOptions {
             owner: owner_id,
             modal: node.into(),
@@ -535,7 +533,6 @@ impl MarkdownInspector {
             detail: None,
             full_copy: None,
             open_url: None,
-            title: String::new(),
             generation: 0,
             display_source: None,
             work_search: None,
@@ -572,23 +569,25 @@ impl MarkdownInspector {
     }
     /// Return the active source reader, preferring nested table cell detail.
     fn source_reader(&self) -> Option<TypedId<MarkdownSource>> {
-        self.detail.or({
-            if let Some(Reader::Source(id)) = self.reader {
-                Some(id)
-            } else {
-                None
-            }
-        })
+        match self.reader {
+            Some(Reader::Source(id)) => self.detail.or(Some(id)),
+            _ => self.detail,
+        }
     }
-    /// Return the content node that receives the initial modal focus.
-    fn initial_focus(&self) -> Option<NodeId> {
-        self.detail.map(Into::into).or_else(|| {
-            self.reader.map(|reader| match reader {
-                Reader::Source(id) => id.into(),
-                Reader::Table(id) => id.into(),
-                Reader::Outline(id) => id.into(),
-                Reader::Text(id) => id,
-            })
+    /// Return the content node that receives reader focus, preferring nested
+    /// cell detail and the table's own focus target.
+    fn focus_target(&self, ctx: &dyn ViewContext) -> Result<Option<NodeId>> {
+        if let Some(detail) = self.detail {
+            return Ok(Some(detail.into()));
+        }
+        Ok(match self.reader {
+            Some(Reader::Table(table)) => {
+                ctx.with_widget(table, |table: &TableView| Ok(table.initial_focus()))?
+            }
+            Some(Reader::Source(id)) => Some(id.into()),
+            Some(Reader::Outline(id)) => Some(id.into()),
+            Some(Reader::Text(id)) => Some(id),
+            None => None,
         })
     }
     /// Queue an immutable action and wake its owning controller.
@@ -620,13 +619,7 @@ impl MarkdownInspector {
     /// Restore focus to the current reader after dismissing a nested prompt or
     /// detail.
     fn restore_focus(&self, ctx: &mut dyn Context) -> Result<()> {
-        let mut focus = self.initial_focus();
-        if self.detail.is_none()
-            && let Some(Reader::Table(table)) = self.reader
-        {
-            focus = ctx.with_widget(table, |table: &TableView| Ok(table.initial_focus()))?;
-        }
-        if let Some(focus) = focus {
+        if let Some(focus) = self.focus_target(ctx)? {
             ctx.set_focus(focus)?;
         }
         Ok(())
@@ -652,7 +645,7 @@ impl MarkdownInspector {
                 self.work_search = None;
                 self.search_fresh = false;
                 self.generation += 1;
-                self.show_status(ctx, "Search cleared · Esc Close")?;
+                self.show_status(ctx, "Search cleared")?;
                 return Ok(());
             }
         }
@@ -738,13 +731,7 @@ impl MarkdownInspector {
     /// Copy the current selection or keyed table cell.
     #[command(enabled = "copy_status")]
     pub fn copy_selection(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let source = self.detail.or({
-            if let Some(Reader::Source(id)) = self.reader {
-                Some(id)
-            } else {
-                None
-            }
-        });
+        let source = self.source_reader();
         if let Some(source) = source {
             let input = ctx.with_widget(source, |source: &MarkdownSource| {
                 let text = source.source_text();
@@ -776,13 +763,7 @@ impl MarkdownInspector {
         if let Some(text) = &self.full_copy {
             return self.request_source_copy(text.clone(), 0..text.len());
         }
-        let source = self.detail.or({
-            if let Some(Reader::Source(id)) = self.reader {
-                Some(id)
-            } else {
-                None
-            }
-        });
+        let source = self.source_reader();
         if let Some(source) = source {
             let text =
                 ctx.with_widget(source, |source: &MarkdownSource| Ok(source.source_text()))?;
@@ -827,13 +808,7 @@ impl MarkdownInspector {
     /// Reveal the next or previous prepared source match.
     #[command(enabled = "line_status")]
     pub fn next_match(&mut self, ctx: &mut dyn Context, delta: i32) -> Result<()> {
-        let source = self.detail.or({
-            if let Some(Reader::Source(id)) = self.reader {
-                Some(id)
-            } else {
-                None
-            }
-        });
+        let source = self.source_reader();
         if let Some(source) = source {
             let delta = if self.search_fresh && delta > 0 {
                 delta - 1
@@ -912,7 +887,7 @@ impl MarkdownInspector {
         self.detail_loading = true;
         self.source_options.language = None;
         self.submit(ctx)?;
-        self.show_status(ctx, "Preparing cell detail… Esc closes detail")
+        self.show_status(ctx, "Preparing cell detail…")
     }
     /// Submit the latest fixed source and optional query through the inspector
     /// lane.
@@ -1022,6 +997,12 @@ impl Register for Inspector {
                 BindingPhase::BeforeWidget,
             ),
             (
+                ":",
+                "Jump to line",
+                Self::call_line(),
+                BindingPhase::AfterWidget,
+            ),
+            (
                 "F3",
                 "Next match",
                 Self::call_next_match(1),
@@ -1097,7 +1078,7 @@ impl Widget for Inspector {
             InspectorContent::Link { .. } => "Copy URL",
             InspectorContent::Outline { .. } => "Copy",
         };
-        self.title = match &content {
+        let title = match &content {
             InspectorContent::Code { info, .. } => format!(
                 "Code · {}",
                 info.chars()
@@ -1112,7 +1093,7 @@ impl Widget for Inspector {
             InspectorContent::Link { .. } => "Link".into(),
             InspectorContent::Outline { .. } => "Outline".into(),
         };
-        let frame = ctx.add_child(ctx.node_id(), Frame::new().with_title(self.title.clone()))?;
+        let frame = ctx.add_child(ctx.node_id(), Frame::new().with_title(title))?;
         let body = ctx.add_child(
             frame,
             Container::new(Layout::fill().direction(Direction::Column)).with_fill(),
@@ -1143,6 +1124,9 @@ impl Widget for Inspector {
                         table,
                         TableViewOptions {
                             copy_bytes: self.copy_limit,
+                            // The default queue bound would reject any
+                            // admitted copy larger than itself.
+                            event_bytes: EVENT_BYTES,
                             ..TableViewOptions::default()
                         },
                     ),
@@ -1193,10 +1177,7 @@ impl Widget for Inspector {
             ));
             self.submit(ctx)?;
         }
-        let status = ctx.add_child(
-            body,
-            Text::new("C-f Find · C-g Line · C-c Copy selection · C-y Copy all · Esc Close"),
-        )?;
+        let status = ctx.add_child(body, Text::new(""))?;
         ctx.set_layout_override(
             status.into(),
             Layout::column().flex_horizontal(1).fixed_height(1).into(),
@@ -1229,15 +1210,12 @@ impl Widget for Inspector {
             ctx.remove_after_dispatch(ctx.node_id())?;
             return Ok(None);
         }
-        if let Some(text) = self.pending_copy.take()
-            && !self.emit_copy(text)?
-        {
-            return Ok(None);
+        // A retained copy keeps later table events queued in order, but it
+        // does not hold back source preparation.
+        if let Some(text) = self.pending_copy.take() {
+            self.emit_copy(text)?;
         }
         self.drain_table(ctx)?;
-        if self.pending_copy.is_some() {
-            return Ok(None);
-        }
         if let Some(result) = self.lane.as_ref().and_then(WorkHandle::take_completed) {
             if let Some(lane) = &self.lane {
                 lane.acknowledge(None);
@@ -1247,14 +1225,7 @@ impl Widget for Inspector {
             }
             let search_result = result.search;
             if self.work_search.is_some() {
-                let source = self.detail.or({
-                    if let Some(Reader::Source(id)) = self.reader {
-                        Some(id)
-                    } else {
-                        None
-                    }
-                });
-                if let (Some(source), Some(matches)) = (source, search_result) {
+                if let (Some(source), Some(matches)) = (self.source_reader(), search_result) {
                     match matches {
                         Ok(SearchOutput::Source(matches)) => {
                             let count = matches.ranges.len();
@@ -1268,7 +1239,7 @@ impl Widget for Inspector {
                             self.show_status(
                                 ctx,
                                 format!(
-                                    "{count} matches{} · F3 Next · Esc Close",
+                                    "{count} matches{}",
                                     if complete { "" } else { " (partial coverage)" }
                                 ),
                             )?;
@@ -1276,37 +1247,32 @@ impl Widget for Inspector {
                         Err(error) => self.show_status(ctx, error)?,
                         _ => {}
                     }
+                } else if let Err(error) = &result.result {
+                    self.show_status(ctx, format!("Search failed: {error}"))?;
                 }
                 self.work_search = None;
                 return Ok(None);
             }
             match result.result {
                 Ok(PreparedView::Source(prepared)) => {
-                    let is_table = matches!(self.reader, Some(Reader::Table(_)));
-                    let old_focus = if is_table {
-                        if let Some(Reader::Table(table)) = self.reader {
-                            ctx.with_widget(table, |table: &TableView| Ok(table.initial_focus()))?
-                        } else {
-                            None
-                        }
-                    } else {
-                        self.initial_focus()
-                    };
-                    let was_focused = old_focus.is_some_and(|node| ctx.is_on_focus_path(node));
+                    let was_focused = self
+                        .focus_target(ctx)?
+                        .is_some_and(|node| ctx.is_on_focus_path(node));
                     let source = MarkdownSource::from_prepared(*prepared);
                     let limited = source.syntax_limited();
                     let parent = self.reader_parent.expect("mounted reader parent");
                     let id = ctx.add_child(parent, source)?;
-                    if is_table {
-                        if let Some(Reader::Table(table)) = self.reader {
+                    match self.reader {
+                        Some(Reader::Table(table)) => {
                             ctx.set_hidden(table.into(), true)?;
+                            self.detail = Some(id);
                         }
-                        self.detail = Some(id);
-                    } else {
-                        if let Some(Reader::Text(old)) = self.reader {
-                            ctx.remove_subtree(old)?;
+                        reader => {
+                            if let Some(Reader::Text(old)) = reader {
+                                ctx.remove_subtree(old)?;
+                            }
+                            self.reader = Some(Reader::Source(id));
                         }
-                        self.reader = Some(Reader::Source(id));
                     }
                     if was_focused {
                         ctx.set_focus(id.into())?;
@@ -1314,12 +1280,17 @@ impl Widget for Inspector {
                     self.display_source = self.pending_source.take();
                     self.detail_loading = false;
                     self.apply_reveal(ctx)?;
-                    self.show_status(ctx, if limited { "Plain text · syntax limit · C-f Find · C-g Line · Esc Close" } else { "C-f Find · C-g Line · F3 Next · C-c Copy selection · C-y Copy all · Esc Close" })?;
+                    self.show_status(
+                        ctx,
+                        if limited {
+                            "Plain text · syntax limit"
+                        } else {
+                            ""
+                        },
+                    )?;
                 }
                 Ok(PreparedView::Rendered(_)) => {}
-                Err(error) => {
-                    self.show_status(ctx, format!("Preparation failed: {error} · Esc Close"))?
-                }
+                Err(error) => self.show_status(ctx, format!("Preparation failed: {error}"))?,
             }
         }
         Ok(None)
@@ -1366,32 +1337,23 @@ impl Widget for Inspector {
             }
             KeyCode::Enter => {
                 let prompt = self.prompt.take().expect("prompt");
-                match prompt.kind {
+                let status = match prompt.kind {
                     PromptKind::Line => {
                         let line = match prompt.value.parse::<usize>() {
                             Ok(line) if line > 0 => line,
                             _ => {
                                 self.prompt = Some(prompt);
-                                self.show_status(
-                                    ctx,
-                                    "Enter a one-based line number · Esc Cancel",
-                                )?;
+                                self.show_status(ctx, "Enter a one-based line number")?;
                                 return Ok(EventOutcome::Handle);
                             }
                         };
-                        let source = self.detail.or({
-                            if let Some(Reader::Source(id)) = self.reader {
-                                Some(id)
-                            } else {
-                                None
-                            }
-                        });
-                        if let Some(source) = source {
+                        if let Some(source) = self.source_reader() {
                             ctx.with_widget_mut(source, |source: &mut MarkdownSource, ctx| {
                                 source.jump_line(ctx, line);
                                 Ok(())
                             })?;
                         }
+                        format!("Line {line}")
                     }
                     PromptKind::Search => {
                         if let Some(Reader::Outline(id)) = self.reader {
@@ -1400,21 +1362,25 @@ impl Widget for Inspector {
                                 ctx.reveal_anchor(RevealAlign::Nearest);
                                 Ok(())
                             })?;
-                        } else if self.display_source.is_some() {
-                            self.work_search = Some(WorkSearch {
-                                query: SearchQuery {
-                                    text: prompt.value.clone(),
-                                    ..SearchQuery::default()
-                                },
-                                generation: self.generation + 1,
-                                limits: SearchLimits::default(),
-                            });
-                            self.submit(ctx)?;
+                            format!("Filter: {}", prompt.value)
+                        } else {
+                            if self.display_source.is_some() {
+                                self.work_search = Some(WorkSearch {
+                                    query: SearchQuery {
+                                        text: prompt.value.clone(),
+                                        ..SearchQuery::default()
+                                    },
+                                    generation: self.generation + 1,
+                                    limits: SearchLimits::default(),
+                                });
+                                self.submit(ctx)?;
+                            }
+                            format!("Find: {}", prompt.value)
                         }
                     }
-                }
+                };
                 self.restore_focus(ctx)?;
-                self.show_status(ctx, format!("Find: {} · F3 Next · Esc Close", prompt.value))?;
+                self.show_status(ctx, status)?;
                 return Ok(EventOutcome::Handle);
             }
             _ => {}
@@ -1531,7 +1497,12 @@ impl OutlineBody {
             && !key.mods.alt
             && matches!(
                 key.key,
-                KeyCode::Up | KeyCode::Down | KeyCode::Home | KeyCode::End | KeyCode::Enter
+                KeyCode::Up
+                    | KeyCode::Down
+                    | KeyCode::Home
+                    | KeyCode::End
+                    | KeyCode::Enter
+                    | KeyCode::Char('j' | 'k' | 'g' | 'G')
             )
     }
 }
@@ -1598,12 +1569,14 @@ impl Widget for OutlineBody {
             return Ok(EventOutcome::Ignore);
         }
         match key.key {
-            KeyCode::Up => self.selected = self.selected.saturating_sub(1),
-            KeyCode::Down => {
+            KeyCode::Up | KeyCode::Char('k') => self.selected = self.selected.saturating_sub(1),
+            KeyCode::Down | KeyCode::Char('j') => {
                 self.selected = (self.selected + 1).min(self.visible.len().saturating_sub(1))
             }
-            KeyCode::Home => self.selected = 0,
-            KeyCode::End => self.selected = self.visible.len().saturating_sub(1),
+            KeyCode::Home | KeyCode::Char('g') => self.selected = 0,
+            KeyCode::End | KeyCode::Char('G') => {
+                self.selected = self.visible.len().saturating_sub(1)
+            }
             KeyCode::Enter => {
                 if let Some(index) = self.visible.get(self.selected) {
                     self.mailbox
@@ -1971,8 +1944,7 @@ mod interaction_tests {
         harness.type_text("Second")?;
         harness.key(key::KeyCode::Enter)?;
         harness.canopy.with_root_context(|ctx| {
-            handle.publish_outline(
-                ctx,
+            handle.publish_outline(ctx, || {
                 vec![
                     OutlineEntry {
                         id: 3,
@@ -1992,8 +1964,8 @@ mod interaction_tests {
                         text: "Unmatched".into(),
                         source_byte: 40,
                     },
-                ],
-            )
+                ]
+            })
         })?;
         harness.with_unique(|outline: &mut OutlineBody, _| {
             assert_eq!(outline.filter, "second");
@@ -2175,6 +2147,28 @@ mod interaction_tests {
     }
 
     #[test]
+    fn prompt_submission_reports_its_own_operation() -> Result<()> {
+        let snapshot = SourceStore::static_text("a\nb\nc\n").unwrap().snapshot();
+        let (mut harness, _, _, manual) = fixture(InspectorContent::Source { snapshot })?;
+        assert!(manual.run_next());
+        harness.canopy.turn(TurnInput::Prepare)?;
+        harness.key(':')?;
+        harness.type_text("2")?;
+        harness.key(key::KeyCode::Enter)?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("Line 2"));
+        assert!(!harness.tbuf().contains_text("Find: 2"));
+
+        let (mut harness, _, _, _) = fixture(outline())?;
+        harness.key(Key::parse_spec("ctrl-f")?)?;
+        harness.type_text("Sec")?;
+        harness.key(key::KeyCode::Enter)?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("Filter: Sec"));
+        Ok(())
+    }
+
+    #[test]
     fn outline_filter_retains_key_and_explicit_jump() -> Result<()> {
         let (mut harness, _, handle, _) = fixture(outline())?;
         harness.key(key::KeyCode::Down)?;
@@ -2184,6 +2178,17 @@ mod interaction_tests {
         assert!(handle.take_events(4).is_empty());
         harness.key(key::KeyCode::Enter)?;
         assert_eq!(handle.take_events(4), vec![InspectorEvent::Navigate(20)]);
+        Ok(())
+    }
+
+    #[test]
+    fn outline_navigates_with_vi_letters() -> Result<()> {
+        let (mut harness, _, handle, _) = fixture(outline())?;
+        for (key, byte) in [('j', 20), ('k', 2), ('G', 20), ('g', 2)] {
+            harness.key(key)?;
+            harness.key(KeyCode::Enter)?;
+            assert_eq!(handle.take_events(4), vec![InspectorEvent::Navigate(byte)]);
+        }
         Ok(())
     }
 
@@ -2387,6 +2392,17 @@ mod table_tests {
                 "Source\tready\nParse\tready\n".into()
             )]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn table_copy_above_the_default_table_queue_bound_reaches_the_owner() -> Result<()> {
+        let value = "x".repeat(2 * 1024 * 1024);
+        let (mut harness, _, handle, _) = fixture(InspectorContent::Table {
+            table: prepared("table", 1, &value),
+        })?;
+        harness.key('y')?;
+        assert_eq!(handle.take_events(4), vec![InspectorEvent::CopyText(value)]);
         Ok(())
     }
 

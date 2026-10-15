@@ -20,13 +20,9 @@ use crate::{
     ViewType,
     document::{DocumentSnapshot, ObjectKind, ParseLimits, ReadingRange, parse_document},
     presentation::{GeometryKey, PresentationSnapshot},
-    search::{
-        CompiledQuery, SearchLimits, SearchMode, SearchQuery, SearchResults, search_document,
-    },
+    search::{CompiledQuery, SearchLimits, SearchQuery, SearchResults, search_document},
     source_store::SourceSnapshot,
-    source_view::{
-        MarkdownSource, PreparedSource, SourceMatches, SourceOptions, SourceQuery, SourceSearchMode,
-    },
+    source_view::{MarkdownSource, PreparedSource, SourceMatches, SourceOptions},
 };
 
 /// Aggregate bounds for one host's Markdown work.
@@ -760,16 +756,14 @@ impl WorkHandle {
     /// Takes a result for validation and publication. Call `acknowledge` after
     /// either accepting or rejecting it, supplying the latest published base.
     pub fn take_completed(&self) -> Option<WorkResult> {
-        let result = {
-            let mut state = self.shared.lock();
-            let lane = state.lanes.get_mut(&self.id)?;
-            let result = lane.completed.take();
-            if result.is_some() {
-                lane.awaiting_ack = true;
-            }
-            result
-        };
-        self.shared.ready.notify_one();
+        // Taking a result makes nothing runnable: the lane awaits its
+        // acknowledgement, which signals workers instead.
+        let mut state = self.shared.lock();
+        let lane = state.lanes.get_mut(&self.id)?;
+        let result = lane.completed.take();
+        if result.is_some() {
+            lane.awaiting_ack = true;
+        }
         result
     }
 
@@ -916,9 +910,9 @@ impl Drop for WorkHandle {
             state.copy_jobs -= queued_jobs;
             state.copy_bytes -= queued_bytes;
         }
+        // Removal frees no worker slot; a running job releases its own on
+        // completion.
         state.ready.retain(|id| *id != self.id);
-        drop(state);
-        self.shared.ready.notify_all();
     }
 }
 
@@ -1111,22 +1105,12 @@ fn prepare(shared: &Shared, id: u64, request: WorkRequest) -> Result<PreparedWor
                 return Err(WorkError::Cancelled);
             }
             let search = request.search.map(|search| {
-                let query = SourceQuery {
-                    text: search.query.text,
-                    mode: match search.query.mode {
-                        SearchMode::Literal => SourceSearchMode::Literal,
-                        SearchMode::Regex => SourceSearchMode::Regex,
-                    },
-                    case: search.query.case,
-                    max_query_bytes: search.limits.max_query_bytes,
-                    max_matches: search.limits.max_matches,
-                    max_scan_bytes: search.limits.max_scan_bytes,
-                };
                 MarkdownSource::find_matches(
                     request.source.epoch,
                     request.source.revision,
                     &request.source.text(),
-                    &query,
+                    &search.query,
+                    &search.limits,
                 )
                 .map(SearchOutput::Source)
                 .map_err(|error| error.to_string())
@@ -1236,14 +1220,10 @@ fn serialize_copy(input: CopyInput, max_bytes: usize) -> Result<String, WorkErro
             let mut output = String::new();
             let (start, end) = if let Some(selection) = selection {
                 let a = document
-                    .units
-                    .iter()
-                    .position(|unit| unit.id == selection.start.unit_id)
+                    .unit_position(selection.start.unit_id)
                     .ok_or_else(|| WorkError::Failed("Missing copy selection start".into()))?;
                 let b = document
-                    .units
-                    .iter()
-                    .position(|unit| unit.id == selection.end.unit_id)
+                    .unit_position(selection.end.unit_id)
                     .ok_or_else(|| WorkError::Failed("Missing copy selection end".into()))?;
                 let from = (a, selection.start.offset);
                 let to = (b, selection.end.offset);

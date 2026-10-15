@@ -153,11 +153,6 @@ fn escape_regex(text: &str) -> String {
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// The readable location containing one search match.
 pub enum SearchAddress {
-    /// A raw source line.
-    SourceLine {
-        /// Zero-based line index within the addressed payload.
-        line: usize,
-    },
     /// A prose reading unit.
     Unit {
         /// Identity of the associated reading unit.
@@ -186,6 +181,17 @@ pub enum SearchAddress {
         /// The source-derived column identity.
         column_key: u64,
     },
+}
+impl SearchAddress {
+    /// Identity of the reading unit containing this address.
+    pub(crate) fn unit_id(&self) -> u64 {
+        match self {
+            Self::Unit { unit_id }
+            | Self::CodeLine { unit_id, .. }
+            | Self::SourceCardLine { unit_id, .. }
+            | Self::TableCell { unit_id, .. } => *unit_id,
+        }
+    }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// A nonempty match with both UTF-8 byte and character offsets.
@@ -252,8 +258,8 @@ impl<'a> Run<'a> {
             },
         }
     }
-    /// Match one bounded logical line and retain exact source mapping when
-    /// known.
+    /// Match one already charged logical line and retain exact source mapping
+    /// when known. Returns false when matching fails.
     fn line(
         &mut self,
         line: &str,
@@ -261,22 +267,12 @@ impl<'a> Run<'a> {
         offset: usize,
         source_start: Option<usize>,
     ) -> bool {
-        if self.query.matcher.is_none() {
-            return true;
-        }
-        let remaining = self
-            .limits
-            .max_scan_bytes
-            .saturating_sub(self.result.scanned_bytes);
-        if line.len() > remaining {
-            self.result.coverage_complete = false;
-            return false;
-        }
-        let covered = line;
-        self.result.scanned_bytes += line.len();
         let mut at = 0;
-        while at <= covered.len() {
-            let found = match self.query.find_at(covered, at) {
+        // Stored matches advance one character cursor, so their columns cost
+        // linear time per line rather than a rescan from the line start.
+        let (mut column_byte, mut column) = (0, 0);
+        while at <= line.len() {
+            let found = match self.query.find_at(line, at) {
                 Ok(Some(found)) => found,
                 Ok(None) => break,
                 Err(_) => {
@@ -285,24 +281,22 @@ impl<'a> Run<'a> {
                 }
             };
             if found.start == found.end {
-                if found.end == covered.len() {
+                if found.end == line.len() {
                     break;
                 }
-                at = found.end
-                    + covered[found.end..]
-                        .chars()
-                        .next()
-                        .map_or(1, char::len_utf8);
+                at = found.end + line[found.end..].chars().next().map_or(1, char::len_utf8);
                 continue;
             }
             self.result.count += 1;
             if self.result.matches.len() < self.limits.max_matches {
+                let start = column + line[column_byte..found.start].chars().count();
+                let end = start + line[found.start..found.end].chars().count();
+                (column_byte, column) = (found.end, end);
                 self.result.matches.push(SearchMatch {
                     address: address.clone(),
-                    source_range: source_start.map(|start| start + found.start..start + found.end),
+                    source_range: source_start.map(|base| base + found.start..base + found.end),
                     range: offset + found.start..offset + found.end,
-                    char_range: covered[..found.start].chars().count()
-                        ..covered[..found.end].chars().count(),
+                    char_range: start..end,
                 });
             } else {
                 self.result.storage_limited = true;
@@ -333,28 +327,18 @@ impl<'a> Run<'a> {
         let truncated = end < text.len();
         let mut offset = 0;
         for (index, raw) in text[..end].split('\n').enumerate() {
-            let line = raw.strip_suffix('\r').unwrap_or(raw);
-            let separator = usize::from(index > 0) + usize::from(raw.ends_with('\r'));
-            if separator
-                > self
-                    .limits
-                    .max_scan_bytes
-                    .saturating_sub(self.result.scanned_bytes)
-            {
-                self.result.coverage_complete = false;
-                return false;
-            }
-            self.result.scanned_bytes += separator;
+            // Every piece lies within `end`, so charging it and its preceding
+            // newline never exceeds the remaining budget.
+            self.result.scanned_bytes += raw.len() + usize::from(index > 0);
             // A budget boundary is not an actual line ending. Matching its
             // prefix would invent `$` and word-boundary matches. Do not scan
             // beyond the budget to find the rest of this logical line.
             if truncated && offset + raw.len() == end {
-                self.result.scanned_bytes += line.len();
                 self.result.coverage_complete = false;
                 return false;
             }
             if !self.line(
-                line,
+                raw.strip_suffix('\r').unwrap_or(raw),
                 &address(index),
                 if unit_offsets { offset } else { 0 },
                 source_base.map(|base| base + offset),
@@ -365,22 +349,6 @@ impl<'a> Run<'a> {
         }
         true
     }
-}
-/// Search exact source lines with bounded scanning and storage.
-pub fn search_source(
-    source: &SourceSnapshot,
-    query: &CompiledQuery,
-    generation: u64,
-    limits: &SearchLimits,
-) -> SearchResults {
-    let mut run = Run::new(source, generation, query, limits);
-    run.lines(
-        &source.text(),
-        |line| SearchAddress::SourceLine { line },
-        false,
-        Some(0),
-    );
-    run.result
 }
 /// Search readable units, code lines, and table cells independently.
 pub fn search_document(
@@ -454,7 +422,7 @@ pub fn search_document(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{document::parse_document, source_store::SourceStore};
+    use crate::{document::parse_document, source_store::SourceStore, source_view::MarkdownSource};
     fn results(pattern: &str, mode: SearchMode, case: SearchCase, text: &str) -> SearchResults {
         let limits = SearchLimits::default();
         let query = CompiledQuery::new(
@@ -466,12 +434,29 @@ mod tests {
             &limits,
         )
         .unwrap();
-        search_source(
-            &SourceStore::static_text(text).unwrap().snapshot(),
+        let source = SourceStore::static_text(text).unwrap().snapshot();
+        search_document(
+            &parse_document(&source, &Default::default(), None),
             &query,
             7,
             &limits,
         )
+    }
+    /// Raw-source ranges found by the Source projection's matcher.
+    fn source_ranges(source: &SourceSnapshot, text: &str) -> Vec<Range<usize>> {
+        let query = SearchQuery {
+            text: text.into(),
+            ..Default::default()
+        };
+        MarkdownSource::find_matches(
+            source.epoch,
+            source.revision,
+            &source.text(),
+            &query,
+            &SearchLimits::default(),
+        )
+        .unwrap()
+        .ranges
     }
     #[test]
     fn literal_regex_and_smart_case_share_line_matching() {
@@ -511,6 +496,12 @@ mod tests {
             results("é+", SearchMode::Regex, SearchCase::Sensitive, "aéé").matches[0].char_range,
             1..3
         );
+        let columns = results("é", SearchMode::Literal, SearchCase::Sensitive, "aé終é b é")
+            .matches
+            .into_iter()
+            .map(|found| found.char_range)
+            .collect::<Vec<_>>();
+        assert_eq!(columns, vec![1..2, 3..4, 7..8]);
     }
     #[test]
     fn invalid_multiline_and_limits_are_explicit() {
@@ -548,8 +539,10 @@ mod tests {
             &limits,
         )
         .unwrap();
-        let source = SourceStore::static_text("aaaa\nx").unwrap().snapshot();
-        let result = search_source(&source, &query, 1, &limits);
+        // The second paragraph is cut by the scan budget.
+        let source = SourceStore::static_text("aaaa\n\nxy").unwrap().snapshot();
+        let document = parse_document(&source, &Default::default(), None);
+        let result = search_document(&document, &query, 1, &limits);
         assert_eq!(result.count, 4);
         assert_eq!(result.matches.len(), 1);
         assert!(!result.coverage_complete);
@@ -574,24 +567,11 @@ mod tests {
             .unwrap();
             let source = SourceStore::static_text("foobar").unwrap().snapshot();
             let document = parse_document(&source, &Default::default(), None);
-            for result in [
-                search_source(&source, &query, 1, &limits),
-                search_document(&document, &query, 1, &limits),
-            ] {
-                assert_eq!(result.count, 0);
-                assert!(result.matches.is_empty());
-                assert!(!result.coverage_complete);
-                assert_eq!(result.scanned_bytes, 3);
-            }
-            let source = SourceStore::static_text("foo\nfoobar").unwrap().snapshot();
-            let limits = SearchLimits {
-                max_scan_bytes: 7,
-                ..limits
-            };
-            let result = search_source(&source, &query, 1, &limits);
-            assert_eq!(result.count, 1);
-            assert_eq!(result.matches[0].source_range, Some(0..3));
+            let result = search_document(&document, &query, 1, &limits);
+            assert_eq!(result.count, 0);
+            assert!(result.matches.is_empty());
             assert!(!result.coverage_complete);
+            assert_eq!(result.scanned_bytes, 3);
         }
     }
     #[test]
@@ -637,15 +617,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(search_document(&doc, &query, 9, &limits).count, 0);
-        assert_eq!(search_source(&source, &query, 9, &limits).count, 1);
-        let limits = SearchLimits {
-            max_scan_bytes: 2,
-            ..Default::default()
-        };
-        let source = SourceStore::static_text("\n\n\n\n").unwrap().snapshot();
-        let result = search_source(&source, &query, 9, &limits);
-        assert!(!result.coverage_complete);
-        assert_eq!(result.scanned_bytes, 2);
+        assert_eq!(source_ranges(&source, "secret").len(), 1);
     }
     #[test]
     fn source_card_matches_carry_exact_original_byte_ranges() {
@@ -669,9 +641,6 @@ mod tests {
             result.matches[0].address,
             SearchAddress::SourceCardLine { line: 1, .. }
         ));
-        assert_eq!(
-            search_source(&source, &query, 1, &limits).matches[0].source_range,
-            Some(15..21)
-        );
+        assert_eq!(source_ranges(&source, "needle"), vec![15..21]);
     }
 }

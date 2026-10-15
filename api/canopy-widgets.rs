@@ -4127,8 +4127,6 @@ pub mod highlight {
         fn prepare(&self, text: &str) {}
     }
 
-    impl Highlighter for PreparedSpans {}
-
     /// A grammar: a syntax, and the set that holds it.
     ///
     /// A syntax parses only against its own set, so the two travel together.

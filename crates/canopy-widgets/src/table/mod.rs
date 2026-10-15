@@ -547,7 +547,7 @@ pub fn prepare(data: Arc<TableData>, options: TableLayoutOptions) -> Result<Prep
     })
 }
 /// Return whether a character requires a safe one-cell substitution.
-fn display_control(c: char) -> bool {
+pub(crate) fn display_control(c: char) -> bool {
     c.is_control() || matches!(c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
 }
 /// Measure the one-line representation, stopping at the supplied width cap.
@@ -718,11 +718,17 @@ impl PreparedTable {
             0
         };
         let body = Rect::new(area.tl.x + gutter, area.tl.y, area.w - gutter, area.h);
-        let from = self
-            .starts
-            .partition_point(|start| *start <= window.offset.x)
-            .saturating_sub(1);
-        for column in from..self.widths.len() {
+        // A gutter-only paint has no body columns to visit.
+        let columns = if body.w == 0 {
+            0..0
+        } else {
+            let from = self
+                .starts
+                .partition_point(|start| *start <= window.offset.x)
+                .saturating_sub(1);
+            from..self.widths.len()
+        };
+        for column in columns {
             let start = self.starts[column];
             let first = start.saturating_sub(u32::from(column > 0));
             if first >= window.offset.x.saturating_add(body.w) {
@@ -803,11 +809,12 @@ impl PreparedTable {
     ) -> Result<()> {
         let start = self.starts[column];
         let width = self.widths[column];
+        let mut glyph = [0; 4];
         if column > 0 && start > offset && start - 1 < offset.saturating_add(area.w) {
             render.text(
                 "table/separator",
                 Line::new(area.tl.x + (start - 1 - offset), y, 1),
-                &self.options.glyphs.separator.to_string(),
+                self.options.glyphs.separator.encode_utf8(&mut glyph),
             )?;
         }
         let left = start.max(offset);
@@ -823,20 +830,19 @@ impl PreparedTable {
             TableAlignment::Center => (width - measured) / 2,
             TableAlignment::Right => width - measured,
         };
+        let base = render.resolve_style(path);
         let mut x = start + padding;
         for (byte, g) in cell.text.grapheme_indices(true) {
             if x >= start + width || x >= offset.saturating_add(area.w) {
                 break;
             }
-            let substituted;
-            let g = if g.chars().any(display_control) {
-                substituted = match g {
+            let g: &str = if g.chars().any(display_control) {
+                match g {
                     "\n" | "\r" | "\r\n" => self.options.glyphs.newline,
                     "\t" => self.options.glyphs.tab,
                     _ => self.options.glyphs.control,
                 }
-                .to_string();
-                &substituted
+                .encode_utf8(&mut glyph)
             } else {
                 g
             };
@@ -849,8 +855,12 @@ impl PreparedTable {
                     x: area.tl.x + (x - offset),
                     y,
                 };
-                let mut style = render.resolve_style(path);
-                if let Some(span) = cell.spans.iter().find(|span| span.range.contains(&byte)) {
+                let mut style = base.clone();
+                // Spans are ordered and disjoint, so their ends ascend.
+                let span = cell.spans[cell.spans.partition_point(|span| span.range.end <= byte)..]
+                    .first()
+                    .filter(|span| span.range.contains(&byte));
+                if let Some(span) = span {
                     let overlay = render.apply_effects(span.style.clone());
                     style.fg = overlay.fg;
                     style.attrs = overlay.attrs;
@@ -887,9 +897,6 @@ impl PreparedTable {
         let mut out = String::new();
         let mut write_row = |cells: &[&TableCell]| -> Result<()> {
             for (i, cell) in cells.iter().enumerate() {
-                if cell.text.len() > limit.saturating_sub(out.len()) {
-                    return Err(Error::Invalid(format!("table copy exceeds {limit} bytes")));
-                }
                 if i > 0 {
                     push_bounded(&mut out, "\t", limit)?;
                 }

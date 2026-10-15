@@ -4,7 +4,7 @@
 use std::{
     collections::{HashMap, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
-    mem::{discriminant, swap},
+    mem::discriminant,
     ops::Range,
     sync::Arc,
 };
@@ -13,7 +13,7 @@ use canopy::{
     error::Result,
     geom::{Point, Rect},
     render::Render,
-    style::{Attr, StyleMap, StyleRules, themes::Palette},
+    style::{Attr, Mix, StyleMap, StyleRules, themes::Palette},
     text,
 };
 #[cfg(feature = "syntax")]
@@ -28,12 +28,25 @@ use canopy_widgets::{
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::document::{
-    Block, BlockKind, CodeBlock, DocumentSnapshot, InlineRole, ReadingPosition, ReadingRange,
-    ReadingUnit,
+    Alignment, Block, BlockKind, CodeBlock, DocumentSnapshot, InlineRole, ReadingPosition,
+    ReadingRange, ReadingUnit,
 };
 
 /// Bounded row count for one derived presentation.
 const MAX_PREPARED_ROWS: usize = 262_144;
+/// Literal lines shown in a code or source card preview.
+const PREVIEW_LINES: usize = 6;
+/// Body rows shown in an inline table preview.
+const PREVIEW_TABLE_ROWS: usize = 8;
+/// How far the object cursor's ground leans from the background toward the
+/// accent. Panels and selections share one color in some themes, so a tint
+/// keeps the cursor apart from code cards and inline code.
+const OBJECT_TINT: f32 = 0.25;
+/// Every readable byte of a unit, for whole-unit overlay tests.
+const WHOLE_UNIT: Range<usize> = 0..usize::MAX;
+
+/// Document reading order: semantic unit index, then readable byte offset.
+type ReadingKey = (usize, usize);
 
 /// Decorations are geometry, so changing this preset requires preparation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -203,8 +216,6 @@ pub struct PresentationSnapshot {
     /// Conservative layout cache allocation estimate, computed on the worker.
     estimated_bytes: usize,
 }
-/// The prepared rendered surface, suitable for worker publication.
-pub type PreparedPresentation = PresentationSnapshot;
 
 impl PresentationSnapshot {
     /// Run this on the document worker. A palette change does not invalidate
@@ -284,24 +295,25 @@ impl PresentationSnapshot {
                 }
             } else {
                 result.stats.prepared_blocks += 1;
-                prepare_block(
+                let mut layout = prepare_block(
                     block,
                     unit,
                     object,
                     geometry,
                     result.document.source.revision,
                     syntax_allowed,
-                )
-            };
-            layout.signature = signature;
-            if result.stats.prepared_blocks > 0 && layout.source_text_start.is_none() {
+                );
+                // Reused blocks keep this: within an epoch, source only grows,
+                // so an unchanged span and text verify identically.
                 layout.source_text_start = document
                     .source
                     .text()
                     .get(block.source.clone())
                     .and_then(|raw| raw.find(&unit.text))
                     .map(|offset| block.source.start + offset);
-            }
+                layout
+            };
+            layout.signature = signature;
             layout.start = result.height;
             let remaining = MAX_PREPARED_ROWS.saturating_sub(result.height as usize);
             if remaining == 0 {
@@ -322,9 +334,10 @@ impl PresentationSnapshot {
                     geometry.glyphs,
                 );
                 layout.rows = rows.into();
+                // The table preview must not paint over the status row.
                 layout.table_height = layout
                     .table_height
-                    .min((remaining as u32).saturating_sub(layout.table_start));
+                    .min((remaining as u32 - 1).saturating_sub(layout.table_start));
                 result.truncated = true;
             }
             result.truncated |= layout.rows.len() >= MAX_PREPARED_ROWS;
@@ -416,13 +429,16 @@ impl PresentationSnapshot {
     }
     /// Resolve one row through the block-height index.
     pub fn row(&self, index: u32) -> Option<&PreparedRow> {
+        self.block_row(index).map(|(_, row)| row)
+    }
+    /// Resolve one row together with its owning block.
+    fn block_row(&self, index: u32) -> Option<(&BlockLayout, &PreparedRow)> {
         let b = self.block_at(index)?;
-        b.rows.get((index - b.start) as usize)
+        Some((b, b.rows.get((index - b.start) as usize)?))
     }
     /// Map a row to verified source bytes, falling back to the block start.
     pub fn source_at_row(&self, row: u32) -> Option<usize> {
-        let block = self.block_at(row)?;
-        let row = self.row(row)?;
+        let (block, row) = self.block_row(row)?;
         let offset = row
             .runs
             .iter()
@@ -478,8 +494,7 @@ impl PresentationSnapshot {
         if point.x >= self.geometry.width {
             return None;
         }
-        let b = self.block_at(point.y)?;
-        let row = self.row(point.y)?;
+        let (b, row) = self.block_row(point.y)?;
         if row.atomic {
             return Some(Hit {
                 reading: Some(ReadingPosition {
@@ -528,37 +543,16 @@ impl PresentationSnapshot {
         }
         nearest
     }
-    /// Test a readable selection against a run or atomic card.
-    fn intersects(
-        &self,
-        selection: &ReadingRange,
-        unit_id: u64,
-        range: &Range<usize>,
-        atomic: bool,
-    ) -> bool {
-        let key = |p: &ReadingPosition| {
-            self.unit_order
-                .get(&p.unit_id)
-                .copied()
-                .map(|index| (index, p.offset))
-        };
-        let (Some(mut start), Some(mut end), Some(&index)) = (
-            key(&selection.start),
-            key(&selection.end),
-            self.unit_order.get(&unit_id),
-        ) else {
-            return false;
-        };
-        if start > end {
-            swap(&mut start, &mut end);
-        }
-        if start == end {
-            return false;
-        }
-        if atomic {
-            return (index, usize::MAX) > start && (index, 0) < end;
-        }
-        (index, range.end) > start && (index, range.start) < end
+    /// Order a selection or match into a nonempty reading-key span.
+    fn reading_span(&self, range: &ReadingRange) -> Option<Range<ReadingKey>> {
+        let key = |p: &ReadingPosition| Some((*self.unit_order.get(&p.unit_id)?, p.offset));
+        let (a, b) = (key(&range.start)?, key(&range.end)?);
+        let span = if a <= b { a..b } else { b..a };
+        (!span.is_empty()).then_some(span)
+    }
+    /// The reading-order index of a unit, if it belongs to this document.
+    fn unit_index(&self, unit_id: u64) -> Option<usize> {
+        self.unit_order.get(&unit_id).copied()
     }
     /// Paint the visible document rectangle at viewport origin zero. This
     /// method never parses, wraps, or highlights source.
@@ -569,29 +563,52 @@ impl PresentationSnapshot {
         overlays: &PaintOverlays,
     ) -> Result<PaintStats> {
         let mut stats = PaintStats::default();
+        // Normalize overlays once, then narrow them per row, so grapheme work
+        // does not scale with the document-wide match count.
+        let selection = overlays
+            .selection
+            .as_ref()
+            .and_then(|s| self.reading_span(s));
+        let search = overlays
+            .search
+            .iter()
+            .filter_map(|s| self.reading_span(s))
+            .collect::<Vec<_>>();
+        let mut row_search = Vec::new();
         let end = visible.tl.y.saturating_add(visible.h).min(self.height);
         for y in visible.tl.y..end {
-            let Some(row) = self.row(y) else {
+            let Some((block, row)) = self.block_row(y) else {
                 continue;
             };
             stats.rows += 1;
-            let whole_selected = row.atomic
-                && overlays
-                    .selection
-                    .as_ref()
-                    .is_some_and(|s| self.intersects(s, row.unit_id, &(0..usize::MAX), true));
-            let whole_search = row.atomic
-                && overlays
-                    .search
-                    .iter()
-                    .any(|s| self.intersects(s, row.unit_id, &(0..usize::MAX), true));
+            let index = self.unit_index(row.unit_id);
+            let marks = |span: &Range<ReadingKey>, bytes: &Range<usize>| {
+                index.is_some_and(|i| overlaps(span, i, bytes))
+            };
+            let row_selection = selection.as_ref().filter(|s| marks(s, &WHOLE_UNIT));
+            row_search.clear();
+            row_search.extend(search.iter().filter(|s| marks(s, &WHOLE_UNIT)));
+            let whole_selected = row.atomic && row_selection.is_some();
+            let whole_search = row.atomic && !row_search.is_empty();
+            let active = |object: Option<u64>| object.is_some() && object == overlays.active_object;
+            // An active card takes the object ground across its full width,
+            // blank code lines and table preview rows included.
+            let table_rows = block.table_start..block.table_start + block.table_height;
+            let active_card = active(block.object)
+                && (row.ground == "markdown/card"
+                    || (block.table.is_some() && table_rows.contains(&(y - block.start)))
+                    || row.runs.iter().any(|run| run.object == block.object));
+            let active_row = active_card || row.runs.iter().any(|run| active(run.object));
             let ground = if whole_selected {
                 "markdown/selection"
             } else if whole_search {
                 "markdown/search"
+            } else if active_card {
+                "markdown/object"
             } else {
                 row.ground
             };
+            let ground_bg = render.resolve_style(ground).bg;
             let local_y = y - visible.tl.y;
             render.fill(
                 ground,
@@ -625,24 +642,19 @@ impl PresentationSnapshot {
                         }
                     });
                     let selected = whole_selected
-                        || bytes.as_ref().is_some_and(|r| {
-                            overlays
-                                .selection
-                                .as_ref()
-                                .is_some_and(|s| self.intersects(s, row.unit_id, r, row.atomic))
-                        });
+                        || bytes
+                            .as_ref()
+                            .is_some_and(|r| row_selection.is_some_and(|s| marks(s, r)));
                     let search = whole_search
-                        || bytes.as_ref().is_some_and(|r| {
-                            overlays
-                                .search
-                                .iter()
-                                .any(|s| self.intersects(s, row.unit_id, r, row.atomic))
-                        });
+                        || bytes
+                            .as_ref()
+                            .is_some_and(|r| row_search.iter().any(|s| marks(s, r)));
+                    let object = active(run.object);
                     let role = if selected {
                         "markdown/selection"
                     } else if search {
                         "markdown/search"
-                    } else if run.object.is_some() && run.object == overlays.active_object {
+                    } else if object {
                         "markdown/object"
                     } else {
                         run.role
@@ -659,8 +671,8 @@ impl PresentationSnapshot {
                             style.attrs.italic |= syntax.attrs.italic;
                             style.attrs.underline |= syntax.attrs.underline;
                         }
-                        if run.role != "markdown/inline-code" {
-                            style.bg = render.resolve_style(ground).bg;
+                        if run.role != "markdown/inline-code" && !object {
+                            style.bg = ground_bg.clone();
                         }
                     }
                     let local = Point {
@@ -671,6 +683,19 @@ impl PresentationSnapshot {
                     render.put_grapheme(style.resolve_at(local_area, local), local, g)?;
                     x = x.saturating_add(width);
                 }
+            }
+            // A bar in the left margin marks every row of the active object.
+            let margin = Rect::new(0, y, 1, 1);
+            if active_row && block.inset > 0 && visible.contains_rect(margin) {
+                let mut bar = render.resolve_style("markdown/object/bar");
+                bar.bg = ground_bg;
+                let glyph = match self.geometry.glyphs {
+                    GlyphPreset::Unicode => "▌",
+                    GlyphPreset::Ascii => "|",
+                };
+                let local = Point { x: 0, y: local_y };
+                let local_area = Rect::new(0, local_y, 1, 1);
+                render.put_grapheme(bar.resolve_at(local_area, local), local, glyph)?;
             }
         }
         // Tables use exactly the same prepared renderer as their inspector.
@@ -711,35 +736,33 @@ impl PresentationSnapshot {
                 &TableSelection::default(),
             )?;
             stats.tables += 1;
-            if let Some(row) = b.rows.first() {
-                let selected = overlays
-                    .selection
-                    .as_ref()
-                    .is_some_and(|s| self.intersects(s, row.unit_id, &(0..usize::MAX), true));
-                let role = if selected {
-                    Some("markdown/selection")
-                } else if overlays
-                    .search
-                    .iter()
-                    .any(|s| self.intersects(s, row.unit_id, &(0..usize::MAX), true))
-                {
-                    Some("markdown/search")
-                } else if b.object.is_some() && b.object == overlays.active_object {
-                    Some("markdown/object")
-                } else {
-                    None
-                };
-                if let Some(role) = role {
-                    for y in local_area.tl.y..local_area.tl.y + local_area.h {
-                        for x in local_area.tl.x..local_area.tl.x + local_area.w {
-                            render.restyle(role, Point { x, y });
-                        }
+            let index = b.rows.first().and_then(|row| self.unit_index(row.unit_id));
+            let marked =
+                |span: &Range<ReadingKey>| index.is_some_and(|i| overlaps(span, i, &WHOLE_UNIT));
+            let role = if selection.as_ref().is_some_and(marked) {
+                Some("markdown/selection")
+            } else if search.iter().any(marked) {
+                Some("markdown/search")
+            } else if b.object.is_some() && b.object == overlays.active_object {
+                Some("markdown/object")
+            } else {
+                None
+            };
+            if let Some(role) = role {
+                for y in local_area.tl.y..local_area.tl.y + local_area.h {
+                    for x in local_area.tl.x..local_area.tl.x + local_area.w {
+                        render.restyle(role, Point { x, y });
                     }
                 }
             }
         }
         Ok(stats)
     }
+}
+
+/// Whether a reading-key span covers any of `bytes` in the unit at `index`.
+fn overlaps(span: &Range<ReadingKey>, index: usize, bytes: &Range<usize>) -> bool {
+    (index, bytes.end) > span.start && (index, bytes.start) < span.end
 }
 
 /// Hash semantic inputs used to decide immutable block reuse.
@@ -757,7 +780,12 @@ fn signature(block: &Block, unit: &ReadingUnit, object: Option<u64>, syntax_allo
     unit.atomic.hash(&mut hash);
     object.hash(&mut hash);
     syntax_allowed.hash(&mut hash);
-    format!("{:?}", unit.spans).hash(&mut hash);
+    unit.spans.len().hash(&mut hash);
+    for span in &unit.spans {
+        span.range.hash(&mut hash);
+        discriminant(&span.role).hash(&mut hash);
+        span.object.hash(&mut hash);
+    }
     match &block.kind {
         BlockKind::Heading { level } => level.hash(&mut hash),
         BlockKind::Code(code) => {
@@ -824,12 +852,11 @@ fn prepare_block(
                 .map(|(i, cell)| {
                     let mut col =
                         TableColumn::new(cell.key.to_string(), TableCell::plain(cell.text.clone()));
-                    col.alignment =
-                        match data.alignments.get(i).map(|a| format!("{a:?}")).as_deref() {
-                            Some("Center") => TableAlignment::Center,
-                            Some("Right") => TableAlignment::Right,
-                            _ => TableAlignment::Left,
-                        };
+                    col.alignment = match data.alignments.get(i) {
+                        Some(Alignment::Center) => TableAlignment::Center,
+                        Some(Alignment::Right) => TableAlignment::Right,
+                        _ => TableAlignment::Left,
+                    };
                     col
                 })
                 .collect();
@@ -870,16 +897,17 @@ fn prepare_block(
                     );
                     rows.push(row);
                     table_start = 1;
-                    table_height = (prepared.data().rows().len().min(8) + 1) as u32;
+                    let body_rows = prepared.data().rows().len();
+                    table_height = (body_rows.min(PREVIEW_TABLE_ROWS) + 1) as u32;
                     for _ in 0..table_height {
                         rows.push(make_row());
                     }
-                    if prepared.data().rows().len() > 8 {
+                    if body_rows > PREVIEW_TABLE_ROWS {
                         let mut row = make_row();
                         decoration(
                             &mut row,
                             inset,
-                            &format!("{} more rows", prepared.data().rows().len() - 8),
+                            &format!("{} more rows", body_rows - PREVIEW_TABLE_ROWS),
                             body,
                             "markdown/card/label",
                             object,
@@ -932,9 +960,7 @@ fn prepare_block(
                 geometry.glyphs,
             );
             rows.push(row);
-            let mut offset = 0;
-            for line in unit.text.split_inclusive('\n').take(6) {
-                let line = line.trim_end_matches(['\r', '\n']);
+            for (offset, line) in preview_lines(&unit.text) {
                 let mut row = make_row();
                 row.ground = "markdown/card";
                 clipped(
@@ -951,9 +977,8 @@ fn prepare_block(
                     },
                 );
                 rows.push(row);
-                offset += line.len() + 1;
             }
-            if unit.text.lines().count() > 6 {
+            if unit.text.lines().nth(PREVIEW_LINES).is_some() {
                 let mut row = make_row();
                 row.ground = "markdown/card";
                 decoration(
@@ -1102,13 +1127,7 @@ fn prepare_code(
     } else {
         Vec::new()
     };
-    let mut byte = 0;
-    for (line_index, line) in code.payload.split_inclusive('\n').take(6).enumerate() {
-        let line = line
-            .strip_suffix('\n')
-            .unwrap_or(line)
-            .strip_suffix('\r')
-            .unwrap_or(line.trim_end_matches('\n'));
+    for (line_index, (byte, line)) in preview_lines(&code.payload).enumerate() {
         let mut row = make_row();
         row.ground = "markdown/card";
         clipped(
@@ -1125,17 +1144,14 @@ fn prepare_code(
             },
         );
         rows.push(row);
-        byte += code.payload[byte..]
-            .find('\n')
-            .map_or(code.payload.len() - byte, |n| n + 1);
     }
-    if code.line_count > 6 {
+    if code.line_count > PREVIEW_LINES {
         let mut row = make_row();
         row.ground = "markdown/card";
         decoration(
             &mut row,
             inset,
-            &format!("{} more lines", code.line_count - 6),
+            &format!("{} more lines", code.line_count - PREVIEW_LINES),
             budget,
             "markdown/card/label",
             object,
@@ -1143,6 +1159,18 @@ fn prepare_code(
         );
         rows.push(row);
     }
+}
+
+/// Card preview lines without terminators, with their byte offsets.
+fn preview_lines(text: &str) -> impl Iterator<Item = (usize, &str)> {
+    text.split_inclusive('\n')
+        .take(PREVIEW_LINES)
+        .scan(0, |offset, raw| {
+            let start = *offset;
+            *offset += raw.len();
+            let line = raw.strip_suffix('\n').unwrap_or(raw);
+            Some((start, line.strip_suffix('\r').unwrap_or(line)))
+        })
 }
 
 /// Render quote rails, nesting, alert labels, and list markers.
@@ -1542,7 +1570,10 @@ fn code_syntax(info: &str, payload: &str) -> SyntaxLines {
     // aliases and named grammars agree with the code inspector.
     let token = info.split_whitespace().next().unwrap_or("");
     let highlighter = SyntectHighlighter::for_path("preview.md").with_palette_roles();
-    let prefix = payload.split_inclusive('\n').take(6).collect::<String>();
+    let prefix = payload
+        .split_inclusive('\n')
+        .take(PREVIEW_LINES)
+        .collect::<String>();
     highlighter.prepare(&format!("```{token}\n{prefix}"));
     prefix
         .lines()
@@ -1605,8 +1636,12 @@ pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
         .fg("markdown/selection", palette.fg)
         .bg("markdown/search", palette.accent)
         .fg("markdown/search", palette.bg)
-        .bg("markdown/object", palette.selection_bg)
-        .attr("markdown/object", Attr::Underline)
+        .bg(
+            "markdown/object",
+            palette.bg.mix(palette.accent, OBJECT_TINT, Mix::Rgb),
+        )
+        .fg("markdown/object", palette.fg)
+        .fg("markdown/object/bar", palette.accent)
         .fg("markdown/status", palette.muted_fg)
         .apply();
 }

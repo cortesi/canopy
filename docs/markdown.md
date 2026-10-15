@@ -1,8 +1,8 @@
 # Markdown and source readers
 
 `canopy-markdown` provides a terminal Markdown reader with Rendered and Source
-views. The shared `canopy-widgets::TableView` also works independently. Run the
-examples with `cargo run -p gyms -- markdowngym` and
+views. Its table inspector, `canopy_widgets::TableView`, also works on its own.
+Run the examples with `cargo run -p gyms -- markdowngym` and
 `cargo run -p gyms -- tablegym`.
 
 ## Embed a reader
@@ -33,7 +33,9 @@ reveals the new view's tail. A parse failure still permits an explicit Source vi
 ## Reading and actions
 
 Scroll mode moves the document. Interact mode adds an object cursor and readable
-text selection. Links open an inspector first; a separate Open action requests a
+text selection. The cursor gives its object one accent-tinted ground, which spans
+the full width of a card or table, and a bar in the left margin marks each of its
+rows. Links open an inspector first; a separate Open action requests a
 browser launch. Code cards show a short preview and open a pinned full-text
 inspector. Completed tables open a keyed TableView; a receiving trailing table
 remains literal source until it closes.
@@ -50,11 +52,13 @@ rejection, or failure. Keep the request ID through asynchronous host work. The
 reader ignores duplicate replies and replies for replaced documents. Parsing,
 painting, switching, and link inspection never perform these external actions.
 
-The built-in search uses literal matching. Hosts such as fh can retain their own
-search field and call `set_search` with regex and smart-case matching. Rendered
-searches readable text, including omitted code and table cells; Source searches
-raw Markdown. A new query or view does not jump until the reader activates a
-match. Outline and local fragment jumps keep a return position.
+The built-in search field matches case-sensitive literal text. A host with its
+own search field, such as fh, sets `external_search` and calls
+`set_search(query, regex)`: `true` matches a smart-case regular expression, and
+`false` a case-sensitive literal. Rendered searches readable text, including
+omitted code and table cells; Source searches raw Markdown. A new query or view
+does not jump until the reader activates a match. Outline and local fragment
+jumps keep a return position.
 
 Hosts with a separate search or status bar can set `publication_wake` to their
 node's wake handle. Accepted publications and view changes then refresh host

@@ -1,6 +1,7 @@
 # Markdown release qualification
 
-Run from the Canopy workspace root with a release build:
+Run with a release build. A relative --output path resolves against the workspace root,
+whatever the working directory:
 
     cargo bench -p canopy-markdown --bench qualification -- --stream --output tmp/markdown-qualification/release
 
@@ -9,6 +10,7 @@ A diagnostic run uses 64 KiB fixtures, 25 input events, and two cold samples:
     cargo bench -p canopy-markdown --bench qualification -- --quick --stream --output tmp/markdown-qualification/diagnostic
 
 Diagnostic output has qualification=false and does not establish release acceptance.
+Quick mode also sends stream chunks without the 50 Hz pacing.
 The default run uses 1,000 input events, ten cold preparation samples, a 120×40 viewport,
 1 MiB prose/mixed documents, and 16 MiB long-line/code documents. The --events N and --cold N
 flags change those counts. A qualifying run rejects fewer than 1,000 input events.
@@ -19,8 +21,9 @@ chunks at 50 Hz, then eight-chunk bursts at the same average rate. Every accepte
 an individual latency sample, including revisions coalesced into a later displayed revision.
 The immediate final-byte Finish transition has a separate sample. Each stream case also
 repeats Finish after a Receiving revision has fully painted and its worker lane has drained.
-Those samples model a stalled producer and have a separate drained-finish revision trace. Trials longer than the default replace
-the document before the 1 MiB workload bound, after draining every old-epoch sample.
+Those samples model a stalled producer and have a separate drained-finish revision trace.
+Trials longer than the default replace the document before the 1 MiB workload bound, after
+draining every old-epoch sample.
 The producer never silently changes the workload into rejected appends.
 
 ## Generated fixtures
@@ -105,12 +108,11 @@ Progress and a partial memory trace are saved every 30 seconds. After removing t
 executor document and copy-request counts must return to zero.
 
 The 50hz_256-revisions.csv, bursty_256-revisions.csv, and table_code_256-revisions.csv traces
-retain every accepted append
-revision, the first displayed revision containing it, acceptance/paint timestamps, and
-Finish. Separate *-drained-finish.csv files identify the fully published Receiving revision,
-subsequent Finish revision, and its first-frame latency. All controller and inspector readiness loops observe actual published state;
-there are no fixed correctness sleeps. Real-time pacing is confined to the dedicated
-stream benchmark.
+retain every accepted append revision, the first displayed revision containing it,
+acceptance/paint timestamps, and Finish. Separate *-drained-finish.csv files identify the
+fully published Receiving revision, subsequent Finish revision, and its first-frame latency.
+All controller and inspector readiness loops observe actual published state; there are no
+fixed correctness sleeps. Real-time pacing is confined to the dedicated stream benchmark.
 
 ## Reading memory and release evidence
 

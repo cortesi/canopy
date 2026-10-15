@@ -47,7 +47,7 @@ use crate::{
     search::{SearchAddress, SearchCase, SearchLimits, SearchMode, SearchQuery, SearchResults},
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, SourceAnchor, SourceMatches, SourceOptions},
-    surface::{RenderedSurface, SurfaceState},
+    surface::{RenderedSurface, SurfaceState, nav_scroll},
 };
 
 /// A view-independent persisted reading location within one document epoch.
@@ -134,7 +134,8 @@ pub struct Markdown {
     displayed: Option<SourceSnapshot>,
     /// Last published Source snapshot, also retained while Source is inactive.
     source_snapshot: Option<SourceSnapshot>,
-    /// Last published semantics, retained independently of cached geometry.
+    /// Last published semantics, retained independently of cached geometry;
+    /// any cached Rendered presentation is built from this document.
     last_document: Option<Arc<DocumentSnapshot>>,
     /// Byte endpoints preserved when inactive Source geometry is evicted.
     saved_source_selection: Option<(usize, usize)>,
@@ -156,8 +157,6 @@ pub struct Markdown {
     results: Option<SearchResults>,
     /// Explicitly activated match, or None before navigation.
     search_index: Option<usize>,
-    /// Number of stored matches in the active Source projection.
-    source_match_count: usize,
     /// Exact Source match ranges for one displayed revision.
     source_results: Option<SourceMatches>,
     /// Current compile or scan failure, without discarding query text.
@@ -262,7 +261,6 @@ impl Markdown {
             query_generation: 0,
             results: None,
             search_index: None,
-            source_match_count: 0,
             source_results: None,
             query_error: None,
             inspector: None,
@@ -316,7 +314,6 @@ impl Markdown {
                 source.cancel_drag(ctx)
             })?;
         }
-        self.source_match_count = 0;
         self.source_results = None;
         self.requests.replace();
         self.switching = None;
@@ -445,7 +442,6 @@ impl Markdown {
         self.displayed = Some(source);
         self.results = None;
         self.search_index = None;
-        self.source_match_count = 0;
         self.source_results = None;
         self.shared.borrow_mut().overlays.search.clear();
         if let Some(nodes) = &self.nodes {
@@ -521,7 +517,7 @@ impl Markdown {
     }
     /// Use the same admission policy for view commands and contextual help.
     fn toggle_status(&self, ctx: &dyn ViewContext) -> Result<CommandStatus> {
-        Ok(if self.can_switch(ctx)? && !self.options.source_only {
+        Ok(if self.can_toggle_view_type(ctx)? {
             CommandStatus::Enabled
         } else {
             CommandStatus::Disabled(
@@ -532,17 +528,32 @@ impl Markdown {
     }
     /// Reject switches while a modal or any reader drag owns interaction.
     fn can_switch(&self, ctx: &dyn ViewContext) -> Result<bool> {
-        let source_drag = if let Some(node) = self.nodes.as_ref().and_then(|n| n.source) {
-            ctx.with_widget(node, |source: &MarkdownSource| {
+        Ok(self.inspector.is_none() && !self.drag_active(ctx)?)
+    }
+    /// Whether any Rendered, scrollbar, or mounted Source drag owns the
+    /// pointer.
+    fn drag_active(&self, ctx: &dyn ViewContext) -> Result<bool> {
+        if self.shared.borrow().dragging || self.bar_drag {
+            return Ok(true);
+        }
+        match self.nodes.as_ref().and_then(|n| n.source) {
+            Some(node) => ctx.with_widget(node, |source: &MarkdownSource| {
                 Ok(source.selection_drag_active())
-            })?
-        } else {
-            false
-        };
-        Ok(self.inspector.is_none()
-            && !self.shared.borrow().dragging
-            && !self.bar_drag
-            && !source_drag)
+            }),
+            None => Ok(false),
+        }
+    }
+    /// Whether the active Source surface holds or is dragging a selection.
+    fn source_selecting(&self, ctx: &dyn ViewContext) -> Result<bool> {
+        if self.active != ViewType::Source {
+            return Ok(false);
+        }
+        match self.navigation_node() {
+            Some(node) => ctx.with_widget(node, |source: &MarkdownSource| {
+                Ok(!source.selection_range().is_empty() || source.selection_drag_active())
+            }),
+            None => Ok(false),
+        }
     }
     /// Restrict a partial document to its exact retained source range.
     pub fn set_source_only(
@@ -831,7 +842,6 @@ impl Markdown {
                 SearchCase::Sensitive
             },
         };
-        self.source_match_count = 0;
         self.source_results = None;
         self.query_generation += 1;
         self.query_error = None;
@@ -878,12 +888,6 @@ impl Markdown {
         self.set_search(ctx, String::new(), false)?;
         if let Some(nodes) = &self.nodes {
             ctx.with_widget_mut(nodes.search, |bar: &mut SearchBar, ctx| bar.close(ctx))?;
-            if let Some(source) = nodes.source {
-                ctx.with_widget_mut(source, |source: &mut MarkdownSource, ctx| {
-                    source.clear_search(ctx);
-                    Ok(())
-                })?;
-            }
         }
         Ok(())
     }
@@ -893,7 +897,7 @@ impl Markdown {
         if self.active == ViewType::Rendered {
             self.results.as_ref().map_or(0, |r| r.matches.len())
         } else {
-            self.source_match_count
+            self.source_results.as_ref().map_or(0, |r| r.ranges.len())
         }
     }
     /// One-based current match, or zero before explicit navigation.
@@ -908,11 +912,14 @@ impl Markdown {
     /// Visit a retained match in the active representation.
     #[command]
     pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32) -> Result<()> {
-        self.shared.borrow_mut().follow = Follow::Paused;
-        self.shared.borrow_mut().navigation += 1;
         let count = self.search_matches();
         if count == 0 {
             return Ok(());
+        }
+        {
+            let mut state = self.shared.borrow_mut();
+            state.follow = Follow::Paused;
+            state.navigation += 1;
         }
         let current = self
             .search_index
@@ -933,40 +940,32 @@ impl Markdown {
             .and_then(|r| r.matches.get(next))
             .cloned()
         {
-            let unit = match found.address {
-                SearchAddress::Unit { unit_id }
-                | SearchAddress::CodeLine { unit_id, .. }
-                | SearchAddress::SourceCardLine { unit_id, .. }
-                | SearchAddress::TableCell { unit_id, .. } => Some(unit_id),
-                SearchAddress::SourceLine { .. } => None,
-            };
-            if let Some(unit) = unit {
-                let presentation = self.shared.borrow().presentation.clone();
-                if let Some(p) = presentation {
-                    self.shared.borrow_mut().overlays.active_object = match found.address {
-                        SearchAddress::Unit { .. } => p.document.unit(unit).and_then(|unit| {
-                            unit.spans
-                                .iter()
-                                .filter(|span| {
-                                    span.range.start < found.range.end
-                                        && found.range.start < span.range.end
-                                })
-                                .find_map(|span| span.object)
-                        }),
-                        _ => p
-                            .document
-                            .objects
+            let unit = found.address.unit_id();
+            let presentation = self.shared.borrow().presentation.clone();
+            if let Some(p) = presentation {
+                self.shared.borrow_mut().overlays.active_object = match found.address {
+                    SearchAddress::Unit { .. } => p.document.unit(unit).and_then(|unit| {
+                        unit.spans
                             .iter()
-                            .find(|o| o.unit_id == unit)
-                            .map(|o| o.id),
-                    };
-                    if let Some(node) = self.navigation_node() {
-                        let row = p.row_for_unit(unit, found.range.start);
-                        ctx.with_widget_mut(node, |_: &mut RenderedSurface, ctx| {
-                            ctx.reveal_area(Rect::new(0, row, 1, 1), RevealAlign::Nearest);
-                            Ok(())
-                        })?;
-                    }
+                            .filter(|span| {
+                                span.range.start < found.range.end
+                                    && found.range.start < span.range.end
+                            })
+                            .find_map(|span| span.object)
+                    }),
+                    _ => p
+                        .document
+                        .objects
+                        .iter()
+                        .find(|o| o.unit_id == unit)
+                        .map(|o| o.id),
+                };
+                if let Some(node) = self.navigation_node() {
+                    let row = p.row_for_unit(unit, found.range.start);
+                    ctx.with_widget_mut(node, |_: &mut RenderedSurface, ctx| {
+                        ctx.reveal_area(Rect::new(0, row, 1, 1), RevealAlign::Nearest);
+                        Ok(())
+                    })?;
                 }
             }
         }
@@ -1031,12 +1030,7 @@ impl Markdown {
                 return Ok(());
             }
             ObjectKind::Link(link) => {
-                let base = self
-                    .options
-                    .base_url
-                    .as_deref()
-                    .and_then(|base| url::Url::parse(base).ok());
-                match resolve_link(&link.destination, base.as_ref()) {
+                match resolve_link(&link.destination, self.base_url().as_ref()) {
                     ResolvedLink::Fragment(slug) => {
                         if let Some(entry) = p.document.outline.iter().find(|e| e.slug == slug) {
                             self.jump_source(ctx, entry.source.start)?;
@@ -1107,20 +1101,11 @@ impl Markdown {
         let Some(p) = self.shared.borrow().presentation.clone() else {
             return Ok(());
         };
-        let entries = p
-            .document
-            .outline
-            .iter()
-            .map(|entry| OutlineEntry {
-                id: entry.id,
-                level: entry.level,
-                text: entry.text.clone(),
-                source_byte: entry.source.start,
-            })
-            .collect();
         self.open_inspector(
             ctx,
-            InspectorContent::Outline { entries },
+            InspectorContent::Outline {
+                entries: outline_entries(&p.document),
+            },
             None,
             p.document.source.revision,
         )
@@ -1197,12 +1182,9 @@ impl Markdown {
                 self.queue_copy(ctx, CopyInput::Source { text, range }, None, revision)?;
             }
             InspectorEvent::OpenUrl(destination) if self.options.browser => {
-                let base = self
-                    .options
-                    .base_url
-                    .as_deref()
-                    .and_then(|b| url::Url::parse(b).ok());
-                if let ResolvedLink::External(url) = resolve_link(&destination, base.as_ref()) {
+                if let ResolvedLink::External(url) =
+                    resolve_link(&destination, self.base_url().as_ref())
+                {
                     let action = self
                         .requests
                         .reserve(epoch, revision, None, self.options.action_limit)
@@ -1418,6 +1400,13 @@ impl Markdown {
         self.schedule(ctx, true)
     }
 
+    /// The host base for relative links, ignoring an unparsable preference.
+    fn base_url(&self) -> Option<url::Url> {
+        self.options
+            .base_url
+            .as_deref()
+            .and_then(|base| url::Url::parse(base).ok())
+    }
     /// Capture Source layout and syntax preferences for worker preparation.
     fn source_options(&self) -> SourceOptions {
         SourceOptions {
@@ -1568,19 +1557,8 @@ impl Markdown {
                     ))?;
                 }
                 if let Some(open) = &self.inspector {
-                    open.handle.publish_outline(
-                        ctx,
-                        p.document
-                            .outline
-                            .iter()
-                            .map(|entry| OutlineEntry {
-                                id: entry.id,
-                                level: entry.level,
-                                text: entry.text.clone(),
-                                source_byte: entry.source.start,
-                            })
-                            .collect(),
-                    )?;
+                    open.handle
+                        .publish_outline(ctx, || outline_entries(&p.document))?;
                     if let Some(id) = open.object {
                         match p.document.objects.iter().find(|o| o.id == id) {
                             Some(object) if matches!(object.kind, ObjectKind::Table) => {
@@ -1634,7 +1612,6 @@ impl Markdown {
         if switched {
             self.results = None;
             self.search_index = None;
-            self.source_match_count = 0;
             self.source_results = None;
             if was_focused && let Some(node) = self.navigation_node() {
                 ctx.set_focus(node)?;
@@ -1677,35 +1654,40 @@ impl Markdown {
         }
         Ok(())
     }
-    /// Install bounded matches without moving the reader or stealing prompt
-    /// focus.
+    /// Install bounded matches or a query error in place of all prior match
+    /// state, without moving the reader or stealing prompt focus.
     fn apply_search(
         &mut self,
         ctx: &mut dyn Context,
         search: StdResult<SearchOutput, String>,
     ) -> Result<()> {
-        match search {
+        let output = match search {
+            Ok(output) => output,
             Err(error) => {
                 self.query_error = Some(error);
                 self.results = None;
-                self.source_match_count = 0;
                 self.source_results = None;
+                self.search_index = None;
+                self.shared.borrow_mut().overlays.search.clear();
+                return Ok(());
             }
-            Ok(SearchOutput::Source(matches)) => {
+        };
+        self.query_error = None;
+        match output {
+            SearchOutput::Source(matches) => {
                 let current = self
                     .search_index
                     .and_then(|i| self.source_results.as_ref()?.ranges.get(i));
                 self.search_index =
                     current.and_then(|range| matches.ranges.iter().position(|next| next == range));
                 self.source_results = Some(matches.clone());
-                self.source_match_count = matches.ranges.len();
                 if let Some(node) = self.nodes.as_ref().and_then(|n| n.source) {
                     ctx.with_widget_mut(node, |source: &mut MarkdownSource, _| {
                         source.publish_matches(matches).map_err(invalid)
                     })?;
                 }
             }
-            Ok(SearchOutput::Rendered(results)) => {
+            SearchOutput::Rendered(results) => {
                 let current = self
                     .search_index
                     .and_then(|i| self.results.as_ref()?.matches.get(i));
@@ -1715,15 +1697,10 @@ impl Markdown {
                     .matches
                     .iter()
                     .filter_map(|found| {
-                        let (unit_id, range) = match found.address {
-                            SearchAddress::Unit { unit_id } => (unit_id, found.range.clone()),
-                            SearchAddress::CodeLine { unit_id, .. }
-                            | SearchAddress::SourceCardLine { unit_id, .. }
-                            | SearchAddress::TableCell { unit_id, .. } => {
-                                let unit = self.last_document.as_ref()?.unit(unit_id)?;
-                                (unit_id, 0..unit.text.len())
-                            }
-                            SearchAddress::SourceLine { .. } => return None,
+                        let unit_id = found.address.unit_id();
+                        let range = match found.address {
+                            SearchAddress::Unit { .. } => found.range.clone(),
+                            _ => 0..self.last_document.as_ref()?.unit(unit_id)?.text.len(),
                         };
                         Some(ReadingRange {
                             start: ReadingPosition {
@@ -1778,18 +1755,22 @@ impl Markdown {
         self.restoring = true;
         Ok(())
     }
+    /// Whether completed input still awaits its final displayed revision.
+    fn finishing(&self, accepted: &SourceSnapshot) -> bool {
+        matches!(
+            accepted.lifecycle,
+            Lifecycle::Complete(FinishOutcome::Completed)
+        ) && self.displayed_revision() < accepted.revision
+    }
     /// Refresh fixed status and query chrome without changing document state.
     fn update_chrome(&self, ctx: &mut dyn Context) -> Result<()> {
         let snapshot = self.store.snapshot();
         let lifecycle = match &snapshot.lifecycle {
             Lifecycle::Receiving => "Receiving".to_owned(),
-            Lifecycle::Complete(FinishOutcome::Completed) => {
-                if self.displayed_revision() < snapshot.revision {
-                    "Finishing".into()
-                } else {
-                    "Complete".into()
-                }
+            Lifecycle::Complete(FinishOutcome::Completed) if self.finishing(&snapshot) => {
+                "Finishing".into()
             }
+            Lifecycle::Complete(FinishOutcome::Completed) => "Complete".into(),
             Lifecycle::Complete(FinishOutcome::Aborted(reason)) => format!("Aborted: {reason}"),
         };
         let label = if self.active == ViewType::Source {
@@ -1837,7 +1818,7 @@ impl Markdown {
                 format!(" · {}", self.action_status)
             }
         );
-        let enabled = self.can_switch(ctx)? && !self.options.source_only;
+        let enabled = self.can_toggle_view_type(ctx)?;
         *self.chrome.borrow_mut() = ChromeState {
             text,
             enabled,
@@ -1953,18 +1934,7 @@ impl Widget for Markdown {
                 }
             }
         }
-        let source_selecting = if self.active == ViewType::Source {
-            if let Some(node) = self.navigation_node() {
-                ctx.with_widget(node, |s: &MarkdownSource| {
-                    Ok(!s.selection_range().is_empty() || s.selection_drag_active())
-                })?
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-        if source_selecting && self.follow_state() == Follow::Following {
+        if self.follow_state() == Follow::Following && self.source_selecting(ctx)? {
             self.shared.borrow_mut().follow = Follow::Paused;
             if let Some(wake) = &self.wake {
                 let _ = wake.wake()?;
@@ -2013,40 +1983,30 @@ impl Widget for Markdown {
                     .map_err(invalid)?,
             );
         }
-        if self.displayed.is_some()
-            && self.active == ViewType::Source
-            && let Some(node) = self.navigation_node()
-        {
-            let selecting = ctx.with_widget(node, |source: &MarkdownSource| {
-                Ok(!source.selection_range().is_empty() || source.selection_drag_active())
-            })?;
-            if selecting {
-                self.shared.borrow_mut().follow = Follow::Paused;
-            }
+        if self.displayed.is_some() && self.source_selecting(ctx)? {
+            self.shared.borrow_mut().follow = Follow::Paused;
         }
-        let mut inspector_failure = None;
+        let mut action_failure = None;
         if let Some(open) = &self.inspector {
             let events = open.handle.take_events(32);
             let epoch = open.epoch;
             let revision = open.revision;
             for event in events {
                 if let Err(error) = self.apply_inspector_event(ctx, event, epoch, revision) {
-                    inspector_failure = Some(format!("Failed: {error}"));
+                    action_failure = Some(format!("Failed: {error}"));
                 }
             }
         }
         let pending = self.shared.borrow_mut().pending_open.take();
         if let Some(object) = pending {
+            // A failed pointer activation is a status, not a reason to skip
+            // this turn's worker completions.
             self.shared.borrow_mut().overlays.active_object = Some(object);
-            self.activate(ctx)?;
+            if let Err(error) = self.activate(ctx) {
+                action_failure = Some(format!("Failed: {error}"));
+            }
         }
-        self.deferred_publication = self.shared.borrow().dragging
-            || self.bar_drag
-            || if let Some(node) = self.nodes.as_ref().and_then(|n| n.source) {
-                ctx.with_widget(node, |s: &MarkdownSource| Ok(s.selection_drag_active()))?
-            } else {
-                false
-            };
+        self.deferred_publication = self.drag_active(ctx)?;
         let completed = if self.deferred_publication {
             None
         } else {
@@ -2076,7 +2036,7 @@ impl Widget for Markdown {
                 }
             }
         }
-        if let Some(failure) = inspector_failure {
+        if let Some(failure) = action_failure {
             self.action_status = failure;
         }
         if self.dirty {
@@ -2175,18 +2135,8 @@ impl Widget for Markdown {
         let Some(nav) = NavIntent::from_name(intent) else {
             return false;
         };
-        if self.active == ViewType::Rendered {
-            let state = self.shared.borrow();
-            if state.overlays.selection.is_some()
-                && !matches!(nav, NavIntent::PageUp | NavIntent::PageDown)
-                || state.mode == Mode::Interact
-                    && matches!(
-                        nav,
-                        NavIntent::Up | NavIntent::Down | NavIntent::First | NavIntent::Last
-                    )
-            {
-                return true;
-            }
+        if self.shared.borrow().claims(nav) {
+            return true;
         }
         self.navigation_node()
             .and_then(|node| ctx.scroll_outcome(node, nav_scroll(nav)))
@@ -2242,18 +2192,18 @@ impl Widget for Markdown {
     }
 }
 
-/// Translate core navigation into explicit document scroll operations.
-fn nav_scroll(nav: NavIntent) -> ScrollOp {
-    match nav {
-        NavIntent::Up => ScrollOp::By(0, -1),
-        NavIntent::Down => ScrollOp::By(0, 1),
-        NavIntent::Left => ScrollOp::By(-1, 0),
-        NavIntent::Right => ScrollOp::By(1, 0),
-        NavIntent::PageUp => ScrollOp::pages(-1),
-        NavIntent::PageDown => ScrollOp::pages(1),
-        NavIntent::First => ScrollOp::To(Point { x: 0, y: 0 }),
-        NavIntent::Last => ScrollOp::To(Point { x: 0, y: u32::MAX }),
-    }
+/// Project a document's headings into inspector outline rows.
+fn outline_entries(document: &DocumentSnapshot) -> Vec<OutlineEntry> {
+    document
+        .outline
+        .iter()
+        .map(|entry| OutlineEntry {
+            id: entry.id,
+            level: entry.level,
+            text: entry.text.clone(),
+            source_byte: entry.source.start,
+        })
+        .collect()
 }
 
 impl Register for Markdown {
@@ -2347,7 +2297,9 @@ impl Register for Markdown {
             ("PageUp", NavIntent::PageUp),
             ("PageDown", NavIntent::PageDown),
             ("Home", NavIntent::First),
+            ("g", NavIntent::First),
             ("End", NavIntent::Last),
+            ("G", NavIntent::Last),
         ] {
             for path in ["**/markdown/", "**/markdown_rendered/"] {
                 setup.bind(

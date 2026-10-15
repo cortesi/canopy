@@ -120,7 +120,6 @@ fn build_content() -> String {
     let mut lines = Vec::new();
 
     lines.push("chargym: unicode and wide character samples".to_string());
-    lines.push("Use arrows/hjkl/PgUp/PgDn to scroll; q quits.".to_string());
     lines.push(String::new());
     lines.push(format!("Column ruler ({RULER_COLUMNS} cols):"));
 

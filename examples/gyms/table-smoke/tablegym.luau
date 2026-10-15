@@ -30,7 +30,9 @@ canopy.prepare()
 canopy.assert(gym("state").copy == "1\tBeta é\n0\tAlpha 界\n", "copy follows displayed row order")
 
 -- Geometry publications retain the data revision and selected keys.
-canopy.send_key("s")
+canopy.send_key("p")
+canopy.send_key("g")
+canopy.send_key("p")
 canopy.send_key("w")
 canopy.prepare()
 local geometry = gym("state")

@@ -23,7 +23,7 @@ use canopy_widgets::{
     highlight::{HighlightSpan, palette_style_rules},
 };
 
-use crate::search::{CompiledQuery, SearchCase, SearchLimits, SearchMode, SearchQuery};
+use crate::search::{CompiledQuery, SearchLimits, SearchQuery};
 
 /// Geometry and automatic syntax-work bounds for a source presentation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,46 +101,6 @@ impl fmt::Display for SourceError {
 }
 
 impl StdError for SourceError {}
-
-/// Matching semantics over raw source lines.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SourceSearchMode {
-    /// Case-sensitive literal matching.
-    Literal,
-    /// The shared ripgrep regular-expression matcher.
-    Regex,
-}
-
-/// A bounded source query, suitable for preparation on a worker.
-#[derive(Debug, Clone)]
-pub struct SourceQuery {
-    /// Raw query, retained by the host even when compilation fails.
-    pub text: String,
-    /// Literal or regular-expression matching.
-    pub mode: SourceSearchMode,
-    /// Sensitive, insensitive, or smart-case matching.
-    pub case: SearchCase,
-    /// Maximum query bytes before compilation.
-    pub max_query_bytes: usize,
-    /// Maximum stored nonempty matches.
-    pub max_matches: usize,
-    /// Maximum source bytes covered by this search.
-    pub max_scan_bytes: usize,
-}
-
-impl SourceQuery {
-    /// Construct a literal query with bounded work and result storage.
-    pub fn literal(text: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            mode: SourceSearchMode::Literal,
-            case: SearchCase::Sensitive,
-            max_query_bytes: 4096,
-            max_matches: 10_000,
-            max_scan_bytes: 16 * 1024 * 1024,
-        }
-    }
-}
 
 /// A bounded match window over a specific immutable revision.
 #[derive(Debug, Clone)]
@@ -571,7 +531,7 @@ impl MarkdownSource {
         {
             return Err(SourceError::NonAppend);
         }
-        let (anchor, head) = self.selection_endpoints();
+        let (anchor, head) = self.selection_bytes();
         self.editor.publish_view(prepared.editor, preserve);
         if preserve {
             self.editor.set_selection(Selection::new(
@@ -658,7 +618,7 @@ impl MarkdownSource {
     pub fn source_anchor(&self) -> SourceAnchor {
         SourceAnchor {
             epoch: self.epoch,
-            byte: self.selection_endpoints().1,
+            byte: self.selection_bytes().1,
         }
     }
     /// Return the source location at a prepared content point, such as the
@@ -671,13 +631,24 @@ impl MarkdownSource {
     }
     /// Return the prepared content point for a byte location in this epoch.
     pub fn point_for_anchor(&self, anchor: SourceAnchor) -> Result<Point, SourceError> {
+        let position = self.anchor_position(anchor)?;
+        Ok(self.editor.point_at(position))
+    }
+    /// Map a same-epoch byte boundary to its display position.
+    fn anchor_position(&self, anchor: SourceAnchor) -> Result<TextPosition, SourceError> {
         if anchor.epoch != self.epoch {
             return Err(SourceError::WrongEpoch);
         }
-        if anchor.byte > self.source.len() || !self.source.is_char_boundary(anchor.byte) {
-            return Err(SourceError::InvalidRange);
+        self.check_boundary(anchor.byte)?;
+        Ok(self.map.position(anchor.byte))
+    }
+    /// Reject a byte outside the source or inside a UTF-8 character.
+    fn check_boundary(&self, byte: usize) -> Result<(), SourceError> {
+        if self.source.is_char_boundary(byte) {
+            Ok(())
+        } else {
+            Err(SourceError::InvalidRange)
         }
-        Ok(self.editor.point_at(self.map.position(anchor.byte)))
     }
     /// Restore a byte location and reveal it without taking focus.
     pub fn restore_anchor(
@@ -685,13 +656,8 @@ impl MarkdownSource {
         ctx: &mut dyn Context,
         anchor: SourceAnchor,
     ) -> Result<(), SourceError> {
-        if anchor.epoch != self.epoch {
-            return Err(SourceError::WrongEpoch);
-        }
-        if anchor.byte > self.source.len() || !self.source.is_char_boundary(anchor.byte) {
-            return Err(SourceError::InvalidRange);
-        }
-        self.editor.set_cursor(ctx, self.map.position(anchor.byte));
+        let position = self.anchor_position(anchor)?;
+        self.editor.set_cursor(ctx, position);
         self.retained_selection = Some((anchor.byte, anchor.byte, self.editor.selection()));
         Ok(())
     }
@@ -703,11 +669,13 @@ impl MarkdownSource {
     }
     /// Return the selected exact source interval, excluding display decoration.
     pub fn selection_range(&self) -> Range<usize> {
-        let (anchor, head) = self.selection_endpoints();
+        let (anchor, head) = self.selection_bytes();
         anchor.min(head)..anchor.max(head)
     }
-    /// Recover exact selection endpoints even inside hidden CRLF boundaries.
-    fn selection_endpoints(&self) -> (usize, usize) {
+    /// Return exact source-byte selection endpoints, preserving drag direction,
+    /// even inside hidden CRLF boundaries. Hosts can retain these when
+    /// evicting an inactive prepared surface.
+    pub fn selection_bytes(&self) -> (usize, usize) {
         let selection = self.editor.selection();
         if let Some((anchor, head, retained)) = self.retained_selection
             && retained == selection
@@ -719,20 +687,11 @@ impl MarkdownSource {
             self.map.byte(selection.head()),
         )
     }
-    /// Return exact source-byte selection endpoints, preserving drag direction.
-    /// Hosts can retain these when evicting an inactive prepared surface.
-    pub fn selection_bytes(&self) -> (usize, usize) {
-        self.selection_endpoints()
-    }
     /// Set byte-addressed selection endpoints without scrolling or taking
     /// focus.
     pub fn set_selection(&mut self, anchor: usize, head: usize) -> Result<(), SourceError> {
-        if [anchor, head]
-            .iter()
-            .any(|byte| *byte > self.source.len() || !self.source.is_char_boundary(*byte))
-        {
-            return Err(SourceError::InvalidRange);
-        }
+        self.check_boundary(anchor)?;
+        self.check_boundary(head)?;
         self.editor.set_selection(Selection::new(
             self.map.position(anchor),
             self.map.position(head),
@@ -763,9 +722,10 @@ impl MarkdownSource {
         epoch: u64,
         revision: u64,
         source: &str,
-        query: &SourceQuery,
+        query: &SearchQuery,
+        limits: &SearchLimits,
     ) -> Result<SourceMatches, SourceError> {
-        if query.text.len() > query.max_query_bytes {
+        if query.text.len() > limits.max_query_bytes {
             return Err(SourceError::QueryLimit);
         }
         let mut result = SourceMatches {
@@ -777,24 +737,9 @@ impl MarkdownSource {
         if query.text.is_empty() {
             return Ok(result);
         }
-        let matcher = CompiledQuery::new(
-            &SearchQuery {
-                text: query.text.clone(),
-                mode: if query.mode == SourceSearchMode::Literal {
-                    SearchMode::Literal
-                } else {
-                    SearchMode::Regex
-                },
-                case: query.case,
-            },
-            &SearchLimits {
-                max_query_bytes: query.max_query_bytes,
-                max_matches: query.max_matches,
-                max_scan_bytes: query.max_scan_bytes,
-            },
-        )
-        .map_err(|error| SourceError::Regex(error.to_string()))?;
-        let mut scanned = query.max_scan_bytes.min(source.len());
+        let matcher = CompiledQuery::new(query, limits)
+            .map_err(|error| SourceError::Regex(error.to_string()))?;
+        let mut scanned = limits.max_scan_bytes.min(source.len());
         while !source.is_char_boundary(scanned) {
             scanned -= 1;
         }
@@ -823,7 +768,7 @@ impl MarkdownSource {
                     }
                     continue;
                 }
-                if result.ranges.len() == query.max_matches {
+                if result.ranges.len() == limits.max_matches {
                     result.complete = false;
                     return Ok(result);
                 }
@@ -901,6 +846,13 @@ impl MarkdownSource {
         self.editor.clear_search(ctx);
     }
 
+    /// Request preparation at a newly allocated width, or withdraw the request
+    /// when the allocation returns to the displayed geometry.
+    fn observe_width(&self, width: u32) {
+        self.requested_width
+            .set((width != self.width).then_some(width));
+    }
+
     /// Whether Escape must end a selection before reaching the host.
     fn selection_active(&self) -> bool {
         self.editor.selection_drag_active()
@@ -923,19 +875,14 @@ impl Widget for MarkdownSource {
         self.editor.measure(constraints)
     }
     fn canvas(&self, content: Size, ctx: &CanvasContext) -> Size {
-        if content.w != self.width {
-            self.requested_width.set(Some(content.w));
-        }
+        self.observe_width(content.w);
         self.editor.canvas(content, ctx)
     }
     fn render(&mut self, render: &mut Render, ctx: &dyn ViewContext) -> UiResult<()> {
         if self.editor.selection_drag_active() && !ctx.has_mouse_capture() {
             self.editor.end_selection_drag();
         }
-        let width = ctx.view().view_rect().w;
-        if width != self.width {
-            self.requested_width.set(Some(width));
-        }
+        self.observe_width(ctx.view().content.w);
         self.editor.render(render, ctx)
     }
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> UiResult<EventOutcome> {
@@ -1026,6 +973,14 @@ mod tests {
     use canopy_widgets::highlight::SpanStyle;
 
     use super::*;
+    use crate::search::{SearchCase, SearchMode};
+
+    fn literal(text: &str) -> SearchQuery {
+        SearchQuery {
+            text: text.into(),
+            ..SearchQuery::default()
+        }
+    }
 
     fn prepared(epoch: u64, revision: u64, text: &str) -> PreparedSource {
         PreparedSource::new(
@@ -1101,6 +1056,15 @@ mod tests {
                 Ok(())
             })
             .unwrap();
+    }
+
+    #[test]
+    fn width_request_withdraws_when_allocation_returns() {
+        let source = MarkdownSource::from_prepared(prepared(1, 0, "text"));
+        source.observe_width(20);
+        assert_eq!(source.requested_width(), Some(20));
+        source.observe_width(12);
+        assert_eq!(source.requested_width(), None);
     }
 
     #[test]
@@ -1186,26 +1150,29 @@ mod tests {
     #[test]
     fn bounded_search_uses_raw_source_smart_case_and_skips_empty_matches() {
         let source = "[Link](DEST)\r\nDest destination\n";
-        let mut query = SourceQuery::literal("dest");
-        query.mode = SourceSearchMode::Regex;
-        query.case = SearchCase::Smart;
-        let found = MarkdownSource::find_matches(1, 2, source, &query).unwrap();
+        let mut query = SearchQuery {
+            text: "dest".into(),
+            mode: SearchMode::Regex,
+            case: SearchCase::Smart,
+        };
+        let mut limits = SearchLimits::default();
+        let found = MarkdownSource::find_matches(1, 2, source, &query, &limits).unwrap();
         assert_eq!(found.ranges.len(), 3);
         assert!(found.complete);
-        query.max_matches = 1;
-        let found = MarkdownSource::find_matches(1, 2, source, &query).unwrap();
+        limits.max_matches = 1;
+        let found = MarkdownSource::find_matches(1, 2, source, &query, &limits).unwrap();
         assert_eq!(found.ranges, vec![7..11]);
         assert!(!found.complete);
         query.text = "x*".into();
         assert!(
-            MarkdownSource::find_matches(1, 2, source, &query)
+            MarkdownSource::find_matches(1, 2, source, &query, &limits)
                 .unwrap()
                 .ranges
                 .is_empty()
         );
         query.text = "(".into();
         assert!(matches!(
-            MarkdownSource::find_matches(1, 2, source, &query),
+            MarkdownSource::find_matches(1, 2, source, &query, &limits),
             Err(SourceError::Regex(_))
         ));
     }
@@ -1213,19 +1180,23 @@ mod tests {
     #[test]
     fn scan_cutoff_does_not_invent_regex_endings() {
         for pattern in ["foo$", r"foo\b"] {
-            let query = SourceQuery {
-                mode: SourceSearchMode::Regex,
-                max_scan_bytes: 3,
-                ..SourceQuery::literal(pattern)
+            let query = SearchQuery {
+                text: pattern.into(),
+                mode: SearchMode::Regex,
+                ..SearchQuery::default()
             };
-            let found = MarkdownSource::find_matches(1, 0, "foobar", &query).unwrap();
+            let limits = SearchLimits {
+                max_scan_bytes: 3,
+                ..SearchLimits::default()
+            };
+            let found = MarkdownSource::find_matches(1, 0, "foobar", &query, &limits).unwrap();
             assert!(found.ranges.is_empty());
             assert!(!found.complete);
-            let query = SourceQuery {
+            let limits = SearchLimits {
                 max_scan_bytes: 7,
-                ..query
+                ..limits
             };
-            let found = MarkdownSource::find_matches(1, 0, "foo\nfoobar", &query).unwrap();
+            let found = MarkdownSource::find_matches(1, 0, "foo\nfoobar", &query, &limits).unwrap();
             assert_eq!(found.ranges, vec![0..3]);
             assert!(!found.complete);
         }
@@ -1269,7 +1240,8 @@ mod tests {
         let mut source = MarkdownSource::from_prepared(wrapped);
         assert_eq!(source.derived_bytes(), prepared_bytes);
         let found =
-            MarkdownSource::find_matches(1, 0, &text, &SourceQuery::literal("word")).unwrap();
+            MarkdownSource::find_matches(1, 0, &text, &literal("word"), &SearchLimits::default())
+                .unwrap();
         source.publish_matches(found).unwrap();
         assert!(source.derived_bytes() > prepared_bytes);
         assert!(Arc::ptr_eq(&source.source_text(), &text));
@@ -1285,7 +1257,8 @@ mod tests {
     fn explicit_match_activation_reveals_its_prepared_content_point() {
         let text = format!("{}needle\n", "filler\n".repeat(30));
         let found =
-            MarkdownSource::find_matches(1, 0, &text, &SourceQuery::literal("needle")).unwrap();
+            MarkdownSource::find_matches(1, 0, &text, &literal("needle"), &SearchLimits::default())
+                .unwrap();
         let source = MarkdownSource::from_prepared(prepared(1, 0, &text));
         let mut harness = Harness::builder(source).size(12, 4).build().unwrap();
         harness

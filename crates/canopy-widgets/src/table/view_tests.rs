@@ -295,7 +295,7 @@ fn narrow_and_empty_axes_keep_navigation_and_header_copy() -> Result<()> {
 #[test]
 fn coordinate_prompt_tab_and_all_four_boundaries_are_deterministic() -> Result<()> {
     let mut h = harness(3, 25, 6)?;
-    h.key('g')?;
+    h.key(':')?;
     for c in "3,2".chars() {
         h.key(c)?;
     }
@@ -313,6 +313,32 @@ fn coordinate_prompt_tab_and_all_four_boundaries_are_deterministic() -> Result<(
     h.key(KeyCode::BackTab)?;
     with(&mut h, |v, _| {
         assert_eq!(v.cursor_index(), Some((0, 0)));
+        Ok(())
+    })?;
+    Ok(())
+}
+#[test]
+fn vi_letters_jump_to_edges_and_shifted_letters_extend() -> Result<()> {
+    let mut h = harness(3, 25, 6)?;
+    h.key('G')?;
+    h.key('$')?;
+    with(&mut h, |v, _| {
+        assert_eq!(v.cursor_index(), Some((2, 2)));
+        Ok(())
+    })?;
+    h.key('g')?;
+    h.key('0')?;
+    with(&mut h, |v, _| {
+        assert_eq!(v.cursor_index(), Some((0, 0)));
+        assert!(v.selection().is_empty());
+        Ok(())
+    })?;
+    h.key('J')?;
+    h.key('L')?;
+    with(&mut h, |v, _| {
+        assert_eq!(v.cursor_index(), Some((1, 1)));
+        assert_eq!(v.selection().rows().len(), 2);
+        assert_eq!(v.selection().columns().len(), 2);
         Ok(())
     })?;
     Ok(())
@@ -733,5 +759,34 @@ fn large_canvas_offsets_translate_before_adding_the_render_origin() -> Result<()
     h.render()?;
     assert_eq!(h.buf().get(Point::new(13, 0)).unwrap().ch, 'H');
     assert_eq!(h.buf().get(Point::new(13, 1)).unwrap().ch, 'V');
+    Ok(())
+}
+
+#[test]
+fn shift_click_keeps_its_anchor_and_the_gutter_stops_at_the_body() -> Result<()> {
+    let mut h = harness(20, 25, 7)?;
+    h.render()?;
+    // The gutter is three cells wide and the body starts on row one.
+    h.mouse(mouse(mouse::Action::Down, 4, 1))?;
+    h.mouse(mouse(mouse::Action::Up, 4, 1))?;
+    h.mouse(mouse::MouseEvent {
+        modifiers: key::Shift,
+        ..mouse(mouse::Action::Down, 10, 3)
+    })?;
+    h.mouse(mouse(mouse::Action::Up, 10, 3))?;
+    h.key(key::Shift + KeyCode::Down)?;
+    with(&mut h, |v, _| {
+        assert_eq!(v.cursor_index(), Some((3, 1)));
+        assert_eq!(v.selection().rows().len(), 4, "rows extend from the click");
+        assert_eq!(v.selection().columns().len(), 2);
+        Ok(())
+    })?;
+    // The bottom row holds the horizontal scrollbar, not a row number.
+    h.mouse(mouse(mouse::Action::Down, 0, 6))?;
+    with(&mut h, |v, _| {
+        assert_eq!(v.cursor_index(), Some((3, 1)));
+        assert_eq!(v.selection().rows().len(), 4);
+        Ok(())
+    })?;
     Ok(())
 }

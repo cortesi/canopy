@@ -125,6 +125,13 @@ pub(super) enum VisualCommand {
     Move(MoveCommand),
 }
 
+impl VisualCommand {
+    /// Whether this command changes the buffer.
+    fn edits(self) -> bool {
+        matches!(self, Self::Delete | Self::Change | Self::Indent(_))
+    }
+}
+
 /// One pending multi-key vi command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum PendingCommand {
@@ -210,6 +217,30 @@ pub(super) enum PlainCommand {
     ChangeToEnd,
     /// Jump to the last line.
     GotoLastLine,
+}
+
+impl PlainCommand {
+    /// Whether this command changes the buffer or enters an editing mode.
+    fn edits(&self) -> bool {
+        matches!(
+            self,
+            Self::BeginInsert
+                | Self::AppendAfter
+                | Self::InsertLineStart
+                | Self::AppendLineEnd
+                | Self::OpenBelow
+                | Self::OpenAbove
+                | Self::ReplaceMode
+                | Self::Undo
+                | Self::Redo
+                | Self::Repeat
+                | Self::SetPending(PendingKey::Delete | PendingKey::Change)
+                | Self::Put(_)
+                | Self::DeleteChar
+                | Self::DeleteToEnd
+                | Self::ChangeToEnd
+        )
+    }
 }
 
 /// One vi-mode action.
@@ -346,11 +377,14 @@ impl Editor {
         if self.prompt.is_some() {
             return self.prompt_command(key).map(ViCommand::Prompt);
         }
+        // A read-only buffer declines edit commands, so their keys reach the
+        // host's bindings, as they do in text mode.
+        let read_only = self.config.interaction.read_only();
         match self.vi.mode() {
             ViMode::Insert => self.insert_command(key).map(ViCommand::Insert),
-            ViMode::Visual(mode) => {
-                Self::visual_command(key).map(|command| ViCommand::Visual(mode, command))
-            }
+            ViMode::Visual(mode) => Self::visual_command(key)
+                .filter(|command| !(read_only && command.edits()))
+                .map(|command| ViCommand::Visual(mode, command)),
             ViMode::Normal => self.normal_command(key).map(ViCommand::Normal),
         }
     }
@@ -413,7 +447,9 @@ impl Editor {
         if self.config.history_arrows && matches!(key.key, key::KeyCode::Up | key::KeyCode::Down) {
             return None;
         }
-        Self::plain_command(key).map(NormalCommand::Plain)
+        Self::plain_command(key)
+            .filter(|command| !(self.config.interaction.read_only() && command.edits()))
+            .map(NormalCommand::Plain)
     }
 
     /// Classify one pending-prefix continuation.

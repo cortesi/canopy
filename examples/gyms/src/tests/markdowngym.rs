@@ -146,3 +146,42 @@ fn fixture_contains_release_acceptance_cases_and_tiny_viewports_settle() -> Resu
     assert!(h.tbuf().contains_text("Field notes"));
     Ok(())
 }
+
+#[test]
+fn glyph_toggle_remounts_the_reader_with_focus() -> Result<()> {
+    let mut h = gym()?;
+    h.script("canopy.send_key('p'); canopy.send_key('g')")?;
+    ready(&mut h)?;
+    assert!(h.tbuf().contains_text("ASCII"));
+    assert!(h.with_unique(|gym: &mut MarkdownGym, ctx| gym.focused(ctx))?);
+    Ok(())
+}
+
+#[test]
+fn menu_keys_reach_the_gym_from_both_views() -> Result<()> {
+    let mut h = gym()?;
+    for view in [ViewType::Rendered, ViewType::Source] {
+        reader(&mut h, |md, ctx| md.set_view_type(ctx, view))?;
+        ready(&mut h)?;
+        h.with_unique(|gym: &mut MarkdownGym, ctx| gym.focus_reader(ctx))?;
+        for (keys, status) in [
+            ("ss", "receiving 1/6"),
+            ("a", "receiving 2/6"),
+            ("sa", "receiving 3/6"),
+            ("sx", "aborted"),
+            ("de", "exact CRLF fixture"),
+            ("df", "complete fixture"),
+        ] {
+            for key in keys.chars() {
+                h.script(&format!("canopy.send_key('{key}')"))?;
+            }
+            ready(&mut h)?;
+            assert!(
+                h.tbuf().contains_text(status),
+                "{view:?} {keys}\n{}",
+                h.tbuf().lines().join("\n")
+            );
+        }
+    }
+    Ok(())
+}

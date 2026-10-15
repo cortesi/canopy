@@ -162,7 +162,8 @@ fn code_preview_limits_lines_marks_clipping_and_keeps_atomic_payload() {
         p.document.copy_range(&range).as_deref(),
         Some("abcdefghijk\n2\n3\n4\n5\n6\n7\n")
     );
-    assert!(p.intersects(&range, id, &(0..1), true));
+    let span = p.reading_span(&range).unwrap();
+    assert!(overlaps(&span, p.unit_index(id).unwrap(), &WHOLE_UNIT));
 }
 
 #[test]
@@ -360,6 +361,82 @@ fn mounted_visible_paint_is_bounded_and_selection_styles_actual_glyphs() {
         h.tbuf()
             .contains_text_style("alpha", &PartialStyle::new().bg(selected.bg))
     );
+}
+
+#[test]
+fn search_overlay_marks_only_matched_prose_graphemes() {
+    let p = prepared("alpha beta\n", 24);
+    let unit = p.document.units[0].id;
+    let at = |offset| ReadingPosition {
+        unit_id: unit,
+        offset,
+    };
+    let overlays = PaintOverlays {
+        search: vec![ReadingRange {
+            start: at(10),
+            end: at(6),
+        }],
+        ..Default::default()
+    };
+    let mut h = mounted(p, overlays, 24, 2);
+    h.render().unwrap();
+    let search = h.canopy.style().resolve("markdown/search");
+    let marked = PartialStyle::new().bg(search.bg);
+    assert!(h.tbuf().contains_text_style("beta", &marked));
+    assert!(!h.tbuf().contains_text_style("alpha", &marked));
+}
+
+#[test]
+fn object_cursor_shares_one_ground_and_marks_its_rows_in_the_margin() {
+    let p = prepared(
+        "see [the guide](https://x) now\n\n```\nlet a\n\nlet b\n```\n",
+        24,
+    );
+    let link = p.blocks[0]
+        .rows
+        .iter()
+        .flat_map(|row| &row.runs)
+        .find_map(|run| run.object)
+        .unwrap();
+    let card = p.blocks[1].object.unwrap();
+    let card_start = p.blocks[1].start;
+    let mut h = mounted(
+        p,
+        PaintOverlays {
+            active_object: Some(link),
+            ..Default::default()
+        },
+        24,
+        8,
+    );
+    h.render().unwrap();
+    let object = h.canopy.style().resolve("markdown/object");
+    let bar = h.canopy.style().resolve("markdown/object/bar");
+    let ground = PartialStyle::new().bg(object.bg.clone());
+    let (object, bar) = (
+        object.resolve_solid().unwrap(),
+        bar.resolve_solid().unwrap(),
+    );
+    let margin = |h: &Harness, y| h.buf().get(Point { x: 0, y }).unwrap().clone();
+    assert!(h.tbuf().contains_text_style("the guide", &ground));
+    assert!(!h.tbuf().contains_text_style("see", &ground));
+    assert_eq!((margin(&h, 0).ch, margin(&h, 0).style.fg), ('▌', bar.fg));
+    assert_eq!(margin(&h, card_start).ch, ' ');
+
+    // A card marks every row, blank code lines included, on the same ground.
+    h.with_root_widget_context(|preview: &mut Preview, _| {
+        preview.overlays.active_object = Some(card);
+        Ok(())
+    })
+    .unwrap();
+    h.render().unwrap();
+    assert!(h.tbuf().contains_text_style("let a", &ground));
+    assert!(!h.tbuf().contains_text_style("the guide", &ground));
+    assert_eq!(margin(&h, 0).ch, ' ');
+    for y in card_start..card_start + 4 {
+        let cell = margin(&h, y);
+        assert_eq!((cell.ch, cell.style.bg), ('▌', object.bg), "row {y}");
+    }
 }
 
 #[test]

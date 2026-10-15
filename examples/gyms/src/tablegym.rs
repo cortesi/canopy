@@ -12,6 +12,7 @@ use canopy::{
     layout::{Edges, Layout},
     render::Render,
     runtime::PollLifetime,
+    style::themes,
 };
 use canopy_widgets::{
     TableView,
@@ -27,6 +28,25 @@ const FIRST_ROWS: usize = 64;
 const MAX_ROWS: usize = 256;
 /// Maximum bytes recorded in one complete copy payload.
 const COPY_LIMIT: usize = 64 * 1024;
+/// Table events queued and drained per poll.
+const EVENT_CAPACITY: usize = 8;
+/// Publication controls, scoped to the gym so plain letters stay local.
+/// Presentation toggles share one which-key menu, as in the Markdown gym.
+const BINDINGS: &str = r#"
+root.default_bindings()
+canopy.keymap({
+    path = "table_gym",
+    { key = "a", description = "Append keyed row", action = command.table_gym.append() },
+    { key = "r", description = "Reverse keyed rows", action = command.table_gym.reorder() },
+    { key = "p", description = "Presentation", action = canopy.menu("presentation") },
+})
+canopy.keymap({
+    mode = "presentation",
+    { key = "g", description = "ASCII / Unicode glyphs", action = command.table_gym.toggle_ascii() },
+    { key = "w", description = "Compact / wide columns", action = command.table_gym.toggle_widths() },
+    { key = "t", description = "Light / dark theme", action = command.table_gym.theme() },
+})
+"#;
 
 /// Recorded host events make the public surface testable without touching a
 /// clipboard.
@@ -43,6 +63,8 @@ pub struct TableGym {
     ascii: bool,
     /// Whether alternate explicit widths are selected.
     compact: bool,
+    /// Whether the live palette uses the light theme.
+    light: bool,
     /// Number of complete copy events recorded.
     copies: usize,
     /// Number of cell activation events recorded.
@@ -72,18 +94,21 @@ impl TableGym {
             revision: 1,
             ascii: false,
             compact: false,
+            light: false,
             copies: 0,
             activations: 0,
             last_copy: String::new(),
             last_detail: "".into(),
-            status: "Select with Shift+arrows; y copies; Enter records full cell detail".into(),
+            status: String::new(),
         }
     }
     /// Append one stable row, preserving cursor and selection keys.
     #[command]
     pub fn append(&mut self, c: &mut dyn Context) -> Result<()> {
         if self.order.len() >= MAX_ROWS {
-            return Err(Error::Invalid("table gym is limited to 256 rows".into()));
+            return Err(Error::Invalid(format!(
+                "table gym is limited to {MAX_ROWS} rows"
+            )));
         }
         self.order.push(self.next_row);
         self.next_row += 1;
@@ -121,6 +146,23 @@ impl TableGym {
         self.compact = !self.compact;
         self.publish(c)?;
         self.status = "Changed prepared column widths without changing the data revision".into();
+        Ok(())
+    }
+    /// Toggle the live palette between dark and light.
+    #[command]
+    pub fn theme(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.light = !self.light;
+        c.set_theme(if self.light {
+            themes::solarized_light()
+        } else {
+            themes::default_dark()
+        });
+        self.status = if self.light {
+            "Light theme"
+        } else {
+            "Dark theme"
+        }
+        .into();
         Ok(())
     }
     /// Move to one-based display coordinates through TableView's public API.
@@ -246,12 +288,24 @@ impl TableGym {
             table.publish(c, prepared)
         })
     }
-    /// Drain bounded public table events into the recording host.
+    /// Drain bounded public table events into the recording host, resolving
+    /// each activated cell's full value against the published data.
     fn record(&mut self, c: &mut dyn Context) -> Result<()> {
         let events = c.with_widget_mut(self.table_id()?, |table: &mut TableView, _| {
-            Ok(table.take_events(8))
+            Ok(table
+                .take_events(EVENT_CAPACITY)
+                .into_iter()
+                .map(|event| {
+                    let detail = match &event {
+                        TableEvent::Activate { cell, .. } => table.table().data().cell(cell),
+                        TableEvent::Copy { .. } => None,
+                    }
+                    .map_or_else(|| Arc::from(""), TableCell::shared_text);
+                    (event, detail)
+                })
+                .collect::<Vec<_>>())
         })?;
-        for event in events {
+        for (event, detail) in events {
             match event {
                 TableEvent::Copy { revision, text, .. } => {
                     self.copies += 1;
@@ -264,14 +318,7 @@ impl TableGym {
                 }
                 TableEvent::Activate { revision, cell, .. } => {
                     self.activations += 1;
-                    self.last_detail =
-                        c.with_widget_mut(self.table_id()?, |table: &mut TableView, _| {
-                            Ok(table
-                                .table()
-                                .data()
-                                .cell(&cell)
-                                .map_or_else(|| Arc::from(""), TableCell::shared_text))
-                        })?;
+                    self.last_detail = detail;
                     self.status = format!(
                         "Cell detail {} / {}: {} full bytes at revision {revision}",
                         cell.row,
@@ -314,13 +361,13 @@ impl Register for TableGym {
 }
 impl Widget for TableGym {
     fn layout(&self) -> Layout {
-        Layout::fill().padding(Edges::new(2, 0, 1, 0))
+        Layout::fill().padding(Edges::new(1, 0, 1, 0))
     }
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let mut table = TableView::new(
             self.prepared()?,
             TableViewOptions {
-                event_capacity: 8,
+                event_capacity: EVENT_CAPACITY,
                 event_bytes: COPY_LIMIT * 2,
                 copy_bytes: COPY_LIMIT,
                 ..Default::default()
@@ -333,13 +380,8 @@ impl Widget for TableGym {
     fn render(&mut self, r: &mut Render, c: &dyn ViewContext) -> Result<()> {
         let area = c.view().outer_rect_local();
         r.text(
-            "table/header",
-            Line::new(0, 0, area.w),
-            "TABLEVIEW  a append · r reverse · s ASCII · w widths",
-        )?;
-        r.text(
             "table/gutter",
-            Line::new(0, 1, area.w),
+            Line::new(0, 0, area.w),
             &format!(
                 "{} rows · revision {} · {} · {} widths",
                 self.order.len(),
@@ -370,13 +412,5 @@ impl Widget for TableGym {
 /// controls.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.script("tablegym",r#"
-root.default_bindings()
-canopy.keymap({
-    { key = "a", description = "Append keyed row", action = command.table_gym.append() },
-    { key = "r", description = "Reverse keyed rows", action = command.table_gym.reorder() },
-    { key = "s", description = "ASCII / Unicode table", action = command.table_gym.toggle_ascii() },
-    { key = "w", description = "Compact / wide columns", action = command.table_gym.toggle_widths() },
-})
-"#)
+    builder.script("tablegym", BINDINGS)
 }

@@ -388,9 +388,11 @@ impl DocumentSnapshot {
     }
     /// Look up one reading unit by its opaque identity.
     pub fn unit(&self, id: u64) -> Option<&ReadingUnit> {
-        self.unit_index
-            .get(&id)
-            .and_then(|index| self.units.get(*index))
+        self.units.get(self.unit_position(id)?)
+    }
+    /// Reading-order index of a unit identity.
+    pub(crate) fn unit_position(&self, id: u64) -> Option<usize> {
+        self.unit_index.get(&id).copied()
     }
     /// Materialize the complete rendered copy projection.
     pub fn readable_text(&self) -> String {
@@ -424,11 +426,8 @@ impl DocumentSnapshot {
     }
     /// Materialize a displayed selection, expanding atomic cards.
     pub fn copy_range(&self, range: &ReadingRange) -> Option<String> {
-        let a = self
-            .units
-            .iter()
-            .position(|u| u.id == range.start.unit_id)?;
-        let b = self.units.iter().position(|u| u.id == range.end.unit_id)?;
+        let a = self.unit_position(range.start.unit_id)?;
+        let b = self.unit_position(range.end.unit_id)?;
         let (start, end) = if (a, range.start.offset) <= (b, range.end.offset) {
             ((a, range.start.offset), (b, range.end.offset))
         } else {
@@ -500,12 +499,19 @@ struct Node {
     /// Nested parser nodes in source order.
     children: Vec<Self>,
 }
-/// Build a bounded source-addressed parser tree.
-fn tree(text: &str, limits: &ParseLimits) -> Option<Vec<Node>> {
+/// Build a bounded source-addressed parser tree and collect the source spans
+/// of the reference definitions that the parser retained.
+fn tree(text: &str, limits: &ParseLimits) -> Option<(Vec<Node>, Vec<Range<usize>>)> {
     let mut roots = Vec::new();
     let mut stack: Vec<Node> = Vec::new();
     let mut count = 0;
-    for (event, range) in Parser::new_ext(text, parser_options()).into_offset_iter() {
+    let events = Parser::new_ext(text, parser_options()).into_offset_iter();
+    let definitions = events
+        .reference_definitions()
+        .iter()
+        .map(|(_, definition)| definition.span.clone())
+        .collect();
+    for (event, range) in events {
         count += 1;
         if count > limits.max_nodes {
             return None;
@@ -545,7 +551,7 @@ fn tree(text: &str, limits: &ParseLimits) -> Option<Vec<Node>> {
             }
         }
     }
-    Some(roots)
+    Some((roots, definitions))
 }
 /// Join adjacent text events before detecting bare URLs.
 fn push_merged(nodes: &mut Vec<Node>, node: Node) {
@@ -704,11 +710,33 @@ fn is_block(node: &Node) -> bool {
     ) || matches!(node.event, Some(Event::Rule))
 }
 
-/// Recognize a complete blank-line boundary across supported line endings.
+/// Recognize a complete blank line after the first line, across CR, LF, and
+/// CRLF endings. Lines of only spaces and tabs are blank.
 fn blank_boundary(text: &str) -> bool {
-    text.replace("\r\n", "\n")
-        .replace('\r', "\n")
-        .contains("\n\n")
+    let bytes = text.as_bytes();
+    let mut start = 0;
+    let mut first = true;
+    while let Some(len) = bytes[start..]
+        .iter()
+        .position(|byte| matches!(byte, b'\n' | b'\r'))
+    {
+        let end = start + len;
+        if !first
+            && bytes[start..end]
+                .iter()
+                .all(|byte| matches!(byte, b' ' | b'\t'))
+        {
+            return true;
+        }
+        first = false;
+        start = end
+            + if bytes[end..].starts_with(b"\r\n") {
+                2
+            } else {
+                1
+            };
+    }
+    false
 }
 /// Recognize a complete CR, LF, or CRLF source line.
 fn complete_line(text: &str) -> bool {
@@ -1370,18 +1398,12 @@ pub fn parse_document(
         previous,
         limits,
     };
-    let Some(initial) = tree(&text, limits) else {
+    let Some((initial, definitions)) = tree(&text, limits) else {
         builder.document.degraded = true;
         builder.source_fallback(&text, "Semantic node or depth limit");
         builder.document.estimated_bytes = builder.document.estimate_bytes();
         return builder.document;
     };
-    let parser = Parser::new_ext(&text, parser_options());
-    let definitions: Vec<_> = parser
-        .reference_definitions()
-        .iter()
-        .map(|(_, definition)| definition.span.clone())
-        .collect();
     let mut leaves = Vec::new();
     collect(&initial, &Context::default(), &mut leaves);
     let definitions = definition_records(&text, &leaves, definitions);
@@ -1405,7 +1427,7 @@ pub fn parse_document(
             }
             let masked =
                 String::from_utf8(bytes).expect("offset-preserving ASCII masks preserve UTF-8");
-            if let Some(nodes) = tree(&masked, limits) {
+            if let Some((nodes, _)) = tree(&masked, limits) {
                 leaves.clear();
                 collect(&nodes, &Context::default(), &mut leaves);
             }
@@ -1788,6 +1810,27 @@ mod tests {
         let independently_rejected =
             parse_document(&source.snapshot(), &ParseLimits::default(), None);
         assert_ne!(third.units[1].id, independently_rejected.units[1].id);
+    }
+    #[test]
+    fn whitespace_only_lines_are_blank_boundaries() {
+        for text in ["a\r\nb", "a\n  ", "\nb\n", "a\r"] {
+            assert!(!blank_boundary(text), "{text:?}");
+        }
+        for text in ["a\n\n", "a\r\n\r\n", "a\r\r", "a\n \t\n", "a\r\n  \r\nb"] {
+            assert!(blank_boundary(text), "{text:?}");
+        }
+        let doc = receiving("see https://example.com\n \t\n");
+        assert_eq!(doc.provisional, None);
+        assert!(
+            doc.objects
+                .iter()
+                .any(|object| matches!(object.kind, ObjectKind::Link(_)))
+        );
+        assert!(
+            receiving("see https://example.com\n  ")
+                .provisional
+                .is_some()
+        );
     }
     #[test]
     fn short_fixtures_all_utf8_splits_and_codepoint_appends_finish_like_static() {
