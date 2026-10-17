@@ -1,14 +1,14 @@
-mod chartgym;
-mod focusgym;
-mod framegym;
+mod chart;
+mod focus;
+mod frame;
 mod help;
-mod listgym;
-mod markdowngym;
+mod list;
+mod markdown;
 mod shell;
 mod smoke;
-mod stylegym;
-mod tablegym;
-mod termgym;
+mod style;
+mod table;
+mod term;
 
 use canopy::{CanopyBuilder, Widget, error::Result, geom::Size, testing::harness::Harness};
 use canopy_widgets::Root;

@@ -9,18 +9,18 @@ end
 
 canopy.prepare()
 local shots = {
-    { id = "biggym", title = "Big text gym", caption = "Custom text in BigText, fitted to its area, with every setting beside it.", capture = canopy.capture() },
+    { id = "big", title = "Big text gym", caption = "Custom text in BigText, fitted to its area, with every setting beside it.", capture = canopy.capture() },
 }
 -- Esc moves the keyboard from the text field to the settings. Align and
 -- vertical: center. Width and height: twenty and ten less than
 -- the stage. Style: gradient.
 keys({ "Esc", "j", "j", "j", "j", "j", "j", "l", "j", "l", "j", "H", "H", "j", "H", "j", "j", "l", "l" })
-table.insert(shots, { id = "biggym-area", title = "Big text in an area", caption = "A smaller area, centered, in a gradient: the fit takes a smaller face.", capture = canopy.capture() })
+table.insert(shots, { id = "big-area", title = "Big text in an area", caption = "A smaller area, centered, in a gradient: the fit takes a smaller face.", capture = canopy.capture() })
 -- Back to the first setting, the view, and the ladder.
 keys({ "k", "k", "k", "k", "k", "k", "k", "k", "k", "k", "k", "l" })
-table.insert(shots, { id = "biggym-ladder", title = "Big text ladder", caption = "The text in every face, at the scale of the settings.", capture = canopy.capture() })
+table.insert(shots, { id = "big-ladder", title = "Big text ladder", caption = "The text in every face, at the scale of the settings.", capture = canopy.capture() })
 -- Back to the preview, then up from the view to the last setting, the
 -- glyphs, and on to half blocks.
 keys({ "l", "k", "l" })
-table.insert(shots, { id = "biggym-halves", title = "Big text in half blocks", caption = "The same area in half blocks, for a font without octants: the ladder loses the step between each two half-block scales.", capture = canopy.capture() })
+table.insert(shots, { id = "big-halves", title = "Big text in half blocks", caption = "The same area in half blocks, for a font without octants: the ladder loses the step between each two half-block scales.", capture = canopy.capture() })
 return shots

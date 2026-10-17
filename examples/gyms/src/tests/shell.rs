@@ -9,15 +9,15 @@ use canopy_markdown::Markdown;
 use canopy_widgets::Root;
 
 use crate::{
-    Demo, DemoShell, chargym, demo_canopy,
-    markdowngym::{MarkdownGym, ReaderSlot},
+    Demo, DemoShell, char, demo_canopy,
+    markdown::{MarkdownGym, ReaderSlot},
 };
 
 #[test]
 fn the_launcher_shell_adds_a_footer_naming_the_demo_and_the_help_key() -> Result<()> {
-    let canopy = chargym::binding_setup(demo_canopy().configure(chargym::CharGym::register))
+    let canopy = char::binding_setup(demo_canopy().configure(char::CharGym::register))
         .assemble(|canopy| {
-            Root::new().install(canopy, DemoShell::new(chargym::CharGym::new()))?;
+            Root::new().install(canopy, DemoShell::new(char::CharGym::new()))?;
             Ok(())
         })
         .build()?;
@@ -54,28 +54,28 @@ fn every_demo_has_the_same_view_selector_and_restores_focus() -> Result<()> {
         Demo::Cedit {
             file: root.join("README.md"),
         },
-        Demo::Biggym,
-        Demo::Chargym,
-        Demo::Chartgym,
-        Demo::Cursorgym,
-        Demo::Editorgym,
-        Demo::Focusgym,
-        Demo::Fontgym,
-        Demo::Framegym,
+        Demo::Big,
+        Demo::Char,
+        Demo::Chart,
+        Demo::Cursor,
+        Demo::Editor,
+        Demo::Focus,
+        Demo::Font,
+        Demo::Frame,
         Demo::Imgview {
             file: root.join(".assets/shyness.jpg"),
         },
         Demo::Intervals,
-        Demo::Listgym,
-        Demo::Markdowngym,
-        Demo::Motiongym,
+        Demo::List,
+        Demo::Markdown,
+        Demo::Motion,
         Demo::Pager {
             file: root.join("README.md"),
         },
-        Demo::Stylegym,
-        Demo::Tablegym,
-        Demo::Termgym,
-        Demo::Textgym,
+        Demo::Style,
+        Demo::Table,
+        Demo::Term,
+        Demo::Text,
     ];
     for demo in demos {
         let mut h = Harness::from_canopy(demo.build(false)?, Size::new(110, 36))?;
@@ -111,7 +111,7 @@ fn every_demo_has_the_same_view_selector_and_restores_focus() -> Result<()> {
 
 #[test]
 fn view_selector_cancels_isolates_input_and_clamps_to_a_small_terminal() -> Result<()> {
-    let mut h = Harness::from_canopy(Demo::Tablegym.build(false)?, Size::new(110, 36))?;
+    let mut h = Harness::from_canopy(Demo::Table.build(false)?, Size::new(110, 36))?;
     h.render()?;
     let focus = h.canopy.with_root_view(|c| c.focused_node());
     keys(&mut h, ["Ctrl+l", "Down", "a", "Escape"])?;
@@ -160,7 +160,7 @@ fn assert_within_columns(h: &Harness, width: usize, what: &str) {
 
 #[test]
 fn the_view_preset_also_constrains_help_and_inspectors() -> Result<()> {
-    let mut h = Harness::from_canopy(Demo::Markdowngym.build(false)?, Size::new(110, 36))?;
+    let mut h = Harness::from_canopy(Demo::Markdown.build(false)?, Size::new(110, 36))?;
     let ready = |h: &mut Harness| {
         h.wait_until(Duration::from_secs(5), |h| {
             h.with_unique(|gym: &mut MarkdownGym, ctx| gym.ready(ctx))

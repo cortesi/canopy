@@ -6,7 +6,7 @@ use canopy::{
 };
 use canopy_widgets::{Columns, List};
 
-use crate::listgym::{ListEntry, ListGym};
+use crate::list::{ListEntry, ListGym};
 
 /// Build a harness around a registered list gym.
 fn listgym() -> Result<Harness> {

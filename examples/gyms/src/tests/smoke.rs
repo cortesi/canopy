@@ -15,7 +15,7 @@ fn luau_smoke_suite_passes() -> Result<()> {
             app: "gyms".into(),
             reset: ResetPolicy::Isolated,
         },
-        || Demo::Listgym.build(false).map_err(McpError::app),
+        || Demo::List.build(false).map_err(McpError::app),
     );
     let result = run_suite(&factory, &SuiteConfig::new(suite_dir))
         .map_err(|error| Error::App(Box::new(error)))?;
@@ -56,19 +56,19 @@ fn run_gym_script(demo: Demo, script: &str) -> Result<()> {
 fn the_gallery_scripts_run() -> Result<()> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let scripts = [
-        (Demo::Stylegym, "stylegym.luau"),
-        (Demo::Chartgym, "chartgym.luau"),
-        (Demo::Biggym, "biggym.luau"),
+        (Demo::Style, "style.luau"),
+        (Demo::Chart, "chart.luau"),
+        (Demo::Big, "big.luau"),
         (
             Demo::Cedit {
                 file: root.join("../../crates/canopy-widgets/src/spinner.rs"),
             },
             "cedit.luau",
         ),
-        (Demo::Editorgym, "editorgym.luau"),
-        (Demo::Markdowngym, "markdowngym.luau"),
-        (Demo::Tablegym, "tablegym.luau"),
-        (Demo::Fontgym, "fontgym.luau"),
+        (Demo::Editor, "editor.luau"),
+        (Demo::Markdown, "markdown.luau"),
+        (Demo::Table, "table.luau"),
+        (Demo::Font, "font.luau"),
         (
             Demo::Imgview {
                 file: root.join("../../.assets/shyness.jpg"),
@@ -84,17 +84,17 @@ fn the_gallery_scripts_run() -> Result<()> {
 
 #[test]
 fn the_cursor_gym_script_passes() -> Result<()> {
-    run_gym_script(Demo::Cursorgym, "cursorgym.luau")
+    run_gym_script(Demo::Cursor, "cursor.luau")
 }
 
 #[test]
 fn the_motion_gym_script_passes() -> Result<()> {
-    run_gym_script(Demo::Motiongym, "motiongym.luau")
+    run_gym_script(Demo::Motion, "motion.luau")
 }
 
 #[test]
 fn the_chart_gym_script_passes() -> Result<()> {
-    run_gym_script(Demo::Chartgym, "chartgym.luau")
+    run_gym_script(Demo::Chart, "chart.luau")
 }
 
 #[test]
@@ -105,20 +105,20 @@ fn the_image_view_gym_script_passes() -> Result<()> {
 
 #[test]
 fn the_font_gym_script_passes() -> Result<()> {
-    run_gym_script(Demo::Fontgym, "fontgym.luau")
+    run_gym_script(Demo::Font, "font.luau")
 }
 
 #[test]
 fn the_big_text_gym_script_passes() -> Result<()> {
-    run_gym_script(Demo::Biggym, "biggym.luau")
+    run_gym_script(Demo::Big, "big.luau")
 }
 
 #[test]
 fn the_markdown_gym_script_passes() -> Result<()> {
-    run_script(Demo::Markdowngym, "markdown-smoke", "markdowngym.luau")
+    run_script(Demo::Markdown, "markdown-smoke", "markdown.luau")
 }
 
 #[test]
 fn the_table_gym_script_passes() -> Result<()> {
-    run_script(Demo::Tablegym, "table-smoke", "tablegym.luau")
+    run_script(Demo::Table, "table-smoke", "table.luau")
 }

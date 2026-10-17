@@ -23,41 +23,43 @@ use shell::DemoShell;
 pub(crate) const HELP_LABEL: &str = "help";
 
 /// Big text gym example nodes.
-mod biggym;
+mod big;
 /// Char gym example nodes.
-mod chargym;
+mod char;
 /// Chart gym example nodes.
-mod chartgym;
-mod cursorgym;
+mod chart;
+/// Cursor gym example nodes.
+mod cursor;
 /// Editor gym example nodes.
-mod editorgym;
+mod editor;
 /// Focus gym example nodes.
-mod focusgym;
+mod focus;
 /// Font gym example nodes.
-mod fontgym;
+mod font;
 /// Frame gym example nodes.
-mod framegym;
+mod frame;
 /// Image viewer example nodes.
 mod imgview;
 /// Intervals example nodes.
 mod intervals;
 /// List gym example nodes.
-mod listgym;
+mod list;
 /// Interactive Markdown and controlled streaming fixtures.
-mod markdowngym;
-mod motiongym;
+mod markdown;
+/// Motion gym example nodes.
+mod motion;
 /// Pager example nodes.
 mod pager;
 /// Shared viewport controls and launcher footer.
 mod shell;
-/// Stylegym example nodes.
-mod stylegym;
+/// Style gym example nodes.
+mod style;
 /// Keyed table navigation and rectangle selection.
-mod tablegym;
+mod table;
 /// Terminal gym example nodes.
-mod termgym;
+mod term;
 /// Text gym example nodes.
-mod textgym;
+mod text;
 /// Widget editor example nodes.
 mod widget_editor;
 
@@ -180,21 +182,21 @@ enum Demo {
         file: PathBuf,
     },
     /// Try custom text in every face, size, and setting of big text.
-    Biggym,
+    Big,
     /// Browse the character and glyph rendering gym.
-    Chargym,
+    Char,
     /// Watch the chart primitives update live in every theme.
-    Chartgym,
+    Chart,
     /// Compare every cursor role, motion, and shape.
-    Cursorgym,
+    Cursor,
     /// Drive the experimental editor widget.
-    Editorgym,
+    Editor,
     /// Explore focus traversal across a node grid.
-    Focusgym,
+    Focus,
     /// Render large text with the ASCII font engine.
-    Fontgym,
+    Font,
     /// Explore frames, scrolling, and canvases.
-    Framegym,
+    Frame,
     /// View an image in the terminal.
     Imgview {
         /// Image to display.
@@ -203,24 +205,24 @@ enum Demo {
     /// Watch periodic poll callbacks drive a list.
     Intervals,
     /// Explore the list widget.
-    Listgym,
+    List,
     /// Read Markdown, inspect cards, and publish controlled stream chunks.
-    Markdowngym,
+    Markdown,
     /// Watch colors change over time.
-    Motiongym,
+    Motion,
     /// Page through a text file.
     Pager {
         /// File to page.
         file: PathBuf,
     },
     /// Explore themes and render effects.
-    Stylegym,
+    Style,
     /// Inspect a keyed table with two-axis navigation and exact copying.
-    Tablegym,
+    Table,
     /// Run a shell inside the terminal widget.
-    Termgym,
+    Term,
     /// Explore text wrapping and tab expansion.
-    Textgym,
+    Text,
 }
 
 /// Run one demo, interactively or under MCP automation.
@@ -257,40 +259,28 @@ impl Demo {
             Self::Cedit { .. } => widget_editor::binding_setup(
                 builder.configure(widget_editor::WidgetEditor::register),
             ),
-            Self::Biggym => biggym::binding_setup(builder.configure(biggym::BigGym::register)),
-            Self::Chargym => chargym::binding_setup(builder.configure(chargym::CharGym::register)),
-            Self::Chartgym => {
-                chartgym::binding_setup(builder.configure(chartgym::ChartGym::register))
-            }
-            Self::Cursorgym => cursorgym::binding_setup(builder),
-            Self::Editorgym => {
-                editorgym::binding_setup(builder.configure(editorgym::EditorGym::register))
-            }
-            Self::Focusgym => {
-                focusgym::binding_setup(builder.configure(focusgym::FocusGym::register))
-            }
-            Self::Fontgym => fontgym::binding_setup(builder.configure(fontgym::FontGym::register)),
-            Self::Framegym => {
-                framegym::binding_setup(builder.configure(framegym::FrameGym::register))
-            }
+            Self::Big => big::binding_setup(builder.configure(big::BigGym::register)),
+            Self::Char => char::binding_setup(builder.configure(char::CharGym::register)),
+            Self::Chart => chart::binding_setup(builder.configure(chart::ChartGym::register)),
+            Self::Cursor => cursor::binding_setup(builder),
+            Self::Editor => editor::binding_setup(builder.configure(editor::EditorGym::register)),
+            Self::Focus => focus::binding_setup(builder.configure(focus::FocusGym::register)),
+            Self::Font => font::binding_setup(builder.configure(font::FontGym::register)),
+            Self::Frame => frame::binding_setup(builder.configure(frame::FrameGym::register)),
             Self::Imgview { .. } => imgview::binding_setup(builder),
             Self::Intervals => {
                 intervals::binding_setup(builder.configure(intervals::Intervals::register))
             }
-            Self::Listgym => listgym::binding_setup(builder.configure(listgym::ListGym::register)),
-            Self::Markdowngym => {
-                markdowngym::binding_setup(builder.configure(markdowngym::MarkdownGym::register))
+            Self::List => list::binding_setup(builder.configure(list::ListGym::register)),
+            Self::Markdown => {
+                markdown::binding_setup(builder.configure(markdown::MarkdownGym::register))
             }
-            Self::Motiongym => motiongym::binding_setup(builder),
+            Self::Motion => motion::binding_setup(builder),
             Self::Pager { .. } => pager::binding_setup(builder.configure(pager::Pager::register)),
-            Self::Stylegym => {
-                stylegym::binding_setup(builder.configure(stylegym::Stylegym::register))
-            }
-            Self::Tablegym => {
-                tablegym::binding_setup(builder.configure(tablegym::TableGym::register))
-            }
-            Self::Termgym => termgym::binding_setup(builder.configure(termgym::TermGym::register)),
-            Self::Textgym => textgym::binding_setup(builder),
+            Self::Style => style::binding_setup(builder.configure(style::Stylegym::register)),
+            Self::Table => table::binding_setup(builder.configure(table::TableGym::register)),
+            Self::Term => term::binding_setup(builder.configure(term::TermGym::register)),
+            Self::Text => text::binding_setup(builder),
         }
     }
 
@@ -309,28 +299,28 @@ impl Demo {
                 ),
                 inspector,
             ),
-            Self::Biggym => install(builder, biggym::BigGym::new(), inspector),
-            Self::Chargym => install(builder, chargym::CharGym::new(), inspector),
-            Self::Chartgym => install(builder, chartgym::ChartGym::new(), inspector),
-            Self::Cursorgym => install(builder, cursorgym::CursorGym::new(), inspector),
-            Self::Editorgym => install(builder, editorgym::EditorGym::new(), inspector),
-            Self::Focusgym => install(builder, focusgym::FocusGym::new(), inspector),
-            Self::Fontgym => install(builder, fontgym::FontGym::new(), inspector),
-            Self::Framegym => install(builder, framegym::FrameGym::new(), inspector),
+            Self::Big => install(builder, big::BigGym::new(), inspector),
+            Self::Char => install(builder, char::CharGym::new(), inspector),
+            Self::Chart => install(builder, chart::ChartGym::new(), inspector),
+            Self::Cursor => install(builder, cursor::CursorGym::new(), inspector),
+            Self::Editor => install(builder, editor::EditorGym::new(), inspector),
+            Self::Focus => install(builder, focus::FocusGym::new(), inspector),
+            Self::Font => install(builder, font::FontGym::new(), inspector),
+            Self::Frame => install(builder, frame::FrameGym::new(), inspector),
             Self::Imgview { file } => install(
                 builder,
                 imgview::ImgGym::new(ImageView::from_path(file)?),
                 inspector,
             ),
             Self::Intervals => install(builder, intervals::Intervals::new(), inspector),
-            Self::Listgym => install(builder, listgym::ListGym::new(), inspector),
-            Self::Markdowngym => install(builder, markdowngym::MarkdownGym::new(), inspector),
-            Self::Motiongym => install(builder, motiongym::MotionGym::new(), inspector),
+            Self::List => install(builder, list::ListGym::new(), inspector),
+            Self::Markdown => install(builder, markdown::MarkdownGym::new(), inspector),
+            Self::Motion => install(builder, motion::MotionGym::new(), inspector),
             Self::Pager { file } => install(builder, pager::Pager::new(&read(file)?), inspector),
-            Self::Stylegym => install(builder, stylegym::Stylegym::new(), inspector),
-            Self::Tablegym => install(builder, tablegym::TableGym::new(), inspector),
-            Self::Termgym => install(builder, termgym::TermGym::new(), inspector),
-            Self::Textgym => install(builder, textgym::TextGym::new(), inspector),
+            Self::Style => install(builder, style::Stylegym::new(), inspector),
+            Self::Table => install(builder, table::TableGym::new(), inspector),
+            Self::Term => install(builder, term::TermGym::new(), inspector),
+            Self::Text => install(builder, text::TextGym::new(), inspector),
         };
         builder.build()
     }
@@ -340,7 +330,7 @@ impl Demo {
     /// The terminal gym routes Ctrl+C to its shell, with an emergency exit.
     fn run_options(&self) -> Result<RunOptions> {
         Ok(match self {
-            Self::Termgym => RunOptions {
+            Self::Term => RunOptions {
                 interrupt_policy: InterruptPolicy::RouteToApplication,
                 emergency_exit: Some(Key::parse_spec("Ctrl+Alt+q")?),
                 ..RunOptions::default()

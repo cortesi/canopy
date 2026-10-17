@@ -340,7 +340,7 @@ the default weight, and `BigWeight::Regular` draws one-pixel strokes. Lines
 align with `with_align`, and the block of lines with `with_vertical_align`, in
 half rows. The Tamzen sources and their converter are in
 `crates/canopy-widgets/assets/fonts/tamzen`. The big text gym,
-`cargo run -p gyms -- biggym`, draws custom text with every setting, and in
+`cargo run -p gyms -- big`, draws custom text with every setting, and in
 every face.
 
 ## Font banners

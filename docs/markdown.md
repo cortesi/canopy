@@ -2,8 +2,8 @@
 
 `canopy-markdown` provides a terminal Markdown reader with Rendered and Source
 views. Its table inspector, `canopy_widgets::TableView`, also works on its own.
-Run the examples with `cargo run -p gyms -- markdowngym` and
-`cargo run -p gyms -- tablegym`.
+Run the examples with `cargo run -p gyms -- markdown` and
+`cargo run -p gyms -- table`.
 
 ## Embed a reader
 

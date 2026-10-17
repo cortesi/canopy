@@ -1,7 +1,7 @@
 -- The Charts gym, as it opens, and its page of big text.
 canopy.prepare()
 local shots = {
-    { id = "chartgym", title = "Charts", caption = "Big numbers, meters, sparklines, and column charts, updating live.", capture = canopy.capture() },
+    { id = "chart", title = "Charts", caption = "Big numbers, meters, sparklines, and column charts, updating live.", capture = canopy.capture() },
 }
 canopy.send_key("Tab")
 canopy.prepare()

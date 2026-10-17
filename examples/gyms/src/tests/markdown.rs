@@ -4,7 +4,7 @@ use canopy::{ContextExt, Register, error::Result, geom::Size, testing::harness::
 use canopy_markdown::{Markdown, ViewType};
 
 use super::{Mount, root_harness};
-use crate::markdowngym::{EXACT_SOURCE, FIXTURE, MarkdownGym, ReaderSlot, binding_setup};
+use crate::markdown::{EXACT_SOURCE, FIXTURE, MarkdownGym, ReaderSlot, binding_setup};
 
 fn gym() -> Result<Harness> {
     let mut harness = root_harness(

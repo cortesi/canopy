@@ -1,7 +1,7 @@
 use canopy::{Register, commands::ArgValue, error::Result, geom::Size, testing::harness::Harness};
 
 use super::{Mount, root_harness};
-use crate::tablegym::{TableGym, binding_setup};
+use crate::table::{TableGym, binding_setup};
 
 fn gym() -> Result<Harness> {
     root_harness(

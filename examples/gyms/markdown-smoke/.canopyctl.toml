@@ -1,6 +1,6 @@
 [app]
-headless = ["cargo", "run", "-p", "gyms", "--", "markdowngym", "--headless"]
-run = ["cargo", "run", "-p", "gyms", "--", "markdowngym"]
+headless = ["cargo", "run", "-p", "gyms", "--", "markdown", "--headless"]
+run = ["cargo", "run", "-p", "gyms", "--", "markdown"]
 mcp_args = ["--mcp={socket}"]
 
 [smoke]

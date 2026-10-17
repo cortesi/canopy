@@ -14,7 +14,7 @@ use canopy_widgets::{BigFace, BigSize, BigText, Root};
 
 use super::{Mount, root_harness};
 use crate::{
-    chartgym::{ChartGym, LADDER_SAMPLE, binding_setup},
+    chart::{ChartGym, LADDER_SAMPLE, binding_setup},
     demo_canopy,
 };
 

@@ -9,7 +9,7 @@ use canopy::{
 use canopy_widgets::{Dropdown, Selector};
 
 use super::{Mount, root_harness};
-use crate::stylegym::{EffectOption, Stylegym, ThemeOption, binding_setup};
+use crate::style::{EffectOption, Stylegym, ThemeOption, binding_setup};
 
 /// Index of the rules tab.
 const RULES: usize = 1;

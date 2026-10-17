@@ -9,7 +9,7 @@ use canopy::{
 use canopy_widgets::terminal::Terminal;
 
 use super::{Mount, root_harness};
-use crate::termgym::{TermGym, binding_setup};
+use crate::term::{TermGym, binding_setup};
 
 /// Build the installed TermGym application with its real bindings.
 fn termgym_harness() -> Result<(Harness, NodeId)> {

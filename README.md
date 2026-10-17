@@ -34,7 +34,7 @@ images in [`docs/gallery`](./docs/gallery), beside a viewer.
             <p><b>Stock widgets</b>: Buttons in each look and state, inputs, a selector, and a dropdown.</p>
         </td>
         <td align="center" width="50%">
-            <img src="./docs/gallery/chartgym-110x36.png" />
+            <img src="./docs/gallery/chart-110x36.png" />
             <p><b>Charts</b>: Big numbers, meters, sparklines, and column charts.</p>
         </td>
     </tr>
@@ -44,7 +44,7 @@ images in [`docs/gallery`](./docs/gallery), beside a viewer.
             <p><b>Big text</b>: The faces of <code>BigText</code> at scale 1: Canopy's compact numerals, then the sizes of Tamzen.</p>
         </td>
         <td align="center" width="50%">
-            <img src="./docs/gallery/fontgym-110x36.png" />
+            <img src="./docs/gallery/font-110x36.png" />
             <p><b>Font banners</b>: TrueType fonts drawn as large text for banners and headers.</p>
         </td>
     </tr>
@@ -54,7 +54,7 @@ images in [`docs/gallery`](./docs/gallery), beside a viewer.
             <p><b>Code editor</b>: A source file with syntax colours and vi keys.</p>
         </td>
         <td align="center" width="50%">
-            <img src="./docs/gallery/editorgym-110x36.png" />
+            <img src="./docs/gallery/editor-110x36.png" />
             <p><b>Editor</b>: The editor in each mode: wrapping, line numbers, tab stops, and auto grow.</p>
         </td>
     </tr>
@@ -74,7 +74,7 @@ images in [`docs/gallery`](./docs/gallery), beside a viewer.
             <p><b>Syntax</b>: Code in the syntax colours of the theme.</p>
         </td>
         <td align="center" width="50%">
-            <img src="./docs/gallery/biggym-area-110x36.png" />
+            <img src="./docs/gallery/big-area-110x36.png" />
             <p><b>Big text gym</b>: Custom text in <code>BigText</code>, with every face, size, and setting to try.</p>
         </td>
     </tr>
@@ -97,7 +97,7 @@ images in [`docs/gallery`](./docs/gallery), beside a viewer.
 The gyms exercise each widget family. Run one by name:
 
 ```sh
-cargo run -p gyms -- stylegym
+cargo run -p gyms -- style
 ```
 
 Run `cargo run -p gyms -- --help` to list them. Like `examples/hello` and

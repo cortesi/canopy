@@ -7,12 +7,11 @@ use canopy::{
 };
 
 use super::{Mount, root_harness};
-use crate::{demo_canopy, termgym, widget_editor};
+use crate::{demo_canopy, term, widget_editor};
 
 #[test]
 fn demo_api_build_does_not_assemble_or_publish() -> Result<()> {
-    let canopy =
-        termgym::binding_setup(demo_canopy().configure(termgym::TermGym::register)).build()?;
+    let canopy = term::binding_setup(demo_canopy().configure(term::TermGym::register)).build()?;
     assert!(canopy.snapshot().is_none());
     assert!(
         canopy
@@ -163,8 +162,8 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
 #[test]
 fn termgym_help_opens_over_a_consuming_terminal_and_restores_input() -> Result<()> {
     let harness = root_harness(
-        termgym::TermGym::new(),
-        |builder| termgym::binding_setup(builder.configure(termgym::TermGym::register)),
+        term::TermGym::new(),
+        |builder| term::binding_setup(builder.configure(term::TermGym::register)),
         Size::new(80, 24),
         Mount::Wrap,
     )?;

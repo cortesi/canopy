@@ -8,7 +8,7 @@ use canopy::{
 };
 
 use super::{Mount, root_harness};
-use crate::framegym::{FrameGym, FrameSlot, PatternSlot, binding_setup};
+use crate::frame::{FrameGym, FrameSlot, PatternSlot, binding_setup};
 
 struct ViewMetrics {
     outer: geom::RectI32,

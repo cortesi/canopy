@@ -946,7 +946,7 @@ Copy may complete after background serialization, so there is no synchronous unb
 helper instead.
 
 Table events use general cell and copy concepts, independent of HostRequest. PreparedTable
-paints a clipped grid and answers hits without a mounted widget. Let the tablegym and the
+paints a clipped grid and answers hits without a mounted widget. Let the table gym and the
 Markdown preview together drive its final signatures.
 
 ## Delivery
@@ -968,12 +968,12 @@ copy are exact. A source/rendered round trip has a tested position rule.
 
 ### Stage 2: first usable slice
 
-Build TableData, PreparedTable, TableView, and a tablegym: fixed headers, single-line cells,
+Build TableData, PreparedTable, TableView, and a table gym: fixed headers, single-line cells,
 two-axis navigation, rectangle selection, activation, and TSV copy. Build the Markdown surface
 with streamed appends, anchors, Scroll and Interact, completed-table previews, and link,
 code, and table inspectors. Add MarkdownSource as a usable standalone widget and as the
 sibling Source surface, the visible toggle, the pinned source inspector, immutable host
-requests, and a markdowngym with append, finish, abort, replace, and resize controls. Add
+requests, and a Markdown gym with append, finish, abort, replace, and resize controls. Add
 focused harness tests and tracked gym scenarios with this slice rather than at release time.
 
 Gate: a user reads a streamed document, pauses, selects a table rectangle, inspects and copies
@@ -1044,7 +1044,7 @@ mean both are wrong. Likewise, a gallery image cannot establish which widget rec
 | Grid model and renderer | `canopy-widgets` table tests without optional features | Validation, keys, geometry, hit testing, navigation, and TSV |
 | Publication and concurrency | Markdown's controlled scheduler and recording host | Stale-result rejection, queue bounds, fairness, liveness, and immutable actions |
 | Mounted interaction | Canopy Harness with real bindings and modal scopes | Focus, admission, pointer capture, scroll ownership, and lifecycle cleanup |
-| Application journeys | markdowngym, tablegym, and fh Luau scripts | Public commands, default menus, view switching, and consumer compatibility |
+| Application journeys | Markdown gym, table gym, and fh Luau scripts | Public commands, default menus, view switching, and consumer compatibility |
 | Appearance | Scripted Canopy/fh galleries and visual inspection | Legibility, clipping, state labels, contrast, and narrow layouts |
 | Cost | Release benchmarks, counters, and bounded soak | Input latency, publication lag, work scaling, and retained memory |
 
@@ -1220,14 +1220,14 @@ that use the shared renderer on both sides.
 
 ### Luau journeys and visual review
 
-Add markdowngym and tablegym scripts that drive public controls, inject deterministic chunks,
+Add Markdown gym and table gym scripts that drive public controls, inject deterministic chunks,
 and inspect revision-addressed state. Include read → pause → inspect table → copy → dismiss,
 stream → toggle source → search → toggle back, and replace → deliver stale result → continue
 reading. The recording host exposes requests without invoking a real browser or clipboard.
 
 Wire each script to its actual gym in
 [the gym test runner](../examples/gyms/src/tests/smoke.rs) and
-[xtask](../xtask/src/main.rs). The current default gym smoke launch selects listgym; dropping
+[xtask](../xtask/src/main.rs). The current default gym smoke launch selects the list gym; dropping
 a Markdown script into that directory alone will not exercise the new app. Add an explicit
 runner or suite configuration and verify script counts. Extend fh's existing view-focus,
 view-modes, view-scroll, full-screen, and Markdown-preview coverage with the new toggle

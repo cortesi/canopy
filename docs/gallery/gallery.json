@@ -8,56 +8,56 @@
   ],
   "pages": [
     {
-      "id": "biggym",
+      "id": "big",
       "title": "Big text gym",
       "caption": "Custom text in BigText, fitted to its area, with every setting beside it.",
-      "script": "biggym.luau",
+      "script": "big.luau",
       "shots": [
         {
           "size": "110x36",
-          "file": "biggym-110x36.png",
+          "file": "big-110x36.png",
           "width": 1870,
           "height": 1332
         }
       ]
     },
     {
-      "id": "biggym-area",
+      "id": "big-area",
       "title": "Big text in an area",
       "caption": "A smaller area, centered, in a gradient: the fit takes a smaller face.",
-      "script": "biggym.luau",
+      "script": "big.luau",
       "shots": [
         {
           "size": "110x36",
-          "file": "biggym-area-110x36.png",
+          "file": "big-area-110x36.png",
           "width": 1870,
           "height": 1332
         }
       ]
     },
     {
-      "id": "biggym-ladder",
+      "id": "big-ladder",
       "title": "Big text ladder",
       "caption": "The text in every face, at the scale of the settings.",
-      "script": "biggym.luau",
+      "script": "big.luau",
       "shots": [
         {
           "size": "110x36",
-          "file": "biggym-ladder-110x36.png",
+          "file": "big-ladder-110x36.png",
           "width": 1870,
           "height": 1332
         }
       ]
     },
     {
-      "id": "biggym-halves",
+      "id": "big-halves",
       "title": "Big text in half blocks",
       "caption": "The same area in half blocks, for a font without octants: the ladder loses the step between each two half-block scales.",
-      "script": "biggym.luau",
+      "script": "big.luau",
       "shots": [
         {
           "size": "110x36",
-          "file": "biggym-halves-110x36.png",
+          "file": "big-halves-110x36.png",
           "width": 1870,
           "height": 1332
         }
@@ -78,14 +78,14 @@
       ]
     },
     {
-      "id": "chartgym",
+      "id": "chart",
       "title": "Charts",
       "caption": "Big numbers, meters, sparklines, and column charts, updating live.",
-      "script": "chartgym.luau",
+      "script": "chart.luau",
       "shots": [
         {
           "size": "110x36",
-          "file": "chartgym-110x36.png",
+          "file": "chart-110x36.png",
           "width": 1870,
           "height": 1332
         }
@@ -95,7 +95,7 @@
       "id": "big-text",
       "title": "Big text",
       "caption": "The faces of BigText at scale 1: Canopy's compact numerals, then the sizes of Tamzen.",
-      "script": "chartgym.luau",
+      "script": "chart.luau",
       "shots": [
         {
           "size": "110x36",
@@ -106,42 +106,42 @@
       ]
     },
     {
-      "id": "editorgym",
+      "id": "editor",
       "title": "Editor",
       "caption": "The multi-line editor.",
-      "script": "editorgym.luau",
+      "script": "editor.luau",
       "shots": [
         {
           "size": "110x36",
-          "file": "editorgym-110x36.png",
+          "file": "editor-110x36.png",
           "width": 1870,
           "height": 1332
         }
       ]
     },
     {
-      "id": "fontgym",
+      "id": "font",
       "title": "Font banners",
       "caption": "TrueType fonts drawn as large text for banners and headers.",
-      "script": "fontgym.luau",
+      "script": "font.luau",
       "shots": [
         {
           "size": "110x36",
-          "file": "fontgym-110x36.png",
+          "file": "font-110x36.png",
           "width": 1870,
           "height": 1332
         }
       ]
     },
     {
-      "id": "fontgym-blocks",
+      "id": "font-blocks",
       "title": "Font banners in block elements",
       "caption": "The banners in the block elements alone, for a font without the mosaics.",
-      "script": "fontgym.luau",
+      "script": "font.luau",
       "shots": [
         {
           "size": "110x36",
-          "file": "fontgym-blocks-110x36.png",
+          "file": "font-blocks-110x36.png",
           "width": 1870,
           "height": 1332
         }
@@ -193,7 +193,7 @@
       "id": "rendered",
       "title": "Markdown",
       "caption": "Rendered hierarchy, links, code cards, and shared table previews.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -212,7 +212,7 @@
       "id": "document-menu",
       "title": "Document menu",
       "caption": "Gym controls live in which-key menus; d lists the fixtures.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -231,7 +231,7 @@
       "id": "selected-link",
       "title": "Selected link",
       "caption": "The object cursor selects a readable label with an inspectable destination.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -250,7 +250,7 @@
       "id": "code-inspector",
       "title": "Complete code",
       "caption": "The code inspector includes the lines omitted from the card and preserves its payload.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -269,7 +269,7 @@
       "id": "table-inspector",
       "title": "Table rectangle",
       "caption": "The shared TableView inspector navigates and selects the complete dataset.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -288,7 +288,7 @@
       "id": "cell-detail",
       "title": "Full cell detail",
       "caption": "Full values remain readable and copyable beyond one-line previews.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -302,7 +302,7 @@
       "id": "search",
       "title": "Search hidden payloads",
       "caption": "Search covers complete code, table, and source-card content.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -321,7 +321,7 @@
       "id": "source-inspector",
       "title": "Pinned source",
       "caption": "The source inspector pins the displayed revision and retains original syntax.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -340,7 +340,7 @@
       "id": "source",
       "title": "Source presentation",
       "caption": "A sibling Source surface over the same accepted bytes and epoch.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -359,7 +359,7 @@
       "id": "receiving-code",
       "title": "Receiving code",
       "caption": "A receiving code card is visible while earlier content remains interactive.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -373,7 +373,7 @@
       "id": "literal-table",
       "title": "Open table",
       "caption": "Trailing tables remain literal Markdown until their interpretation is stable.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -392,7 +392,7 @@
       "id": "complete-table",
       "title": "Published grid",
       "caption": "A following block publishes the shared prepared table and its inspector together.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -411,7 +411,7 @@
       "id": "aborted",
       "title": "Aborted stream",
       "caption": "Accepted source stays available after an explicit abort.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -430,7 +430,7 @@
       "id": "unavailable",
       "title": "Unavailable browser action",
       "caption": "An unsafe destination remains inspectable with Open disabled.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -444,7 +444,7 @@
       "id": "syntax-limit",
       "title": "Syntax limit",
       "caption": "A large immutable code payload opens as plain text above the syntax cap.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -458,7 +458,7 @@
       "id": "partial-source",
       "title": "Partial file",
       "caption": "A labeled retained prefix offers Source while Rendered is unavailable.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -472,7 +472,7 @@
       "id": "ascii-light-narrow",
       "title": "ASCII, light, narrow",
       "caption": "The whole gym uses a 40-column view, portable decoration, and the light palette.",
-      "script": "markdowngym.luau",
+      "script": "markdown.luau",
       "shots": [
         {
           "size": "110x36",
@@ -491,7 +491,7 @@
       "id": "widgets",
       "title": "Widgets",
       "caption": "Buttons in each look and state, inputs, a selector, and a dropdown.",
-      "script": "stylegym.luau",
+      "script": "style.luau",
       "shots": [
         {
           "size": "110x36",
@@ -505,7 +505,7 @@
       "id": "palette",
       "title": "Themes",
       "caption": "The palette of a theme, and the roles that its rules colour.",
-      "script": "stylegym.luau",
+      "script": "style.luau",
       "shots": [
         {
           "size": "110x36",
@@ -519,7 +519,7 @@
       "id": "syntax",
       "title": "Syntax",
       "caption": "Code in the syntax colours of the theme.",
-      "script": "stylegym.luau",
+      "script": "style.luau",
       "shots": [
         {
           "size": "110x36",
@@ -530,14 +530,14 @@
       ]
     },
     {
-      "id": "tablegym",
+      "id": "table",
       "title": "TableView",
       "caption": "Fixed headers and row numbers over a keyed table, with full Unicode cell values.",
-      "script": "tablegym.luau",
+      "script": "table.luau",
       "shots": [
         {
           "size": "110x36",
-          "file": "tablegym-110x36.png",
+          "file": "table-110x36.png",
           "width": 1870,
           "height": 1332,
           "missing": [
@@ -551,7 +551,7 @@
       "id": "table-selection",
       "title": "Table selection",
       "caption": "Rectangle membership spans rows and columns; TSV copy preserves the full values.",
-      "script": "tablegym.luau",
+      "script": "table.luau",
       "shots": [
         {
           "size": "110x36",
@@ -569,7 +569,7 @@
       "id": "table-scrolled",
       "title": "Table scrolling",
       "caption": "The body scrolls on both axes while the header and gutter remain fixed.",
-      "script": "tablegym.luau",
+      "script": "table.luau",
       "shots": [
         {
           "size": "110x36",
@@ -583,7 +583,7 @@
       "id": "table-ascii",
       "title": "ASCII table",
       "caption": "The same data revision uses compact widths and the ASCII glyph preset.",
-      "script": "tablegym.luau",
+      "script": "table.luau",
       "shots": [
         {
           "size": "110x36",
@@ -597,7 +597,7 @@
       "id": "gym-view",
       "title": "Gym view selector",
       "caption": "Every gym shares Full, Narrow, and Short views through Ctrl+l.",
-      "script": "tablegym.luau",
+      "script": "table.luau",
       "shots": [
         {
           "size": "110x36",
@@ -611,7 +611,7 @@
       "id": "table-narrow",
       "title": "Narrow gym",
       "caption": "The table, status, and footer share the 40-column viewport.",
-      "script": "tablegym.luau",
+      "script": "table.luau",
       "shots": [
         {
           "size": "110x36",
@@ -628,7 +628,7 @@
       "id": "table-short",
       "title": "Short gym",
       "caption": "The whole gym fits within 12 rows, leaving horizontal navigation unchanged.",
-      "script": "tablegym.luau",
+      "script": "table.luau",
       "shots": [
         {
           "size": "110x36",
@@ -645,8 +645,8 @@
   ],
   "sections": [
     {
-      "script": "biggym.luau",
-      "title": "Biggym",
+      "script": "big.luau",
+      "title": "Big",
       "summary": "The big text gym: the text fitted to the whole stage, then to a smaller area in the middle with a gradient, and its ladder of every face."
     },
     {
@@ -655,18 +655,18 @@
       "summary": "The Code editor gym, as it opens."
     },
     {
-      "script": "chartgym.luau",
-      "title": "Chartgym",
+      "script": "chart.luau",
+      "title": "Chart",
       "summary": "The Charts gym, as it opens, and its page of big text."
     },
     {
-      "script": "editorgym.luau",
-      "title": "Editorgym",
+      "script": "editor.luau",
+      "title": "Editor",
       "summary": "The Editor gym, as it opens."
     },
     {
-      "script": "fontgym.luau",
-      "title": "Fontgym",
+      "script": "font.luau",
+      "title": "Font",
       "summary": "The Font banners gym, as it opens in the full tier, then in the block elements."
     },
     {
@@ -675,18 +675,18 @@
       "summary": "The Image viewer gym, as it opens in the full tier, then in the block elements, then its chart of the glyphs of each tier."
     },
     {
-      "script": "markdowngym.luau",
-      "title": "Markdowngym",
+      "script": "markdown.luau",
+      "title": "Markdown",
       "summary": "Explicit targets keep queries valid from the automation root and modal focus."
     },
     {
-      "script": "stylegym.luau",
-      "title": "Stylegym",
+      "script": "style.luau",
+      "title": "Style",
       "summary": "The style gym: the stock widgets, the palette of a theme, and its syntax colours."
     },
     {
-      "script": "tablegym.luau",
-      "title": "Tablegym",
+      "script": "table.luau",
+      "title": "Table",
       "summary": null
     }
   ],

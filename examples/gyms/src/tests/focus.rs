@@ -8,7 +8,7 @@ use canopy::{
 };
 
 use super::{Mount, root_harness};
-use crate::focusgym::{Block, FocusGym, binding_setup};
+use crate::focus::{Block, FocusGym, binding_setup};
 
 fn setup_harness(size: Size) -> Result<Harness> {
     root_harness(

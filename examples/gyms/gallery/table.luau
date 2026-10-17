@@ -5,7 +5,7 @@ local function gym(name: string, ...: any)
 end
 canopy.prepare()
 local shots = {
-    { id = "tablegym", title = "TableView", caption = "Fixed headers and row numbers over a keyed table, with full Unicode cell values.", capture = canopy.capture() },
+    { id = "table", title = "TableView", caption = "Fixed headers and row numbers over a keyed table, with full Unicode cell values.", capture = canopy.capture() },
 }
 canopy.send_key("Shift+Right")
 canopy.send_key("Shift+Down")

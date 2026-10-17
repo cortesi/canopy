@@ -126,17 +126,17 @@ fn run_smoke(workspace_root: &Path) -> bool {
 /// and the arguments of the gym that it runs against. Paths are relative to
 /// `examples/gyms`, where the gyms run.
 const GALLERY: [(&str, &[&str]); 9] = [
-    ("stylegym.luau", &["stylegym"]),
-    ("tablegym.luau", &["tablegym"]),
-    ("markdowngym.luau", &["markdowngym"]),
-    ("chartgym.luau", &["chartgym"]),
-    ("biggym.luau", &["biggym"]),
+    ("style.luau", &["style"]),
+    ("table.luau", &["table"]),
+    ("markdown.luau", &["markdown"]),
+    ("chart.luau", &["chart"]),
+    ("big.luau", &["big"]),
     (
         "cedit.luau",
         &["cedit", "../../crates/canopy-widgets/src/spinner.rs"],
     ),
-    ("editorgym.luau", &["editorgym"]),
-    ("fontgym.luau", &["fontgym"]),
+    ("editor.luau", &["editor"]),
+    ("font.luau", &["font"]),
     ("imgview.luau", &["imgview", "../../.assets/shyness.jpg"]),
 ];
 
