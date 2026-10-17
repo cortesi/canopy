@@ -34,10 +34,6 @@ use crate::document::{
 
 /// Bounded row count for one derived presentation.
 const MAX_PREPARED_ROWS: usize = 262_144;
-/// Literal lines shown in a code or source card preview.
-const PREVIEW_LINES: usize = 6;
-/// Most lines one wrapped cell takes in an inline table preview.
-const PREVIEW_CELL_LINES: u32 = 4;
 /// How far the object cursor's ground leans from the background toward the
 /// accent. Panels and selections share one color in some themes, so a tint
 /// keeps the cursor apart from code cards and inline code.
@@ -915,7 +911,9 @@ fn prepare_block(
                     data.clone(),
                     FlowOptions {
                         width: body,
-                        cell_lines: PREVIEW_CELL_LINES,
+                        // The preview never cuts a value short: every value
+                        // takes the lines it needs.
+                        cell_lines: u32::MAX,
                         glyphs,
                     },
                 )
@@ -993,7 +991,7 @@ fn prepare_block(
                 geometry.glyphs,
             );
             rows.push(row);
-            for (offset, line) in preview_lines(&unit.text) {
+            for (offset, line) in card_lines(&unit.text) {
                 let mut row = make_row();
                 row.ground = "markdown/card";
                 clipped(
@@ -1008,20 +1006,6 @@ fn prepare_block(
                         role: "markdown/card",
                         glyphs: geometry.glyphs,
                     },
-                );
-                rows.push(row);
-            }
-            if unit.text.lines().nth(PREVIEW_LINES).is_some() {
-                let mut row = make_row();
-                row.ground = "markdown/card";
-                decoration(
-                    &mut row,
-                    inset,
-                    "more source",
-                    body,
-                    "markdown/card/label",
-                    object,
-                    geometry.glyphs,
                 );
                 rows.push(row);
             }
@@ -1106,7 +1090,8 @@ fn prepare_block(
     }
 }
 
-/// Prepare a six-line code card and its receiving or omitted-content labels.
+/// Prepare a code card: its label, then every line of the payload. Long
+/// lines are clipped at the card's edge, but no line is left out.
 fn prepare_code(
     rows: &mut Vec<PreparedRow>,
     make_row: impl Fn() -> PreparedRow,
@@ -1161,7 +1146,7 @@ fn prepare_code(
     } else {
         Vec::new()
     };
-    for (line_index, (byte, line)) in preview_lines(&code.payload).enumerate() {
+    for (line_index, (byte, line)) in card_lines(&code.payload).enumerate() {
         let mut row = make_row();
         row.ground = "markdown/card";
         clipped(
@@ -1179,32 +1164,16 @@ fn prepare_code(
         );
         rows.push(row);
     }
-    if code.line_count > PREVIEW_LINES {
-        let mut row = make_row();
-        row.ground = "markdown/card";
-        decoration(
-            &mut row,
-            inset,
-            &format!("{} more lines", code.line_count - PREVIEW_LINES),
-            budget,
-            "markdown/card/label",
-            object,
-            glyphs,
-        );
-        rows.push(row);
-    }
 }
 
-/// Card preview lines without terminators, with their byte offsets.
-fn preview_lines(text: &str) -> impl Iterator<Item = (usize, &str)> {
-    text.split_inclusive('\n')
-        .take(PREVIEW_LINES)
-        .scan(0, |offset, raw| {
-            let start = *offset;
-            *offset += raw.len();
-            let line = raw.strip_suffix('\n').unwrap_or(raw);
-            Some((start, line.strip_suffix('\r').unwrap_or(line)))
-        })
+/// Card lines without terminators, with their byte offsets.
+fn card_lines(text: &str) -> impl Iterator<Item = (usize, &str)> {
+    text.split_inclusive('\n').scan(0, |offset, raw| {
+        let start = *offset;
+        *offset += raw.len();
+        let line = raw.strip_suffix('\n').unwrap_or(raw);
+        Some((start, line.strip_suffix('\r').unwrap_or(line)))
+    })
 }
 
 /// Render quote rails, nesting, alert labels, and list markers.
@@ -1597,19 +1566,15 @@ fn clipped(
 }
 
 #[cfg(feature = "syntax")]
-/// Prepare palette role spans for the six-line code preview.
+/// Prepare palette role spans for every line of a code card.
 fn code_syntax(info: &str, payload: &str) -> SyntaxLines {
     use canopy_widgets::highlight::{Highlighter, SyntectHighlighter};
     // The bundled Markdown highlighter resolves fences through Grammar, so
     // aliases and named grammars agree with the code inspector.
     let token = info.split_whitespace().next().unwrap_or("");
     let highlighter = SyntectHighlighter::for_path("preview.md").with_palette_roles();
-    let prefix = payload
-        .split_inclusive('\n')
-        .take(PREVIEW_LINES)
-        .collect::<String>();
-    highlighter.prepare(&format!("```{token}\n{prefix}"));
-    prefix
+    highlighter.prepare(&format!("```{token}\n{payload}"));
+    payload
         .lines()
         .enumerate()
         .map(|(i, line)| {
@@ -1622,7 +1587,7 @@ fn code_syntax(info: &str, payload: &str) -> SyntaxLines {
         .collect()
 }
 #[cfg(not(feature = "syntax"))]
-/// Prepare palette role spans for the six-line code preview.
+/// Prepare palette role spans for every line of a code card.
 fn code_syntax(_info: &str, _payload: &str) -> SyntaxLines {
     Vec::new()
 }

@@ -138,15 +138,11 @@ fn narrow_unicode_tabs_and_controls_progress_and_never_overflow() {
 }
 
 #[test]
-fn code_preview_limits_lines_marks_clipping_and_keeps_atomic_payload() {
+fn code_cards_show_every_line_clip_wide_ones_and_keep_atomic_payload() {
     let p = prepared("```unknown\nabcdefghijk\n2\n3\n4\n5\n6\n7\n```\n", 10);
-    assert_eq!(
-        p.height(),
-        8,
-        "label, six payload lines, omission indicator"
-    );
-    assert!(row_text(&p, 1).ends_with('…'));
-    assert_eq!(row_text(&p, 7), "1 more ");
+    assert_eq!(p.height(), 8, "the label, then every payload line");
+    assert!(row_text(&p, 1).ends_with('…'), "a wide line clips");
+    assert_eq!(row_text(&p, 7).trim_end(), "7", "no line is left out");
     let id = p.document.units[0].id;
     let range = ReadingRange {
         start: ReadingPosition {
@@ -594,4 +590,34 @@ fn table_preview_keeps_every_row_and_marks_cut_columns() {
     h.render().unwrap();
     assert!(h.tbuf().contains_text("k11"));
     assert!(h.tbuf().contains_text("›"));
+}
+
+#[test]
+fn source_cards_and_table_previews_show_every_line() {
+    let html: String = (1..=9).map(|i| format!("<p>line {i}</p>\n")).collect();
+    let p = prepared(&format!("<div>\n{html}</div>\n"), 40);
+    let rows: Vec<String> = (0..p.height()).map(|row| row_text(&p, row)).collect();
+    assert!(
+        rows.iter().any(|row| row.contains("line 9")),
+        "a source card shows its last line: {rows:?}"
+    );
+    assert!(
+        !rows.iter().any(|row| row.contains("more source")),
+        "{rows:?}"
+    );
+
+    let long = "word ".repeat(60);
+    let p = prepared(&format!("| a | b |\n| --- | --- |\n| k | {long}|\n"), 30);
+    let flow = p
+        .blocks
+        .iter()
+        .find_map(|block| block.flow.clone())
+        .expect("a flowed table");
+    // Three hundred cells of value at most 30 wide need far more than the
+    // four lines a preview once allowed.
+    assert!(
+        flow.height() > 12,
+        "the value wraps in full: {}",
+        flow.height()
+    );
 }
