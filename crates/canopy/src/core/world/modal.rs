@@ -1,8 +1,11 @@
 //! Modal input admission and the stack of open modals.
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
+use std::{
+    borrow::Cow,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use super::{Core, focus::is_focus_candidate};
@@ -135,6 +138,37 @@ impl Core {
     /// Whether `node` sits in the overlay layer: a child of the root.
     fn is_overlay(&self, node: NodeId) -> bool {
         self.nodes.get(node).and_then(|entry| entry.parent) == Some(self.root)
+    }
+
+    /// The children of `node` in paint order, bottom first.
+    ///
+    /// Open modals in the overlay layer trade places among themselves, so
+    /// the most recently opened paints on top, whatever order they mounted
+    /// in. Every other child keeps its place.
+    pub(crate) fn paint_order(&self, node: NodeId) -> Cow<'_, [NodeId]> {
+        let children = &self.nodes[node].children;
+        if node != self.root {
+            return Cow::Borrowed(children);
+        }
+        let opened = self
+            .modals
+            .scopes
+            .iter()
+            .map(|scope| scope.options.modal)
+            .filter(|modal| children.contains(modal))
+            .collect::<Vec<_>>();
+        if opened.len() < 2 {
+            return Cow::Borrowed(children);
+        }
+        let mut order = children.clone();
+        let slots = order
+            .iter_mut()
+            .filter(|child| opened.contains(child))
+            .collect::<Vec<_>>();
+        for (slot, modal) in slots.into_iter().zip(opened) {
+            *slot = modal;
+        }
+        Cow::Owned(order)
     }
 
     /// Whether a token still owns a scope, including a close awaiting

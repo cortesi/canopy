@@ -12,10 +12,16 @@ use canopy::{
     error::{Error, Result},
     geom::{Line, Point, Rect, Size},
     render::Render,
-    style::{Style, StyleRules, themes::Palette},
+    style::{Mix, Style, StyleRules, themes::Palette},
     text,
 };
 use unicode_segmentation::UnicodeSegmentation;
+
+mod flow;
+pub use flow::{FlowOptions, FlowTable};
+
+/// How far the header band leans from the ground toward the foreground.
+const HEADER_LIFT: f32 = 0.18;
 
 /// A stable dataset, row, or column identity. Labels are independent of keys.
 pub type TableKey = Arc<str>;
@@ -78,6 +84,13 @@ impl TableCell {
     /// Return validated presentation spans.
     pub fn spans(&self) -> &[TableSpan] {
         &self.spans
+    }
+    /// The span covering a byte, if any.
+    fn span_at(&self, byte: usize) -> Option<&TableSpan> {
+        // Spans are ordered and disjoint, so their ends ascend.
+        self.spans[self.spans.partition_point(|span| span.range.end <= byte)..]
+            .first()
+            .filter(|span| span.range.contains(&byte))
     }
 }
 impl From<String> for TableCell {
@@ -393,6 +406,18 @@ pub struct TableGlyphs {
     pub tab: char,
     /// Other terminal controls.
     pub control: char,
+    /// Rule between the wrapped rows of a flowed table.
+    pub rule: char,
+    /// Crossing of a row rule and a column boundary.
+    pub cross: char,
+    /// End of a value cut short in a flowed table.
+    pub ellipsis: char,
+    /// Rule under the header of a flowed table.
+    pub header_rule: char,
+    /// Crossing of the header rule and a column boundary.
+    pub header_cross: char,
+    /// Broken right margin of a flowed table with columns cut.
+    pub more: char,
 }
 impl TableGlyphs {
     /// Thin Unicode separators and visible whitespace substitutions.
@@ -401,6 +426,12 @@ impl TableGlyphs {
         newline: '↵',
         tab: '⇥',
         control: '�',
+        rule: '─',
+        cross: '┼',
+        ellipsis: '…',
+        header_rule: '━',
+        header_cross: '┿',
+        more: '›',
     };
     /// Portable ASCII substitutions.
     pub const ASCII: Self = Self {
@@ -408,7 +439,49 @@ impl TableGlyphs {
         newline: ' ',
         tab: ' ',
         control: '?',
+        rule: '-',
+        cross: '+',
+        ellipsis: '~',
+        header_rule: '=',
+        header_cross: '+',
+        more: '>',
     };
+    /// The one-cell display form of a grapheme: controls take their visible
+    /// substitutes.
+    fn display<'a>(&self, g: &'a str, buf: &'a mut [u8; 4]) -> &'a str {
+        if g.chars().any(display_control) {
+            match g {
+                "\n" | "\r" | "\r\n" => self.newline,
+                "\t" => self.tab,
+                _ => self.control,
+            }
+            .encode_utf8(buf)
+        } else {
+            g
+        }
+    }
+    /// Reject glyphs that do not occupy exactly one terminal cell.
+    fn validate(&self) -> Result<()> {
+        for glyph in [
+            self.separator,
+            self.newline,
+            self.tab,
+            self.control,
+            self.rule,
+            self.cross,
+            self.ellipsis,
+            self.header_rule,
+            self.header_cross,
+            self.more,
+        ] {
+            if text::width(&glyph.to_string()) != 1 || glyph.is_control() {
+                return Err(Error::Invalid(
+                    "table glyphs must occupy one terminal cell".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 impl Default for TableGlyphs {
     fn default() -> Self {
@@ -475,18 +548,7 @@ pub fn prepare(data: Arc<TableData>, options: TableLayoutOptions) -> Result<Prep
     {
         return Err(Error::Invalid("invalid table widths".into()));
     }
-    for glyph in [
-        options.glyphs.separator,
-        options.glyphs.newline,
-        options.glyphs.tab,
-        options.glyphs.control,
-    ] {
-        if text::width(&glyph.to_string()) != 1 || glyph.is_control() {
-            return Err(Error::Invalid(
-                "table glyphs must occupy one terminal cell".into(),
-            ));
-        }
-    }
+    options.glyphs.validate()?;
     let mut sampled_bytes = 0;
     let mut widths = vec![options.min_width; data.columns.len()];
     if options.widths.is_empty() {
@@ -545,6 +607,15 @@ pub fn prepare(data: Arc<TableData>, options: TableLayoutOptions) -> Result<Prep
         sampled_bytes,
         derived_bytes,
     })
+}
+/// The separator role beside a cell role: header separators keep the header
+/// band.
+fn separator_role(path: &str) -> &'static str {
+    if path == "table/header" {
+        "table/header/separator"
+    } else {
+        "table/separator"
+    }
 }
 /// Return whether a character requires a safe one-cell substitution.
 pub(crate) fn display_control(c: char) -> bool {
@@ -812,7 +883,7 @@ impl PreparedTable {
         let mut glyph = [0; 4];
         if column > 0 && start > offset && start - 1 < offset.saturating_add(area.w) {
             render.text(
-                "table/separator",
+                separator_role(path),
                 Line::new(area.tl.x + (start - 1 - offset), y, 1),
                 self.options.glyphs.separator.encode_utf8(&mut glyph),
             )?;
@@ -836,16 +907,7 @@ impl PreparedTable {
             if x >= start + width || x >= offset.saturating_add(area.w) {
                 break;
             }
-            let g: &str = if g.chars().any(display_control) {
-                match g {
-                    "\n" | "\r" | "\r\n" => self.options.glyphs.newline,
-                    "\t" => self.options.glyphs.tab,
-                    _ => self.options.glyphs.control,
-                }
-                .encode_utf8(&mut glyph)
-            } else {
-                g
-            };
+            let g = self.options.glyphs.display(g, &mut glyph);
             let cells = text::grapheme_width(g) as u32;
             if x >= offset
                 && x.saturating_add(cells) <= start + width
@@ -856,11 +918,7 @@ impl PreparedTable {
                     y,
                 };
                 let mut style = base.clone();
-                // Spans are ordered and disjoint, so their ends ascend.
-                let span = cell.spans[cell.spans.partition_point(|span| span.range.end <= byte)..]
-                    .first()
-                    .filter(|span| span.range.contains(&byte));
-                if let Some(span) = span {
+                if let Some(span) = cell.span_at(byte) {
                     let overlay = render.apply_effects(span.style.clone());
                     style.fg = overlay.fg;
                     style.attrs = overlay.attrs;
@@ -1017,8 +1075,21 @@ pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
     rules
         .fg("table", palette.fg)
         .bg("table", palette.bg)
-        .bg("table/header", palette.panel_bg)
+        // The header is one band of accent labels. The band is lifted well
+        // clear of the ground and of panels such as code cards, and stays
+        // darker than the separators, so column lines run on through it.
+        .fg("table/header", palette.accent)
+        .bg(
+            "table/header",
+            palette.bg.mix(palette.fg, HEADER_LIFT, Mix::Rgb),
+        )
         .attr("table/header", Attr::Bold)
+        .fg("table/header/separator", palette.frame)
+        // A flowed header carries its weight in its labels and a heavy rule,
+        // with no band.
+        .fg("table/flow/header", palette.accent)
+        .attr("table/flow/header", Attr::Bold)
+        .fg("table/more", palette.faint_fg)
         .fg("table/gutter", palette.muted_fg)
         .fg("table/separator", palette.frame)
         .bg("table/selection", palette.selection_bg)

@@ -913,5 +913,4 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
 }
 
 #[cfg(test)]
-#[path = "paged/tests.rs"]
 mod tests;

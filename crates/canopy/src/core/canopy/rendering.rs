@@ -235,7 +235,7 @@ impl Canopy {
         }
 
         if let Some(children_clip) = view.content.intersect_rect(parent_clip) {
-            for child in &node.children {
+            for child in self.core.paint_order(node_id).iter() {
                 self.render_recursive(traversal, *child, children_clip, active_start, current_len)?;
             }
         }

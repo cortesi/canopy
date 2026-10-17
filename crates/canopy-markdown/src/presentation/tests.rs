@@ -460,12 +460,37 @@ fn mounted_table_uses_shared_grid_and_keeps_full_atomic_copy() {
     );
     let mut h = mounted(p, PaintOverlays::default(), 30, 5);
     h.render().unwrap();
-    assert!(h.tbuf().contains_text("one│two"));
+    assert!(h.tbuf().contains_text("one │ two"));
     h.with_root_widget_context(|root: &mut Preview, _| {
         assert_eq!(root.last.tables, 1);
         Ok(())
     })
     .unwrap();
+}
+
+#[test]
+fn table_preview_wraps_long_values_within_the_reading_width() {
+    let p = prepared(
+        "| Key | Notes |\n| - | - |\n| a | one two three four five six seven |\n| b | short |\n",
+        24,
+    );
+    let block = &p.blocks[0];
+    assert!(block.flow.is_some());
+    // Header and its rule, three wrapped lines, a row rule, and the short
+    // row.
+    assert_eq!(block.table_height, 7);
+    let mut h = mounted(p, PaintOverlays::default(), 24, 8);
+    h.render().unwrap();
+    for line in [
+        "Key │ Notes",
+        "━━━━┿━━━━",
+        "a   │ one two three",
+        "    │ four five six",
+        "────┼────",
+        "b   │ short",
+    ] {
+        assert!(h.tbuf().contains_text(line), "missing {line:?}");
+    }
 }
 
 #[test]
@@ -494,8 +519,9 @@ fn scrolled_inline_table_does_not_repeat_its_header() {
     );
     let mut h = mounted(p, PaintOverlays::default(), 30, 2);
     h.render().unwrap();
+    // The label, the header, and its rule precede the first body row.
     h.with_root_widget_context(|_: &mut Preview, ctx| {
-        ctx.scroll(ScrollOp::To(Point { x: 0, y: 3 }));
+        ctx.scroll(ScrollOp::To(Point { x: 0, y: 4 }));
         Ok(())
     })
     .unwrap();
@@ -550,4 +576,22 @@ fn palette_switch_recolors_prepared_code_without_reflow_or_losing_font_attribute
             })
             .unwrap();
     }
+}
+
+#[test]
+fn table_preview_keeps_every_row_and_marks_cut_columns() {
+    let mut source = String::from("| Key | One | Two | Three |\n| - | - | - | - |\n");
+    let prose = "a sentence of prose that needs room to stay readable";
+    for i in 0..12 {
+        source.push_str(&format!("| k{i} | {prose} | {prose} | {prose} |\n"));
+    }
+    let p = prepared(&source, 50);
+    let block = &p.blocks[0];
+    let flow = block.flow.as_ref().unwrap();
+    assert!(flow.cut());
+    assert!(row_text(&p, block.start).contains(" of 4 columns"));
+    let mut h = mounted(p, PaintOverlays::default(), 50, 80);
+    h.render().unwrap();
+    assert!(h.tbuf().contains_text("k11"));
+    assert!(h.tbuf().contains_text("›"));
 }

@@ -4,10 +4,7 @@ use std::time::Duration;
 
 use canopy::{
     CanopyBuilder, Context, ContextExt, NodeName, Register, Setup, Widget, derive_commands,
-    error::Result,
-    layout::{Layout, LayoutOverride},
-    style::themes,
-    tree::ChildSlot,
+    error::Result, layout::Layout, style::themes, tree::ChildSlot,
 };
 use canopy_markdown::{
     DocumentInput, FinishOutcome, Markdown, MarkdownOptions, Mode, ViewType,
@@ -64,7 +61,6 @@ canopy.keymap({
 })
 canopy.keymap({
     mode = "presentation",
-    { key = "w", description = "Narrow / full width", action = command.markdown_gym.narrow() },
     { key = "t", description = "Light / dark theme", action = command.markdown_gym.theme() },
     { key = "g", description = "ASCII / Unicode glyphs", action = command.markdown_gym.glyphs() },
 })
@@ -90,8 +86,6 @@ pub struct MarkdownGym {
     receiving: bool,
     /// Human-readable lifecycle outcome for the host status line.
     state: String,
-    /// Whether the reader uses a fixed 40-cell width.
-    narrow: bool,
     /// Whether newly mounted geometry uses portable decorations.
     ascii: bool,
     /// Whether the live palette uses the light theme.
@@ -113,7 +107,6 @@ impl MarkdownGym {
             next_chunk: 0,
             receiving: false,
             state: "complete fixture".into(),
-            narrow: false,
             ascii: false,
             light: false,
             requests: Vec::new(),
@@ -174,14 +167,6 @@ impl MarkdownGym {
         self.next_chunk = usize::from(receiving);
         self.set_state(ctx, state, receiving)
     }
-    /// Choose the full-width or narrow reader region.
-    fn reader_layout(&self) -> LayoutOverride {
-        let mut layout = flex_row(1);
-        if self.narrow {
-            layout = layout.fixed_width(40);
-        }
-        layout
-    }
     /// Mount a reader over the complete fixture with the current options and
     /// region.
     fn mount_reader(&self, ctx: &mut dyn Context) -> Result<()> {
@@ -189,7 +174,7 @@ impl MarkdownGym {
             ctx.node_id(),
             Markdown::new(FIXTURE.into(), self.options())?,
         )?;
-        ctx.set_layout_override(node.into(), self.reader_layout())
+        ctx.set_layout_override(node.into(), flex_row(1))
     }
     /// Return the most recent recorded action that `pick` accepts.
     fn last_action(&self, pick: impl Fn(&HostAction) -> Option<&String>) -> String {
@@ -371,15 +356,6 @@ impl MarkdownGym {
     /// Whether the current host policy allows switching presentations.
     pub fn rendered_available(&self, ctx: &mut dyn Context) -> Result<bool> {
         reader(ctx, |md, ctx| md.can_toggle_view_type(ctx))
-    }
-    #[command]
-    /// Toggle the reader between full width and a 40-cell region.
-    pub fn narrow(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        self.narrow = !self.narrow;
-        if let Some(node) = ctx.child_slot_of(ctx.node_id(), <ReaderSlot as ChildSlot>::KEY) {
-            ctx.set_layout_override(node, self.reader_layout())?;
-        }
-        Ok(())
     }
     #[command]
     /// Toggle the live palette between dark and light.

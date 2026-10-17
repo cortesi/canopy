@@ -185,3 +185,28 @@ fn menu_keys_reach_the_gym_from_both_views() -> Result<()> {
     }
     Ok(())
 }
+
+#[test]
+fn help_opens_from_the_table_inspector() -> Result<()> {
+    let mut h = gym()?;
+    for _ in 0..5 {
+        reader(&mut h, |md, ctx| md.next_object(ctx, 1))?;
+    }
+    reader(&mut h, |md, ctx| md.activate(ctx))?;
+    h.wait_until(Duration::from_secs(5), |h| {
+        h.with_unique(|gym: &mut MarkdownGym, ctx| gym.inspector_ready(ctx))
+    })?;
+    h.render()?;
+    assert_eq!(
+        h.find_nodes("**/markdown_inspector/**/table_view")?.len(),
+        1
+    );
+    h.script("canopy.send_key('Ctrl+g')")?;
+    h.render()?;
+    assert!(
+        h.tbuf().contains_text("Keyboard shortcuts"),
+        "{}",
+        h.tbuf().lines().join("\n")
+    );
+    Ok(())
+}

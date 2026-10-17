@@ -7,16 +7,17 @@ use std::{
 };
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, Register, Widget,
+    Canopy, CanopyBuilder, Register, Widget,
     error::{Error, Result},
     input::key::Key,
-    layout::{Direction, Layout, LayoutOverride, Sizing},
+    layout::{LayoutOverride, Sizing},
     style::{AttrSet, PartialStyle, StyleRules, themes::Palette},
     terminal::{InterruptPolicy, RunOptions},
 };
 use canopy_mcp::{AppFactory, AppMetadata, Error as McpError, LaunchMode, ResetPolicy, launch};
-use canopy_widgets::{ImageView, KeyHint, Root, StatusBar, Text};
+use canopy_widgets::{ImageView, Root};
 use clap::{Parser, Subcommand};
+use shell::DemoShell;
 
 /// Label every demo footer gives the help key.
 pub(crate) const HELP_LABEL: &str = "help";
@@ -47,6 +48,8 @@ mod markdowngym;
 mod motiongym;
 /// Pager example nodes.
 mod pager;
+/// Shared viewport controls and launcher footer.
+mod shell;
 /// Stylegym example nodes.
 mod stylegym;
 /// Keyed table navigation and rectangle selection.
@@ -103,7 +106,9 @@ canopy.keymap({
 /// script installs first.
 #[must_use]
 fn demo_canopy() -> CanopyBuilder {
-    CanopyBuilder::new().configure(Root::register)
+    CanopyBuilder::new()
+        .configure(Root::register)
+        .configure(DemoShell::register)
 }
 
 /// Install `app` under a root with the demo shell, as the builder's assembly.
@@ -114,63 +119,6 @@ fn install<T: Widget + 'static>(builder: CanopyBuilder, app: T, inspector: bool)
             .install(cnpy, DemoShell::new(app))?;
         Ok(())
     })
-}
-
-/// Wrap a demo app in the shared footer bar every launcher demo carries.
-///
-/// The footer names the app and pins the standard help hint to the right edge.
-/// The app keeps the rest of the shell and its own layout; the shell only adds
-/// the row beneath it.
-struct DemoShell<T> {
-    /// The demo application, mounted on first mount.
-    app: Option<T>,
-    /// Status text shown on the left of the footer.
-    status: String,
-}
-
-impl<T: Widget + 'static> DemoShell<T> {
-    /// Construct a shell around one demo app.
-    fn new(app: T) -> Self {
-        Self {
-            status: app.name().to_string(),
-            app: Some(app),
-        }
-    }
-}
-
-impl<T: Widget + 'static> Widget for DemoShell<T> {
-    fn name(&self) -> canopy::NodeName {
-        canopy::NodeName::convert("demo_shell")
-    }
-
-    fn layout(&self) -> Layout {
-        Layout::fill().direction(Direction::Column)
-    }
-
-    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let app = self
-            .app
-            .take()
-            .ok_or_else(|| Error::Internal("demo app missing".into()))?;
-        let app_node = c.add_child(c.node_id(), app)?;
-        c.set_layout_override(
-            app_node.into(),
-            LayoutOverride {
-                min_width: Some(None),
-                max_width: Some(None),
-                min_height: Some(None),
-                max_height: Some(None),
-                ..LayoutOverride::new().flex_horizontal(1).flex_vertical(1)
-            },
-        )?;
-        c.add_child(
-            c.node_id(),
-            StatusBar::new()
-                .with_left(Text::new(self.status.clone()))
-                .with_right(KeyHint::for_command(Root::call_toggle_help(), HELP_LABEL)),
-        )?;
-        Ok(())
-    }
 }
 
 #[cfg(test)]

@@ -991,12 +991,6 @@ impl Register for Inspector {
                 BindingPhase::BeforeWidget,
             ),
             (
-                "ctrl-g",
-                "Jump to line",
-                Self::call_line(),
-                BindingPhase::BeforeWidget,
-            ),
-            (
                 ":",
                 "Jump to line",
                 Self::call_line(),

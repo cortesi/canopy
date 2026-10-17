@@ -37,8 +37,14 @@ text selection. The cursor gives its object one accent-tinted ground, which span
 the full width of a card or table, and a bar in the left margin marks each of its
 rows. Links open an inspector first; a separate Open action requests a
 browser launch. Code cards show a short preview and open a pinned full-text
-inspector. Completed tables open a keyed TableView; a receiving trailing table
-remains literal source until it closes.
+inspector. A table preview shows every row and fits the reading width. Long
+values wrap within their columns, while short and single-word columns keep their
+widths. Accent labels and a heavy rule mark the header, and light rules separate
+rows when any of them wraps. When prose would need columns too narrow to hold
+it, the preview keeps the leading columns that fit, marks each line at its
+broken right margin, and labels the table with the columns it shows. Completed
+tables open a keyed TableView; a receiving trailing table remains literal source
+until it closes.
 
 Source preserves Markdown syntax, tabs, CRLF, and final-newline bytes. Its display
 substitutes unsafe terminal controls, but exact copy uses accepted source ranges.

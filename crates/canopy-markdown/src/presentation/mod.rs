@@ -21,8 +21,8 @@ use canopy_widgets::highlight::Grammar;
 use canopy_widgets::{
     highlight::{SpanStyle, palette_style_rules},
     table::{
-        self, PreparedTable, TableAlignment, TableCell, TableColumn, TableData, TableGlyphs,
-        TableLayoutOptions, TableRow, TableSelection, TableWindow,
+        self, FlowOptions, FlowTable, PreparedTable, TableAlignment, TableCell, TableColumn,
+        TableData, TableGlyphs, TableLayoutOptions, TableRow, TableSelection, TableWindow,
     },
 };
 use unicode_segmentation::UnicodeSegmentation;
@@ -36,8 +36,8 @@ use crate::document::{
 const MAX_PREPARED_ROWS: usize = 262_144;
 /// Literal lines shown in a code or source card preview.
 const PREVIEW_LINES: usize = 6;
-/// Body rows shown in an inline table preview.
-const PREVIEW_TABLE_ROWS: usize = 8;
+/// Most lines one wrapped cell takes in an inline table preview.
+const PREVIEW_CELL_LINES: u32 = 4;
 /// How far the object cursor's ground leans from the background toward the
 /// accent. Panels and selections share one color in some themes, so a tint
 /// keeps the cursor apart from code cards and inline code.
@@ -133,6 +133,9 @@ struct BlockLayout {
     rows: Arc<[PreparedRow]>,
     /// Shared full table geometry retained for preview and inspector.
     table: Option<Arc<PreparedTable>>,
+    /// Preview fitted to the body width; absent when the columns cannot fit,
+    /// so the preview clips the shared grid.
+    flow: Option<Arc<FlowTable>>,
     /// First table row relative to the block label.
     table_start: u32,
     /// Visible header and body rows in the inline preview.
@@ -287,6 +290,7 @@ impl PresentationSnapshot {
                     start: result.height,
                     rows: old.rows.clone(),
                     table: old.table.clone(),
+                    flow: old.flow.clone(),
                     table_start: old.table_start,
                     table_height: old.table_height,
                     inset: old.inset,
@@ -398,6 +402,13 @@ impl PresentationSnapshot {
                 bytes = bytes
                     .saturating_add(2 * size_of::<usize>())
                     .saturating_add(table.derived_bytes());
+            }
+            if let Some(flow) = &block.flow
+                && tables.insert(Arc::as_ptr(flow) as usize)
+            {
+                bytes = bytes
+                    .saturating_add(2 * size_of::<usize>())
+                    .saturating_add(flow.derived_bytes());
             }
         }
         bytes
@@ -698,7 +709,8 @@ impl PresentationSnapshot {
                 render.put_grapheme(bar.resolve_at(local_area, local), local, glyph)?;
             }
         }
-        // Tables use exactly the same prepared renderer as their inspector.
+        // A table that fits flows into the body width; one that does not
+        // clips the same prepared grid as its inspector.
         let first = self
             .blocks
             .partition_point(|b| b.start.saturating_add(b.rows.len() as u32) <= visible.tl.y);
@@ -721,20 +733,31 @@ impl PresentationSnapshot {
                 clip.w,
                 clip.h,
             );
-            table.paint(
-                render,
-                local_area,
-                TableWindow {
-                    offset: Point {
+            if let Some(flow) = &b.flow {
+                flow.paint(
+                    render,
+                    local_area,
+                    Point {
                         x: clip.tl.x - area.tl.x,
-                        y: clip.tl.y.saturating_sub(area.tl.y + 1),
+                        y: clip.tl.y - area.tl.y,
                     },
-                    header: clip.tl.y == area.tl.y,
-                    row_numbers: false,
-                },
-                None,
-                &TableSelection::default(),
-            )?;
+                )?;
+            } else {
+                table.paint(
+                    render,
+                    local_area,
+                    TableWindow {
+                        offset: Point {
+                            x: clip.tl.x - area.tl.x,
+                            y: clip.tl.y.saturating_sub(area.tl.y + 1),
+                        },
+                        header: clip.tl.y == area.tl.y,
+                        row_numbers: false,
+                    },
+                    None,
+                    &TableSelection::default(),
+                )?;
+            }
             stats.tables += 1;
             let index = b.rows.first().and_then(|row| self.unit_index(row.unit_id));
             let marked =
@@ -826,6 +849,7 @@ fn prepare_block(
         atomic: unit.atomic,
     };
     let mut table = None;
+    let mut flow = None;
     let mut table_start = 0;
     let mut table_height = 0;
     let mut prefix = block_prefix(block, geometry.glyphs);
@@ -876,20 +900,40 @@ fn prepare_block(
             if let Ok(data) =
                 TableData::new(block.id.to_string(), revision, columns, data_rows).map(Arc::new)
             {
+                let glyphs = if geometry.glyphs == GlyphPreset::Ascii {
+                    TableGlyphs::ASCII
+                } else {
+                    TableGlyphs::UNICODE
+                };
                 let options = TableLayoutOptions {
-                    glyphs: if geometry.glyphs == GlyphPreset::Ascii {
-                        TableGlyphs::ASCII
-                    } else {
-                        TableGlyphs::UNICODE
-                    },
+                    glyphs,
                     ..TableLayoutOptions::default()
                 };
+                // The preview flows every row into the body width; the
+                // inspector keeps the full grid.
+                flow = FlowTable::prepare(
+                    data.clone(),
+                    FlowOptions {
+                        width: body,
+                        cell_lines: PREVIEW_CELL_LINES,
+                        glyphs,
+                    },
+                )
+                .ok()
+                .map(Arc::new);
                 if let Ok(prepared) = table::prepare(data, options) {
+                    let columns = prepared.data().columns().len();
+                    let label = match &flow {
+                        Some(flow) if flow.cut() => {
+                            format!("table · {} of {columns} columns", flow.widths().len())
+                        }
+                        _ => "table".to_owned(),
+                    };
                     let mut row = make_row();
                     decoration(
                         &mut row,
                         inset,
-                        "table",
+                        &label,
                         body,
                         "markdown/card/label",
                         object,
@@ -898,22 +942,11 @@ fn prepare_block(
                     rows.push(row);
                     table_start = 1;
                     let body_rows = prepared.data().rows().len();
-                    table_height = (body_rows.min(PREVIEW_TABLE_ROWS) + 1) as u32;
+                    table_height = flow
+                        .as_ref()
+                        .map_or(body_rows as u32 + 1, |flow| flow.height());
                     for _ in 0..table_height {
                         rows.push(make_row());
-                    }
-                    if body_rows > PREVIEW_TABLE_ROWS {
-                        let mut row = make_row();
-                        decoration(
-                            &mut row,
-                            inset,
-                            &format!("{} more rows", body_rows - PREVIEW_TABLE_ROWS),
-                            body,
-                            "markdown/card/label",
-                            object,
-                            geometry.glyphs,
-                        );
-                        rows.push(row);
                     }
                     table = Some(Arc::new(prepared));
                     if ignored_excess {
@@ -1064,6 +1097,7 @@ fn prepare_block(
         start: 0,
         rows: rows.into(),
         table,
+        flow,
         table_start,
         table_height,
         inset,

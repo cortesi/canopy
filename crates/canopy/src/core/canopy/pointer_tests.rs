@@ -251,3 +251,48 @@ fn a_modal_admits_a_click_that_passes_through_the_layer() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn the_overlay_modal_opened_last_is_on_top() -> Result<()> {
+    let Tree {
+        mut canopy, app, ..
+    } = tree(false)?;
+    let root = canopy.core.root;
+    // Mounted in this order, the second would cover the first.
+    let mut overlay = |name| -> Result<NodeId> {
+        let node = canopy.core.add_child_to_boxed(
+            root,
+            Box::new(Probe {
+                name,
+                capture: false,
+            }),
+        )?;
+        canopy.core.set_layout_of(node, Layout::fill())?;
+        canopy.core.set_hidden(node, true)?;
+        Ok(node)
+    };
+    let first = overlay("first")?;
+    let second = overlay("second")?;
+    let open = |canopy: &mut Canopy, owner, modal| {
+        canopy.core.open_modal(ModalOptions {
+            owner,
+            modal,
+            initial_focus: modal,
+            dim_target: None,
+            bindings: ModalBindings::Application,
+        })
+    };
+    open(&mut canopy, app, second)?;
+    open(&mut canopy, second, first)?;
+    canopy.render(&mut TestRender::new())?;
+    let order = canopy.core.paint_order(root).into_owned();
+    let position = |node| order.iter().position(|child| *child == node);
+    assert!(position(first) > position(second), "{order:?}");
+    assert_eq!(
+        canopy.core.locate_node(root, Point { x: 2, y: 1 })?,
+        Some(first)
+    );
+    mouse_at(&mut canopy, mouse::Action::Down, 2, 1)?;
+    assert_eq!(routed(), [("first", mouse::Action::Down)]);
+    Ok(())
+}

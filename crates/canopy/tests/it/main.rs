@@ -2,53 +2,38 @@
 //!
 //! Cargo builds one crate per file directly under `tests/`, and every one of
 //! them links the Luau-bearing library. Keeping a single root here keeps that
-//! to one link step. Cargo resolves a test root's modules against `tests/`
-//! itself, so each module names its path explicitly.
+//! to one link step. The conventional `it/main.rs` root resolves its
+//! modules from the same directory.
 
 /// API capture path checks.
-#[path = "it/api_capture.rs"]
 mod api_capture;
 /// Command dispatch, argument, and error integration tests.
-#[path = "it/commands.rs"]
 mod commands;
 /// Shared native and adapter contract trace.
-#[path = "it/contracts.rs"]
 mod contracts;
 /// Focus traversal integration tests.
-#[path = "it/focus.rs"]
 mod focus;
 /// Layout integration tests.
-#[path = "it/layout.rs"]
 mod layout;
 /// Tracked Luau source typecheck test.
-#[path = "it/luau_check.rs"]
 mod luau_check;
 /// Node render integration tests.
-#[path = "it/node_render.rs"]
 mod node_render;
 /// Mount hook integration tests.
-#[path = "it/on_mount.rs"]
 mod on_mount;
 /// Luau scripting framework and command integration tests.
-#[path = "it/script.rs"]
 mod script;
 /// Callback completion and deferred teardown integration tests.
-#[path = "it/teardown.rs"]
 mod teardown;
 /// Tree traversal and hit-testing integration tests.
-#[path = "it/tree.rs"]
 mod tree;
 /// Native mutation and publication integration tests.
-#[path = "it/turn.rs"]
 mod turn;
 /// Viewport scrolling integration tests.
-#[path = "it/viewport.rs"]
 mod viewport;
 
 /// Scoped script lookup integration tests.
-#[path = "it/semantic_script.rs"]
 mod semantic_script;
 
 /// Immutable script observation integration tests.
-#[path = "it/snapshot_script.rs"]
 mod snapshot_script;

@@ -1021,7 +1021,7 @@ fn locate_recursive(
     let Some(child_clip) = node.view.content.intersect_rect(parent_clip) else {
         return Ok(own());
     };
-    for child in node.children.iter().rev() {
+    for child in core.paint_order(node_id).iter().rev() {
         if let Some(hit) = locate_recursive(core, *child, point, child_clip)? {
             return Ok(Some(hit));
         }

@@ -26,12 +26,20 @@ fn publish(revision: u64) -> Result<(), Error> {
 | Parse | ready | **strong**, `code`, and [guide](https://example.com/table) |
 | Geometry | ready | 界界 and 👩‍💻 occupy shared terminal cell widths |
 | Paint | visible | Only visible rows and cells paint |
-| Inspector | selectable | Full cells stay available beyond the compact preview |
+| Inspector | selectable | Full cells stay available beyond the compact preview: a long note wraps within its column, while the short Stage and State columns keep their widths, and a rule between rows keeps each wrapped row distinct |
 | Copy | exact | Embedded tab: a&#9;b |
 | Search | ready | Search also finds hidden-card-needle in full payloads |
 | Stream | receiving | Earlier content stays interactive |
-| Publish | queued | This ninth body row is outside the inline preview |
+| Publish | queued | Every body row appears in the preview |
 | Finish | pending | The inspector includes every body row |
+
+## A wide table
+
+| Option | Type | Default | Scope | Description | Interactions | Migration | Example |
+| ------ | ---- | ------- | ----- | ----------- | ------------ | --------- | ------- |
+| `wrap` | bool | true | reader | Wraps prose at word boundaries within the reading width | Ignored when the source view is active | Replaces the old `soft_wrap` flag | `wrap = false` |
+| `spacing` | u8 | 1 | blocks | Blank rows between blocks, capped at three | Cards keep their own padding | Unchanged | `spacing = 2` |
+| `glyphs` | enum | unicode | decoration | Chooses portable ASCII or Unicode rails, bullets, and rules | Tables and code cards follow the same preset | Previously named `charset` | `glyphs = "ascii"` |
 
 ## Checklist
 

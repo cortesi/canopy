@@ -10,7 +10,6 @@
 //! `UPDATE_GOLDEN=1` rewrites the baselines after an improvement.
 
 #[cfg(test)]
-#[path = "support/corpus.rs"]
 mod corpus;
 
 #[cfg(test)]

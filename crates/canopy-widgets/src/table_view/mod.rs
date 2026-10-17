@@ -1024,5 +1024,4 @@ impl Widget for TableView {
 }
 
 #[cfg(test)]
-#[path = "table/view_tests.rs"]
 mod tests;

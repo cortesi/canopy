@@ -4704,6 +4704,49 @@ pub mod table {
         pub column: TableKey,
     }
 
+    /// Bounds of a flowed table.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct FlowOptions {
+        /// Total width, separators and any margin mark included.
+        pub width: u32,
+        /// Most lines one value takes; a longer value ends in an ellipsis.
+        pub cell_lines: u32,
+        /// Separator, rule, and substitution glyphs.
+        pub glyphs: TableGlyphs,
+    }
+
+    /// A table fitted to a width, with its values wrapped into lines. The flow
+    /// retains exactly the snapshot it laid out.
+    #[derive(Debug)]
+    pub struct FlowTable {/* private fields */}
+
+    impl FlowTable {
+        /// Whether trailing columns are cut at the right margin.
+        pub fn cut(&self) -> bool;
+
+        /// Conservative owned bytes, excluding the shared snapshot.
+        pub fn derived_bytes(&self) -> usize;
+
+        /// Display lines, header and rules included.
+        pub fn height(&self) -> u32;
+
+        /// Paint the lines from `offset.y` into `area`, starting `offset.x`
+        /// cells into the table.
+        pub fn paint(
+            &self,
+            render: &mut Render<'_>,
+            area: Rect,
+            offset: Point,
+        ) -> canopy::error::Result<()>;
+
+        /// Fit the header and every body row to `options.width`, keeping the
+        /// leading columns that fit when not all do.
+        pub fn prepare(data: Arc<TableData>, options: FlowOptions) -> canopy::error::Result<Self>;
+
+        /// Widths of the shown leading columns.
+        pub fn widths(&self) -> &[u32];
+    }
+
     /// A pure prepared grid, retaining exactly the snapshot it measured.
     #[derive(Debug)]
     pub struct PreparedTable {/* private fields */}
@@ -4936,6 +4979,18 @@ pub mod table {
         pub tab: char,
         /// Other terminal controls.
         pub control: char,
+        /// Rule between the wrapped rows of a flowed table.
+        pub rule: char,
+        /// Crossing of a row rule and a column boundary.
+        pub cross: char,
+        /// End of a value cut short in a flowed table.
+        pub ellipsis: char,
+        /// Rule under the header of a flowed table.
+        pub header_rule: char,
+        /// Crossing of the header rule and a column boundary.
+        pub header_cross: char,
+        /// Broken right margin of a flowed table with columns cut.
+        pub more: char,
     }
 
     impl TableGlyphs {

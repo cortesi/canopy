@@ -346,7 +346,7 @@
 <script>
 const GALLERY = {
   "title": "Canopy widgets",
-  "generated": 1792103629,
+  "generated": 1792118023,
   "font_size": 14.0,
   "scale": 2.0,
   "sizes": [
@@ -817,7 +817,7 @@ const GALLERY = {
     {
       "id": "ascii-light-narrow",
       "title": "ASCII, light, narrow",
-      "caption": "The 40-cell reading region uses portable decoration and the light palette.",
+      "caption": "The whole gym uses a 40-column view, portable decoration, and the light palette.",
       "script": "markdowngym.luau",
       "shots": [
         {
@@ -938,6 +938,55 @@ const GALLERY = {
           "height": 1332
         }
       ]
+    },
+    {
+      "id": "gym-view",
+      "title": "Gym view selector",
+      "caption": "Every gym shares Full, Narrow, and Short views through Ctrl+l.",
+      "script": "tablegym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "gym-view-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "table-narrow",
+      "title": "Narrow gym",
+      "caption": "The table, status, and footer share the 40-column viewport.",
+      "script": "tablegym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "table-narrow-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "table-short",
+      "title": "Short gym",
+      "caption": "The whole gym fits within 12 rows, leaving horizontal navigation unchanged.",
+      "script": "tablegym.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "table-short-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界",
+            "🦀"
+          ]
+        }
+      ]
     }
   ],
   "sections": [
@@ -992,7 +1041,8 @@ const GALLERY = {
     "↵",
     "界",
     "👩",
-    "💻"
+    "💻",
+    "🦀"
   ]
 };
 

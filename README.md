@@ -104,3 +104,9 @@ Run `cargo run -p gyms -- --help` to list them. Like `examples/hello` and
 `examples/todo`, the gyms launch through `canopy_mcp::launch`, so
 `canopyctl` drives them: `--headless` serves MCP over stdio, and
 `examples/gyms/.canopyctl.toml` points the smoke suite at the list gym.
+
+In every gym, `Ctrl+l` opens the view selector. Choose Full (terminal size),
+Narrow (up to 40 columns), or Short (up to 12 rows) with the arrows or `j`/`k`,
+then press Enter. Esc cancels. The preset sizes the whole application, including
+its footer, help, and inspectors, as a smaller terminal would, and fits within
+the terminal. `Ctrl+g` shows contextual help.

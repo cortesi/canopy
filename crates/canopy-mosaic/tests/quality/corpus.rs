@@ -1,6 +1,5 @@
 //! The quality corpus: images and text matched in each tier, and the metrics
-//! that score them. The quality test and the contact sheet example share
-//! it.
+//! that score them.
 
 use std::{fs, path::PathBuf};
 
