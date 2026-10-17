@@ -44,7 +44,9 @@ rows when any of them wraps. When prose would need columns too narrow to hold
 it, the preview keeps the leading columns that fit, marks each line at its
 broken right margin, and labels the table with the columns it shows. Completed
 tables open a keyed TableView; a receiving trailing table remains literal source
-until it closes.
+until it closes. The table inspector shows every value in full: values wrap
+within their columns, the columns fit the inspector's width, and the grid
+scrolls sideways only when even narrowed columns do not fit.
 
 An inspector opens over the reader itself, so it fills the reader's area and
 leaves the rest of the host visible. It takes focus and the keys until it

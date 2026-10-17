@@ -790,3 +790,41 @@ fn shift_click_keeps_its_anchor_and_the_gutter_stops_at_the_body() -> Result<()>
     })?;
     Ok(())
 }
+
+#[test]
+fn a_wrapping_view_shows_every_value_in_full() -> Result<()> {
+    let notes = "one two three four five six seven eight nine ten eleven twelve";
+    let data = Arc::new(
+        TableData::builder("w", 1, ["Key", "Notes"])
+            .row("a", ["k1", notes])
+            .row("b", ["k2", "short"])
+            .row("c", ["k3", "also short"])
+            .build()
+            .unwrap(),
+    );
+    let prepared = Arc::new(prepare(
+        data,
+        TableLayoutOptions {
+            wrap: true,
+            ..Default::default()
+        },
+    )?);
+    let mut h = Harness::builder(TableView::new(prepared, Default::default()))
+        .register::<TableView>()
+        .size(30, 12)
+        .build()?;
+    h.render()?;
+    let screen = h.tbuf().lines().join("\n");
+    for word in notes.split(' ') {
+        assert!(screen.contains(word), "{word} is cut from:\n{screen}");
+    }
+    assert!(
+        screen.contains('─'),
+        "rules separate wrapped rows:\n{screen}"
+    );
+    // A page moves by the rows that fit, so the cursor lands on a row.
+    h.key(key::KeyCode::PageDown)?;
+    let cursor = with(&mut h, |view, _| Ok(view.cursor_index()))?;
+    assert!(cursor.is_some_and(|(row, _)| row > 0), "{cursor:?}");
+    Ok(())
+}

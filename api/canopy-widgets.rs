@@ -4765,6 +4765,16 @@ pub mod table {
         /// This excludes the immutable TableData model and its full cell payloads.
         pub fn derived_bytes(&self) -> usize;
 
+        /// Refit a wrapping layout to `room` cells, separators included.
+        ///
+        /// Columns that `max_width` cut back share any room beyond the prepared
+        /// widths, up to their natural widths, so their values wrap less. In a
+        /// narrower view, wide columns give up room down to a readable floor, so
+        /// their values wrap more; a view too narrow even for the floors keeps
+        /// them and scrolls. A layout that does not wrap returns its own
+        /// geometry.
+        pub fn fit(&self, room: u32) -> canopy::error::Result<Self>;
+
         /// Stable key for these layout options and measured widths.
         pub fn geometry_key(&self) -> u64;
 
@@ -4773,6 +4783,9 @@ pub mod table {
 
         /// Fixed gutter width, excluding the body grid.
         pub fn gutter_width(&self) -> u32;
+
+        /// Lines the header takes.
+        pub fn header_lines(&self) -> u32;
 
         /// Hit a grid using the same offsets and decoration widths as paint.
         pub fn hit_test(&self, area: Rect, window: TableWindow, point: Point) -> Option<TableHit>;
@@ -4787,6 +4800,17 @@ pub mod table {
             cursor: Option<&CellKey>,
             selection: &TableSelection,
         ) -> canopy::error::Result<TablePaintStats>;
+
+        /// Return the body row whose values reach canvas line `y`, if a row
+        /// does rather than a rule or nothing.
+        pub fn row_at(&self, y: u32) -> Option<usize>;
+
+        /// First canvas line and line count of a body row.
+        pub fn row_lines(&self, row: usize) -> Option<(u32, u32)>;
+
+        /// Count the rows from `row` on that fit in `lines` canvas lines, at
+        /// least one.
+        pub fn rows_within(&self, row: usize, lines: u32) -> usize;
 
         /// Bytes inspected for automatic measurement.
         pub fn sampled_bytes(&self) -> usize;
@@ -4806,6 +4830,9 @@ pub mod table {
 
         /// Prepared column widths.
         pub fn widths(&self) -> &[u32];
+
+        /// Return whether values wrap within their columns.
+        pub fn wraps(&self) -> bool;
     }
 
     /// Horizontal placement within a column.
@@ -5035,6 +5062,16 @@ pub mod table {
         pub sample_bytes: usize,
         /// Shared grid glyphs.
         pub glyphs: TableGlyphs,
+        /// Wrap values within their columns, so every value shows in full.
+        ///
+        /// A wrapping layout measures every value rather than a sample, so it
+        /// suits bounded tables. Columns take their natural widths up to
+        /// `max_width`, and longer values wrap at word boundaries over as many
+        /// lines as they need. Each row is as tall as its tallest value, and
+        /// rules separate the rows once any of them wraps.
+        /// [`PreparedTable::fit`] refits the columns to a view: wider, so values
+        /// wrap less, or narrower, so the grid scrolls only when it must.
+        pub wrap: bool,
     }
 
     /// Visible-work counters returned by grid painting.

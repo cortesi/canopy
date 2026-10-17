@@ -197,3 +197,120 @@ fn membership_deduplicates_each_axis_in_first_seen_order() {
     assert!(selection.contains("b", "x"));
     assert!(!selection.contains("missing", "x"));
 }
+
+/// A wrapping layout of a short key column and a notes column cut back to ten
+/// cells.
+fn wrapping() -> PreparedTable {
+    prepare(
+        Arc::new(
+            TableData::builder("w", 1, ["Key", "Notes"])
+                .row("a", ["k1", "one two three four five six"])
+                .row("b", ["k2", "short"])
+                .build()
+                .unwrap(),
+        ),
+        TableLayoutOptions {
+            wrap: true,
+            max_width: 10,
+            ..Default::default()
+        },
+    )
+    .unwrap()
+}
+#[test]
+fn a_wrapping_layout_gives_each_row_the_lines_its_values_need() {
+    let table = wrapping();
+    assert!(table.wraps());
+    assert_eq!(table.widths(), [3, 10], "notes stop at the width limit");
+    // "one two" / "three four" / "five six" at ten cells.
+    assert_eq!(table.row_lines(0), Some((0, 3)));
+    assert_eq!(
+        table.row_lines(1),
+        Some((4, 1)),
+        "a rule follows the wrapped row"
+    );
+    assert_eq!(table.size(), Size::new(14, 5));
+    assert_eq!(table.header_lines(), 1);
+    assert_eq!(table.row_at(2), Some(0));
+    assert_eq!(table.row_at(3), None, "the rule belongs to no row");
+    assert_eq!(table.row_at(4), Some(1));
+    assert_eq!(table.row_at(5), None);
+    assert_eq!(table.cell_rect(0, 1), Some(Rect::new(4, 0, 10, 3)));
+    assert_eq!(table.rows_within(0, 4), 1);
+    assert_eq!(table.rows_within(0, 5), 2);
+    let window = TableWindow::default();
+    let area = Rect::new(0, 0, 14, 6);
+    assert_eq!(
+        table.hit_test(area, window, Point::new(5, 3)),
+        Some(TableHit::Cell { row: 0, column: 1 }),
+        "every line of a wrapped row hits it"
+    );
+    assert_eq!(table.hit_test(area, window, Point::new(5, 4)), None);
+}
+#[test]
+fn fitting_widens_cut_back_columns_into_spare_room() {
+    let table = wrapping();
+    let roomy = table.fit(40).unwrap();
+    assert_eq!(
+        roomy.widths(),
+        [3, 27],
+        "room for every value keeps them whole"
+    );
+    assert_eq!(roomy.size().h, 2, "rows that do not wrap need no rules");
+    let some = table.fit(20).unwrap();
+    assert_eq!(
+        some.widths(),
+        [3, 16],
+        "the cut-back column takes the spare room"
+    );
+    assert_eq!(some.row_lines(0), Some((0, 2)));
+    let narrow = table.fit(8).unwrap();
+    assert_eq!(
+        narrow.widths(),
+        [3, 10],
+        "a narrow view keeps the limit and scrolls"
+    );
+    let plain = prepare(
+        Arc::new(
+            TableData::builder("p", 1, ["a"])
+                .row("r", ["a long value"])
+                .build()
+                .unwrap(),
+        ),
+        TableLayoutOptions::default(),
+    )
+    .unwrap();
+    assert!(!plain.wraps());
+    assert_eq!(plain.fit(80).unwrap().widths(), plain.widths());
+    assert_eq!(plain.row_lines(0), Some((0, 1)));
+}
+#[test]
+fn fitting_narrows_wide_columns_into_a_narrow_view() {
+    let table = prepare(
+        Arc::new(
+            TableData::builder("n", 1, ["Key", "Notes"])
+                .row(
+                    "a",
+                    ["k1", "one two three four five six seven eight nine ten"],
+                )
+                .build()
+                .unwrap(),
+        ),
+        TableLayoutOptions {
+            wrap: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(table.widths(), [3, 40]);
+    let narrow = table.fit(24).unwrap();
+    assert_eq!(narrow.widths(), [3, 20], "the wide column narrows to fit");
+    assert_eq!(narrow.size().w, 24);
+    assert_eq!(narrow.row_lines(0), Some((0, 3)));
+    let tiny = table.fit(10).unwrap();
+    assert_eq!(
+        tiny.widths(),
+        [3, 12],
+        "below the floor the column keeps it, and the grid scrolls"
+    );
+}

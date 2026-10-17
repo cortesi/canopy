@@ -29,7 +29,7 @@ use canopy_widgets::{
     editor::{Editor, LineNumbers, WrapMode},
     highlight::palette_style_rules,
     scrollbar::Scrollbar,
-    table::CellKey,
+    table::{self, CellKey, PreparedTable, TableLayoutOptions},
 };
 
 use crate::{
@@ -1008,7 +1008,10 @@ impl Markdown {
                 }
             }
             ObjectKind::Table => {
-                let Some(table) = p.prepared_table(object.unit_id) else {
+                let Some(table) = p
+                    .prepared_table(object.unit_id)
+                    .and_then(|table| full_table(&table))
+                else {
                     return Ok(());
                 };
                 InspectorContent::Table { table }
@@ -1572,7 +1575,10 @@ impl Markdown {
                     if let Some(id) = open.object {
                         match p.document.objects.iter().find(|o| o.id == id) {
                             Some(object) if matches!(object.kind, ObjectKind::Table) => {
-                                if let Some(table) = p.prepared_table(object.unit_id) {
+                                if let Some(table) = p
+                                    .prepared_table(object.unit_id)
+                                    .and_then(|table| full_table(&table))
+                                {
                                     open.handle.publish_table(ctx, table)?;
                                 }
                             }
@@ -1872,6 +1878,22 @@ impl Markdown {
             vec![(node, Rect::new(x, y + view.content.h, view.content.w, 1))],
         )
     }
+}
+
+/// Lay out a previewed table for its inspector, which shows every value in
+/// full: values wrap within their columns, and the grid scrolls sideways when
+/// the columns are wider than the inspector.
+fn full_table(preview: &PreparedTable) -> Option<Arc<PreparedTable>> {
+    table::prepare(
+        preview.data().clone(),
+        TableLayoutOptions {
+            glyphs: preview.glyphs(),
+            wrap: true,
+            ..TableLayoutOptions::default()
+        },
+    )
+    .ok()
+    .map(Arc::new)
 }
 
 impl Widget for Markdown {

@@ -22,6 +22,9 @@ pub use flow::{FlowOptions, FlowTable};
 
 /// How far the header band leans from the ground toward the foreground.
 const HEADER_LIFT: f32 = 0.18;
+/// The narrowest a wrapping column narrows to fit a view. A narrower column
+/// keeps its width, and a view too narrow for every floor scrolls instead.
+const WRAP_FLOOR: u32 = 12;
 
 /// A stable dataset, row, or column identity. Labels are independent of keys.
 pub type TableKey = Arc<str>;
@@ -505,6 +508,16 @@ pub struct TableLayoutOptions {
     pub sample_bytes: usize,
     /// Shared grid glyphs.
     pub glyphs: TableGlyphs,
+    /// Wrap values within their columns, so every value shows in full.
+    ///
+    /// A wrapping layout measures every value rather than a sample, so it
+    /// suits bounded tables. Columns take their natural widths up to
+    /// `max_width`, and longer values wrap at word boundaries over as many
+    /// lines as they need. Each row is as tall as its tallest value, and
+    /// rules separate the rows once any of them wraps.
+    /// [`PreparedTable::fit`] refits the columns to a view: wider, so values
+    /// wrap less, or narrower, so the grid scrolls only when it must.
+    pub wrap: bool,
 }
 impl Default for TableLayoutOptions {
     fn default() -> Self {
@@ -515,6 +528,7 @@ impl Default for TableLayoutOptions {
             sample_rows: 64,
             sample_bytes: 65536,
             glyphs: TableGlyphs::default(),
+            wrap: false,
         }
     }
 }
@@ -532,6 +546,10 @@ pub struct PreparedTable {
     starts: Vec<u32>,
     /// Total body canvas width including separators.
     width: u32,
+    /// Natural width of each column, which a wrapping layout may widen to.
+    natural: Vec<u32>,
+    /// Rows of a wrapping layout; `None` when every row takes one line.
+    rows: Option<RowLines>,
     /// Hash of every prepared geometry input.
     geometry_key: u64,
     /// Text bytes inspected by bounded width sampling.
@@ -539,6 +557,35 @@ pub struct PreparedTable {
     /// Precomputed retained geometry allocation estimate.
     derived_bytes: usize,
 }
+/// The lines of a wrapping layout's rows.
+#[derive(Debug)]
+struct RowLines {
+    /// Lines of each body row.
+    heights: Vec<u32>,
+    /// First canvas line of each body row.
+    tops: Vec<u32>,
+    /// Body lines, rules between rows included.
+    total: u32,
+    /// Lines the header takes.
+    header: u32,
+    /// Whether a rule follows each row but the last.
+    rules: bool,
+}
+
+/// Where one canvas line of the body falls.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BodyLine {
+    /// A line of a row's values.
+    Row {
+        /// Body row index.
+        row: usize,
+        /// Line within the row.
+        line: u32,
+    },
+    /// The rule after a row.
+    Rule,
+}
+
 /// Prepare widths once. Explicit widths require one positive width per column.
 pub fn prepare(data: Arc<TableData>, options: TableLayoutOptions) -> Result<PreparedTable> {
     if options.min_width == 0
@@ -551,7 +598,29 @@ pub fn prepare(data: Arc<TableData>, options: TableLayoutOptions) -> Result<Prep
     options.glyphs.validate()?;
     let mut sampled_bytes = 0;
     let mut widths = vec![options.min_width; data.columns.len()];
-    if options.widths.is_empty() {
+    let mut natural = Vec::new();
+    if !options.widths.is_empty() {
+        widths.clone_from(&options.widths);
+    } else if options.wrap {
+        // A wrapping layout shows every value, so it measures every value.
+        natural = vec![options.min_width; data.columns.len()];
+        let mut note = |cell: &TableCell, column: usize| {
+            sampled_bytes += cell.text.len();
+            natural[column] = natural[column].max(flow::measure(&cell.text).natural);
+        };
+        for (column, col) in data.columns.iter().enumerate() {
+            note(&col.label, column);
+        }
+        for row in &data.rows {
+            for (column, cell) in row.cells.iter().enumerate() {
+                note(cell, column);
+            }
+        }
+        widths = natural
+            .iter()
+            .map(|n| (*n).min(options.max_width))
+            .collect();
+    } else {
         let mut measure = |cell: &TableCell, column: usize| {
             let remaining = options.sample_bytes.saturating_sub(sampled_bytes);
             let mut end = remaining.min(cell.text.len());
@@ -570,43 +639,21 @@ pub fn prepare(data: Arc<TableData>, options: TableLayoutOptions) -> Result<Prep
                 measure(cell, i);
             }
         }
-    } else {
-        widths.clone_from(&options.widths);
     }
-    let mut starts = Vec::with_capacity(widths.len());
-    let mut width = 0u32;
-    for (i, w) in widths.iter().enumerate() {
-        if i > 0 {
-            width = width
-                .checked_add(1)
-                .ok_or_else(|| Error::Invalid("table width overflow".into()))?;
-        }
-        starts.push(width);
-        width = width
-            .checked_add(*w)
-            .ok_or_else(|| Error::Invalid("table width overflow".into()))?;
-    }
-    let mut hash = DefaultHasher::new();
-    options.hash(&mut hash);
-    widths.hash(&mut hash);
-    data.rows.len().hash(&mut hash);
-    for col in data.columns() {
-        col.alignment.hash(&mut hash);
-    }
-    let derived_bytes = size_of::<PreparedTable>()
-        .saturating_add(widths.capacity().saturating_mul(size_of::<u32>()))
-        .saturating_add(starts.capacity().saturating_mul(size_of::<u32>()))
-        .saturating_add(options.widths.capacity().saturating_mul(size_of::<u32>()));
-    Ok(PreparedTable {
-        data,
-        options,
-        widths,
-        starts,
-        width,
-        geometry_key: hash.finish(),
-        sampled_bytes,
-        derived_bytes,
-    })
+    PreparedTable::assemble(data, options, widths, natural, sampled_bytes)
+}
+/// Return the lines a row of `cells` takes when each wraps to its width.
+fn wrapped_lines(cells: &[TableCell], widths: &[u32]) -> u32 {
+    cells
+        .iter()
+        .zip(widths)
+        .map(|(cell, width)| {
+            let lines = flow::wrap(&cell.text, &flow::measure(&cell.text), *width, u32::MAX).len();
+            u32::try_from(lines).unwrap_or(u32::MAX)
+        })
+        .max()
+        .unwrap_or(1)
+        .max(1)
 }
 /// The separator role beside a cell role: header separators keep the header
 /// band.
@@ -684,6 +731,181 @@ pub struct TablePaintStats {
     pub rows_visited: usize,
 }
 impl PreparedTable {
+    /// Lay out `widths`, and in a wrapping layout the lines of every row.
+    fn assemble(
+        data: Arc<TableData>,
+        options: TableLayoutOptions,
+        widths: Vec<u32>,
+        natural: Vec<u32>,
+        sampled_bytes: usize,
+    ) -> Result<Self> {
+        let mut starts = Vec::with_capacity(widths.len());
+        let mut width = 0u32;
+        for (i, w) in widths.iter().enumerate() {
+            if i > 0 {
+                width = width
+                    .checked_add(1)
+                    .ok_or_else(|| Error::Invalid("table width overflow".into()))?;
+            }
+            starts.push(width);
+            width = width
+                .checked_add(*w)
+                .ok_or_else(|| Error::Invalid("table width overflow".into()))?;
+        }
+        let rows = options.wrap.then(|| {
+            let heights: Vec<u32> = data
+                .rows
+                .iter()
+                .map(|row| wrapped_lines(&row.cells, &widths))
+                .collect();
+            let labels: Vec<TableCell> = data.columns.iter().map(|c| c.label.clone()).collect();
+            let rules = heights.iter().any(|h| *h > 1);
+            let mut tops = Vec::with_capacity(heights.len());
+            let mut line = 0u32;
+            for height in &heights {
+                tops.push(line);
+                line = line
+                    .saturating_add(*height)
+                    .saturating_add(u32::from(rules));
+            }
+            RowLines {
+                total: line.saturating_sub(u32::from(rules && !heights.is_empty())),
+                header: wrapped_lines(&labels, &widths),
+                heights,
+                tops,
+                rules,
+            }
+        });
+        let mut hash = DefaultHasher::new();
+        options.hash(&mut hash);
+        widths.hash(&mut hash);
+        data.rows.len().hash(&mut hash);
+        for col in data.columns() {
+            col.alignment.hash(&mut hash);
+        }
+        let row_bytes = rows.as_ref().map_or(0, |rows| {
+            (rows.heights.capacity() + rows.tops.capacity()).saturating_mul(size_of::<u32>())
+        });
+        let derived_bytes = size_of::<Self>()
+            .saturating_add(widths.capacity().saturating_mul(size_of::<u32>()))
+            .saturating_add(starts.capacity().saturating_mul(size_of::<u32>()))
+            .saturating_add(natural.capacity().saturating_mul(size_of::<u32>()))
+            .saturating_add(row_bytes)
+            .saturating_add(options.widths.capacity().saturating_mul(size_of::<u32>()));
+        Ok(Self {
+            data,
+            options,
+            widths,
+            starts,
+            width,
+            natural,
+            rows,
+            geometry_key: hash.finish(),
+            sampled_bytes,
+            derived_bytes,
+        })
+    }
+    /// Return whether values wrap within their columns.
+    pub fn wraps(&self) -> bool {
+        self.rows.is_some()
+    }
+    /// Refit a wrapping layout to `room` cells, separators included.
+    ///
+    /// Columns that `max_width` cut back share any room beyond the prepared
+    /// widths, up to their natural widths, so their values wrap less. In a
+    /// narrower view, wide columns give up room down to a readable floor, so
+    /// their values wrap more; a view too narrow even for the floors keeps
+    /// them and scrolls. A layout that does not wrap returns its own
+    /// geometry.
+    pub fn fit(&self, room: u32) -> Result<Self> {
+        let base: Vec<u32> = if self.natural.is_empty() {
+            self.widths.clone()
+        } else {
+            self.natural
+                .iter()
+                .map(|n| (*n).min(self.options.max_width))
+                .collect()
+        };
+        let gaps = u32::try_from(base.len().saturating_sub(1)).unwrap_or(u32::MAX);
+        let room = room.saturating_sub(gaps);
+        let natural_sum = self.natural.iter().sum::<u32>();
+        let base_sum = base.iter().sum::<u32>();
+        let widths = if !self.wraps() || self.natural.is_empty() {
+            base
+        } else if natural_sum <= room {
+            self.natural.clone()
+        } else if base_sum <= room {
+            flow::distribute(&self.natural, &base, room)
+        } else {
+            let floor: Vec<u32> = base.iter().map(|width| (*width).min(WRAP_FLOOR)).collect();
+            if floor.iter().sum::<u32>() <= room {
+                flow::distribute(&base, &floor, room)
+            } else {
+                floor
+            }
+        };
+        Self::assemble(
+            self.data.clone(),
+            self.options.clone(),
+            widths,
+            self.natural.clone(),
+            self.sampled_bytes,
+        )
+    }
+    /// Lines the header takes.
+    pub fn header_lines(&self) -> u32 {
+        self.rows.as_ref().map_or(1, |rows| rows.header)
+    }
+    /// First canvas line and line count of a body row.
+    pub fn row_lines(&self, row: usize) -> Option<(u32, u32)> {
+        match &self.rows {
+            None => {
+                (row < self.data.rows.len()).then(|| (u32::try_from(row).unwrap_or(u32::MAX), 1))
+            }
+            Some(rows) => Some((*rows.tops.get(row)?, rows.heights[row])),
+        }
+    }
+    /// Return the body row whose values reach canvas line `y`, if a row
+    /// does rather than a rule or nothing.
+    pub fn row_at(&self, y: u32) -> Option<usize> {
+        match self.body_line(y)? {
+            BodyLine::Row { row, .. } => Some(row),
+            BodyLine::Rule => None,
+        }
+    }
+    /// Count the rows from `row` on that fit in `lines` canvas lines, at
+    /// least one.
+    pub fn rows_within(&self, row: usize, lines: u32) -> usize {
+        let Some(rows) = &self.rows else {
+            return usize::try_from(lines.max(1)).unwrap_or(usize::MAX);
+        };
+        let Some(top) = rows.tops.get(row) else {
+            return 1;
+        };
+        let end = top.saturating_add(lines);
+        let fits = rows.tops[row..]
+            .iter()
+            .zip(&rows.heights[row..])
+            .take_while(|(top, height)| top.saturating_add(**height) <= end)
+            .count();
+        fits.max(1)
+    }
+    /// Place canvas line `y` of the body.
+    fn body_line(&self, y: u32) -> Option<BodyLine> {
+        let Some(rows) = &self.rows else {
+            let row = usize::try_from(y).ok()?;
+            return (row < self.data.rows.len()).then_some(BodyLine::Row { row, line: 0 });
+        };
+        let row = rows.tops.partition_point(|top| *top <= y).checked_sub(1)?;
+        let line = y - rows.tops[row];
+        if line < rows.heights[row] {
+            Some(BodyLine::Row { row, line })
+        } else if line == rows.heights[row] && rows.rules && row + 1 < rows.heights.len() {
+            Some(BodyLine::Rule)
+        } else {
+            None
+        }
+    }
     /// Snapshot retained by this geometry.
     pub fn data(&self) -> &Arc<TableData> {
         &self.data
@@ -702,7 +924,11 @@ impl PreparedTable {
     }
     /// Total body canvas dimensions, excluding fixed chrome.
     pub fn size(&self) -> Size {
-        Size::new(self.width, self.data.rows.len() as u32)
+        let height = self
+            .rows
+            .as_ref()
+            .map_or(self.data.rows.len() as u32, |rows| rows.total);
+        Size::new(self.width, height)
     }
     /// Conservative retained geometry bytes, computed during preparation.
     /// This excludes the immutable TableData model and its full cell payloads.
@@ -719,14 +945,12 @@ impl PreparedTable {
     }
     /// Body rectangle for one indexed cell.
     pub fn cell_rect(&self, row: usize, column: usize) -> Option<Rect> {
-        if row >= self.data.rows.len() {
-            return None;
-        }
+        let (top, height) = self.row_lines(row)?;
         Some(Rect::new(
             *self.starts.get(column)?,
-            u32::try_from(row).ok()?,
+            top,
             *self.widths.get(column)?,
-            1,
+            height,
         ))
     }
     /// Resolve a canvas column with a binary prefix-sum lookup.
@@ -749,17 +973,17 @@ impl PreparedTable {
         } else {
             0
         };
-        if window.header && y == 0 {
+        let header = if window.header {
+            self.header_lines()
+        } else {
+            0
+        };
+        if y < header {
             return self
                 .column_at(x.checked_sub(gutter)?.saturating_add(window.offset.x))
                 .map(TableHit::Header);
         }
-        let row = y
-            .checked_sub(u32::from(window.header))?
-            .saturating_add(window.offset.y) as usize;
-        if row >= self.data.rows.len() {
-            return None;
-        }
+        let row = self.row_at((y - header).saturating_add(window.offset.y))?;
         if x < gutter {
             return Some(TableHit::Row(row));
         }
@@ -788,6 +1012,11 @@ impl PreparedTable {
         } else {
             0
         };
+        let header = if window.header {
+            self.header_lines().min(area.h)
+        } else {
+            0
+        };
         let body = Rect::new(area.tl.x + gutter, area.tl.y, area.w - gutter, area.h);
         // A gutter-only paint has no body columns to visit.
         let columns = if body.w == 0 {
@@ -809,25 +1038,43 @@ impl PreparedTable {
                 continue;
             }
             stats.columns_visited += 1;
-            if window.header {
-                self.paint_cell(
+            let shown = start < window.offset.x.saturating_add(body.w);
+            let label = &self.data.columns[column].label;
+            let label_lines = self.lines_of(label, column);
+            for line in 0..header {
+                self.paint_line(
                     render,
                     body,
                     window.offset.x,
-                    body.tl.y,
+                    body.tl.y + line,
                     column,
-                    &self.data.columns[column].label,
+                    label,
+                    label_lines.get(line as usize),
                     "table/header",
                 )?;
-                stats.labels += usize::from(start < window.offset.x.saturating_add(body.w));
             }
-            let rows = area.h.saturating_sub(u32::from(window.header));
-            for y in 0..rows {
-                let row = window.offset.y.saturating_add(y) as usize;
+            stats.labels += usize::from(header > 0 && shown);
+            let mut wrapped: Option<(usize, Vec<flow::Fragment>)> = None;
+            for y in header..area.h {
+                let canvas = window.offset.y.saturating_add(y - header);
                 stats.rows_visited += 1;
-                let Some(data_row) = self.data.rows.get(row) else {
+                let Some(placed) = self.body_line(canvas) else {
                     break;
                 };
+                let (row, line) = match placed {
+                    BodyLine::Row { row, line } => (row, line),
+                    BodyLine::Rule => {
+                        self.paint_rule(render, body, window.offset.x, body.tl.y + y, column)?;
+                        continue;
+                    }
+                };
+                let data_row = &self.data.rows[row];
+                let cell = &data_row.cells[column];
+                if wrapped.as_ref().is_none_or(|(at, _)| *at != row) {
+                    wrapped = Some((row, self.lines_of(cell, column)));
+                    stats.cells += usize::from(shown);
+                }
+                let fragments = wrapped.as_ref().map(|(_, lines)| lines.as_slice());
                 let selected = selection.contains(&data_row.key, &self.data.columns[column].key);
                 let active = cursor.is_some_and(|key| {
                     key.row == data_row.key && key.column == self.data.columns[column].key
@@ -839,36 +1086,92 @@ impl PreparedTable {
                 } else {
                     "table/cell"
                 };
-                self.paint_cell(
+                self.paint_line(
                     render,
                     body,
                     window.offset.x,
-                    body.tl.y + u32::from(window.header) + y,
+                    body.tl.y + y,
                     column,
-                    &data_row.cells[column],
+                    cell,
+                    fragments.and_then(|lines| lines.get(line as usize)),
                     style,
                 )?;
-                stats.cells += usize::from(start < window.offset.x.saturating_add(body.w));
             }
         }
         if gutter > 0 {
-            for y in u32::from(window.header)..area.h {
-                let row = window.offset.y.saturating_add(y - u32::from(window.header));
-                if row as usize >= self.data.rows.len() {
+            for y in header..area.h {
+                let canvas = window.offset.y.saturating_add(y - header);
+                let Some(placed) = self.body_line(canvas) else {
                     break;
+                };
+                if let BodyLine::Row { row, line: 0 } = placed {
+                    render.text(
+                        "table/gutter",
+                        Line::new(area.tl.x, area.tl.y + y, gutter),
+                        &format!("{} ", row + 1),
+                    )?;
                 }
-                render.text(
-                    "table/gutter",
-                    Line::new(area.tl.x, area.tl.y + y, gutter),
-                    &format!("{} ", row + 1),
-                )?;
             }
         }
         Ok(stats)
     }
-    #[expect(clippy::too_many_arguments, reason = "one clipped cell paint")]
-    /// Paint one visible clipped cell, including its preceding separator.
-    fn paint_cell(
+    /// Return the lines `cell` shows in `column`: its wrapped fragments, or
+    /// in a layout that does not wrap, the whole value on one line.
+    fn lines_of(&self, cell: &TableCell, column: usize) -> Vec<flow::Fragment> {
+        if self.rows.is_none() {
+            return vec![flow::Fragment {
+                bytes: 0..cell.text.len(),
+                width: display_width(&cell.text, self.widths[column]),
+                cut: false,
+            }];
+        }
+        flow::wrap(
+            &cell.text,
+            &flow::measure(&cell.text),
+            self.widths[column],
+            u32::MAX,
+        )
+    }
+    /// Paint the rule after a wrapped row across one column, crossing its
+    /// separator.
+    fn paint_rule(
+        &self,
+        render: &mut Render,
+        area: Rect,
+        offset: u32,
+        y: u32,
+        column: usize,
+    ) -> Result<()> {
+        let start = self.starts[column];
+        let mut glyph = [0; 4];
+        if column > 0 && start > offset && start - 1 < offset.saturating_add(area.w) {
+            render.text(
+                "table/separator",
+                Line::new(area.tl.x + (start - 1 - offset), y, 1),
+                self.options.glyphs.cross.encode_utf8(&mut glyph),
+            )?;
+        }
+        let left = start.max(offset);
+        let right = (start + self.widths[column]).min(offset.saturating_add(area.w));
+        if right > left {
+            let rule = self
+                .options
+                .glyphs
+                .rule
+                .to_string()
+                .repeat((right - left) as usize);
+            render.text(
+                "table/separator",
+                Line::new(area.tl.x + (left - offset), y, right - left),
+                &rule,
+            )?;
+        }
+        Ok(())
+    }
+    #[expect(clippy::too_many_arguments, reason = "one clipped line of one cell")]
+    /// Paint one visible clipped line of a cell, including its preceding
+    /// separator. A row line past the cell's own lines paints blank.
+    fn paint_line(
         &self,
         render: &mut Render,
         area: Rect,
@@ -876,6 +1179,7 @@ impl PreparedTable {
         y: u32,
         column: usize,
         cell: &TableCell,
+        fragment: Option<&flow::Fragment>,
         path: &str,
     ) -> Result<()> {
         let start = self.starts[column];
@@ -895,7 +1199,13 @@ impl PreparedTable {
         }
         let line = Rect::new(area.tl.x + (left - offset), y, right - left, 1);
         render.fill(path, line, ' ')?;
-        let measured = display_width(&cell.text, width);
+        let Some(fragment) = fragment else {
+            return Ok(());
+        };
+        let measured = fragment
+            .width
+            .saturating_add(u32::from(fragment.cut))
+            .min(width);
         let padding = match self.data.columns[column].alignment {
             TableAlignment::Left => 0,
             TableAlignment::Center => (width - measured) / 2,
@@ -903,7 +1213,16 @@ impl PreparedTable {
         };
         let base = render.resolve_style(path);
         let mut x = start + padding;
-        for (byte, g) in cell.text.grapheme_indices(true) {
+        let value = &cell.text[fragment.bytes.clone()];
+        let ellipsis = self.options.glyphs.ellipsis.to_string();
+        let cut = fragment
+            .cut
+            .then_some((fragment.bytes.end, ellipsis.as_str()));
+        let graphemes = value
+            .grapheme_indices(true)
+            .map(|(byte, g)| (fragment.bytes.start + byte, g))
+            .chain(cut);
+        for (byte, g) in graphemes {
             if x >= start + width || x >= offset.saturating_add(area.w) {
                 break;
             }

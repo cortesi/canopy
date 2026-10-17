@@ -52,13 +52,13 @@ pub struct FlowOptions {
 
 /// One line of a wrapped value.
 #[derive(Clone, Debug)]
-struct Fragment {
+pub(super) struct Fragment {
     /// Bytes of the full value shown on this line.
-    bytes: Range<usize>,
+    pub(super) bytes: Range<usize>,
     /// Display cells of those bytes.
-    width: u32,
+    pub(super) width: u32,
     /// Whether the value continues past this, its last shown line.
-    cut: bool,
+    pub(super) cut: bool,
 }
 
 /// One display line of a flowed table.
@@ -118,11 +118,11 @@ enum Token {
 
 /// The tokens of a value, and the widths that bound its column.
 #[derive(Debug, Default)]
-struct Measure {
+pub(super) struct Measure {
     /// Words and breaks of the measured bytes.
     tokens: Vec<Token>,
     /// Widest line without wrapping.
-    natural: u32,
+    pub(super) natural: u32,
     /// Widest word.
     word: u32,
     /// Whether any line holds two words.
@@ -153,7 +153,7 @@ fn close(m: &mut Measure, word: &mut Option<(usize, u32)>, at: usize, gap: &mut 
 }
 
 /// Split a value into words and breaks within the measured byte bound.
-fn measure(value: &str) -> Measure {
+pub(super) fn measure(value: &str) -> Measure {
     let mut end = value.len().min(CELL_BYTES);
     while !value.is_char_boundary(end) {
         end -= 1;
@@ -200,7 +200,7 @@ fn measure(value: &str) -> Measure {
 }
 
 /// Wrap measured tokens into at most `lines` fragments of `width` cells.
-fn wrap(value: &str, m: &Measure, width: u32, lines: u32) -> Vec<Fragment> {
+pub(super) fn wrap(value: &str, m: &Measure, width: u32, lines: u32) -> Vec<Fragment> {
     let lines = lines.max(1) as usize;
     let mut out: Vec<Fragment> = Vec::new();
     let mut current: Option<Fragment> = None;
@@ -292,7 +292,7 @@ fn wrap(value: &str, m: &Measure, width: u32, lines: u32) -> Vec<Fragment> {
 
 /// Give each column its floor, then share the remaining room in proportion
 /// to how far each column falls short of its natural width.
-fn distribute(natural: &[u32], floor: &[u32], room: u32) -> Vec<u32> {
+pub(super) fn distribute(natural: &[u32], floor: &[u32], room: u32) -> Vec<u32> {
     let mut widths = floor.to_vec();
     let extra = u64::from(room - floor.iter().sum::<u32>());
     let slack: Vec<u64> = natural

@@ -34,7 +34,12 @@ type Tracks = Vec<(NodeId, Rect)>;
 /// Immutable data and lightweight selection shared with the sole body node.
 struct BodyPaint {
     /// Immutable publication shared with the shell.
+    base: Arc<PreparedTable>,
+    /// The geometry that shows: the publication, or for a wrapping table the
+    /// publication refitted to the body's width.
     table: Arc<PreparedTable>,
+    /// The body width the shown geometry was fitted to.
+    fitted: Option<u32>,
     /// Stable keys of the current cursor.
     cursor: Option<CellKey>,
     /// Shared immutable axis membership.
@@ -53,8 +58,18 @@ impl Widget for TableBody {
     fn layout(&self) -> Layout {
         Layout::fill()
     }
-    fn canvas(&self, _view: Size, _ctx: &CanvasContext) -> Size {
-        self.paint.borrow().table.size()
+    fn canvas(&self, view: Size, _ctx: &CanvasContext) -> Size {
+        let mut paint = self.paint.borrow_mut();
+        // A wrapping table widens its cut-back columns into the body, so it
+        // refits whenever the body's width changes.
+        if paint.base.wraps()
+            && paint.fitted != Some(view.w)
+            && let Ok(fitted) = paint.base.fit(view.w)
+        {
+            paint.table = Arc::new(fitted);
+            paint.fitted = Some(view.w);
+        }
+        paint.table.size()
     }
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         self.interactive
@@ -138,7 +153,9 @@ impl TableView {
         let (vertical, horizontal) = scrollbars(&table);
         let paint = Rc::new(RefCell::new(BodyPaint {
             cursor: cursor.and_then(|(r, c)| table.data().cell_key(r, c)),
+            base: table.clone(),
             table: table.clone(),
+            fitted: None,
             selection: TableSelection::default(),
             stats: Default::default(),
         }));
@@ -179,10 +196,9 @@ impl TableView {
             .map(|view| view.scroll)
             .unwrap_or(Point::ZERO);
         let top = self
-            .table
-            .data()
-            .rows()
-            .get(offset.y as usize)
+            .geometry()
+            .row_at(offset.y)
+            .and_then(|row| self.table.data().rows().get(row))
             .map(|row| row.key.clone());
         self.end_drag(ctx)?;
         if ctx.has_mouse_capture() {
@@ -215,7 +231,8 @@ impl TableView {
             let origin = if same {
                 let y = top
                     .and_then(|key| self.table.data().row_index(&key))
-                    .map_or(offset.y, |row| row as u32);
+                    .and_then(|row| self.table.row_lines(row))
+                    .map_or(offset.y, |(top, _)| top);
                 Point::new(offset.x, y)
             } else {
                 Point::ZERO
@@ -464,10 +481,27 @@ impl TableView {
         }
         Ok(())
     }
+    /// Return the geometry that shows, which a wrapping table refits to the
+    /// body's width.
+    fn geometry(&self) -> Arc<PreparedTable> {
+        self.paint.borrow().table.clone()
+    }
+    /// Return the lines the fixed header takes.
+    fn header_lines(&self) -> u32 {
+        if self.options.header {
+            self.geometry().header_lines()
+        } else {
+            0
+        }
+    }
     /// Publish lightweight cursor and membership state to the body.
     fn sync_paint(&self) {
         let mut paint = self.paint.borrow_mut();
-        paint.table = self.table.clone();
+        if !Arc::ptr_eq(&paint.base, &self.table) {
+            paint.base = self.table.clone();
+            paint.table = self.table.clone();
+            paint.fitted = None;
+        }
         paint.cursor = self.cursor();
         paint.selection = self.selection.clone();
     }
@@ -537,7 +571,7 @@ impl TableView {
             return (vec![], vec![]);
         }
         let x = self.gutter();
-        let y = u32::from(self.options.header);
+        let y = self.header_lines();
         (
             vec![(
                 body.into(),
@@ -560,7 +594,7 @@ impl TableView {
     /// Return whether fixed chrome leaves no usable grid area.
     fn narrow(&self, ctx: &dyn ViewContext) -> bool {
         let area = ctx.view().outer;
-        area.w <= self.gutter() + 2 || area.h <= u32::from(self.options.header) + 1
+        area.w <= self.gutter() + 2 || area.h <= self.header_lines() + 1
     }
     /// Predict raw-key admission without changing table state.
     fn key_action(&self, key: Key) -> bool {
@@ -692,11 +726,11 @@ impl TableView {
             };
         }
         let (r, c) = self.cursor.unwrap_or((0, 0));
-        let page = self
+        let lines = self
             .body
             .and_then(|id| ctx.view_of(id.into()))
-            .map_or(1, |v| v.content.h.max(1))
-            .min(i32::MAX as u32) as i32;
+            .map_or(1, |v| v.content.h.max(1));
+        let page = i32::try_from(self.geometry().rows_within(r, lines)).unwrap_or(i32::MAX);
         match key.key {
             KeyCode::Left | KeyCode::Char('h') => self.move_cursor(ctx, 0, -1, key.mods.shift),
             KeyCode::Right | KeyCode::Char('l') => self.move_cursor(ctx, 0, 1, key.mods.shift),
@@ -807,12 +841,7 @@ impl Widget for TableView {
         })
     }
     fn layout(&self) -> Layout {
-        Layout::fill().padding(Edges::new(
-            u32::from(self.options.header),
-            1,
-            1,
-            self.gutter(),
-        ))
+        Layout::fill().padding(Edges::new(self.header_lines(), 1, 1, self.gutter()))
     }
     fn owns_scrollbars(&self) -> bool {
         true
@@ -861,29 +890,26 @@ impl Widget for TableView {
                 )?;
             }
         } else if let Some(body) = self.body.and_then(|id| ctx.view_of(id.into())) {
+            let geometry = self.geometry();
+            let header = self.header_lines();
             let window = TableWindow {
                 offset: body.scroll,
                 header: self.options.header,
                 row_numbers: false,
             };
             if self.options.header {
-                self.table.paint(
+                geometry.paint(
                     render,
-                    Rect::new(self.gutter(), 0, body.content.w, 1),
+                    Rect::new(self.gutter(), 0, body.content.w, header),
                     window,
                     None,
                     &TableSelection::default(),
                 )?;
             }
             if self.options.row_numbers {
-                self.table.paint(
+                geometry.paint(
                     render,
-                    Rect::new(
-                        0,
-                        u32::from(self.options.header),
-                        self.gutter(),
-                        body.content.h,
-                    ),
+                    Rect::new(0, header, self.gutter(), body.content.h),
                     TableWindow {
                         offset: body.scroll,
                         header: false,
@@ -955,11 +981,12 @@ impl Widget for TableView {
         };
         // Header, gutter, and body hits share the painted grid area, which
         // excludes the scrollbar row and column.
-        let header = u32::from(self.options.header);
+        let header = self.header_lines();
+        let geometry = self.geometry();
         if mouse.action == mouse::Action::Down
             && mouse.button == mouse::Button::Left
             && let Some(point) = ctx.view().outer_point(mouse.location)
-            && let Some(hit) = self.table.hit_test(
+            && let Some(hit) = geometry.hit_test(
                 Rect::new(
                     0,
                     0,
@@ -1000,11 +1027,15 @@ impl Widget for TableView {
         if self.drag && mouse.action == mouse::Action::Drag {
             let point = view.viewport_to_outer(mouse.location)?.clamped_point();
             let x = point.x.saturating_add(view.scroll.x);
-            let row = point.y.saturating_add(view.scroll.y) as usize;
-            let column = self
-                .table
+            let y = point.y.saturating_add(view.scroll.y);
+            // A rule between wrapped rows belongs to the row above it.
+            let row = geometry
+                .row_at(y)
+                .or_else(|| geometry.row_at(y.saturating_sub(1)))
+                .unwrap_or(usize::MAX);
+            let column = geometry
                 .column_at(x)
-                .or_else(|| self.table.column_at(x.saturating_sub(1)))
+                .or_else(|| geometry.column_at(x.saturating_sub(1)))
                 .unwrap_or(self.table.data().columns().len().saturating_sub(1));
             self.move_to(ctx, row, column, true)?;
             return Ok(EventOutcome::Handle);
