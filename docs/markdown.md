@@ -50,6 +50,12 @@ until it closes. The table inspector shows every value in full: values wrap
 within their columns, the columns fit the inspector's width, and the grid
 scrolls sideways only when even narrowed columns do not fit.
 
+Alerts take the colour of their tone on their rail and label. GitHub's five
+kinds set the tones, and the common labels of other tools, such as Obsidian's
+`info`, `success`, `question`, and `danger`, take the tone of the closest
+kind. `AlertTone::of` lists them. A marker must stand alone on the quote's
+first line, as GitHub requires; an unknown label stays quote text.
+
 An inspector opens over the reader itself, so it fills the reader's area and
 leaves the rest of the host visible. It takes focus and the keys until it
 closes, and the document's scrollbars hide while it covers the document.

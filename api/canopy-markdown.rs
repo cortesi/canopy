@@ -770,6 +770,44 @@ pub mod document {
     //! Source-addressed Markdown semantics, independent of widgets and geometry.
 
     pub use pulldown_cmark::Alignment;
+    /// An alert quote a block lies in.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct Alert {
+        /// The alert's tone.
+        pub tone: AlertTone,
+        /// The alert quote's rail, counting quote rails from the outermost.
+        pub depth: usize,
+    }
+
+    /// The semantic tone of an alert, which sets its colour.
+    ///
+    /// GitHub defines five alert kinds, and other tools, such as Obsidian,
+    /// MkDocs, Docusaurus, and reStructuredText, use overlapping vocabularies.
+    /// Each common label takes the tone of the GitHub kind closest in meaning.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub enum AlertTone {
+        /// Information worth noticing: note, info, todo, abstract, summary,
+        /// tldr, quote, cite, and example.
+        Note,
+        /// Advice or success: tip, hint, success, check, and done.
+        Tip,
+        /// Information needed to succeed: important.
+        Important,
+        /// Something that needs attention: warning, attention, question, help,
+        /// and faq.
+        Warning,
+        /// Risk or failure: caution, danger, error, failure, fail, missing, and
+        /// bug.
+        Caution,
+    }
+
+    impl AlertTone {
+        /// Return the tone of an alert label, ignoring case, or nothing for a
+        /// label no common vocabulary uses.
+        #[must_use]
+        pub fn of(label: &str) -> Option<Self>;
+    }
+
     /// One semantic leaf with source and container metadata.
     #[derive(Clone, Debug)]
     pub struct Block {
@@ -787,6 +825,8 @@ pub mod document {
         pub quote_depth: usize,
         /// Uppercase alert label on the first leaf of an alert quote.
         pub quote_kind: Option<String>,
+        /// The innermost alert quote this block lies in, if any.
+        pub alert: Option<Alert>,
         /// A generated bullet or parser-derived ordered marker.
         pub list_marker: Option<String>,
         /// Whether this leaf remains open at the receiving boundary.

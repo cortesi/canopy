@@ -13,7 +13,7 @@ use canopy::{
     error::Result,
     geom::{Point, Rect},
     render::Render,
-    style::{Attr, Mix, StyleMap, StyleRules, themes::Palette},
+    style::{Attr, Mix, PartialStyle, StyleMap, StyleRules, themes::Palette},
     text,
 };
 #[cfg(feature = "syntax")]
@@ -28,8 +28,8 @@ use canopy_widgets::{
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::document::{
-    Alignment, Block, BlockKind, CodeBlock, DocumentSnapshot, InlineRole, ReadingPosition,
-    ReadingRange, ReadingUnit,
+    AlertTone, Alignment, Block, BlockKind, CodeBlock, DocumentSnapshot, InlineRole,
+    ReadingPosition, ReadingRange, ReadingUnit,
 };
 
 /// Bounded row count for one derived presentation.
@@ -791,6 +791,7 @@ fn signature(block: &Block, unit: &ReadingUnit, object: Option<u64>, syntax_allo
     block.depth.hash(&mut hash);
     block.quote_depth.hash(&mut hash);
     block.quote_kind.hash(&mut hash);
+    block.alert.hash(&mut hash);
     block.list_marker.hash(&mut hash);
     block.provisional.hash(&mut hash);
     discriminant(&block.kind).hash(&mut hash);
@@ -1035,10 +1036,10 @@ fn prepare_block(
                 None => ground,
             };
             if let Some(level @ 3..=6) = heading {
-                prefix.push_str(&format!("H{level} "));
+                prefix.push(format!("H{level} "), "markdown/structure");
             }
             if let BlockKind::Footnote { label } = &block.kind {
-                prefix.push_str(&format!("[{label}] "));
+                prefix.push(format!("[{label}] "), "markdown/structure");
             }
             let prose = body.min(geometry.prose_width.clamp(1, 65535));
             wrap(
@@ -1172,15 +1173,87 @@ fn card_lines(text: &str) -> impl Iterator<Item = (usize, &str)> {
     })
 }
 
-/// Render quote rails, nesting, alert labels, and list markers.
-fn block_prefix(block: &Block, glyphs: GlyphPreset) -> String {
-    let mut prefix = String::new();
-    for _ in 0..block.quote_depth.min(16) {
-        prefix.push_str(if glyphs == GlyphPreset::Ascii {
-            "| "
-        } else {
-            "│ "
-        });
+/// The text before a block's lines: quote rails, nesting, an alert label, and
+/// a list marker, each part with its style.
+#[derive(Clone, Default)]
+struct Prefix {
+    /// Text and style of each part, left to right.
+    parts: Vec<(String, &'static str)>,
+}
+
+impl Prefix {
+    /// Append `text` in `style`.
+    fn push(&mut self, text: impl Into<String>, style: &'static str) {
+        self.parts.push((text.into(), style));
+    }
+
+    /// Return the display width.
+    fn width(&self) -> u32 {
+        self.parts.iter().map(|(text, _)| text::width(text)).sum()
+    }
+
+    /// Return the prefix of a wrapped line: the rails stay, in their styles,
+    /// and every other part becomes blank.
+    fn continuation(&self) -> Self {
+        let parts = self
+            .parts
+            .iter()
+            .map(|(text, style)| {
+                let blanked = text
+                    .graphemes(true)
+                    .map(|g| {
+                        if matches!(g, "│" | "|") {
+                            g.to_owned()
+                        } else {
+                            " ".repeat(text::grapheme_width(g))
+                        }
+                    })
+                    .collect();
+                (blanked, *style)
+            })
+            .collect();
+        Self { parts }
+    }
+
+    /// Draw the prefix into `row` from column `x`, within `width` cells.
+    fn draw(&self, row: &mut PreparedRow, x: u32, width: u32, glyphs: GlyphPreset) {
+        let mut column = 0;
+        for (text, style) in &self.parts {
+            if column >= width {
+                break;
+            }
+            decoration(row, x + column, text, width - column, style, None, glyphs);
+            column = column.saturating_add(text::width(text));
+        }
+    }
+}
+
+/// Return the style of an alert's rail and label.
+fn alert_style(tone: AlertTone) -> &'static str {
+    match tone {
+        AlertTone::Note => "markdown/alert/note",
+        AlertTone::Tip => "markdown/alert/tip",
+        AlertTone::Important => "markdown/alert/important",
+        AlertTone::Warning => "markdown/alert/warning",
+        AlertTone::Caution => "markdown/alert/caution",
+    }
+}
+
+/// Render quote rails, nesting, alert labels, and list markers. An alert's
+/// rail and label take the colour of its tone.
+fn block_prefix(block: &Block, glyphs: GlyphPreset) -> Prefix {
+    let mut prefix = Prefix::default();
+    let rail = if glyphs == GlyphPreset::Ascii {
+        "| "
+    } else {
+        "│ "
+    };
+    for depth in 1..=block.quote_depth.min(16) {
+        let style = block
+            .alert
+            .filter(|alert| alert.depth == depth)
+            .map_or("markdown/structure", |alert| alert_style(alert.tone));
+        prefix.push(rail, style);
     }
     let list_depth = block.depth.saturating_sub(block.quote_depth);
     let indent = if block.list_marker.is_some() {
@@ -1188,9 +1261,13 @@ fn block_prefix(block: &Block, glyphs: GlyphPreset) -> String {
     } else {
         list_depth
     };
-    prefix.push_str(&" ".repeat(indent.min(16) * 2));
+    prefix.push(" ".repeat(indent.min(16) * 2), "markdown/structure");
     if let Some(kind) = &block.quote_kind {
-        prefix.push_str(&format!("[{kind}] "));
+        let style = block
+            .alert
+            .map_or("markdown/structure", |alert| alert_style(alert.tone));
+        prefix.push(kind.clone(), style);
+        prefix.push(" ", "markdown/structure");
     }
     if let Some(marker) = &block.list_marker {
         let marker = match marker.as_str() {
@@ -1204,8 +1281,7 @@ fn block_prefix(block: &Block, glyphs: GlyphPreset) -> String {
             }
             _ => marker,
         };
-        prefix.push_str(marker);
-        prefix.push(' ');
+        prefix.push(format!("{marker} "), "markdown/structure");
     }
     prefix
 }
@@ -1330,7 +1406,7 @@ fn wrap(
     rows: &mut Vec<PreparedRow>,
     make_row: impl Fn() -> PreparedRow,
     value: &str,
-    prefix: &str,
+    prefix: &Prefix,
     unit: &ReadingUnit,
     layout: TextLayout,
 ) {
@@ -1340,29 +1416,12 @@ fn wrap(
         role,
         glyphs,
     } = layout;
-    let prefix_width = text::width(prefix).min(budget.saturating_sub(1));
+    let prefix_width = prefix.width().min(budget.saturating_sub(1));
     let available = budget.saturating_sub(prefix_width);
     let mut row = make_row();
-    decoration(
-        &mut row,
-        inset,
-        prefix,
-        prefix_width,
-        "markdown/structure",
-        None,
-        glyphs,
-    );
+    prefix.draw(&mut row, inset, prefix_width, glyphs);
     let mut column: u32 = 0;
-    let continuation = prefix
-        .graphemes(true)
-        .map(|g| {
-            if matches!(g, "│" | "|") {
-                g.to_owned()
-            } else {
-                " ".repeat(text::grapheme_width(g))
-            }
-        })
-        .collect::<String>();
+    let continuation = prefix.continuation();
     let mut word_start = true;
     let mut spans = unit.spans.iter().enumerate().collect::<Vec<_>>();
     spans.sort_by_key(|(_, span)| span.range.start);
@@ -1386,15 +1445,7 @@ fn wrap(
         if (g == "\n" || g == "\r\n") && !soft_break {
             rows.push(row);
             row = make_row();
-            decoration(
-                &mut row,
-                inset,
-                &continuation,
-                prefix_width,
-                "markdown/structure",
-                None,
-                glyphs,
-            );
+            continuation.draw(&mut row, inset, prefix_width, glyphs);
             column = 0;
             word_start = true;
             continue;
@@ -1410,15 +1461,7 @@ fn wrap(
             if word_width <= available && column.saturating_add(word_width) > available {
                 rows.push(row);
                 row = make_row();
-                decoration(
-                    &mut row,
-                    inset,
-                    &continuation,
-                    prefix_width,
-                    "markdown/structure",
-                    None,
-                    glyphs,
-                );
+                continuation.draw(&mut row, inset, prefix_width, glyphs);
                 column = 0;
             }
         }
@@ -1428,15 +1471,7 @@ fn wrap(
         if column > 0 && column.saturating_add(width) > available {
             rows.push(row);
             row = make_row();
-            decoration(
-                &mut row,
-                inset,
-                &continuation,
-                prefix_width,
-                "markdown/structure",
-                None,
-                glyphs,
-            );
+            continuation.draw(&mut row, inset, prefix_width, glyphs);
             column = 0;
             if whitespace {
                 continue;
@@ -1622,6 +1657,28 @@ pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
         .fg("markdown/link", palette.accent)
         .attr("markdown/link", Attr::Underline)
         .fg("markdown/structure", palette.faint_fg)
+        // An alert's rail and label take its tone's colour, as GitHub
+        // colours its alert boxes.
+        .style(
+            "markdown/alert/note",
+            PartialStyle::new().fg(palette.blue).attr(Attr::Bold),
+        )
+        .style(
+            "markdown/alert/tip",
+            PartialStyle::new().fg(palette.green).attr(Attr::Bold),
+        )
+        .style(
+            "markdown/alert/important",
+            PartialStyle::new().fg(palette.violet).attr(Attr::Bold),
+        )
+        .style(
+            "markdown/alert/warning",
+            PartialStyle::new().fg(palette.yellow).attr(Attr::Bold),
+        )
+        .style(
+            "markdown/alert/caution",
+            PartialStyle::new().fg(palette.red).attr(Attr::Bold),
+        )
         .fg("markdown/rule", palette.frame)
         .fg("markdown/provisional", palette.muted_fg)
         .bg("markdown/card", palette.panel_bg)

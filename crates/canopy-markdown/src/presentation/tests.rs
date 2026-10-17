@@ -662,3 +662,33 @@ fn cards_and_tables_label_only_what_their_formatting_cannot_show() {
         rows(&p)
     );
 }
+
+#[test]
+fn an_alert_rail_and_label_take_its_tone() {
+    let p = prepared(
+        "> [!caution]\n> risky words that wrap onto another line\n",
+        24,
+    );
+    // Neighbouring cells of one style share a run.
+    let first = |row: u32| {
+        let run = &p.row(row).unwrap().runs[0];
+        (run.text.clone(), run.role)
+    };
+    assert_eq!(
+        first(0),
+        ("│ CAUTION".to_owned(), "markdown/alert/caution"),
+        "the rail and the label take the tone"
+    );
+    let (rail, role) = first(1);
+    assert!(rail.starts_with('│'), "{rail:?}");
+    assert_eq!(
+        role, "markdown/alert/caution",
+        "a wrapped line keeps the coloured rail"
+    );
+    let plain = prepared("> just a quote\n", 24);
+    assert_eq!(
+        plain.row(0).unwrap().runs[0].role,
+        "markdown/structure",
+        "an ordinary quote keeps a quiet rail"
+    );
+}

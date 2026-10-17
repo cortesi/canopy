@@ -188,6 +188,8 @@ pub struct Block {
     pub quote_depth: usize,
     /// Uppercase alert label on the first leaf of an alert quote.
     pub quote_kind: Option<String>,
+    /// The innermost alert quote this block lies in, if any.
+    pub alert: Option<Alert>,
     /// A generated bullet or parser-derived ordered marker.
     pub list_marker: Option<String>,
     /// Whether this leaf remains open at the receiving boundary.
@@ -566,6 +568,96 @@ fn push_merged(nodes: &mut Vec<Node>, node: Node) {
     }
     nodes.push(node);
 }
+/// The semantic tone of an alert, which sets its colour.
+///
+/// GitHub defines five alert kinds, and other tools, such as Obsidian,
+/// MkDocs, Docusaurus, and reStructuredText, use overlapping vocabularies.
+/// Each common label takes the tone of the GitHub kind closest in meaning.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum AlertTone {
+    /// Information worth noticing: note, info, todo, abstract, summary,
+    /// tldr, quote, cite, and example.
+    Note,
+    /// Advice or success: tip, hint, success, check, and done.
+    Tip,
+    /// Information needed to succeed: important.
+    Important,
+    /// Something that needs attention: warning, attention, question, help,
+    /// and faq.
+    Warning,
+    /// Risk or failure: caution, danger, error, failure, fail, missing, and
+    /// bug.
+    Caution,
+}
+
+impl AlertTone {
+    /// Return the tone of an alert label, ignoring case, or nothing for a
+    /// label no common vocabulary uses.
+    #[must_use]
+    pub fn of(label: &str) -> Option<Self> {
+        Some(match label.to_ascii_lowercase().as_str() {
+            "note" | "info" | "todo" | "abstract" | "summary" | "tldr" | "quote" | "cite"
+            | "example" => Self::Note,
+            "tip" | "hint" | "success" | "check" | "done" => Self::Tip,
+            "important" => Self::Important,
+            "warning" | "attention" | "question" | "help" | "faq" => Self::Warning,
+            "caution" | "danger" | "error" | "failure" | "fail" | "missing" | "bug" => {
+                Self::Caution
+            }
+            _ => return None,
+        })
+    }
+}
+
+/// An alert quote a block lies in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Alert {
+    /// The alert's tone.
+    pub tone: AlertTone,
+    /// The alert quote's rail, counting quote rails from the outermost.
+    pub depth: usize,
+}
+
+/// Return the label of an alert marker that leads a quote, such as `info` in
+/// `> [!info]`, and remove the marker line from `children`.
+///
+/// A marker stands alone on the quote's first line, as GitHub requires; an
+/// Obsidian fold sign may follow it. Only a label with a tone counts, so an
+/// unknown marker stays text.
+fn take_alert_marker(children: &mut Vec<Node>) -> Option<String> {
+    let paragraph = children
+        .first_mut()
+        .filter(|node| matches!(node.tag, Some(Tag::Paragraph)))?;
+    let Some(Event::Text(text)) = paragraph
+        .children
+        .first()
+        .and_then(|node| node.event.as_ref())
+    else {
+        return None;
+    };
+    let label = text
+        .trim_end()
+        .trim_end_matches(['+', '-'])
+        .strip_prefix("[!")?
+        .strip_suffix(']')?;
+    AlertTone::of(label)?;
+    let label = label.to_owned();
+    paragraph.children.remove(0);
+    if matches!(
+        paragraph
+            .children
+            .first()
+            .and_then(|node| node.event.as_ref()),
+        Some(Event::SoftBreak | Event::HardBreak)
+    ) {
+        paragraph.children.remove(0);
+    }
+    if paragraph.children.is_empty() {
+        children.remove(0);
+    }
+    Some(label)
+}
+
 #[derive(Clone, Default)]
 /// Container metadata inherited by semantic leaves.
 struct Context {
@@ -575,6 +667,8 @@ struct Context {
     quote_depth: usize,
     /// Optional first-leaf alert label.
     quote_kind: Option<String>,
+    /// The innermost alert quote the leaf lies in.
+    alert: Option<Alert>,
     /// Generated list marker for the containing item.
     marker: Option<String>,
     /// Source start of the enclosing construct.
@@ -647,9 +741,29 @@ fn collect(nodes: &[Node], context: &Context, out: &mut Vec<Leaf>) {
                 c.quote_depth += 1;
                 c.depth += 1;
                 c.enclosing = node.range.start;
-                collect(&node.children, &c, out);
-                if let (Some(kind), Some(first)) = (kind, out.get_mut(start)) {
-                    first.context.quote_kind = Some(format!("{kind:?}").to_uppercase());
+                // The parser knows GitHub's five kinds; other common labels
+                // lead the quote as a marker line, which the alert drops.
+                let mut children = node.children.clone();
+                let label = match kind {
+                    Some(kind) => Some(format!("{kind:?}")),
+                    None => take_alert_marker(&mut children),
+                };
+                collect(&children, &c, out);
+                let Some((label, tone)) =
+                    label.and_then(|label| AlertTone::of(&label).map(|tone| (label, tone)))
+                else {
+                    continue;
+                };
+                if let Some(first) = out.get_mut(start) {
+                    first.context.quote_kind = Some(label.to_uppercase());
+                }
+                let alert = Alert {
+                    tone,
+                    depth: c.quote_depth,
+                };
+                // An alert nested inside this one keeps its own tone.
+                for leaf in &mut out[start..] {
+                    leaf.context.alert.get_or_insert(alert);
                 }
             }
             Some(Tag::FootnoteDefinition(label)) => {
@@ -1061,6 +1175,7 @@ impl Builder<'_> {
             depth: context.depth,
             quote_depth: context.quote_depth,
             quote_kind: context.quote_kind.clone(),
+            alert: context.alert,
             list_marker: context.marker.clone(),
             provisional,
         });
@@ -1173,6 +1288,7 @@ impl Builder<'_> {
             depth: 0,
             quote_depth: 0,
             quote_kind: None,
+            alert: None,
             list_marker: None,
             provisional: false,
         });
@@ -2084,6 +2200,58 @@ mod tests {
         assert_eq!(doc.blocks[1].quote_depth, 1);
         assert_eq!(doc.blocks[2].list_marker.as_deref(), Some("3."));
         assert_eq!(doc.blocks[3].list_marker.as_deref(), Some("4."));
+    }
+    #[test]
+    fn common_alert_labels_take_the_tone_of_the_closest_github_kind() {
+        use super::{Alert, AlertTone};
+
+        for (label, tone) in [
+            ("NOTE", AlertTone::Note),
+            ("info", AlertTone::Note),
+            ("Tip", AlertTone::Tip),
+            ("success", AlertTone::Tip),
+            ("IMPORTANT", AlertTone::Important),
+            ("question", AlertTone::Warning),
+            ("danger", AlertTone::Caution),
+            ("bug", AlertTone::Caution),
+        ] {
+            assert_eq!(AlertTone::of(label), Some(tone), "{label}");
+        }
+        assert_eq!(AlertTone::of("unknown"), None);
+
+        let doc = complete("> [!info]-\n> body text\n>\n> second\n");
+        assert_eq!(doc.blocks[0].quote_kind.as_deref(), Some("INFO"));
+        assert_eq!(doc.units[0].text, "body text", "the marker line goes");
+        let alert = Some(Alert {
+            tone: AlertTone::Note,
+            depth: 1,
+        });
+        assert_eq!(doc.blocks[0].alert, alert);
+        assert_eq!(doc.blocks[1].alert, alert, "every block of the alert");
+        assert_eq!(doc.blocks[1].quote_kind, None, "only the first is labelled");
+
+        let doc = complete("> [!WARNING]\n> careful\n");
+        assert_eq!(doc.blocks[0].quote_kind.as_deref(), Some("WARNING"));
+        assert_eq!(
+            doc.blocks[0].alert.map(|alert| alert.tone),
+            Some(AlertTone::Warning)
+        );
+
+        let doc = complete("> [!unknown]\n> stays text\n");
+        assert_eq!(doc.blocks[0].alert, None);
+        assert!(doc.units[0].text.starts_with("[!unknown]"));
+
+        let doc = complete("> [!tip]\n> outer\n>\n> > [!danger]\n> > inner\n");
+        let tones: Vec<_> = doc
+            .blocks
+            .iter()
+            .map(|block| block.alert.map(|alert| (alert.tone, alert.depth)))
+            .collect();
+        assert_eq!(
+            tones,
+            [Some((AlertTone::Tip, 1)), Some((AlertTone::Caution, 2)),],
+            "a nested alert keeps its own tone"
+        );
     }
     #[test]
     fn loose_list_continuations_do_not_repeat_item_markers() {
