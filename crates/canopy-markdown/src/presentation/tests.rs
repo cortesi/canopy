@@ -429,7 +429,8 @@ fn object_cursor_shares_one_ground_and_marks_its_rows_in_the_margin() {
     assert!(h.tbuf().contains_text_style("let a", &ground));
     assert!(!h.tbuf().contains_text_style("the guide", &ground));
     assert_eq!(margin(&h, 0).ch, ' ');
-    for y in card_start..card_start + 4 {
+    // An unlabelled card is its three code lines.
+    for y in card_start..card_start + 3 {
         let cell = margin(&h, y);
         assert_eq!((cell.ch, cell.style.bg), ('▌', object.bg), "row {y}");
     }
@@ -619,5 +620,45 @@ fn source_cards_and_table_previews_show_every_line() {
         flow.height() > 12,
         "the value wraps in full: {}",
         flow.height()
+    );
+}
+
+#[test]
+fn cards_and_tables_label_only_what_their_formatting_cannot_show() {
+    let rows = |p: &PresentationSnapshot| -> Vec<String> {
+        (0..p.height()).map(|row| row_text(p, row)).collect()
+    };
+    let p = prepared("```\nplain\n```\n", 40);
+    assert_eq!(
+        p.height(),
+        1,
+        "a plain block is its line alone: {:?}",
+        rows(&p)
+    );
+    let p = prepared("```rust\nfn main() {}\n```\n", 40);
+    let shown = rows(&p);
+    assert_eq!(shown[0].trim_end(), "rust", "the label names the language");
+    assert!(
+        !shown
+            .iter()
+            .any(|row| row.contains("lines") || row.contains("complete"))
+    );
+
+    let p = prepared("| a | b |\n| --- | --- |\n| 1 | 2 |\n", 40);
+    assert!(
+        !rows(&p).iter().any(|row| row.contains("table")),
+        "{:?}",
+        rows(&p)
+    );
+    assert_eq!(
+        p.blocks[0].table_start, 0,
+        "the grid starts at the block's top"
+    );
+
+    let p = prepared("<div>\nraw\n</div>\n", 40);
+    assert!(
+        !rows(&p).iter().any(|row| row.contains("Unrendered")),
+        "{:?}",
+        rows(&p)
     );
 }

@@ -920,25 +920,23 @@ fn prepare_block(
                 .ok()
                 .map(Arc::new);
                 if let Ok(prepared) = table::prepare(data, options) {
+                    // The grid shows that it is a table; a label says only
+                    // which columns the preview leaves out.
                     let columns = prepared.data().columns().len();
-                    let label = match &flow {
-                        Some(flow) if flow.cut() => {
-                            format!("table · {} of {columns} columns", flow.widths().len())
-                        }
-                        _ => "table".to_owned(),
-                    };
-                    let mut row = make_row();
-                    decoration(
-                        &mut row,
-                        inset,
-                        &label,
-                        body,
-                        "markdown/card/label",
-                        object,
-                        geometry.glyphs,
-                    );
-                    rows.push(row);
-                    table_start = 1;
+                    if let Some(flow) = flow.as_ref().filter(|flow| flow.cut()) {
+                        let mut row = make_row();
+                        decoration(
+                            &mut row,
+                            inset,
+                            &format!("{} of {columns} columns", flow.widths().len()),
+                            body,
+                            "markdown/card/label",
+                            object,
+                            geometry.glyphs,
+                        );
+                        rows.push(row);
+                        table_start = 1;
+                    }
                     let body_rows = prepared.data().rows().len();
                     table_height = flow
                         .as_ref()
@@ -979,18 +977,20 @@ fn prepare_block(
             );
         }
         BlockKind::Source { reason } => {
-            let mut row = make_row();
-            row.ground = "markdown/card";
-            decoration(
-                &mut row,
-                inset,
-                reason,
-                body,
-                "markdown/card/label",
-                object,
-                geometry.glyphs,
-            );
-            rows.push(row);
+            if !reason.is_empty() {
+                let mut row = make_row();
+                row.ground = "markdown/card";
+                decoration(
+                    &mut row,
+                    inset,
+                    reason,
+                    body,
+                    "markdown/card/label",
+                    object,
+                    geometry.glyphs,
+                );
+                rows.push(row);
+            }
             for (offset, line) in card_lines(&unit.text) {
                 let mut row = make_row();
                 row.ground = "markdown/card";
@@ -1090,8 +1090,12 @@ fn prepare_block(
     }
 }
 
-/// Prepare a code card: its label, then every line of the payload. Long
-/// lines are clipped at the card's edge, but no line is left out.
+/// Prepare a code card: a label, then every line of the payload. Long lines
+/// are clipped at the card's edge, but no line is left out.
+///
+/// The label names the fence's language, a block still receiving lines, and
+/// a fallback to plain text; the card shows the rest. A card with none of
+/// these has no label row.
 fn prepare_code(
     rows: &mut Vec<PreparedRow>,
     make_row: impl Fn() -> PreparedRow,
@@ -1106,41 +1110,33 @@ fn prepare_code(
         glyphs,
         ..
     } = layout;
-    let state = if code.receiving {
-        "receiving"
-    } else {
-        "complete"
-    };
-    let label = if code.info.is_empty() {
-        "code"
-    } else {
-        &code.info
-    };
-    let mut row = make_row();
-    row.ground = "markdown/card";
     let separator = if glyphs == GlyphPreset::Ascii {
         " | "
     } else {
         " · "
     };
-    let fallback = if !syntax_allowed && syntax_known(&code.info) {
-        format!("{separator}plain: syntax limit")
-    } else {
-        String::new()
-    };
-    decoration(
-        &mut row,
-        inset,
-        &format!(
-            "{label}{separator}{} lines{separator}{state}{fallback}",
-            code.line_count
-        ),
-        budget,
-        "markdown/card/label",
-        object,
-        glyphs,
-    );
-    rows.push(row);
+    let parts: Vec<&str> = [
+        (!code.info.is_empty()).then_some(code.info.as_str()),
+        code.receiving.then_some("receiving"),
+        (!syntax_allowed && syntax_known(&code.info)).then_some("plain: syntax limit"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    if !parts.is_empty() {
+        let mut row = make_row();
+        row.ground = "markdown/card";
+        decoration(
+            &mut row,
+            inset,
+            &parts.join(separator),
+            budget,
+            "markdown/card/label",
+            object,
+            glyphs,
+        );
+        rows.push(row);
+    }
     let syntax = if syntax_allowed {
         code_syntax(&code.info, &code.payload)
     } else {

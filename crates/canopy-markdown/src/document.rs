@@ -110,8 +110,6 @@ pub struct CodeBlock {
     pub info: String,
     /// Normalized code bytes, preserving content whitespace and final LF.
     pub payload: Arc<str>,
-    /// Content line count without a synthetic final caret row.
-    pub line_count: usize,
     /// Whether the trailing code block is still receiving content.
     pub receiving: bool,
 }
@@ -161,7 +159,8 @@ pub enum BlockKind {
     Table(MarkdownTable),
     /// Exact source retained for inspection or literal presentation.
     Source {
-        /// The visible explanation for source-card degradation.
+        /// Why the block shows as source rather than rendered, or empty for
+        /// source that always shows as itself, such as HTML.
         reason: String,
     },
     /// A thematic rule without readable decoration.
@@ -922,12 +921,10 @@ impl Builder<'_> {
                         CodeBlockKind::Fenced(info) => info.to_string(),
                         CodeBlockKind::Indented => String::new(),
                     };
-                    let line_count = payload.lines().count();
                     (
                         BlockKind::Code(CodeBlock {
                             info,
                             payload: Arc::from(payload.as_str()),
-                            line_count,
                             receiving: provisional,
                         }),
                         UnitKind::Code,
@@ -952,9 +949,11 @@ impl Builder<'_> {
                         (BlockKind::Table(table), UnitKind::Table, payload, true)
                     }
                 }
+                // The terminal shows HTML and front matter as source, so
+                // their cards need no explanation.
                 Some(Tag::HtmlBlock | Tag::MetadataBlock(_)) => (
                     BlockKind::Source {
-                        reason: "Unrendered source".into(),
+                        reason: String::new(),
                     },
                     UnitKind::Source,
                     raw.to_owned(),
@@ -1725,7 +1724,6 @@ mod tests {
             panic!("code");
         };
         assert_eq!(&*code.payload, "x\n");
-        assert_eq!(code.line_count, 1);
         assert!(!code.receiving);
         let unit = &doc.units[0];
         let range = ReadingRange {
@@ -1745,7 +1743,7 @@ mod tests {
         assert!(matches!(&doc.blocks[0].kind,BlockKind::Code(code) if code.receiving));
         assert!(doc.objects.is_empty());
         assert!(
-            matches!(&complete("```\n").blocks[0].kind,BlockKind::Code(code) if code.line_count==0)
+            matches!(&complete("```\n").blocks[0].kind,BlockKind::Code(code) if code.payload.is_empty())
         );
     }
     #[test]

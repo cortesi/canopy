@@ -809,7 +809,8 @@ pub mod document {
         Table(MarkdownTable),
         /// Exact source retained for inspection or literal presentation.
         Source {
-            /// The visible explanation for source-card degradation.
+            /// Why the block shows as source rather than rendered, or empty for
+            /// source that always shows as itself, such as HTML.
             reason: String,
         },
         /// A thematic rule without readable decoration.
@@ -828,8 +829,6 @@ pub mod document {
         pub info: String,
         /// Normalized code bytes, preserving content whitespace and final LF.
         pub payload: Arc<str>,
-        /// Content line count without a synthetic final caret row.
-        pub line_count: usize,
         /// Whether the trailing code block is still receiving content.
         pub receiving: bool,
     }
