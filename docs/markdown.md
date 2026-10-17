@@ -46,6 +46,10 @@ broken right margin, and labels the table with the columns it shows. Completed
 tables open a keyed TableView; a receiving trailing table remains literal source
 until it closes.
 
+An inspector opens over the reader itself, so it fills the reader's area and
+leaves the rest of the host visible. It takes focus and the keys until it
+closes, and the document's scrollbars hide while it covers the document.
+
 Source preserves Markdown syntax, tabs, CRLF, and final-newline bytes. Its display
 substitutes unsafe terminal controls, but exact copy uses accepted source ranges.
 `MarkdownSource` is also usable on its own: prepare a `PreparedSource` off the UI

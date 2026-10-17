@@ -83,7 +83,7 @@ struct Nodes {
 }
 /// Pinned inspector provenance, independent of subsequent publications.
 struct OpenInspector {
-    /// Modal overlay handle used for events, readiness, and dismissal.
+    /// Modal handle used for events, readiness, and dismissal.
     handle: InspectorHandle,
     /// Pinned inspected object, or None for an outline or full source.
     object: Option<u64>,
@@ -1123,8 +1123,14 @@ impl Markdown {
             return Err(invalid("Close the current inspector first"));
         }
         self.shared.borrow_mut().follow = Follow::Paused;
+        let body = self
+            .nodes
+            .as_ref()
+            .map(|nodes| nodes.body)
+            .ok_or_else(|| invalid("The reader is not mounted"))?;
         let handle = Inspector::open_configured(
             ctx,
+            body,
             self.options.executor.clone(),
             content,
             self.options.clipboard,
@@ -1844,6 +1850,10 @@ impl Markdown {
     }
     /// Compute scrollbar tracks from the current active child allocation.
     fn tracks(&self, ctx: &dyn ViewContext) -> ScrollbarTracks {
+        // An open inspector covers the document, whose position it hides.
+        if self.inspector.is_some() {
+            return (vec![], vec![]);
+        }
         let Some(node) = self.navigation_node() else {
             return (vec![], vec![]);
         };
@@ -1891,9 +1901,12 @@ impl Widget for Markdown {
         )?;
         ctx.set_hidden(search.into(), true)?;
         let body = ctx.add_child(owner, Container::stack().with_name("markdown_body"))?;
+        // The override replaces the container's own layout, so it names the
+        // stack again: an open inspector lies over the reading surface.
         ctx.set_layout_override(
             body.into(),
             Layout::fill()
+                .direction(Direction::Stack)
                 .padding(Edges {
                     left: 0,
                     right: 1,

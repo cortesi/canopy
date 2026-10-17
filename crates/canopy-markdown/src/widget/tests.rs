@@ -1565,3 +1565,42 @@ fn vi_letters_jump_to_document_edges_in_both_views() {
             .unwrap();
     }
 }
+
+#[test]
+fn an_inspector_covers_the_reader_body_and_nothing_beyond_it() {
+    let (mut harness, manual) =
+        fixture("# Title\n\nbody\n", ViewType::Rendered, false, false, false);
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.inspect_source(ctx))
+        .unwrap();
+    manual.run_until_idle();
+    harness.canopy.turn(TurnInput::Prepare).unwrap();
+    harness.render().unwrap();
+    let (body, inspector) = harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            let body = reader.nodes.as_ref().unwrap().body;
+            let inspector: NodeId = reader.inspector.as_ref().unwrap().handle.node.into();
+            assert_eq!(
+                ctx.parent_of(inspector),
+                Some(body),
+                "the inspector mounts in the reader's body"
+            );
+            Ok((
+                ctx.view_of(body).unwrap().content,
+                ctx.view_of(inspector).unwrap().outer,
+            ))
+        })
+        .unwrap();
+    assert_eq!(inspector, body, "the inspector fills the body");
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            assert_eq!(
+                reader.tracks(ctx),
+                (vec![], vec![]),
+                "the document's scrollbars hide under the inspector"
+            );
+            Ok(())
+        })
+        .unwrap();
+}

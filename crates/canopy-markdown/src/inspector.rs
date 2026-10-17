@@ -17,7 +17,7 @@ use canopy::{
         InputSpec, ModalBindings, ModalOptions, ModalToken,
         key::{Key, KeyCode},
     },
-    layout::{CanvasContext, Direction, Edges, Layout, RevealAlign},
+    layout::{CanvasContext, Direction, Layout, RevealAlign},
     render::Render,
     runtime::{NodeWakeHandle, PollLifetime, WakeOutcome},
     tree::{FocusDirection, FocusScope},
@@ -458,12 +458,26 @@ impl MarkdownInspector {
         executor: MarkdownExecutor,
         content: InspectorContent,
     ) -> Result<InspectorHandle> {
-        Self::open_configured(ctx, executor, content, true, DEFAULT_COPY_BYTES, 256 * 1024)
+        let parent = ctx.node_id();
+        Self::open_configured(
+            ctx,
+            parent,
+            executor,
+            content,
+            true,
+            DEFAULT_COPY_BYTES,
+            256 * 1024,
+        )
     }
     /// Mount and open a modal with its host capabilities and preparation
     /// bounds.
+    ///
+    /// The inspector mounts in `parent`, a stack inside the calling owner,
+    /// and fills it, so it covers the reader it inspects and nothing else.
+    /// The modal still takes focus and the keys while it is open.
     pub fn open_configured(
         ctx: &mut dyn Context,
+        parent: NodeId,
         executor: MarkdownExecutor,
         content: InspectorContent,
         allow_copy: bool,
@@ -477,7 +491,7 @@ impl MarkdownInspector {
         inspector.allow_copy = allow_copy;
         inspector.copy_limit = copy_limit.min(EVENT_BYTES);
         inspector.source_options.syntax_limit = syntax_limit;
-        let node = ctx.add_modal(inspector)?;
+        let node = ctx.add_child(parent, inspector)?;
         let view: &dyn ViewContext = ctx;
         let (focus, wake) = view.with_widget(node, |widget: &Self| {
             Ok((
@@ -489,7 +503,8 @@ impl MarkdownInspector {
             owner: owner_id,
             modal: node.into(),
             initial_focus: focus.unwrap_or(node.into()),
-            dim_target: Some(owner_id),
+            // The inspector covers the reader, so nothing beside it dims.
+            dim_target: None,
             bindings: ModalBindings::Framework {
                 groups: &[Self::BINDINGS],
                 intents: &[],
@@ -1049,7 +1064,7 @@ impl Widget for Inspector {
         NodeName::convert("markdown_inspector")
     }
     fn layout(&self) -> Layout {
-        Layout::fill().padding(Edges::all(1))
+        Layout::fill()
     }
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
@@ -1597,8 +1612,9 @@ mod tests {
         inspector: Option<InspectorHandle>,
     }
     impl Widget for Owner {
+        // The inspector mounts in its owner, over the owner's own drawing.
         fn layout(&self) -> Layout {
-            Layout::fill()
+            Layout::fill().direction(Direction::Stack)
         }
         fn name(&self) -> NodeName {
             NodeName::convert("inspector_owner")
@@ -1663,38 +1679,30 @@ mod tests {
         }
     }
     #[test]
-    fn modal_background_covers_backdrop_between_controls_and_in_empty_reader_rows() -> Result<()> {
-        let (mut harness, _, handle, _) = fixture(outline())?;
+    fn the_inspector_covers_its_owner_between_controls_and_in_empty_reader_rows() -> Result<()> {
+        let (mut harness, owner, handle, _) = fixture(outline())?;
         harness.render()?;
-        let body = harness.canopy.with_root_context(|ctx| {
-            let reader = ctx.with_widget(handle.node, |inspector: &Inspector| {
-                Ok(inspector.reader_parent.unwrap())
-            })?;
-            Ok(ctx.view_of(ctx.parent_of(reader).unwrap()).unwrap().outer)
+        let (owner, inspector) = harness.canopy.with_root_context(|ctx| {
+            Ok((
+                ctx.view_of(owner).unwrap().outer,
+                ctx.view_of(handle.node.into()).unwrap().outer,
+            ))
         })?;
-        let lines = harness.tbuf().lines();
-        assert!(
-            lines[0].starts_with('~'),
-            "the outer margin still shows the backdrop"
+        assert_eq!(
+            inspector, owner,
+            "the inspector fills its owner, and only it"
         );
-        for row in lines
-            .iter()
-            .skip(usize::try_from(body.tl.y).unwrap())
-            .take(body.h as usize)
-        {
+        for row in harness.tbuf().lines() {
             assert!(
-                row.chars()
-                    .skip(usize::try_from(body.tl.x).unwrap())
-                    .take(body.w as usize)
-                    .all(|ch| ch != '~'),
-                "backdrop leaked through the modal: {row}"
+                !row.contains('~'),
+                "the owner's drawing leaked through the inspector: {row}"
             );
         }
         Ok(())
     }
 
     #[test]
-    fn owner_removal_reclaims_root_sibling_without_a_timer() -> Result<()> {
+    fn owner_removal_reclaims_the_inspector_without_a_timer() -> Result<()> {
         let (mut harness, owner, handle, _) = fixture(outline())?;
         harness
             .canopy
@@ -1731,8 +1739,15 @@ mod tests {
         })?;
         handle.wake()?;
         harness.canopy.turn(TurnInput::Prepare)?;
-        assert_eq!(harness.find_nodes("**/markdown_inspector/")?.len(), 1);
+        // The inspector travels with its detached owner, and lives on.
         assert_ne!(handle.wake()?, WakeOutcome::Expired);
+        harness.canopy.with_root_context(|ctx| {
+            let root = ctx.root_id();
+            ctx.attach(root, owner)?;
+            ctx.set_hidden(owner, false)
+        })?;
+        harness.canopy.turn(TurnInput::Prepare)?;
+        assert_eq!(harness.find_nodes("**/markdown_inspector/")?.len(), 1);
         Ok(())
     }
     #[test]
@@ -1839,6 +1854,7 @@ mod tests {
         let handle = harness.canopy.with_context(owner, |ctx| {
             Inspector::open_configured(
                 ctx,
+                owner,
                 executor,
                 InspectorContent::Code {
                     info: String::new(),
