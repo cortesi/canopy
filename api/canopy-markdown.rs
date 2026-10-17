@@ -136,6 +136,9 @@ impl Markdown {
     /// Inspect a pinned snapshot of the displayed source.
     pub fn inspect_source(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Whether an inspector is open over the reader.
+    pub fn inspector_open(&self) -> bool;
+
     /// Whether an open inspector has published all requested preparation.
     pub fn inspector_ready(&self, ctx: &dyn ViewContext) -> canopy::error::Result<bool>;
 

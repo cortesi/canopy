@@ -1372,6 +1372,10 @@ impl Markdown {
     pub fn action_status(&self) -> String {
         self.action_status.clone()
     }
+    /// Whether an inspector is open over the reader.
+    pub fn inspector_open(&self) -> bool {
+        self.inspector.is_some()
+    }
     /// Whether an open inspector has published all requested preparation.
     pub fn inspector_ready(&self, ctx: &dyn ViewContext) -> Result<bool> {
         self.inspector
