@@ -28,6 +28,7 @@ use canopy_widgets::{
     Container, SearchBar, TableView,
     editor::{Editor, LineNumbers, WrapMode},
     highlight::palette_style_rules,
+    mosaic::{Tier, tier_for},
     scrollbar::Scrollbar,
     table::{self, CellKey, PreparedTable, TableLayoutOptions},
 };
@@ -147,6 +148,8 @@ pub struct Markdown {
     generation: u64,
     /// Latest allocated body width observed during render.
     geometry_width: u32,
+    /// Block mosaics of the terminal's glyphs, observed during render.
+    mosaic: Tier,
     /// Identity of the most recent admitted replaceable request.
     last_submitted: Option<(u64, u64, ViewType, GeometryKey, u64, u64)>,
     /// Retained query and explicit matching policy.
@@ -256,6 +259,7 @@ impl Markdown {
             deadline: None,
             generation: 1,
             geometry_width: 0,
+            mosaic: Tier::Full,
             last_submitted: None,
             query: SearchQuery::default(),
             query_generation: 0,
@@ -1436,6 +1440,7 @@ impl Markdown {
             glyphs: self.options.glyphs,
             prose_width: self.options.prose_width,
             syntax_limit: self.options.syntax_limit,
+            mosaic: self.mosaic,
             ..Default::default()
         }
     }
@@ -1963,8 +1968,10 @@ impl Widget for Markdown {
         render.fill("markdown", ctx.view().outer_rect_local(), ' ')?;
         if let Some(nodes) = &self.nodes {
             let width = ctx.view_of(nodes.body).map_or(0, |v| v.content.w);
-            if width != self.geometry_width {
+            let mosaic = tier_for(render.glyphs());
+            if width != self.geometry_width || mosaic != self.mosaic {
                 self.geometry_width = width;
+                self.mosaic = mosaic;
                 self.generation += 1;
                 self.dirty = true;
                 self.last_submitted = None;

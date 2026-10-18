@@ -154,7 +154,7 @@ fn fixture_contains_release_acceptance_cases_and_tiny_viewports_settle() -> Resu
             ready(&mut h)?;
         }
     }
-    assert!(h.tbuf().contains_text("Field notes"));
+    assert!(h.tbuf().contains_text("A reader for"));
     Ok(())
 }
 

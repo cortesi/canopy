@@ -38,7 +38,7 @@ end
 ready()
 gym("focus_reader")
 canopy.assert(gym("focused"), "the reading surface accepts focus")
-canopy.assert(canopy.screen_text():find("Field notes", 1, true) ~= nil, "the realistic fixture is rendered")
+canopy.assert(canopy.screen_text():find("A reader for", 1, true) ~= nil, "the realistic fixture is rendered")
 local epoch = gym("epoch")
 local revision = gym("displayed_revision")
 

@@ -339,7 +339,10 @@ Keep prose left aligned. Tables and code cards may use the full body width. Rese
 scrollbar gutter from the start so its appearance cannot change wrapping. The status strip
 and search prompt sit outside the document canvas.
 
-Headings are ordinary terminal text led by their `#` markers, and every level is bold in
+A first-level heading that fits the reading width draws in the smallest big text face,
+without markers: two rows of octants where the terminal draws them, else half blocks. Each
+of its rows reads as the whole heading, so positions, search, and selection mark the title.
+Other headings are ordinary terminal text led by their `#` markers, and every level is bold in
 one hue, the palette's orange, which no other document element uses. Each level below the
 first mixes that hue a step toward the ground. Markers and underlines are quieter than the
 text. H1, H2, and H3 are underlined from the marker to the end of the widest line, with `━`,

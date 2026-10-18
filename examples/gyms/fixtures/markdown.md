@@ -137,8 +137,6 @@ The source inspector includes unpainted definitions and the final newline.
 
 # Heading weights
 
-Every level sits in one run here, so their weights compare side by side.
-
 ## Second-level heading
 
 Body text under the second level.

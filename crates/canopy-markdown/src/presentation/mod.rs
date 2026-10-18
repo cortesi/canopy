@@ -11,7 +11,7 @@ use std::{
 
 use canopy::{
     error::Result,
-    geom::{Point, Rect},
+    geom::{Point, Rect, Size},
     render::Render,
     style::{Attr, AttrSet, Mix, Paint, PartialStyle, StyleMap, StyleRules, themes::Palette},
     text,
@@ -19,7 +19,9 @@ use canopy::{
 #[cfg(feature = "syntax")]
 use canopy_widgets::highlight::Grammar;
 use canopy_widgets::{
+    BigFace, BigSize, BigText,
     highlight::{SpanStyle, palette_style_rules},
+    mosaic::Tier,
     table::{
         self, FlowOptions, FlowTable, PreparedTable, TableAlignment, TableCell, TableColumn,
         TableData, TableGlyphs, TableLayoutOptions, TableRow, TableSelection, TableWindow,
@@ -40,6 +42,9 @@ const MAX_PREPARED_ROWS: usize = 262_144;
 const OBJECT_TINT: f32 = 0.25;
 /// Every readable byte of a unit, for whole-unit overlay tests.
 const WHOLE_UNIT: Range<usize> = 0..usize::MAX;
+/// Rows of the area that a big heading lays out in, more than any face of
+/// the smallest size takes.
+const BIG_HEADING_ROWS: u32 = 8;
 /// How far each heading level mixes the heading hue toward the ground.
 const HEADING_STEP: f32 = 0.08;
 /// How much further a heading's markers and underline mix toward the ground.
@@ -116,6 +121,8 @@ pub struct GeometryKey {
     pub prose_width: u32,
     /// Cumulative eligible code-payload bytes admitted for automatic syntax.
     pub syntax_limit: usize,
+    /// Block mosaics that the terminal draws, which big headings draw with.
+    pub mosaic: Tier,
 }
 impl Default for GeometryKey {
     fn default() -> Self {
@@ -125,6 +132,7 @@ impl Default for GeometryKey {
             spacing: 1,
             prose_width: 88,
             syntax_limit: 256 * 1024,
+            mosaic: Tier::Full,
         }
     }
 }
@@ -875,6 +883,26 @@ fn signature(
     hash.finish()
 }
 
+/// Return the rows that draw `text` in the smallest big text face, or none
+/// when it is wider than `width`. Terminals with octants draw it two rows
+/// high; others draw it in half blocks, four rows high with descenders.
+fn big_heading(text: &str, width: u32, mosaic: Tier) -> Option<Vec<String>> {
+    let size = if mosaic == Tier::Full {
+        BigSize::MaxRows(2)
+    } else {
+        BigSize::Exact {
+            face: BigFace::Compact,
+            scale: 1,
+        }
+    };
+    let rows = BigText::new(text)
+        .with_size(size)
+        .with_tier(mosaic)
+        .rows_in(Size::new(width, BIG_HEADING_ROWS));
+    let fits = !rows.is_empty() && rows.iter().all(|row| text::width(row) <= width);
+    fits.then_some(rows)
+}
+
 /// Prepare bounded display rows and any shared table preview. A `leading`
 /// block opens the document.
 fn prepare_block(
@@ -1114,20 +1142,49 @@ fn prepare_block(
             }
             let prose = body.min(geometry.prose_width.clamp(1, 65535));
             let text_start = rows.len();
-            wrap(
-                &mut rows,
-                make_row,
-                &unit.text,
-                &prefix,
-                unit,
-                TextLayout {
-                    inset,
-                    budget: prose,
-                    role,
-                    glyphs: geometry.glyphs,
-                },
-                &INLINE_ROLES[level.unwrap_or(0)],
-            );
+            // A first-level heading that fits draws in big text, without
+            // markers. Each row reads as the whole heading, so a reading
+            // position, search match, or selection in it marks the title.
+            let big = (level == Some(1) && geometry.glyphs == GlyphPreset::Unicode)
+                .then(|| {
+                    big_heading(
+                        &unit.text,
+                        prose.saturating_sub(card_inset - inset),
+                        geometry.mosaic,
+                    )
+                })
+                .flatten();
+            if let Some(lines) = &big {
+                for line in lines {
+                    let mut row = make_row();
+                    rail(&mut row, &rails, inset, body, geometry.glyphs);
+                    add(
+                        &mut row,
+                        card_inset,
+                        line.clone(),
+                        Some(0..unit.text.len()),
+                        "markdown/h1",
+                        None,
+                        None,
+                    );
+                    rows.push(row);
+                }
+            } else {
+                wrap(
+                    &mut rows,
+                    make_row,
+                    &unit.text,
+                    &prefix,
+                    unit,
+                    TextLayout {
+                        inset,
+                        budget: prose,
+                        role,
+                        glyphs: geometry.glyphs,
+                    },
+                    &INLINE_ROLES[level.unwrap_or(0)],
+                );
+            }
             // The top three levels are underlined, lighter at each level, from
             // the markers to the end of the widest line. ASCII starts from
             // Setext's `=` and `-`.
@@ -1144,7 +1201,7 @@ fn prepare_block(
                 let end = rows[text_start..]
                     .iter()
                     .flat_map(|row| row.runs.iter())
-                    .map(|run| run.x + text::width(run.text.trim_end()) as u32)
+                    .map(|run| run.x + text::width(run.text.trim_end()))
                     .max()
                     .unwrap_or(card_inset);
                 let width = end.saturating_sub(card_inset);

@@ -45,18 +45,17 @@ fn heading_inline_roles_link_hits_and_copy_have_independent_expected_values() {
         "# Title\n\nalpha **bold** [site](https://example.com)\n",
         40,
     );
-    assert_eq!(row_text(&p, 0), "# Title");
-    // The underline runs from the marker to the end of the text.
-    assert_eq!(row_text(&p, 1), "━".repeat(7));
-    assert_eq!(row_text(&p, 2), "alpha bold site");
+    // The title draws in two rows of big text, then its underline.
+    assert!(row_text(&p, 2).chars().all(|c| c == '━'));
+    assert_eq!(row_text(&p, 3), "alpha bold site");
     assert!(
-        p.row(2)
+        p.row(3)
             .unwrap()
             .runs
             .iter()
             .any(|r| r.role == "markdown/strong" && r.text == "bold")
     );
-    let hit = p.hit(Point { x: 13, y: 2 }).unwrap();
+    let hit = p.hit(Point { x: 13, y: 3 }).unwrap();
     assert!(hit.object.is_some());
     assert_eq!(
         hit.reading,
@@ -238,12 +237,52 @@ fn headings_show_markers_and_underline_the_top_three_levels() {
 }
 
 #[test]
+fn a_first_level_heading_draws_in_big_text_that_reads_as_the_heading() {
+    let big = |text: &str, width: u32, mosaic: Tier, glyphs: GlyphPreset| {
+        PresentationSnapshot::prepare(
+            document(text),
+            GeometryKey {
+                width,
+                spacing: 0,
+                mosaic,
+                glyphs,
+                ..Default::default()
+            },
+            None,
+        )
+    };
+    // Octants draw the title in two rows; every one reads as the heading.
+    let p = big("# Title\n", 40, Tier::Full, GlyphPreset::Unicode);
+    for row in 0..2 {
+        let runs = &p.row(row).unwrap().runs;
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].reading, Some(0..5));
+        assert!(!runs[0].text.contains("Title"));
+    }
+    assert!(row_text(&p, 2).chars().all(|c| c == '━'));
+    assert_eq!(p.row_for_unit(p.document.units[0].id, 3), 0);
+    // Half blocks take more rows.
+    let p = big("# Title\n", 40, Tier::Blocks, GlyphPreset::Unicode);
+    assert!(
+        row_text(&p, 2)
+            .chars()
+            .all(|c| matches!(c, '▀' | '▄' | '█' | ' '))
+    );
+    // A title too wide for the view, and ASCII, keep the text heading.
+    let wide = format!("# {}\n", "Wide ".repeat(12));
+    let p = big(&wide, 40, Tier::Full, GlyphPreset::Unicode);
+    assert!(row_text(&p, 0).starts_with("# Wide"));
+    let p = big("# Title\n", 40, Tier::Full, GlyphPreset::Ascii);
+    assert_eq!(row_text(&p, 0), "# Title");
+}
+
+#[test]
 fn a_wrapped_heading_hangs_under_its_text_and_is_underlined_to_its_widest_line() {
-    let p = prepared("# alphabet beta gamma\n", 18);
-    assert_eq!(row_text(&p, 0).trim_end(), "# alphabet beta");
-    assert_eq!(row_text(&p, 1), "  gamma");
+    let p = prepared("## alphabet beta gamma\n", 19);
+    assert_eq!(row_text(&p, 0).trim_end(), "## alphabet beta");
+    assert_eq!(row_text(&p, 1), "   gamma");
     // The trailing space of the wrapped line is not underlined.
-    assert_eq!(row_text(&p, 2), "━".repeat(15));
+    assert_eq!(row_text(&p, 2), "─".repeat(16));
 }
 
 #[test]

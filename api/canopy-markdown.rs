@@ -31,6 +31,7 @@ use canopy::{
     style::{StyleMap, StyleRules, themes::Palette},
 };
 use canopy_widgets::{
+    Tier,
     editor::{LineNumbers, TextPosition, TextRange, WrapMode},
     table::PreparedTable,
 };
@@ -1538,6 +1539,8 @@ pub mod presentation {
         pub prose_width: u32,
         /// Cumulative eligible code-payload bytes admitted for automatic syntax.
         pub syntax_limit: usize,
+        /// Block mosaics that the terminal draws, which big headings draw with.
+        pub mosaic: Tier,
     }
 
     /// Decorations are geometry, so changing this preset requires preparation.
