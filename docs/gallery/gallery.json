@@ -1,6 +1,6 @@
 {
   "title": "Canopy widgets",
-  "generated": 1792280653,
+  "generated": 1792281805,
   "font_size": 14.0,
   "scale": 2.0,
   "sizes": [
@@ -248,8 +248,8 @@
     },
     {
       "id": "code-inspector",
-      "title": "Complete code",
-      "caption": "The code inspector includes the lines omitted from the card and preserves its payload.",
+      "title": "Code inspector",
+      "caption": "The code inspector pins the exact payload for selection and copy.",
       "script": "markdown.luau",
       "shots": [
         {
@@ -299,6 +299,20 @@
       ]
     },
     {
+      "id": "wide-table-inspector",
+      "title": "Wide table",
+      "caption": "Every value shows in full: values wrap within columns that fit the inspector.",
+      "script": "markdown.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "wide-table-inspector-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
       "id": "search",
       "title": "Search hidden payloads",
       "caption": "Search covers complete code, table, and source-card content.",
@@ -314,6 +328,34 @@
             "👩",
             "💻"
           ]
+        }
+      ]
+    },
+    {
+      "id": "quotes",
+      "title": "Quote rails",
+      "caption": "A quote's rail runs unbroken past the lists, code cards, tables, and nested quotes it holds.",
+      "script": "markdown.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "quotes-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "alerts",
+      "title": "Alert tones",
+      "caption": "Alerts colour their rail and label by tone; common labels from other tools take the closest kind.",
+      "script": "markdown.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "alerts-110x36.png",
+          "width": 1870,
+          "height": 1332
         }
       ]
     },
@@ -346,12 +388,7 @@
           "size": "110x36",
           "file": "source-110x36.png",
           "width": 1870,
-          "height": 1332,
-          "missing": [
-            "界",
-            "👩",
-            "💻"
-          ]
+          "height": 1332
         }
       ]
     },
@@ -484,6 +521,20 @@
             "👩",
             "💻"
           ]
+        }
+      ]
+    },
+    {
+      "id": "narrow-table-scrolled",
+      "title": "Sideways scroll",
+      "caption": "A grid too wide for the inspector even with narrowed columns scrolls sideways.",
+      "script": "markdown.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "narrow-table-scrolled-110x36.png",
+          "width": 1870,
+          "height": 1332
         }
       ]
     },

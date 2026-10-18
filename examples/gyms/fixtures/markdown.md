@@ -52,12 +52,58 @@ fn publish(revision: u64) -> Result<(), Error> {
 7. Preserve the parser's ordered numbering.
 8. Keep the next item consecutive.
 
+## Quotes and alerts
+
 > A quiet quote rail keeps long wrapped notes together. Resize the reader to
 > check hanging indentation and the relationship between text and decoration.
+>
+> The rail runs unbroken past every block the quote holds:
+>
+> - a list item
+> - another item
+>
+> ```text
+> a code card inside the quote
+> ```
+>
+> | Quoted | Table |
+> | ------ | ----- |
+> | rail   | stays |
+>
+> > A nested quote adds a rail of its own.
+
+> An adjacent quote keeps a gap between its rail and the last.
 
 > [!NOTE]
 > The gym records copy and browser requests. It does not touch the clipboard
 > or open a browser. The immutable request log is available to smoke tests.
+
+> [!TIP]
+> A tip takes the green tone.
+
+> [!IMPORTANT]
+> Important takes the violet tone.
+
+> [!WARNING]
+> A warning takes the yellow tone.
+
+> [!CAUTION]
+> Caution takes the red tone.
+
+> [!info]
+> Labels from other tools take the tone of the closest kind: info is a note.
+
+> [!question]-
+> A question is a warning, and Obsidian's fold sign is dropped.
+
+> [!success]
+> An alert can hold another.
+>
+> > [!danger]
+> > The inner alert keeps its own tone, and the outer rail keeps its tone.
+
+> [!UNKNOWN]
+> An unknown label stays quote text.
 
 ### Text, images, and references
 
