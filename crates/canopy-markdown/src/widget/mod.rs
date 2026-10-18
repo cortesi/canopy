@@ -2,7 +2,7 @@
 
 use std::{
     cell::RefCell,
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     fmt::Display,
     rc::Rc,
     result::Result as StdResult,
@@ -43,9 +43,12 @@ use crate::{
     executor::{
         CopyInput, PreparedView, SearchOutput, WorkHandle, WorkRequest, WorkResult, WorkSearch,
     },
-    host::{HostAction, HostOutcome, HostReply, HostRequest, Requests},
+    host::{
+        HostAction, HostOutcome, HostReply, HostRequest, Requests, Resource, ResourceKind,
+        ResourceRequest,
+    },
     inspector::{Inspector, InspectorContent, InspectorEvent, InspectorHandle, OutlineEntry},
-    presentation::{GeometryKey, style_rules},
+    presentation::{GeometryKey, ImageInfo, ImagePixels, ImageSizes, style_rules},
     search::{SearchAddress, SearchCase, SearchLimits, SearchMode, SearchQuery, SearchResults},
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, SourceAnchor, SourceMatches, SourceOptions},
@@ -169,6 +172,16 @@ pub struct Markdown {
     inspector: Option<OpenInspector>,
     /// Destination of the link the inspector shows, which its Open follows.
     inspected_link: Option<ResolvedLink>,
+    /// What the reader has done about each image block's image, by
+    /// destination: asked for it, or settled it.
+    image_states: HashMap<String, ImageState>,
+    /// Resource requests awaiting the host's reply, by id, with the
+    /// destination each names.
+    resource_requests: HashMap<u64, String>,
+    /// The last resource request id; ids are never reused.
+    resource_id: u64,
+    /// What the reader knows of each supplied image, for layout.
+    image_sizes: Arc<ImageSizes>,
     /// Bounded immutable effects awaiting host delivery or acknowledgement.
     requests: Requests,
     /// Latest status of an explicitly activated host effect.
@@ -216,6 +229,19 @@ type ScrollbarTracks = (Vec<(NodeId, Rect)>, Vec<(NodeId, Rect)>);
 
 /// Jumps the reader keeps for its host before it drops the oldest.
 const JUMP_LIMIT: usize = 32;
+/// Resource requests awaiting replies at once.
+const RESOURCE_LIMIT: usize = 8;
+/// Images one document asks for at most.
+const IMAGE_LIMIT: usize = 64;
+
+/// What the reader has done about one image.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ImageState {
+    /// Asked the host for it.
+    Requested,
+    /// Holds its answer, or never asks for it, as for a remote image.
+    Settled,
+}
 /// Conditional Rendered activation route that Source can decline.
 const ACTIVATE_INTENT: &str = "markdown.activate";
 /// Conditional forward Rendered object traversal route.
@@ -277,6 +303,10 @@ impl Markdown {
             query_error: None,
             inspector: None,
             inspected_link: None,
+            image_states: HashMap::new(),
+            resource_requests: HashMap::new(),
+            resource_id: 0,
+            image_sizes: Arc::default(),
             requests: Requests::default(),
             action_status: String::new(),
             failure: None,
@@ -342,6 +372,11 @@ impl Markdown {
         self.jumps.clear();
         // An action's status belongs to the document that took it.
         self.action_status.clear();
+        // So do its images, which a new document asks for again.
+        self.image_states.clear();
+        self.resource_requests.clear();
+        self.image_sizes = Arc::default();
+        self.shared.borrow_mut().overlays.images = ImagePixels::default();
         self.acknowledged = if receiving {
             0
         } else {
@@ -1329,6 +1364,103 @@ impl Markdown {
             },
         )
     }
+    /// Drain requests for the images the displayed document's image blocks
+    /// show, each once per document. Remote images are never fetched; they
+    /// keep their alt text. Without the `images` option, nothing is asked.
+    pub fn take_resource_requests(&mut self) -> Vec<ResourceRequest> {
+        let mut requests = Vec::new();
+        if !self.options.images {
+            return requests;
+        }
+        let Some(p) = self.shared.borrow().presentation.clone() else {
+            return requests;
+        };
+        if p.document.source.epoch != self.epoch() {
+            return requests;
+        }
+        for block in &p.document.blocks {
+            let BlockKind::Image(image) = &block.kind else {
+                continue;
+            };
+            let destination = &image.link.destination;
+            if self.image_states.contains_key(destination) {
+                continue;
+            }
+            if self.resource_requests.len() >= RESOURCE_LIMIT
+                || self.image_states.len() >= IMAGE_LIMIT
+            {
+                break;
+            }
+            let ResolvedLink::Local(target) = image.link.resolve(self.base_url().as_ref()) else {
+                self.image_states
+                    .insert(destination.clone(), ImageState::Settled);
+                continue;
+            };
+            self.resource_id += 1;
+            self.image_states
+                .insert(destination.clone(), ImageState::Requested);
+            self.resource_requests
+                .insert(self.resource_id, destination.clone());
+            requests.push(ResourceRequest {
+                id: self.resource_id,
+                epoch: self.epoch(),
+                target,
+                kind: ResourceKind::Image,
+            });
+        }
+        requests
+    }
+    /// Whether an image block of the displayed document still waits for its
+    /// image: not yet asked for, or asked for and unanswered.
+    #[command]
+    pub fn images_pending(&self) -> bool {
+        if !self.options.images {
+            return false;
+        }
+        let shared = self.shared.borrow();
+        let Some(p) = shared.presentation.as_ref() else {
+            return false;
+        };
+        p.document.blocks.iter().any(|block| {
+            matches!(&block.kind, BlockKind::Image(image)
+                if self.image_states.get(&image.link.destination) != Some(&ImageState::Settled))
+        })
+    }
+    /// Take the host's answer to a resource request. An answer for another
+    /// document, or for an unknown request, changes nothing. An image lays
+    /// out again at its own aspect; a failure shows its reason.
+    pub fn supply_resource(
+        &mut self,
+        ctx: &mut dyn Context,
+        id: u64,
+        resource: Resource,
+    ) -> Result<()> {
+        let Some(destination) = self.resource_requests.remove(&id) else {
+            return Ok(());
+        };
+        let info = match resource {
+            Resource::Image(image) => {
+                let info = ImageInfo::Size {
+                    width: image.width(),
+                    height: image.height(),
+                };
+                self.shared
+                    .borrow_mut()
+                    .overlays
+                    .images
+                    .images
+                    .insert(destination.clone(), image);
+                info
+            }
+            Resource::Missing => ImageInfo::Failed("not found".into()),
+            Resource::Failed(reason) => ImageInfo::Failed(reason),
+        };
+        self.image_states
+            .insert(destination.clone(), ImageState::Settled);
+        Arc::make_mut(&mut self.image_sizes).insert(destination, info);
+        self.generation += 1;
+        self.schedule(ctx, true)
+    }
     /// Drain the positions the reader left by its own jumps (fragments,
     /// block and heading anchors, footnotes, and the outline), oldest first.
     /// The reader keeps at most a few; a host with a history drains them
@@ -1609,6 +1741,7 @@ impl Markdown {
             limits: self.options.parse_limits,
             generation: self.generation,
             search,
+            images: self.image_sizes.clone(),
         };
         let Some(lane) = &self.lane else {
             return Ok(());

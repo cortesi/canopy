@@ -54,7 +54,11 @@ fn read_rgba(path: &Path) -> Result<RgbaImage> {
 }
 
 /// Decode within a source budget, then shrink before building sampling tables.
-fn read_preview(path: &Path, bounds: Size) -> Result<RgbaImage> {
+/// Decode the image at `path` as a preview that fits `bounds` pixels, under
+/// the same bounds as [`ImageView::set_preview_path`]: at most 32 * 1024 *
+/// 1024 source pixels, a 128 MiB decoder budget, and 1024 pixels an edge.
+/// Callers should also bound the encoded file size.
+pub fn read_preview(path: &Path, bounds: Size) -> Result<RgbaImage> {
     if bounds.w == 0 || bounds.h == 0 {
         return Err(Error::Invalid(
             "image preview bounds must be nonzero".into(),
@@ -114,6 +118,52 @@ fn thumbnail(image: DynamicImage, bounds: Size) -> RgbaImage {
         }
     }
     reduced
+}
+
+/// Match `image` to a box of `size` cells in `tier`, fitted and centred, over
+/// a `ground` that shows through its transparent pixels and around it. Cells
+/// come row by row, as the image view draws them.
+pub fn image_cells(
+    image: &RgbaImage,
+    size: Size,
+    ground: [u8; 3],
+    tier: Tier,
+) -> Vec<Cell<[u8; 3]>> {
+    let (cols, rows) = (size.w as usize, size.h as usize);
+    let (width, height) = (image.width(), image.height());
+    let mut cells = Vec::new();
+    if cols == 0 || rows == 0 || width == 0 || height == 0 {
+        return cells;
+    }
+    // A cell is one display subpixel wide and two tall, as in the view.
+    let zoom = (size.w as f32 / width as f32).min(2.0 * size.h as f32 / height as f32);
+    let offset = (
+        (size.w as f32 - width as f32 * zoom) / 2.0,
+        (2.0 * size.h as f32 - height as f32 * zoom) / 2.0,
+    );
+    let placement = Placement {
+        origin: [-offset.0 / zoom, -offset.1 / zoom],
+        step: [1.0 / (8.0 * zoom), 1.0 / (4.0 * zoom)],
+    };
+    let Ok(source) = Image::new(image.as_raw(), width as usize, height as usize) else {
+        return cells;
+    };
+    let mut linear = LinearRaster::new();
+    resample(
+        &source,
+        placement,
+        cols * MATRIX,
+        rows * MATRIX,
+        &mut linear,
+    );
+    let grounds = vec![ground; cols * rows];
+    let mut opaque = Vec::new();
+    composite(&linear, &grounds, &mut opaque);
+    let stride = cols * MATRIX;
+    if let Ok(raster) = RasterView::new(&opaque, stride, rows * MATRIX, stride) {
+        rgb_into(&raster, SymbolSet::tier(tier), &mut cells);
+    }
+    cells
 }
 
 /// What a cached mosaic depends on, besides the ground of each cell.

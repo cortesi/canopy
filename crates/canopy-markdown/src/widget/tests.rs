@@ -980,6 +980,95 @@ fn successful_jumps_queue_the_position_they_left() {
     );
 }
 
+/// A 64 by 32 image, red on its left half and blue on its right.
+fn two_tone() -> Arc<image::RgbaImage> {
+    Arc::new(image::RgbaImage::from_fn(64, 32, |x, _| {
+        if x < 32 {
+            image::Rgba([220, 20, 20, 255])
+        } else {
+            image::Rgba([20, 20, 220, 255])
+        }
+    }))
+}
+
+#[test]
+fn image_blocks_ask_the_host_and_lay_out_what_it_supplies() {
+    let text = "![Local](pics/a.png)\n\n![Remote](https://example.com/b.png)\n\nAfter.\n";
+    for enabled in [false, true] {
+        let (mut harness, manual) = configured(text, ViewType::Rendered, false, |options| {
+            options.images = enabled;
+        });
+        settle(&mut harness, &manual);
+        // Before the image arrives, its alt text and destination stand in.
+        assert!(harness.tbuf().contains_text("Local"));
+        assert!(harness.tbuf().contains_text("pics/a.png"));
+        let requests =
+            harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests());
+        if !enabled {
+            assert!(requests.is_empty());
+            continue;
+        }
+        // Only the local image is asked for, and only once.
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].target.path, "pics/a.png");
+        assert!(
+            harness
+                .with_root_widget(|reader: &mut Markdown| reader.take_resource_requests())
+                .is_empty()
+        );
+        let before = harness.with_root_widget(|reader: &mut Markdown| {
+            reader
+                .shared
+                .borrow()
+                .presentation
+                .as_ref()
+                .map_or(0, |p| p.height())
+        });
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                // An unknown id changes nothing.
+                reader.supply_resource(ctx, 999, Resource::Missing)?;
+                reader.supply_resource(ctx, requests[0].id, Resource::Image(two_tone()))
+            })
+            .unwrap();
+        settle(&mut harness, &manual);
+        let after = harness.with_root_widget(|reader: &mut Markdown| {
+            reader
+                .shared
+                .borrow()
+                .presentation
+                .as_ref()
+                .map_or(0, |p| p.height())
+        });
+        // 64 by 32 pixels fit 32 columns by 8 rows in the 40-cell view.
+        assert!(after > before, "{before} -> {after}");
+        assert!(!harness.tbuf().contains_text("pics/a.png"));
+        let painted = harness.tbuf().lines().iter().any(|line| {
+            line.chars()
+                .any(|c| ('\u{2580}'..='\u{259f}').contains(&c) || c != ' ' && !c.is_ascii())
+        });
+        assert!(painted, "{}", harness.tbuf().lines().join("\n"));
+    }
+}
+
+#[test]
+fn a_failed_image_shows_why() {
+    let (mut harness, manual) = configured("![Gone](gone.png)\n", ViewType::Rendered, false, |o| {
+        o.images = true;
+    });
+    settle(&mut harness, &manual);
+    let id =
+        harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests())[0].id;
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.supply_resource(ctx, id, Resource::Failed("cannot decode".into()))
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    assert!(harness.tbuf().contains_text("Gone"));
+    assert!(harness.tbuf().contains_text("cannot decode"));
+}
+
 #[test]
 fn clipboard_and_browser_admission_follow_root_capability_flags() {
     for enabled in [false, true] {

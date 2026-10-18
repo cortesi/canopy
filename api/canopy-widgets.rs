@@ -34,7 +34,7 @@ use canopy::{
     text::Truncate,
     tree::FocusDirection,
 };
-use canopy_mosaic::Tier;
+use canopy_mosaic::{Cell, Tier};
 use grep_regex::{error::Error, matcher::RegexMatcher};
 use image::RgbaImage;
 use syntect::{SyntaxReference, SyntaxSet};
@@ -3191,6 +3191,23 @@ pub enum ValueExposure {
     /// a dot in place of each character on screen.
     Sensitive,
 }
+
+/// Match `image` to a box of `size` cells in `tier`, fitted and centred, over
+/// a `ground` that shows through its transparent pixels and around it. Cells
+/// come row by row, as the image view draws them.
+pub fn image_cells(
+    image: &RgbaImage,
+    size: Size,
+    ground: [u8; 3],
+    tier: Tier,
+) -> Vec<Cell<[u8; 3]>>;
+
+/// Decode within a source budget, then shrink before building sampling tables.
+/// Decode the image at `path` as a preview that fits `bounds` pixels, under
+/// the same bounds as [`ImageView::set_preview_path`]: at most 32 * 1024 *
+/// 1024 source pixels, a 128 MiB decoder budget, and 1024 pixels an edge.
+/// Callers should also bound the encoded file size.
+pub fn read_preview(path: &Path, bounds: Size) -> canopy::error::Result<RgbaImage>;
 
 /// Register [`CLEAR_INTENT`]. Each widget type that accepts the intent calls
 /// this from its `Register` impl; registering it again is harmless.

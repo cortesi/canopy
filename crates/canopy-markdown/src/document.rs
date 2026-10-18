@@ -170,6 +170,19 @@ pub enum BlockKind {
         /// The readable label or footnote identifier.
         label: String,
     },
+    /// An image alone in its paragraph, which a host may supply.
+    Image(ImageBlock),
+}
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// An image alone in its paragraph: `![alt](path)`, or Obsidian's
+/// `![[path]]` with an optional `|width` or `|widthxheight` size in pixels.
+pub struct ImageBlock {
+    /// The image's destination, and its alt text as the label.
+    pub link: Link,
+    /// The width the source asks for, in pixels.
+    pub width: Option<u32>,
+    /// The height the source asks for, in pixels.
+    pub height: Option<u32>,
 }
 #[derive(Clone, Debug)]
 /// One semantic leaf with source and container metadata.
@@ -198,7 +211,7 @@ pub struct Block {
     /// Whether this leaf remains open at the receiving boundary.
     pub provisional: bool,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// A readable label and its original destination and title.
 pub struct Link {
     /// The readable label or footnote identifier.
@@ -1174,6 +1187,13 @@ impl Builder<'_> {
                 _ if matches!(leaf.node.event, Some(Event::Rule)) => {
                     (BlockKind::Rule, UnitKind::Separator, String::new(), false)
                 }
+                _ if lone_image(&leaf.node).is_some() => {
+                    let image = lone_image(&leaf.node).expect("checked");
+                    // It reads, and copies, as an inline image does.
+                    let payload = image_text(&image.link.label, &image.link.destination);
+                    // The image is one whole payload, its alt text.
+                    (BlockKind::Image(image), UnitKind::Prose, payload, true)
+                }
                 _ => {
                     let mut payload = inline(
                         &leaf.node.children,
@@ -1208,22 +1228,28 @@ impl Builder<'_> {
             BlockKind::Source { .. } => "source",
             BlockKind::Rule => "rule",
             BlockKind::Footnote { .. } => "footnote",
+            BlockKind::Image(_) => "image",
         };
         let id = self.id(range.start, role, context.enclosing);
         let unit_id = self.id(range.start, &format!("unit:{role}"), context.enclosing);
         if !provisional {
             if matches!(
                 kind,
-                BlockKind::Code(_) | BlockKind::Table(_) | BlockKind::Source { .. }
+                BlockKind::Code(_)
+                    | BlockKind::Table(_)
+                    | BlockKind::Source { .. }
+                    | BlockKind::Image(_)
             ) {
                 let object_id = self.id(range.start, &format!("object:{role}"), context.enclosing);
                 self.document.objects.push(Object {
                     id: object_id,
                     source: range.clone(),
                     unit_id,
-                    kind: match kind {
+                    kind: match &kind {
                         BlockKind::Code(_) => ObjectKind::Code,
                         BlockKind::Table(_) => ObjectKind::Table,
+                        // An image follows as its link does.
+                        BlockKind::Image(image) => ObjectKind::Link(image.link.clone()),
                         _ => ObjectKind::Source,
                     },
                 });
@@ -1450,6 +1476,69 @@ fn inline(
     append_inline(nodes, &mut out, spans, links, soft_breaks, false);
     out
 }
+/// An image's readable text: its label, then its destination unless the
+/// label already names it, as an unlabelled embed's does.
+fn image_text(label: &str, destination: &str) -> String {
+    if label.is_empty() || label == destination {
+        destination.to_owned()
+    } else {
+        format!("{label} ({destination})")
+    }
+}
+/// The image a paragraph holds alone, beside whitespace.
+fn lone_image(node: &Node) -> Option<ImageBlock> {
+    if !matches!(node.tag, Some(Tag::Paragraph)) {
+        return None;
+    }
+    let mut rest = node.children.iter().filter(|child| {
+        !matches!(child.event, Some(Event::SoftBreak | Event::HardBreak))
+            && !matches!(&child.event, Some(Event::Text(text)) if text.trim().is_empty())
+    });
+    let image = rest.next()?;
+    if rest.next().is_some() {
+        return None;
+    }
+    let Some(Tag::Image {
+        link_type,
+        dest_url,
+        title,
+        ..
+    }) = &image.tag
+    else {
+        return None;
+    };
+    let wiki = matches!(link_type, LinkType::WikiLink { .. });
+    let label = plain(&image.children);
+    // An Obsidian image's label after `|` is its size when it reads as one.
+    let size = wiki
+        .then(|| {
+            let (width, height) = match label.trim().split_once('x') {
+                Some((width, height)) => (width, Some(height)),
+                None => (label.trim(), None),
+            };
+            Some((
+                width.parse::<u32>().ok()?,
+                height.map(str::parse::<u32>).transpose().ok()?,
+            ))
+        })
+        .flatten();
+    let alt = if size.is_some() || (wiki && label.trim() == dest_url.as_ref()) {
+        wiki_label(dest_url)
+    } else {
+        label
+    };
+    Some(ImageBlock {
+        link: Link {
+            label: alt,
+            destination: dest_url.to_string(),
+            title: title.to_string(),
+            wiki,
+            labelled: true,
+        },
+        width: size.map(|(width, _)| width),
+        height: size.and_then(|(_, height)| height),
+    })
+}
 /// The id of a whole-text Obsidian block marker, `^id`.
 fn block_id(text: &str) -> Option<String> {
     let id = text.trim().strip_prefix('^')?;
@@ -1515,9 +1604,9 @@ fn append_inline(
                 out.push_str(&wiki_label(dest_url));
             }
             if let Tag::Image { dest_url, .. } = tag {
-                out.push_str(" (");
-                out.push_str(dest_url);
-                out.push(')');
+                let label = out[start..].to_owned();
+                out.truncate(start);
+                out.push_str(&image_text(&label, dest_url));
             }
             let role = match tag {
                 Tag::Emphasis => Some(InlineRole::Emphasis),
@@ -2385,6 +2474,52 @@ mod tests {
         assert!(readable.contains(&"x^y and ^bad! and ^p1 dup"));
         assert_eq!(doc.outline[0].text, "Head");
         assert_eq!(doc.outline[0].slug, "head");
+    }
+    #[test]
+    fn an_image_alone_in_its_paragraph_is_an_image_block() {
+        let doc = complete(
+            "![Diagram](a.png)\n\n![[b.png|300]]\n\n![[c.png|300x200]]\n\n![[d.png|Caption]]\n\nText ![inline](e.png) here.\n",
+        );
+        let images: Vec<_> = doc
+            .blocks
+            .iter()
+            .filter_map(|block| match &block.kind {
+                BlockKind::Image(image) => Some((
+                    image.link.label.as_str(),
+                    image.link.destination.as_str(),
+                    image.link.wiki,
+                    image.width,
+                    image.height,
+                )),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            images,
+            [
+                ("Diagram", "a.png", false, None, None),
+                ("b.png", "b.png", true, Some(300), None),
+                ("c.png", "c.png", true, Some(300), Some(200)),
+                ("Caption", "d.png", true, None, None),
+            ]
+        );
+        // An image block is a link object, and reads as its alt text.
+        assert!(
+            doc.objects
+                .iter()
+                .any(|o| matches!(&o.kind, ObjectKind::Link(link) if link.destination == "a.png"))
+        );
+        assert!(
+            doc.units
+                .iter()
+                .any(|unit| unit.text == "Diagram (a.png)" && unit.atomic)
+        );
+        // An image in running text keeps its text form.
+        assert!(
+            doc.units
+                .iter()
+                .any(|unit| unit.text == "Text inline (e.png) here.")
+        );
     }
     #[test]
     fn heading_slugs_disambiguate_generated_suffixes_and_literal_headings() {

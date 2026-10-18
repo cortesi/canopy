@@ -2,6 +2,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use std::sync::Arc;
+
+use image::RgbaImage;
+
 use crate::document::LocalLink;
 
 /// An effect the embedding application may perform once.
@@ -13,6 +17,39 @@ pub enum HostAction {
     OpenUrl(String),
     /// Follow a link to a document of the host's own, which the host finds.
     OpenLocal(LocalLink),
+}
+
+/// What a resource request asks the host for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResourceKind {
+    /// An image an image block shows.
+    Image,
+}
+
+/// A resource the document needs from the host. Unlike a [`HostAction`], a
+/// reader may need a resource again, so resources travel on their own
+/// requests.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResourceRequest {
+    /// Identifier the reply names; never reused.
+    pub id: u64,
+    /// The document epoch that needs it.
+    pub epoch: u64,
+    /// The document of the host's own that holds it.
+    pub target: LocalLink,
+    /// What the reader asks for.
+    pub kind: ResourceKind,
+}
+
+/// The host's answer to a resource request.
+#[derive(Clone, Debug)]
+pub enum Resource {
+    /// The image, which the host bounds in size.
+    Image(Arc<RgbaImage>),
+    /// Nothing the request names exists.
+    Missing,
+    /// The host could not supply it, and why.
+    Failed(String),
 }
 
 /// A unique host action, frozen at the displayed revision of its activation.

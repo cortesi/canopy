@@ -19,7 +19,7 @@ use canopy::runtime::NodeWakeHandle;
 use crate::{
     ViewType,
     document::{DocumentSnapshot, ObjectKind, ParseLimits, ReadingRange, parse_document},
-    presentation::{GeometryKey, PresentationSnapshot},
+    presentation::{GeometryKey, ImageSizes, PresentationSnapshot},
     search::{CompiledQuery, SearchLimits, SearchQuery, SearchResults, search_document},
     source_store::SourceSnapshot,
     source_view::{MarkdownSource, PreparedSource, SourceMatches, SourceOptions},
@@ -74,6 +74,8 @@ pub struct WorkRequest {
     pub generation: u64,
     /// Optional query over this request's exact projection.
     pub search: Option<WorkSearch>,
+    /// What the reader knows of the document's images.
+    pub images: Arc<ImageSizes>,
 }
 
 /// A query over the exact snapshot carried by its preparation request.
@@ -1145,10 +1147,11 @@ fn prepare(shared: &Shared, id: u64, request: WorkRequest) -> Result<PreparedWor
             if shared.cancelled(id) {
                 return Err(WorkError::Cancelled);
             }
-            let presentation = PresentationSnapshot::prepare(
+            let presentation = PresentationSnapshot::prepare_with(
                 document.clone(),
                 request.geometry,
                 request.previous.as_deref(),
+                &request.images,
             );
             if shared.cancelled(id) {
                 return Err(WorkError::Cancelled);
@@ -1287,6 +1290,7 @@ mod tests {
             limits: ParseLimits::default(),
             generation,
             search: None,
+            images: Arc::default(),
         }
     }
 

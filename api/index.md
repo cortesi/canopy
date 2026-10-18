@@ -66,7 +66,7 @@ Built-in widgets for canopy applications.
 - Workspace dependencies: canopy, canopy-mosaic
 - Workspace dependents: canopy-markdown, canopyctl, gyms, hello, todo
 - Unnameable: crate::image_view::ZoomDirection
-- Items: 917
+- Items: 919
 - Exposes: canopy, canopy-mosaic, grep-regex, image, syntect
 
 ## canopy-markdown
@@ -77,8 +77,8 @@ Interactive Markdown reading and exact source viewing for Canopy.
 - Declared features: default, syntax
 - Workspace dependencies: canopy, canopy-widgets
 - Workspace dependents: gyms
-- Items: 312
-- Exposes: canopy, canopy-widgets, pulldown-cmark, url
+- Items: 325
+- Exposes: canopy, canopy-widgets, image, pulldown-cmark, url
 
 ## hello
 

@@ -357,6 +357,7 @@ dependencies = [
  "canopy-widgets",
  "grep-matcher",
  "grep-regex",
+ "image",
  "percent-encoding",
  "pulldown-cmark",
  "thiserror",
@@ -1275,6 +1276,7 @@ dependencies = [
  "canopy-mcp",
  "canopy-widgets",
  "clap",
+ "image",
  "rand 0.10.3",
  "unicode-width",
 ]

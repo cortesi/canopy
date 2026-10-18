@@ -13,6 +13,7 @@ canopy-mcp.workspace = true
 canopy-markdown = { workspace = true, default-features = true }
 canopy-widgets = { workspace = true, default-features = true }
 clap.workspace = true
+image = { version = "0.25.10", default-features = false }
 rand.workspace = true
 unicode-width.workspace = true
 

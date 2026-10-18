@@ -2,10 +2,12 @@
 //! visible rows.
 
 use std::{
+    cell::RefCell,
     collections::{HashMap, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
     mem::{discriminant, take},
     ops::Range,
+    rc::Rc,
     sync::Arc,
 };
 
@@ -15,7 +17,8 @@ use canopy::{
     render::Render,
     rgb,
     style::{
-        Attr, AttrSet, Color, Mix, Paint, PartialStyle, StyleMap, StyleRules, themes::Palette,
+        Attr, AttrSet, Color, Mix, Paint, PartialStyle, ResolvedStyle, Style, StyleMap, StyleRules,
+        themes::Palette,
     },
     text,
 };
@@ -24,7 +27,8 @@ use canopy_widgets::highlight::Grammar;
 use canopy_widgets::{
     BigFace, BigSize, BigText,
     highlight::{SpanStyle, palette_style_rules},
-    mosaic::Tier,
+    image_cells,
+    mosaic::{Cell, Tier, tier_for},
     table::{
         self, FlowOptions, FlowTable, PreparedTable, TableAlignment, TableCell, TableColumn,
         TableData, TableGlyphs, TableLayoutOptions, TableRow, TableSelection, TableWindow,
@@ -32,8 +36,10 @@ use canopy_widgets::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
+use image::RgbaImage;
+
 use crate::document::{
-    AlertTone, Alignment, Block, BlockKind, CodeBlock, DocumentSnapshot, InlineRole,
+    AlertTone, Alignment, Block, BlockKind, CodeBlock, DocumentSnapshot, ImageBlock, InlineRole,
     ReadingPosition, ReadingRange, ReadingUnit,
 };
 
@@ -45,6 +51,10 @@ const MAX_PREPARED_ROWS: usize = 262_144;
 const OBJECT_TINT: f32 = 0.25;
 /// Every readable byte of a unit, for whole-unit overlay tests.
 const WHOLE_UNIT: Range<usize> = 0..usize::MAX;
+/// Rows an image block takes at most.
+const IMAGE_ROWS: u32 = 16;
+/// Mosaic grids the reader keeps before it draws them again.
+const IMAGE_GRID_LIMIT: usize = 64;
 /// Rows of the area that a big heading lays out in, more than any face of
 /// the smallest size takes.
 const BIG_HEADING_ROWS: u32 = 8;
@@ -212,6 +222,8 @@ struct BlockLayout {
     object: Option<u64>,
     /// Verified source start of a contiguous readable projection.
     source_text_start: Option<usize>,
+    /// Where an image block draws its image.
+    image: Option<ImagePlacement>,
 }
 
 /// Preparation evidence, independent of paint work.
@@ -250,6 +262,84 @@ pub struct PaintOverlays {
     pub search: Vec<ReadingRange>,
     /// Current object cursor, independent of document selection.
     pub active_object: Option<u64>,
+    /// Images the host supplied, which image blocks paint.
+    pub images: ImagePixels,
+}
+
+/// What the reader knows of an image, by its destination.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ImageInfo {
+    /// The supplied image's size in pixels.
+    Size {
+        /// Width in pixels.
+        width: u32,
+        /// Height in pixels.
+        height: u32,
+    },
+    /// The host could not supply it, and why.
+    Failed(String),
+}
+
+/// What the reader knows of each image, by its destination.
+pub type ImageSizes = HashMap<String, ImageInfo>;
+
+/// The key of a cached mosaic grid: destination, cells across and down, the
+/// tier, and the ground under the image.
+type GridKey = (String, u32, u32, Tier, [u8; 3]);
+
+/// A mosaic grid drawn from an image, row by row.
+type Grid = Arc<Vec<Cell<[u8; 3]>>>;
+
+/// Supplied images by destination, and the mosaic grids drawn from them.
+#[derive(Clone, Debug, Default)]
+pub struct ImagePixels {
+    /// Supplied images, by destination.
+    pub images: HashMap<String, Arc<RgbaImage>>,
+    /// Mosaic grids drawn from them, shared by clones of these overlays.
+    grids: Rc<RefCell<HashMap<GridKey, Grid>>>,
+}
+
+impl ImagePixels {
+    /// Return the cells of `destination`'s image in a box of `size`, drawing
+    /// them once.
+    fn cells(&self, destination: &str, size: Size, tier: Tier, ground: [u8; 3]) -> Option<Grid> {
+        let image = self.images.get(destination)?;
+        let key = (destination.to_owned(), size.w, size.h, tier, ground);
+        let mut grids = self.grids.borrow_mut();
+        if let Some(cells) = grids.get(&key) {
+            return Some(cells.clone());
+        }
+        // Grids for sizes, tiers, or grounds no longer shown go first.
+        if grids.len() >= IMAGE_GRID_LIMIT {
+            grids.clear();
+        }
+        let cells = Arc::new(image_cells(image, size, ground, tier));
+        grids.insert(key, cells.clone());
+        Some(cells)
+    }
+}
+
+/// Where an image block draws its image.
+#[derive(Clone, Debug)]
+struct ImagePlacement {
+    /// The image's destination, which keys its pixels.
+    destination: String,
+    /// First column of the image.
+    x: u32,
+    /// Cells across and down.
+    size: Size,
+}
+
+/// What one block's layout depends on beyond its block, unit, object, and
+/// geometry.
+#[derive(Clone, Copy)]
+struct BlockInputs<'a> {
+    /// Whether the block's code may take syntax colours.
+    syntax_allowed: bool,
+    /// Whether the block opens the document.
+    leading: bool,
+    /// What the reader knows of an image block's image.
+    image: Option<&'a ImageInfo>,
 }
 
 /// Semantic address under a prepared document cell.
@@ -293,6 +383,17 @@ impl PresentationSnapshot {
         document: Arc<DocumentSnapshot>,
         geometry: GeometryKey,
         previous: Option<&Self>,
+    ) -> Self {
+        Self::prepare_with(document, geometry, previous, &ImageSizes::new())
+    }
+
+    /// Prepare as [`Self::prepare`] does, with what the reader knows of the
+    /// document's images, so an image block reserves its image's rows.
+    pub fn prepare_with(
+        document: Arc<DocumentSnapshot>,
+        geometry: GeometryKey,
+        previous: Option<&Self>,
+        images: &ImageSizes,
     ) -> Self {
         let mut result = Self {
             unit_order: document
@@ -344,8 +445,15 @@ impl PresentationSnapshot {
             } else {
                 false
             };
-            let leading = result.blocks.is_empty();
-            let signature = signature(block, unit, object, syntax_allowed, leading);
+            let inputs = BlockInputs {
+                syntax_allowed,
+                leading: result.blocks.is_empty(),
+                image: match &block.kind {
+                    BlockKind::Image(image) => images.get(&image.link.destination),
+                    _ => None,
+                },
+            };
+            let signature = signature(block, unit, object, inputs);
             let mut layout = if let Some(old) = old_blocks
                 .get(&block.id)
                 .filter(|old| old.signature == signature)
@@ -363,6 +471,7 @@ impl PresentationSnapshot {
                     inset: old.inset,
                     object: old.object,
                     source_text_start: old.source_text_start,
+                    image: old.image.clone(),
                 }
             } else {
                 result.stats.prepared_blocks += 1;
@@ -372,8 +481,7 @@ impl PresentationSnapshot {
                     object,
                     geometry,
                     result.document.source.revision,
-                    syntax_allowed,
-                    leading,
+                    inputs,
                 );
                 // Reused blocks keep this: within an epoch, source only grows,
                 // so an unchanged span and text verify identically.
@@ -787,6 +895,9 @@ impl PresentationSnapshot {
             .blocks
             .partition_point(|b| b.start.saturating_add(b.rows.len() as u32) <= visible.tl.y);
         for b in self.blocks[first..].iter().take_while(|b| b.start < end) {
+            if let Some(image) = &b.image {
+                paint_image(render, b.start, image, visible, &overlays.images)?;
+            }
             let Some(table) = &b.table else {
                 continue;
             };
@@ -861,15 +972,15 @@ fn overlaps(span: &Range<ReadingKey>, index: usize, bytes: &Range<usize>) -> boo
 }
 
 /// Hash semantic inputs used to decide immutable block reuse.
-fn signature(
-    block: &Block,
-    unit: &ReadingUnit,
-    object: Option<u64>,
-    syntax_allowed: bool,
-    leading: bool,
-) -> u64 {
+fn signature(block: &Block, unit: &ReadingUnit, object: Option<u64>, inputs: BlockInputs) -> u64 {
+    let BlockInputs {
+        syntax_allowed,
+        leading,
+        image,
+    } = inputs;
     let mut hash = DefaultHasher::new();
     leading.hash(&mut hash);
+    image.hash(&mut hash);
     block.source.hash(&mut hash);
     block.depth.hash(&mut hash);
     block.quote_depth.hash(&mut hash);
@@ -931,9 +1042,13 @@ fn prepare_block(
     object: Option<u64>,
     geometry: GeometryKey,
     revision: u64,
-    syntax_allowed: bool,
-    leading: bool,
+    inputs: BlockInputs,
 ) -> BlockLayout {
+    let BlockInputs {
+        syntax_allowed,
+        leading,
+        image: image_info,
+    } = inputs;
     // A hostile viewport cannot cause an unbounded decoration allocation.
     let width = geometry.width.min(65535);
     let inset = if width > 3 { 2 } else { 0 };
@@ -956,6 +1071,7 @@ fn prepare_block(
     let mut flow = None;
     let mut table_start = 0;
     let mut table_height = 0;
+    let mut image_placement = None;
     let mut prefix = block_prefix(block, geometry.glyphs);
     // Cards, tables, and rules in a quote sit inside its rails.
     let rails = quote_rails(block, block.quote_depth, geometry.glyphs);
@@ -1123,6 +1239,18 @@ fn prepare_block(
                 rows.push(row);
             }
         }
+        BlockKind::Image(image) => {
+            image_placement = prepare_image(
+                &mut rows,
+                make_row,
+                image,
+                image_info,
+                unit,
+                &mut prefix,
+                (inset, card_inset, body, &rails),
+                geometry,
+            );
+        }
         BlockKind::Rule => {
             let mut row = make_row();
             decoration(
@@ -1255,7 +1383,153 @@ fn prepare_block(
         inset: card_inset,
         object,
         source_text_start: None,
+        image: image_placement,
     }
+}
+
+/// Prepare an image block: rows for its image once its size is known, and
+/// its alt text and destination until then, with the reason when the host
+/// could not supply it.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "a block's layout state, as its caller holds it"
+)]
+fn prepare_image(
+    rows: &mut Vec<PreparedRow>,
+    make_row: impl Fn() -> PreparedRow,
+    image: &ImageBlock,
+    info: Option<&ImageInfo>,
+    unit: &ReadingUnit,
+    prefix: &mut Prefix,
+    (inset, card_inset, body, rails): (u32, u32, u32, &Prefix),
+    geometry: GeometryKey,
+) -> Option<ImagePlacement> {
+    let room = body
+        .min(geometry.prose_width.clamp(1, 65535))
+        .saturating_sub(card_inset - inset);
+    if let Some(ImageInfo::Size { width, height }) = info {
+        let size = image_box(Size::new(*width, *height), image, room);
+        for _ in 0..size.h {
+            let mut row = make_row();
+            rail(&mut row, rails, inset, body, geometry.glyphs);
+            rows.push(row);
+        }
+        return Some(ImagePlacement {
+            destination: image.link.destination.clone(),
+            x: card_inset,
+            size,
+        });
+    }
+    prefix.push("Image: ", "markdown/structure");
+    wrap(
+        rows,
+        &make_row,
+        &unit.text,
+        prefix,
+        unit,
+        TextLayout {
+            inset,
+            budget: room.saturating_add(card_inset - inset),
+            role: "markdown/image",
+            glyphs: geometry.glyphs,
+        },
+        &INLINE_ROLES[0],
+    );
+    if let Some(ImageInfo::Failed(reason)) = info {
+        let mut row = make_row();
+        prefix
+            .continuation()
+            .draw(&mut row, inset, prefix.width(), geometry.glyphs);
+        decoration(
+            &mut row,
+            inset + prefix.width(),
+            reason,
+            room.saturating_sub(prefix.width()),
+            "markdown/card/label",
+            None,
+            geometry.glyphs,
+        );
+        rows.push(row);
+    }
+    None
+}
+
+/// The cells an image of `pixels` takes: as large as `room` columns and
+/// [`IMAGE_ROWS`] rows allow, within the size the source asks for, at 8
+/// pixels to a column and 16 to a row, and never above the image's own size.
+fn image_box(pixels: Size, image: &ImageBlock, room: u32) -> Size {
+    let (width, height) = (pixels.w.max(1), pixels.h.max(1));
+    let cols = room
+        .max(1)
+        .min(image.width.map_or(u32::MAX, |w| w.div_ceil(8)));
+    let rows = IMAGE_ROWS.min(image.height.map_or(u32::MAX, |h| h.div_ceil(16)));
+    // A cell is one subpixel across and two down, and a subpixel is square.
+    let zoom = (cols as f32 / width as f32)
+        .min(2.0 * rows as f32 / height as f32)
+        .min(1.0);
+    Size::new(
+        ((width as f32 * zoom).round() as u32).clamp(1, cols),
+        ((height as f32 * zoom / 2.0).ceil() as u32).clamp(1, rows),
+    )
+}
+
+/// Paint the visible cells of an image block whose first row is `top`, over
+/// the text ground. Until the host supplies the image, its rows stay blank.
+fn paint_image(
+    render: &mut Render<'_>,
+    top: u32,
+    image: &ImagePlacement,
+    visible: Rect,
+    pixels: &ImagePixels,
+) -> Result<()> {
+    let area = Rect::new(image.x, top, image.size.w, image.size.h);
+    let bounds = Rect::new(0, 0, visible.w, visible.h);
+    let ground = render.resolve_style("markdown/text").bg;
+    let corner = Point {
+        x: area.tl.x.saturating_sub(visible.tl.x),
+        y: area.tl.y.saturating_sub(visible.tl.y),
+    };
+    let (r, g, b) = ground.resolve(bounds, corner).rgb();
+    let tier = tier_for(render.glyphs());
+    let Some(cells) = pixels.cells(&image.destination, image.size, tier, [r, g, b]) else {
+        return Ok(());
+    };
+    for (index, cell) in cells.iter().enumerate() {
+        let index = index as u32;
+        let at = Point {
+            x: area.tl.x + index % area.w,
+            y: area.tl.y + index / area.w,
+        };
+        if !visible.contains_point(at) {
+            continue;
+        }
+        let local = Point {
+            x: at.x - visible.tl.x,
+            y: at.y - visible.tl.y,
+        };
+        let pen = |rgb: [u8; 3]| {
+            let color = Color::Rgb {
+                r: rgb[0],
+                g: rgb[1],
+                b: rgb[2],
+            };
+            render
+                .apply_effects(Style {
+                    fg: color.into(),
+                    bg: color.into(),
+                    attrs: AttrSet::default(),
+                })
+                .resolve_at(bounds, local)
+        };
+        let (fg, bg) = (pen(cell.fg), pen(cell.bg));
+        let style = ResolvedStyle {
+            fg: fg.fg,
+            bg: bg.fg,
+            attrs: fg.attrs,
+        };
+        render.put_cell(style, local, cell.ch)?;
+    }
+    Ok(())
 }
 
 /// Prepare a code card: a label, then every line of the payload. Long lines
@@ -1965,7 +2239,8 @@ pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
         )
         .fg("markdown/object", palette.fg)
         .fg("markdown/object/bar", palette.accent)
-        .fg("markdown/status", palette.muted_fg);
+        .fg("markdown/status", palette.muted_fg)
+        .fg("markdown/image", palette.muted_fg);
     rules.apply();
 }
 

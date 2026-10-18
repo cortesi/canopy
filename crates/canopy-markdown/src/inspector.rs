@@ -933,6 +933,7 @@ impl MarkdownInspector {
             limits: ParseLimits::default(),
             generation: self.generation,
             search: self.work_search.clone(),
+            images: Arc::default(),
         })
         .map_err(|e| Error::App(Box::new(e)))
     }

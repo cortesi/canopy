@@ -472,6 +472,7 @@ fn request(source: SourceSnapshot, previous: Arc<PresentationSnapshot>) -> WorkR
         limits: ParseLimits::default(),
         generation: 0,
         search: None,
+        images: Arc::default(),
     }
 }
 

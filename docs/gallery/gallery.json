@@ -1,6 +1,6 @@
 {
   "title": "Canopy widgets",
-  "generated": 1792302418,
+  "generated": 1792304788,
   "font_size": 14.0,
   "scale": 2.0,
   "sizes": [
@@ -354,6 +354,20 @@
         {
           "size": "110x36",
           "file": "alerts-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "images",
+      "title": "Embedded images",
+      "caption": "An image alone in its paragraph shows the host's image in block mosaics; an Obsidian embed takes its width.",
+      "script": "markdown.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "images-110x36.png",
           "width": 1870,
           "height": 1332
         }

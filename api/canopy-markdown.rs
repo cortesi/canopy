@@ -12,6 +12,7 @@
 //! Parsing, preparation, and publication never perform external actions.
 
 use std::{
+    collections::HashMap,
     error::Error,
     fmt::{Debug, Display},
     hash::Hash,
@@ -35,6 +36,7 @@ use canopy_widgets::{
     editor::{LineNumbers, TextPosition, TextRange, WrapMode},
     table::PreparedTable,
 };
+use image::RgbaImage;
 use pulldown_cmark::{Alignment, Options};
 use url::Url;
 
@@ -133,6 +135,10 @@ impl Markdown {
 
     /// Current follow policy.
     pub fn follow_state(&self) -> Follow;
+
+    /// Whether an image block of the displayed document still waits for its
+    /// image: not yet asked for, or asked for and unanswered.
+    pub fn images_pending(&self) -> bool;
 
     /// Inspect a pinned snapshot of the displayed source.
     pub fn inspect_source(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
@@ -282,6 +288,16 @@ impl Markdown {
     /// Finish typing while retaining the query and its highlights.
     pub fn submit_search(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Take the host's answer to a resource request. An answer for another
+    /// document, or for an unknown request, changes nothing. An image lays
+    /// out again at its own aspect; a failure shows its reason.
+    pub fn supply_resource(
+        &mut self,
+        ctx: &mut dyn Context,
+        id: u64,
+        resource: Resource,
+    ) -> canopy::error::Result<()>;
+
     /// Drain the positions the reader left by its own jumps (fragments,
     /// block and heading anchors, footnotes, and the outline), oldest first.
     /// The reader keeps at most a few; a host with a history drains them
@@ -291,6 +307,11 @@ impl Markdown {
     /// Drain complete immutable requests once. The host performs each action
     /// and replies.
     pub fn take_requests(&mut self, limit: usize) -> Vec<HostRequest>;
+
+    /// Drain requests for the images the displayed document's image blocks
+    /// show, each once per document. Remote images are never fetched; they
+    /// keep their alt text. Without the `images` option, nothing is asked.
+    pub fn take_resource_requests(&mut self) -> Vec<ResourceRequest>;
 
     /// Toggle Source and Rendered; a second invocation cancels a pending
     /// switch.
@@ -339,6 +360,9 @@ impl Markdown {
 
     /// Build a positional call with typed user arguments.
     pub fn call_follow_state() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_images_pending() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
     pub fn call_inspect_source() -> CommandCall;
@@ -444,6 +468,9 @@ impl Markdown {
 
     /// Return the command spec for this command.
     pub fn spec_follow_state() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_images_pending() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_inspect_source() -> &'static CommandSpec;
@@ -578,6 +605,9 @@ pub struct MarkdownOptions {
     /// destination first. A link that cannot be followed still opens the
     /// inspector.
     pub follow_links: bool,
+    /// Request the images of image blocks from the host, which supplies
+    /// them. Without it, an image block shows its alt text.
+    pub images: bool,
     /// Base URL for resolving relative destinations. With one, relative links
     /// resolve to URLs rather than to host documents.
     pub base_url: Option<String>,
@@ -896,6 +926,8 @@ pub mod document {
             /// The readable label or footnote identifier.
             label: String,
         },
+        /// An image alone in its paragraph, which a host may supply.
+        Image(ImageBlock),
     }
 
     /// Parser-normalized code payload and its original fence information.
@@ -959,6 +991,18 @@ pub mod document {
         pub fn unit(&self, id: u64) -> Option<&ReadingUnit>;
     }
 
+    /// An image alone in its paragraph: `![alt](path)`, or Obsidian's
+    /// `![[path]]` with an optional `|width` or `|widthxheight` size in pixels.
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+    pub struct ImageBlock {
+        /// The image's destination, and its alt text as the label.
+        pub link: Link,
+        /// The width the source asks for, in pixels.
+        pub width: Option<u32>,
+        /// The height the source asks for, in pixels.
+        pub height: Option<u32>,
+    }
+
     /// Semantic emphasis independent of terminal geometry and palette.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum InlineRole {
@@ -986,7 +1030,7 @@ pub mod document {
     }
 
     /// A readable label and its original destination and title.
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
     pub struct Link {
         /// The readable label or footnote identifier.
         pub label: String,
@@ -1476,6 +1520,8 @@ pub mod executor {
         pub generation: u64,
         /// Optional query over this request's exact projection.
         pub search: Option<WorkSearch>,
+        /// What the reader knows of the document's images.
+        pub images: Arc<ImageSizes>,
     }
 
     impl WorkRequest {
@@ -1578,6 +1624,39 @@ pub mod host {
         /// One complete immutable effect.
         pub action: HostAction,
     }
+
+    /// The host's answer to a resource request.
+    #[derive(Clone, Debug)]
+    pub enum Resource {
+        /// The image, which the host bounds in size.
+        Image(Arc<RgbaImage>),
+        /// Nothing the request names exists.
+        Missing,
+        /// The host could not supply it, and why.
+        Failed(String),
+    }
+
+    /// What a resource request asks the host for.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum ResourceKind {
+        /// An image an image block shows.
+        Image,
+    }
+
+    /// A resource the document needs from the host. Unlike a [`HostAction`], a
+    /// reader may need a resource again, so resources travel on their own
+    /// requests.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct ResourceRequest {
+        /// Identifier the reply names; never reused.
+        pub id: u64,
+        /// The document epoch that needs it.
+        pub epoch: u64,
+        /// The document of the host's own that holds it.
+        pub target: LocalLink,
+        /// What the reader asks for.
+        pub kind: ResourceKind,
+    }
 }
 
 pub mod options {
@@ -1631,6 +1710,34 @@ pub mod presentation {
         pub source: Range<usize>,
     }
 
+    /// What the reader knows of an image, by its destination.
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+    pub enum ImageInfo {
+        /// The supplied image's size in pixels.
+        Size {
+            /// Width in pixels.
+            width: u32,
+            /// Height in pixels.
+            height: u32,
+        },
+        /// The host could not supply it, and why.
+        Failed(String),
+    }
+
+    /// Supplied images by destination, and the mosaic grids drawn from them.
+    #[derive(Clone, Debug, Default)]
+    pub struct ImagePixels {
+        /// Supplied images, by destination.
+        pub images: HashMap<String, Arc<RgbaImage>>,
+        /* private fields */
+    }
+
+    impl !Send for ImagePixels {}
+    impl !Sync for ImagePixels {}
+
+    /// What the reader knows of each image, by its destination.
+    pub type ImageSizes = HashMap<String, ImageInfo>;
+
     /// Reader-owned decoration applied without invalidating geometry.
     #[derive(Clone, Debug, Default)]
     pub struct PaintOverlays {
@@ -1640,7 +1747,12 @@ pub mod presentation {
         pub search: Vec<ReadingRange>,
         /// Current object cursor, independent of document selection.
         pub active_object: Option<u64>,
+        /// Images the host supplied, which image blocks paint.
+        pub images: ImagePixels,
     }
+
+    impl !Send for PaintOverlays {}
+    impl !Sync for PaintOverlays {}
 
     /// Paint work is bounded by the supplied visible rectangle, never document
     /// length.
@@ -1749,6 +1861,15 @@ pub mod presentation {
             document: Arc<DocumentSnapshot>,
             geometry: GeometryKey,
             previous: Option<&Self>,
+        ) -> Self;
+
+        /// Prepare as [`Self::prepare`] does, with what the reader knows of the
+        /// document's images, so an image block reserves its image's rows.
+        pub fn prepare_with(
+            document: Arc<DocumentSnapshot>,
+            geometry: GeometryKey,
+            previous: Option<&Self>,
+            images: &ImageSizes,
         ) -> Self;
 
         /// Share the identical dataset and geometry with the table inspector.

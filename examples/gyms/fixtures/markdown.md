@@ -113,6 +113,10 @@ The next logical line stays separate.
 
 ![Local architecture sketch](images/architecture.png)
 
+An Obsidian embed asks for a width in pixels:
+
+![[images/landscape.png|240]]
+
 Inline <span class="literal">HTML</span> stays visible. A reference to
 [the late guide][late] resolves through its admitted definition. A note[^one]
 can jump to its source-positioned definition. A wikilink such as

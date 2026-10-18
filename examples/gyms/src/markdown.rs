@@ -1,6 +1,6 @@
 //! Markdown with deterministic stream controls and a recording host.
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use canopy::{
     CanopyBuilder, Context, ContextExt, NodeName, Register, Setup, Widget, derive_commands,
@@ -8,7 +8,7 @@ use canopy::{
 };
 use canopy_markdown::{
     DocumentInput, FinishOutcome, Markdown, MarkdownOptions, Mode, ViewType,
-    host::{HostAction, HostOutcome, HostReply, HostRequest},
+    host::{HostAction, HostOutcome, HostReply, HostRequest, Resource},
     presentation::GlyphPreset,
 };
 use canopy_widgets::Text;
@@ -119,6 +119,7 @@ impl MarkdownGym {
             clipboard: true,
             browser: true,
             local_links: true,
+            images: true,
             base_url: Some("https://example.com/docs/".into()),
             glyphs: if self.ascii {
                 GlyphPreset::Ascii
@@ -190,7 +191,7 @@ impl MarkdownGym {
     /// A worker/publication readiness predicate, independent of frame timing.
     #[command]
     pub fn ready(&self, ctx: &mut dyn Context) -> Result<bool> {
-        reader(ctx, |md, _| Ok(md.ready()))
+        reader(ctx, |md, _| Ok(md.ready() && !md.images_pending()))
     }
     #[command]
     /// Latest source revision accepted by the reader.
@@ -424,6 +425,16 @@ impl MarkdownGym {
         }
         Ok(())
     }
+    /// Answer each image request with the gym's own landscape, so image
+    /// blocks show without files.
+    fn serve_images(&self, ctx: &mut dyn Context) -> Result<()> {
+        reader(ctx, |md, ctx| {
+            for request in md.take_resource_requests() {
+                md.supply_resource(ctx, request.id, Resource::Image(landscape()))?;
+            }
+            Ok(())
+        })
+    }
     #[command]
     /// Number of requests retained in the bounded recording log.
     pub fn host_actions(&self) -> usize {
@@ -476,6 +487,7 @@ impl Widget for MarkdownGym {
     }
     fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
         self.collect_host(ctx)?;
+        self.serve_images(ctx)?;
         Ok(Some(Duration::from_millis(16)))
     }
 }
@@ -488,4 +500,30 @@ impl Register for MarkdownGym {
 /// Add the gym's explicit stream and presentation control bindings.
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
     builder.script("markdowngym", BINDINGS)
+}
+
+/// A small landscape: sky over hills, with a sun, drawn without a file.
+fn landscape() -> Arc<image::RgbaImage> {
+    Arc::new(image::RgbaImage::from_fn(192, 96, |x, y| {
+        let (fx, fy) = (x as f32 / 192.0, y as f32 / 96.0);
+        let hill = 0.62 + 0.12 * (fx * 7.0).sin() + 0.06 * (fx * 17.0).cos();
+        let sun = (fx - 0.72).powi(2) * 4.0 + (fy - 0.3).powi(2) < 0.012;
+        let rgb = if sun {
+            [250, 214, 120]
+        } else if fy > hill {
+            let shade = 1.0 - (fy - hill) * 1.2;
+            [
+                (52.0 * shade) as u8,
+                (120.0 * shade) as u8,
+                (88.0 * shade) as u8,
+            ]
+        } else {
+            [
+                (120.0 + 90.0 * fy) as u8,
+                (140.0 + 60.0 * fy) as u8,
+                (210.0 - 20.0 * fy) as u8,
+            ]
+        };
+        image::Rgba([rgb[0], rgb[1], rgb[2], 255])
+    }))
 }
