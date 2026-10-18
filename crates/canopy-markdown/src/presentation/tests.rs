@@ -45,17 +45,16 @@ fn heading_inline_roles_link_hits_and_copy_have_independent_expected_values() {
         "# Title\n\nalpha **bold** [site](https://example.com)\n",
         40,
     );
-    // The title draws in two rows of big text, then its underline.
-    assert!(row_text(&p, 2).chars().all(|c| c == '━'));
-    assert_eq!(row_text(&p, 3), "alpha bold site");
+    // The title draws in two rows of big text, with no underline.
+    assert_eq!(row_text(&p, 2), "alpha bold site");
     assert!(
-        p.row(3)
+        p.row(2)
             .unwrap()
             .runs
             .iter()
             .any(|r| r.role == "markdown/strong" && r.text == "bold")
     );
-    let hit = p.hit(Point { x: 13, y: 3 }).unwrap();
+    let hit = p.hit(Point { x: 13, y: 2 }).unwrap();
     assert!(hit.object.is_some());
     assert_eq!(
         hit.reading,
@@ -212,10 +211,10 @@ fn headings_show_markers_and_underline_the_top_three_levels() {
             ("code".into(), "markdown/h2/inline-code")
         ]
     );
-    assert_eq!(row_text(&p, 3), "─".repeat(11));
+    assert_eq!(row_text(&p, 3), "━".repeat(11));
     assert_eq!(row_text(&p, 4), "");
     assert_eq!(row_text(&p, 5), "### Three");
-    assert_eq!(row_text(&p, 6), "┄".repeat(9));
+    assert_eq!(row_text(&p, 6), "─".repeat(9));
     assert_eq!(row_text(&p, 7), "");
     assert_eq!(
         roles(8),
@@ -259,7 +258,6 @@ fn a_first_level_heading_draws_in_big_text_that_reads_as_the_heading() {
         assert_eq!(runs[0].reading, Some(0..5));
         assert!(!runs[0].text.contains("Title"));
     }
-    assert!(row_text(&p, 2).chars().all(|c| c == '━'));
     assert_eq!(p.row_for_unit(p.document.units[0].id, 3), 0);
     // Half blocks take more rows.
     let p = big("# Title\n", 40, Tier::Blocks, GlyphPreset::Unicode);
@@ -282,7 +280,7 @@ fn a_wrapped_heading_hangs_under_its_text_and_is_underlined_to_its_widest_line()
     assert_eq!(row_text(&p, 0).trim_end(), "## alphabet beta");
     assert_eq!(row_text(&p, 1), "   gamma");
     // The trailing space of the wrapped line is not underlined.
-    assert_eq!(row_text(&p, 2), "─".repeat(16));
+    assert_eq!(row_text(&p, 2), "━".repeat(16));
 }
 
 #[test]

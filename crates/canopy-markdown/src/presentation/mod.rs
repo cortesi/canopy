@@ -13,7 +13,10 @@ use canopy::{
     error::Result,
     geom::{Point, Rect, Size},
     render::Render,
-    style::{Attr, AttrSet, Mix, Paint, PartialStyle, StyleMap, StyleRules, themes::Palette},
+    rgb,
+    style::{
+        Attr, AttrSet, Color, Mix, Paint, PartialStyle, StyleMap, StyleRules, themes::Palette,
+    },
     text,
 };
 #[cfg(feature = "syntax")]
@@ -45,8 +48,16 @@ const WHOLE_UNIT: Range<usize> = 0..usize::MAX;
 /// Rows of the area that a big heading lays out in, more than any face of
 /// the smallest size takes.
 const BIG_HEADING_ROWS: u32 = 8;
-/// How far each heading level mixes the heading hue toward the ground.
-const HEADING_STEP: f32 = 0.08;
+/// How far a card's ground mixes the panel ground toward the text colour.
+const CARD_LIFT: f32 = 0.06;
+/// The hue of every heading, before it fits the palette's ground.
+const HEADING_HUE: Color = rgb!("#a99be1");
+/// Least contrast of the heading hue with the ground, the WCAG ratio for body
+/// text.
+const HEADING_CONTRAST: f32 = 4.5;
+/// How far each heading level from the third mixes the heading hue toward
+/// the ground.
+const HEADING_STEP: f32 = 0.06;
 /// How much further a heading's markers and underline mix toward the ground.
 const HEADING_QUIET: f32 = 0.3;
 
@@ -1185,16 +1196,17 @@ fn prepare_block(
                     &INLINE_ROLES[level.unwrap_or(0)],
                 );
             }
-            // The top three levels are underlined, lighter at each level, from
-            // the markers to the end of the widest line. ASCII starts from
-            // Setext's `=` and `-`.
+            // The top three levels are underlined from the markers to the end
+            // of the widest line: heavy under the first two, light under the
+            // third. Big text needs none. ASCII uses Setext's `=` and `-`.
             let underline = match (level, geometry.glyphs) {
+                (Some(1), _) if big.is_some() => None,
                 (Some(1), GlyphPreset::Ascii) => Some(("=", 0)),
                 (Some(1), _) => Some(("━", 0)),
-                (Some(2), GlyphPreset::Ascii) => Some(("-", 1)),
-                (Some(2), _) => Some(("─", 1)),
-                (Some(3), GlyphPreset::Ascii) => Some((".", 2)),
-                (Some(3), _) => Some(("┄", 2)),
+                (Some(2), GlyphPreset::Ascii) => Some(("=", 1)),
+                (Some(2), _) => Some(("━", 1)),
+                (Some(3), GlyphPreset::Ascii) => Some(("-", 2)),
+                (Some(3), _) => Some(("─", 2)),
                 _ => None,
             };
             if let Some((glyph, index)) = underline {
@@ -1926,7 +1938,12 @@ pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
         )
         .fg("markdown/rule", palette.frame)
         .fg("markdown/provisional", palette.muted_fg)
-        .bg("markdown/card", palette.panel_bg)
+        // Cards lift a step past the panel ground, toward the text, so code
+        // stands off the page in every palette.
+        .bg(
+            "markdown/card",
+            palette.panel_bg.mix(palette.fg, CARD_LIFT, Mix::Oklab),
+        )
         .fg("markdown/card/label", palette.faint_fg)
         .bg("markdown/inline-code", palette.panel_bg)
         .bg("markdown/selection", palette.selection_bg)
@@ -1943,14 +1960,16 @@ pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
     rules.apply();
 }
 
-/// Every heading takes one hue, the palette's orange, which nothing else in
-/// a document uses: links take the accent and alerts their own tones. Each
-/// level below the first mixes the hue a step further toward the ground. The
-/// markers and underlines are quieter than their heading's text.
+/// Every heading takes one hue, a muted purple apart from the blue of links
+/// and the tones of alerts. On each palette it moves just far enough in
+/// lightness to read on the ground. The big first level and the second take
+/// the full hue; each level from the third mixes it a step further toward
+/// the ground. Markers and underlines are quieter than their heading's text.
 fn heading_rules<'a>(palette: &Palette, mut rules: StyleRules<'a>) -> StyleRules<'a> {
-    let tint = |t: f32| palette.orange.mix(palette.bg, t, Mix::Oklab);
+    let hue = HEADING_HUE.with_contrast(&[palette.bg], HEADING_CONTRAST);
+    let tint = |t: f32| hue.mix(palette.bg, t, Mix::Oklab);
     for (level, (role, inline)) in HEADING_ROLES.iter().zip(&INLINE_ROLES[1..]).enumerate() {
-        let depth = HEADING_STEP * level as f32;
+        let depth = HEADING_STEP * level.saturating_sub(1) as f32;
         let base = || PartialStyle::new().fg(tint(depth)).attr(Attr::Bold);
         // Markers and underlines are structure, so they drop the weight.
         let quiet = || {
