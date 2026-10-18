@@ -1124,6 +1124,44 @@ fn an_embedded_section_is_cut_by_its_anchor() {
 }
 
 #[test]
+fn an_image_takes_its_size_hint_and_follows_on_enter() {
+    let (mut harness, manual) = configured("![[pic.png|80]]\n", ViewType::Rendered, false, |o| {
+        o.resources = true;
+        o.local_links = true;
+        o.follow_links = true;
+    });
+    settle(&mut harness, &manual);
+    let id =
+        harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests())[0].id;
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.supply_resource(ctx, id, Resource::Image(two_tone()))
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    // 80 pixels at 8 to a column: 10 columns, and 3 rows at the image's
+    // aspect.
+    let painted: Vec<usize> = harness
+        .tbuf()
+        .lines()
+        .iter()
+        .map(|line| line.chars().filter(|c| !c.is_ascii()).count())
+        .filter(|count| *count > 0)
+        .collect();
+    assert_eq!(painted.len(), 3, "{painted:?}");
+    assert!(painted.iter().all(|count| *count <= 10), "{painted:?}");
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.activate(ctx))
+        .unwrap();
+    service(&mut harness);
+    let actions = harness.with_root_widget(|reader: &mut Markdown| reader.take_requests(10));
+    assert!(matches!(
+        &actions[0].action,
+        HostAction::OpenLocal(link) if link.path == "pic.png" && link.wiki
+    ));
+}
+
+#[test]
 fn a_failed_image_shows_why() {
     let (mut harness, manual) = configured("![Gone](gone.png)\n", ViewType::Rendered, false, |o| {
         o.resources = true;
