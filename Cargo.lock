@@ -357,6 +357,7 @@ dependencies = [
  "canopy-widgets",
  "grep-matcher",
  "grep-regex",
+ "percent-encoding",
  "pulldown-cmark",
  "thiserror",
  "unicode-segmentation",

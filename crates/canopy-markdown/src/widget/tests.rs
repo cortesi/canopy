@@ -16,19 +16,31 @@ fn fixture(
     clipboard: bool,
     browser: bool,
 ) -> (Harness, ManualExecutor) {
+    configured(text, view, receiving, |options| {
+        options.clipboard = clipboard;
+        options.browser = browser;
+    })
+}
+
+/// A reader over `text` whose options `configure` adjusts.
+fn configured(
+    text: &str,
+    view: ViewType,
+    receiving: bool,
+    configure: impl FnOnce(&mut MarkdownOptions),
+) -> (Harness, ManualExecutor) {
     let (executor, manual) = MarkdownExecutor::manual(ExecutorOptions {
         worker_count: 1,
         ..ExecutorOptions::default()
     });
-    let options = MarkdownOptions {
+    let mut options = MarkdownOptions {
         executor,
         initial_view: view,
         external_search: true,
-        clipboard,
-        browser,
         coalesce: Duration::ZERO,
         ..MarkdownOptions::default()
     };
+    configure(&mut options);
     let reader = if receiving {
         let mut reader = Markdown::streaming(options).unwrap();
         reader.store.append(text).unwrap();
@@ -794,6 +806,102 @@ fn failed_inspector_copy_admission_does_not_discard_later_open_or_close() {
                 HostAction::OpenUrl("https://example.com/path".into())
             );
         });
+    }
+}
+
+#[test]
+fn followed_links_request_the_host_at_once_and_inspected_links_on_open() {
+    let wiki = HostAction::OpenLocal(LocalLink {
+        path: "work/verber".into(),
+        fragment: Some("Plans".into()),
+        wiki: true,
+    });
+    for follow in [true, false] {
+        let (mut harness, manual) = configured(
+            "[[work/verber#Plans|Verber]] and [site](https://example.com)\n",
+            ViewType::Rendered,
+            false,
+            |options| {
+                options.browser = true;
+                options.local_links = true;
+                options.follow_links = follow;
+            },
+        );
+        settle(&mut harness, &manual);
+        let mut requests = Vec::new();
+        for _ in 0..2 {
+            harness
+                .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                    reader.next_object(ctx, 1)?;
+                    reader.activate(ctx)
+                })
+                .unwrap();
+            service(&mut harness);
+            if !follow {
+                // Without following, the inspector shows the destination and
+                // its Open follows it.
+                harness
+                    .with_unique(|inspector: &mut Inspector, _| inspector.open_url())
+                    .unwrap();
+                harness
+                    .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                        reader.dismiss_inspector(ctx)
+                    })
+                    .unwrap();
+                service(&mut harness);
+            }
+            requests.extend(harness.with_root_widget(|reader: &mut Markdown| {
+                reader
+                    .take_requests(10)
+                    .into_iter()
+                    .map(|request| request.action)
+                    .collect::<Vec<_>>()
+            }));
+        }
+        assert_eq!(
+            requests,
+            [
+                wiki.clone(),
+                HostAction::OpenUrl("https://example.com/".into())
+            ],
+            "follow {follow}"
+        );
+    }
+}
+
+#[test]
+fn local_links_without_host_support_open_the_inspector() {
+    let (mut harness, manual) = configured("[[Note]]\n", ViewType::Rendered, false, |options| {
+        options.follow_links = true;
+    });
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.activate(ctx))
+        .unwrap();
+    service(&mut harness);
+    assert!(harness.with_root_widget(|reader: &mut Markdown| reader.take_requests(10).is_empty()));
+    assert!(harness.with_unique(|_: &mut Inspector, _| Ok(())).is_ok());
+}
+
+#[test]
+fn reveal_heading_finds_a_heading_by_slug_or_text() {
+    let text = format!("{}## Far Away\n\nEnd.\n", "Line.\n\n".repeat(40));
+    for (anchor, found) in [
+        ("far-away", true),
+        ("far away", true),
+        ("FAR AWAY", true),
+        ("Missing", false),
+    ] {
+        let (mut harness, manual) = fixture(&text, ViewType::Rendered, false, false, false);
+        settle(&mut harness, &manual);
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                assert_eq!(reader.reveal_heading(ctx, anchor)?, found, "{anchor}");
+                Ok(())
+            })
+            .unwrap();
+        service(&mut harness);
+        assert_eq!(harness.tbuf().contains_text("Far Away"), found, "{anchor}");
     }
 }
 

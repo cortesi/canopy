@@ -36,8 +36,8 @@ use canopy_widgets::{
 use crate::{
     Follow, MarkdownOptions, Mode, ViewType,
     document::{
-        BlockKind, DocumentSnapshot, ObjectKind, ReadingPosition, ReadingRange, ResolvedLink,
-        resolve_link,
+        BlockKind, DocumentSnapshot, LocalLink, ObjectKind, ReadingPosition, ReadingRange,
+        ResolvedLink, heading_slug,
     },
     executor::{
         CopyInput, PreparedView, SearchOutput, WorkHandle, WorkRequest, WorkResult, WorkSearch,
@@ -166,6 +166,8 @@ pub struct Markdown {
     query_error: Option<String>,
     /// At most one lazily mounted modal inspector.
     inspector: Option<OpenInspector>,
+    /// Destination of the link the inspector shows, which its Open follows.
+    inspected_link: Option<ResolvedLink>,
     /// Bounded immutable effects awaiting host delivery or acknowledgement.
     requests: Requests,
     /// Latest status of an explicitly activated host effect.
@@ -268,6 +270,7 @@ impl Markdown {
             source_results: None,
             query_error: None,
             inspector: None,
+            inspected_link: None,
             requests: Requests::default(),
             action_status: String::new(),
             failure: None,
@@ -1037,29 +1040,37 @@ impl Markdown {
                 return Ok(());
             }
             ObjectKind::Link(link) => {
-                match resolve_link(&link.destination, self.base_url().as_ref()) {
-                    ResolvedLink::Fragment(slug) => {
-                        if let Some(entry) = p.document.outline.iter().find(|e| e.slug == slug) {
-                            self.jump_source(ctx, entry.source.start)?;
-                        }
-                        return Ok(());
+                let resolved = link.resolve(self.base_url().as_ref());
+                if let ResolvedLink::Fragment(slug) = &resolved {
+                    if let Some(entry) = p.document.outline.iter().find(|e| &e.slug == slug) {
+                        self.jump_source(ctx, entry.source.start)?;
                     }
-                    ResolvedLink::External(url) => InspectorContent::Link {
-                        label: link.label.clone(),
-                        original: link.destination.clone(),
-                        resolved: Some(url.to_string()),
-                        allow_open: self.options.browser,
-                    },
-                    ResolvedLink::Unavailable(reason) => {
-                        self.action_status = reason;
-                        InspectorContent::Link {
-                            label: link.label.clone(),
-                            original: link.destination.clone(),
-                            resolved: None,
-                            allow_open: false,
-                        }
-                    }
+                    return Ok(());
                 }
+                if self.options.follow_links
+                    && self.follow_link(&resolved, p.document.source.revision, Some(object.id))?
+                {
+                    return self.update_chrome(ctx);
+                }
+                let (shown, allow_open) = match &resolved {
+                    ResolvedLink::External(url) => (Some(url.to_string()), self.options.browser),
+                    ResolvedLink::Local(local) => {
+                        (Some(local_display(local)), self.options.local_links)
+                    }
+                    ResolvedLink::Unavailable(reason) => {
+                        self.action_status.clone_from(reason);
+                        (None, false)
+                    }
+                    ResolvedLink::Fragment(_) => unreachable!("fragments jump above"),
+                };
+                let content = InspectorContent::Link {
+                    label: link.label.clone(),
+                    original: link.destination.clone(),
+                    resolved: shown,
+                    allow_open,
+                };
+                self.inspected_link = Some(resolved);
+                content
             }
         };
         self.open_inspector(ctx, content, Some(object.id), p.document.source.revision)?;
@@ -1169,6 +1180,8 @@ impl Markdown {
                 self.action_status = failure;
             }
         }
+        // Events still queued in the inspector have followed its link.
+        self.inspected_link = None;
         self.update_chrome(ctx)
     }
     /// Admit explicit inspector effects on the document's ordered action lane.
@@ -1194,22 +1207,58 @@ impl Markdown {
             InspectorEvent::CopySource { text, range } => {
                 self.queue_copy(ctx, CopyInput::Source { text, range }, None, revision)?;
             }
-            InspectorEvent::OpenUrl(destination) if self.options.browser => {
-                if let ResolvedLink::External(url) =
-                    resolve_link(&destination, self.base_url().as_ref())
-                {
-                    let action = self
-                        .requests
-                        .reserve(epoch, revision, None, self.options.action_limit)
-                        .ok_or_else(|| invalid("The host request queue is full"))?;
-                    self.requests
-                        .publish(action.id, HostAction::OpenUrl(url.to_string()));
-                    self.action_status = "Opening".into();
+            InspectorEvent::OpenUrl(_) => {
+                if let Some(link) = self.inspected_link.clone() {
+                    self.follow_link(&link, revision, None)?;
                 }
             }
-            InspectorEvent::OpenUrl(_) => {}
         }
         Ok(())
+    }
+    /// Ask the host to follow a link it can service: a URL through its
+    /// browser, a document of its own through its local links. Returns
+    /// whether a request went out.
+    fn follow_link(
+        &mut self,
+        link: &ResolvedLink,
+        revision: u64,
+        object: Option<u64>,
+    ) -> Result<bool> {
+        let (action, status) = match link {
+            ResolvedLink::External(url) if self.options.browser => {
+                (HostAction::OpenUrl(url.to_string()), "Opening")
+            }
+            ResolvedLink::Local(local) if self.options.local_links => {
+                (HostAction::OpenLocal(local.clone()), "Following")
+            }
+            _ => return Ok(false),
+        };
+        let reserved = self
+            .requests
+            .reserve(self.epoch(), revision, object, self.options.action_limit)
+            .ok_or_else(|| invalid("The host request queue is full"))?;
+        self.requests.publish(reserved.id, action);
+        self.action_status = status.into();
+        Ok(true)
+    }
+    /// Reveal the first heading that a link's `#` anchor names: by its
+    /// fragment slug, or by its text without regard to case. Returns whether
+    /// one matched.
+    pub fn reveal_heading(&mut self, ctx: &mut dyn Context, anchor: &str) -> Result<bool> {
+        let Some(p) = self.shared.borrow().presentation.clone() else {
+            return Ok(false);
+        };
+        let slug = heading_slug(anchor);
+        let Some(entry) = p
+            .document
+            .outline
+            .iter()
+            .find(|e| e.slug == slug || e.text.trim().eq_ignore_ascii_case(anchor.trim()))
+        else {
+            return Ok(false);
+        };
+        self.jump_source(ctx, entry.source.start)?;
+        Ok(true)
     }
     /// Save one return location and navigate to an accepted source byte.
     fn jump_source(&mut self, ctx: &mut dyn Context, byte: usize) -> Result<()> {
@@ -2420,6 +2469,19 @@ impl Widget for Chrome {
     }
     fn name(&self) -> NodeName {
         NodeName::convert("markdown_status")
+    }
+}
+
+/// The destination a local link names, as the inspector shows it.
+fn local_display(link: &LocalLink) -> String {
+    let anchor = link
+        .fragment
+        .as_ref()
+        .map_or(String::new(), |fragment| format!("#{fragment}"));
+    if link.wiki {
+        format!("[[{}{anchor}]]", link.path)
+    } else {
+        format!("{}{anchor}", link.path)
     }
 }
 

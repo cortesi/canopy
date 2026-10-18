@@ -196,6 +196,15 @@ impl Markdown {
     /// Return once from a fragment, footnote, or outline jump.
     pub fn return_from_jump(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Reveal the first heading that a link's `#` anchor names: by its
+    /// fragment slug, or by its text without regard to case. Returns whether
+    /// one matched.
+    pub fn reveal_heading(
+        &mut self,
+        ctx: &mut dyn Context,
+        anchor: &str,
+    ) -> canopy::error::Result<bool>;
+
     /// Scroll the active view while preserving object cursor and follow policy.
     pub fn scroll_view(&mut self, ctx: &mut dyn Context, op: ScrollOp)
     -> canopy::error::Result<()>;
@@ -556,7 +565,15 @@ pub struct MarkdownOptions {
     pub clipboard: bool,
     /// Enable explicit HTTP/HTTPS Open actions. The host services requests.
     pub browser: bool,
-    /// Base URL for resolving relative destinations.
+    /// Enable requests to follow relative, `file:`, and wiki links. The host
+    /// finds and services them.
+    pub local_links: bool,
+    /// Follow a link as soon as it is activated, instead of inspecting its
+    /// destination first. A link that cannot be followed still opens the
+    /// inspector.
+    pub follow_links: bool,
+    /// Base URL for resolving relative destinations. With one, relative links
+    /// resolve to URLs rather than to host documents.
     pub base_url: Option<String>,
 }
 
@@ -959,6 +976,29 @@ pub mod document {
         pub destination: String,
         /// The optional parser-decoded link title.
         pub title: String,
+        /// Whether the source wrote a `[[target|label]]` wikilink, whose
+        /// destination names a host document rather than a URL.
+        pub wiki: bool,
+    }
+
+    impl Link {
+        /// Classify the destination. A wikilink is always local to the host;
+        /// other destinations resolve as [`resolve_link`] does.
+        pub fn resolve(&self, base: Option<&Url>) -> ResolvedLink;
+    }
+
+    /// A link to a document of the host's own: a relative or absolute path, a
+    /// `file:` URL, or a wikilink. The reader never touches the filesystem; the
+    /// host decides what the path names.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct LocalLink {
+        /// The percent-decoded path, as written, without its fragment.
+        pub path: String,
+        /// The percent-decoded heading or block anchor after `#`, if any.
+        pub fragment: Option<String>,
+        /// Whether a wikilink named the document. Its path may omit an
+        /// extension, and the host may resolve it by name.
+        pub wiki: bool,
     }
 
     /// Parser-normalized table data without terminal geometry.
@@ -1078,6 +1118,8 @@ pub mod document {
         Fragment(String),
         /// A structured HTTP(S) URL eligible for an explicit host Open.
         External(Url),
+        /// A document of the host's own, which only the host can find.
+        Local(LocalLink),
         /// A destination that requires a base URL or explicit host handler.
         Unavailable(String),
     }
@@ -1138,7 +1180,8 @@ pub mod document {
     pub fn parser_options() -> Options;
 
     /// Resolve without filesystem inference. Only control-free HTTP(S) URLs can
-    /// open by default.
+    /// open by default. Without a base URL, a relative path or `file:` URL is
+    /// local to the host.
     pub fn resolve_link(destination: &str, base: Option<&Url>) -> ResolvedLink;
 }
 
@@ -1475,6 +1518,8 @@ pub mod host {
         CopyText(String),
         /// Open this validated, resolved URL through the host browser service.
         OpenUrl(String),
+        /// Follow a link to a document of the host's own, which the host finds.
+        OpenLocal(LocalLink),
     }
 
     /// The result of one host request.

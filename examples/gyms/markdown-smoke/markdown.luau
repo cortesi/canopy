@@ -89,6 +89,21 @@ canopy.send_key("Escape")
 canopy.prepare()
 close_inspector()
 
+-- A wikilink names a note for the host. Activating its search match inspects
+-- it, and Open records a local follow rather than a browser request.
+gym("search", "Verber")
+ready()
+reader("search_next", 1)
+reader("activate")
+canopy.wait_for(function() return gym("inspector_ready") end, 5000)
+actions = gym("host_actions")
+canopy.send_key("Ctrl+o")
+host_action(actions)
+canopy.assert(gym("last_local") == "work/verber", "Open follows a wikilink locally: " .. gym("last_local"))
+close_inspector()
+reader("clear_search")
+ready()
+
 -- Search includes payload omitted from inline table and source-card previews.
 gym("search", "hidden-card-needle")
 ready()

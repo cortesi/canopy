@@ -115,7 +115,8 @@ The next logical line stays separate.
 
 Inline <span class="literal">HTML</span> stays visible. A reference to
 [the late guide][late] resolves through its admitted definition. A note[^one]
-can jump to its source-positioned definition.
+can jump to its source-positioned definition. A wikilink such as
+[[work/verber#Plans|Verber]] names a note for the host to find.
 
 [^one]: A footnote remains here, in source order.
 

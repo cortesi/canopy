@@ -2,6 +2,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::document::LocalLink;
+
 /// An effect the embedding application may perform once.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HostAction {
@@ -9,6 +11,8 @@ pub enum HostAction {
     CopyText(String),
     /// Open this validated, resolved URL through the host browser service.
     OpenUrl(String),
+    /// Follow a link to a document of the host's own, which the host finds.
+    OpenLocal(LocalLink),
 }
 
 /// A unique host action, frozen at the displayed revision of its activation.

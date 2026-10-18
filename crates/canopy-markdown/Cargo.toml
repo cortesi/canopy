@@ -18,6 +18,7 @@ canopy.workspace = true
 canopy-widgets.workspace = true
 pulldown-cmark = { version = "0.13.4", default-features = false }
 url = "2.5"
+percent-encoding = "2.3"
 grep-matcher = "0.1.9"
 grep-regex = "0.1.14"
 unicode-segmentation.workspace = true

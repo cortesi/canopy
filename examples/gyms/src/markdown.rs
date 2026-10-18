@@ -118,6 +118,7 @@ impl MarkdownGym {
         MarkdownOptions {
             clipboard: true,
             browser: true,
+            local_links: true,
             base_url: Some("https://example.com/docs/".into()),
             glyphs: if self.ascii {
                 GlyphPreset::Ascii
@@ -433,7 +434,7 @@ impl MarkdownGym {
     pub fn last_copy(&self) -> String {
         self.last_action(|action| match action {
             HostAction::CopyText(text) => Some(text),
-            HostAction::OpenUrl(_) => None,
+            HostAction::OpenUrl(_) | HostAction::OpenLocal(_) => None,
         })
     }
     #[command]
@@ -441,7 +442,15 @@ impl MarkdownGym {
     pub fn last_url(&self) -> String {
         self.last_action(|action| match action {
             HostAction::OpenUrl(url) => Some(url),
-            HostAction::CopyText(_) => None,
+            HostAction::CopyText(_) | HostAction::OpenLocal(_) => None,
+        })
+    }
+    #[command]
+    /// Path of the most recently recorded local link follow.
+    pub fn last_local(&self) -> String {
+        self.last_action(|action| match action {
+            HostAction::OpenLocal(link) => Some(&link.path),
+            HostAction::CopyText(_) | HostAction::OpenUrl(_) => None,
         })
     }
     #[command]

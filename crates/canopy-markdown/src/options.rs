@@ -90,7 +90,15 @@ pub struct MarkdownOptions {
     pub clipboard: bool,
     /// Enable explicit HTTP/HTTPS Open actions. The host services requests.
     pub browser: bool,
-    /// Base URL for resolving relative destinations.
+    /// Enable requests to follow relative, `file:`, and wiki links. The host
+    /// finds and services them.
+    pub local_links: bool,
+    /// Follow a link as soon as it is activated, instead of inspecting its
+    /// destination first. A link that cannot be followed still opens the
+    /// inspector.
+    pub follow_links: bool,
+    /// Base URL for resolving relative destinations. With one, relative links
+    /// resolve to URLs rather than to host documents.
     pub base_url: Option<String>,
 }
 
@@ -118,6 +126,8 @@ impl Default for MarkdownOptions {
             coalesce: Duration::from_millis(33),
             clipboard: false,
             browser: false,
+            local_links: false,
+            follow_links: false,
             base_url: None,
         }
     }

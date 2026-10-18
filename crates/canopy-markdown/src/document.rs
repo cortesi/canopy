@@ -8,7 +8,7 @@ use std::{
 };
 
 pub use pulldown_cmark::Alignment;
-use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag};
+use pulldown_cmark::{CodeBlockKind, Event, LinkType, Options, Parser, Tag};
 
 use crate::source_store::SourceSnapshot;
 
@@ -207,6 +207,34 @@ pub struct Link {
     pub destination: String,
     /// The optional parser-decoded link title.
     pub title: String,
+    /// Whether the source wrote a `[[target|label]]` wikilink, whose
+    /// destination names a host document rather than a URL.
+    pub wiki: bool,
+}
+impl Link {
+    /// Classify the destination. A wikilink is always local to the host;
+    /// other destinations resolve as [`resolve_link`] does.
+    pub fn resolve(&self, base: Option<&url::Url>) -> ResolvedLink {
+        if !self.wiki {
+            return resolve_link(&self.destination, base);
+        }
+        if self.destination.chars().any(char::is_control) {
+            return ResolvedLink::Unavailable("Link contains control characters".into());
+        }
+        let (path, fragment) = match self.destination.split_once('#') {
+            Some((path, fragment)) => (path.trim(), Some(fragment.trim())),
+            None => (self.destination.trim(), None),
+        };
+        match (path.is_empty(), fragment) {
+            (true, Some(fragment)) => ResolvedLink::Fragment(heading_slug(fragment)),
+            (true, None) => ResolvedLink::Unavailable("Wikilink names no document".into()),
+            (false, _) => ResolvedLink::Local(LocalLink {
+                path: path.to_owned(),
+                fragment: fragment.map(str::to_owned),
+                wiki: true,
+            }),
+        }
+    }
 }
 #[derive(Clone, Debug)]
 /// An explicit interaction target outside provisional content.
@@ -489,6 +517,7 @@ pub fn parser_options() -> Options {
         | Options::ENABLE_TASKLISTS
         | Options::ENABLE_GFM
         | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS
+        | Options::ENABLE_WIKILINKS
 }
 
 #[derive(Clone, Debug)]
@@ -1393,7 +1422,10 @@ fn append_inline(
                     object: None,
                 });
                 if let Tag::Link {
-                    dest_url, title, ..
+                    link_type,
+                    dest_url,
+                    title,
+                    ..
                 } = tag
                 {
                     links.push(PendingLink {
@@ -1405,6 +1437,7 @@ fn append_inline(
                             label: out[start..].into(),
                             destination: dest_url.to_string(),
                             title: title.to_string(),
+                            wiki: matches!(link_type, LinkType::WikiLink { .. }),
                         }),
                     });
                 }
@@ -1431,6 +1464,7 @@ fn append_inline(
                                     label: label.clone(),
                                     destination: label,
                                     title: String::new(),
+                                    wiki: false,
                                 }),
                             });
                         }
@@ -1685,11 +1719,27 @@ pub enum ResolvedLink {
     Fragment(String),
     /// A structured HTTP(S) URL eligible for an explicit host Open.
     External(url::Url),
+    /// A document of the host's own, which only the host can find.
+    Local(LocalLink),
     /// A destination that requires a base URL or explicit host handler.
     Unavailable(String),
 }
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// A link to a document of the host's own: a relative or absolute path, a
+/// `file:` URL, or a wikilink. The reader never touches the filesystem; the
+/// host decides what the path names.
+pub struct LocalLink {
+    /// The percent-decoded path, as written, without its fragment.
+    pub path: String,
+    /// The percent-decoded heading or block anchor after `#`, if any.
+    pub fragment: Option<String>,
+    /// Whether a wikilink named the document. Its path may omit an
+    /// extension, and the host may resolve it by name.
+    pub wiki: bool,
+}
 /// Resolve without filesystem inference. Only control-free HTTP(S) URLs can
-/// open by default.
+/// open by default. Without a base URL, a relative path or `file:` URL is
+/// local to the host.
 pub fn resolve_link(destination: &str, base: Option<&url::Url>) -> ResolvedLink {
     if destination.chars().any(char::is_control) {
         return ResolvedLink::Unavailable("URL contains control characters".into());
@@ -1697,17 +1747,44 @@ pub fn resolve_link(destination: &str, base: Option<&url::Url>) -> ResolvedLink 
     if let Some(fragment) = destination.strip_prefix('#') {
         return ResolvedLink::Fragment(fragment.to_owned());
     }
-    let parsed = url::Url::parse(destination).or_else(|_| {
-        base.ok_or(url::ParseError::RelativeUrlWithoutBase)
-            .and_then(|base| base.join(destination))
-    });
+    let parsed = match (url::Url::parse(destination), base) {
+        (Err(url::ParseError::RelativeUrlWithoutBase), Some(base)) => base.join(destination),
+        (Err(url::ParseError::RelativeUrlWithoutBase), None) => return local_link(destination),
+        (parsed, _) => parsed,
+    };
     match parsed {
         Ok(url) if matches!(url.scheme(), "http" | "https") && url.host_str().is_some() => {
             ResolvedLink::External(url)
         }
+        Ok(url) if url.scheme() == "file" => local_link(&format!(
+            "{}{}",
+            url.path(),
+            url.fragment().map_or(String::new(), |f| format!("#{f}"))
+        )),
         Ok(_) => ResolvedLink::Unavailable("URL scheme needs a host handler".into()),
         Err(_) => ResolvedLink::Unavailable("Relative URL needs a valid host base URL".into()),
     }
+}
+/// Split a local destination into its decoded path and fragment.
+fn local_link(destination: &str) -> ResolvedLink {
+    let decode = |text: &str| {
+        percent_encoding::percent_decode_str(text)
+            .decode_utf8_lossy()
+            .into_owned()
+    };
+    let (path, fragment) = match destination.split_once('#') {
+        Some((path, fragment)) => (path, Some(decode(fragment))),
+        None => (destination, None),
+    };
+    let path = decode(path.split_once('?').map_or(path, |(path, _)| path));
+    if path.is_empty() {
+        return ResolvedLink::Unavailable("Link names no document".into());
+    }
+    ResolvedLink::Local(LocalLink {
+        path,
+        fragment,
+        wiki: false,
+    })
 }
 
 #[cfg(test)]
@@ -2077,12 +2154,73 @@ mod tests {
             matches!(resolve_link("../a",Some(&base)),ResolvedLink::External(url) if url.as_str()=="https://example.com/a")
         );
         assert!(matches!(resolve_link("#part",None),ResolvedLink::Fragment(s) if s=="part"));
-        for value in ["/tmp/file", "javascript:alert(1)", "https://example.com/\n"] {
+        for value in ["javascript:alert(1)", "https://example.com/\n"] {
             assert!(matches!(
                 resolve_link(value, None),
                 ResolvedLink::Unavailable(_)
             ));
         }
+    }
+    #[test]
+    fn wikilinks_and_relative_paths_resolve_to_host_documents() {
+        let doc = complete(
+            "[[work/verber|Verber]] [[Note#Plans]] [[#Local Part]] [m](my%20note.md#a%20b)\n",
+        );
+        let links: Vec<_> = doc
+            .objects
+            .iter()
+            .filter_map(|o| match &o.kind {
+                ObjectKind::Link(link) => Some(link.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            links
+                .iter()
+                .map(|l| (l.label.as_str(), l.wiki))
+                .collect::<Vec<_>>(),
+            [
+                ("Verber", true),
+                ("Note#Plans", true),
+                ("#Local Part", true),
+                ("m", false)
+            ]
+        );
+        let local = |path: &str, fragment: Option<&str>, wiki| {
+            ResolvedLink::Local(LocalLink {
+                path: path.into(),
+                fragment: fragment.map(Into::into),
+                wiki,
+            })
+        };
+        let resolved: Vec<_> = links.iter().map(|l| l.resolve(None)).collect();
+        assert_eq!(
+            resolved,
+            [
+                local("work/verber", None, true),
+                local("Note", Some("Plans"), true),
+                ResolvedLink::Fragment("local-part".into()),
+                local("my note.md", Some("a b"), false),
+            ]
+        );
+        assert_eq!(
+            resolve_link("/tmp/file", None),
+            local("/tmp/file", None, false)
+        );
+        assert_eq!(
+            resolve_link("file:///tmp/a%20b.md#x", None),
+            local("/tmp/a b.md", Some("x"), false)
+        );
+        // A base URL still makes relative paths URLs, but not wikilinks.
+        let base = url::Url::parse("https://example.com/docs/").unwrap();
+        assert!(matches!(
+            links[3].resolve(Some(&base)),
+            ResolvedLink::External(_)
+        ));
+        assert_eq!(
+            links[0].resolve(Some(&base)),
+            local("work/verber", None, true)
+        );
     }
     #[test]
     fn heading_slugs_disambiguate_generated_suffixes_and_literal_headings() {
