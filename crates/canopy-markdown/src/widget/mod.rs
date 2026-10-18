@@ -2168,12 +2168,14 @@ impl Widget for Markdown {
         ) {
             return self.rendered_actions_available();
         }
-        if self.active == ViewType::Source {
-            return false;
-        }
         let Some(nav) = NavIntent::from_name(intent) else {
             return false;
         };
+        // Source's vi editor owns line and edge motions, but it has no
+        // paging, so the reader pages its view.
+        if self.active == ViewType::Source {
+            return matches!(nav, NavIntent::PageUp | NavIntent::PageDown);
+        }
         if self.shared.borrow().claims(nav) {
             return true;
         }

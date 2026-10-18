@@ -1574,31 +1574,25 @@ fn space_pages_down_like_page_down_in_both_views() {
         harness
             .with_root_widget_context(|reader: &mut Markdown, ctx| {
                 reader.set_view_type(ctx, view)?;
+                ctx.set_focus(reader.navigation_node().unwrap())?;
                 Ok(())
             })
             .unwrap();
         settle(&mut harness, &manual);
-        let mut offsets = Vec::new();
+        // Each key moves the view by the same page from where it stands.
+        let mut steps = Vec::new();
         for key in ["PageDown", "Space"] {
-            harness
-                .with_root_widget_context(|reader: &mut Markdown, ctx| {
-                    ctx.set_focus(reader.navigation_node().unwrap())?;
-                    Ok(())
-                })
-                .unwrap();
-            harness.key(Key::parse_spec("Home").unwrap()).unwrap();
+            let offset = |h: &mut Harness| {
+                h.with_root_widget_context(|reader: &mut Markdown, ctx| Ok(reader.view_offset(ctx)))
+                    .unwrap()
+            };
+            let before = offset(&mut harness);
             harness.key(Key::parse_spec(key).unwrap()).unwrap();
             service(&mut harness);
-            offsets.push(
-                harness
-                    .with_root_widget_context(|reader: &mut Markdown, ctx| {
-                        Ok(reader.view_offset(ctx))
-                    })
-                    .unwrap(),
-            );
+            steps.push(offset(&mut harness) - before);
         }
-        assert!(offsets[0] > 0, "{view:?}");
-        assert_eq!(offsets[0], offsets[1], "{view:?}");
+        assert!(steps[0] > 0, "{view:?} {steps:?}");
+        assert_eq!(steps[0], steps[1], "{view:?}");
     }
 }
 
