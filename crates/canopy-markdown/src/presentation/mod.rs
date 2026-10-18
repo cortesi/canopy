@@ -4,7 +4,7 @@
 use std::{
     collections::{HashMap, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
-    mem::discriminant,
+    mem::{discriminant, take},
     ops::Range,
     sync::Arc,
 };
@@ -13,7 +13,7 @@ use canopy::{
     error::Result,
     geom::{Point, Rect},
     render::Render,
-    style::{Attr, Mix, PartialStyle, StyleMap, StyleRules, themes::Palette},
+    style::{Attr, Mix, Paint, PartialStyle, StyleMap, StyleRules, themes::Palette},
     text,
 };
 #[cfg(feature = "syntax")]
@@ -112,6 +112,9 @@ pub struct PreparedRow {
     pub source: Range<usize>,
     /// Ground palette role, painted across empty line ends.
     pub ground: &'static str,
+    /// First cell the ground covers. Cells before it take the text ground,
+    /// so quote rails stay outside a card.
+    pub ground_x: u32,
     /// Whether document selection treats the unit as one whole payload.
     pub atomic: bool,
 }
@@ -583,6 +586,7 @@ impl PresentationSnapshot {
             .collect::<Vec<_>>();
         let mut row_search = Vec::new();
         let end = visible.tl.y.saturating_add(visible.h).min(self.height);
+        let text_bg = render.resolve_style("markdown/text").bg;
         for y in visible.tl.y..end {
             let Some((block, row)) = self.block_row(y) else {
                 continue;
@@ -617,21 +621,21 @@ impl PresentationSnapshot {
             };
             let ground_bg = render.resolve_style(ground).bg;
             let local_y = y - visible.tl.y;
-            render.fill(
-                ground,
-                Rect::new(
-                    0,
-                    local_y,
-                    self.geometry
-                        .width
-                        .saturating_sub(visible.tl.x)
-                        .min(visible.w),
-                    1,
-                ),
-                ' ',
-            )?;
+            let span = self
+                .geometry
+                .width
+                .saturating_sub(visible.tl.x)
+                .min(visible.w);
+            fill_ground(render, row, ground, visible.tl.x, local_y, span)?;
             for run in &row.runs {
                 stats.runs += 1;
+                let (whole_selected, whole_search, ground_bg) = cell_ground(
+                    run.x,
+                    row,
+                    (whole_selected, whole_search),
+                    &ground_bg,
+                    &text_bg,
+                );
                 let mut x = run.x;
                 for (byte, g) in run.text.grapheme_indices(true) {
                     let width = text::grapheme_width(g) as u32;
@@ -694,15 +698,8 @@ impl PresentationSnapshot {
             // A bar in the left margin marks every row of the active object.
             let margin = Rect::new(0, y, 1, 1);
             if active_row && block.inset > 0 && visible.contains_rect(margin) {
-                let mut bar = render.resolve_style("markdown/object/bar");
-                bar.bg = ground_bg;
-                let glyph = match self.geometry.glyphs {
-                    GlyphPreset::Unicode => "▌",
-                    GlyphPreset::Ascii => "|",
-                };
-                let local = Point { x: 0, y: local_y };
-                let local_area = Rect::new(0, local_y, 1, 1);
-                render.put_grapheme(bar.resolve_at(local_area, local), local, glyph)?;
+                let (_, _, bg) = cell_ground(0, row, (false, false), &ground_bg, &text_bg);
+                margin_bar(render, bg.clone(), local_y, self.geometry.glyphs)?;
             }
         }
         // A table that fits flows into the body width; one that does not
@@ -791,7 +788,8 @@ fn signature(block: &Block, unit: &ReadingUnit, object: Option<u64>, syntax_allo
     block.depth.hash(&mut hash);
     block.quote_depth.hash(&mut hash);
     block.quote_kind.hash(&mut hash);
-    block.alert.hash(&mut hash);
+    block.quote_join.hash(&mut hash);
+    block.alerts.hash(&mut hash);
     block.list_marker.hash(&mut hash);
     block.provisional.hash(&mut hash);
     discriminant(&block.kind).hash(&mut hash);
@@ -843,6 +841,7 @@ fn prepare_block(
         unit_id: unit.id,
         source: block.source.clone(),
         ground,
+        ground_x: 0,
         atomic: unit.atomic,
     };
     let mut table = None;
@@ -850,6 +849,10 @@ fn prepare_block(
     let mut table_start = 0;
     let mut table_height = 0;
     let mut prefix = block_prefix(block, geometry.glyphs);
+    // Cards, tables, and rules in a quote sit inside its rails.
+    let rails = quote_rails(block, block.quote_depth, geometry.glyphs);
+    let card_inset = inset + rails.width().min(body);
+    let card_body = body - (card_inset - inset);
     match &block.kind {
         BlockKind::Code(code) => prepare_code(
             &mut rows,
@@ -858,8 +861,8 @@ fn prepare_block(
             object,
             syntax_allowed,
             TextLayout {
-                inset,
-                budget: body,
+                inset: card_inset,
+                budget: card_body,
                 role: "markdown/card",
                 glyphs: geometry.glyphs,
             },
@@ -911,7 +914,7 @@ fn prepare_block(
                 flow = FlowTable::prepare(
                     data.clone(),
                     FlowOptions {
-                        width: body,
+                        width: card_body,
                         // The preview never cuts a value short: every value
                         // takes the lines it needs.
                         cell_lines: u32::MAX,
@@ -928,9 +931,9 @@ fn prepare_block(
                         let mut row = make_row();
                         decoration(
                             &mut row,
-                            inset,
+                            card_inset,
                             &format!("{} of {columns} columns", flow.widths().len()),
-                            body,
+                            card_body,
                             "markdown/card/label",
                             object,
                             geometry.glyphs,
@@ -950,9 +953,9 @@ fn prepare_block(
                         let mut row = make_row();
                         decoration(
                             &mut row,
-                            inset,
+                            card_inset,
                             "Excess cells ignored",
-                            body,
+                            card_body,
                             "markdown/card/label",
                             object,
                             geometry.glyphs,
@@ -983,9 +986,9 @@ fn prepare_block(
                 row.ground = "markdown/card";
                 decoration(
                     &mut row,
-                    inset,
+                    card_inset,
                     reason,
-                    body,
+                    card_body,
                     "markdown/card/label",
                     object,
                     geometry.glyphs,
@@ -1002,8 +1005,8 @@ fn prepare_block(
                     object,
                     None,
                     TextLayout {
-                        inset,
-                        budget: body,
+                        inset: card_inset,
+                        budget: card_body,
                         role: "markdown/card",
                         glyphs: geometry.glyphs,
                     },
@@ -1015,9 +1018,9 @@ fn prepare_block(
             let mut row = make_row();
             decoration(
                 &mut row,
-                inset,
-                &rule(geometry.glyphs, body.min(24)),
-                body,
+                card_inset,
+                &rule(geometry.glyphs, card_body.min(24)),
+                card_body,
                 "markdown/rule",
                 None,
                 geometry.glyphs,
@@ -1059,23 +1062,22 @@ fn prepare_block(
                 let mut row = make_row();
                 decoration(
                     &mut row,
-                    inset,
-                    &rule(geometry.glyphs, text::width(&unit.text).min(body).min(40)),
-                    body,
+                    card_inset,
+                    &rule(
+                        geometry.glyphs,
+                        text::width(&unit.text).min(card_body).min(40),
+                    ),
+                    card_body,
                     "markdown/rule",
                     None,
                     geometry.glyphs,
                 );
+                rail(&mut row, &rails, inset, body, geometry.glyphs);
                 rows.push(row);
             }
         }
     }
-    if rows.is_empty() {
-        rows.push(make_row());
-    }
-    for _ in 0..geometry.spacing.min(3) {
-        rows.push(make_row());
-    }
+    frame(&mut rows, make_row, block, unit, (inset, body), geometry);
     BlockLayout {
         id: block.id,
         signature: 0,
@@ -1085,7 +1087,7 @@ fn prepare_block(
         flow,
         table_start,
         table_height,
-        inset,
+        inset: card_inset,
         object,
         source_text_start: None,
     }
@@ -1239,22 +1241,121 @@ fn alert_style(tone: AlertTone) -> &'static str {
     }
 }
 
-/// Render quote rails, nesting, alert labels, and list markers. An alert's
-/// rail and label take the colour of its tone.
-fn block_prefix(block: &Block, glyphs: GlyphPreset) -> Prefix {
+/// Return the outermost `depth` quote rails of `block`. An alert's rail
+/// takes the colour of its tone.
+fn quote_rails(block: &Block, depth: usize, glyphs: GlyphPreset) -> Prefix {
     let mut prefix = Prefix::default();
     let rail = if glyphs == GlyphPreset::Ascii {
         "| "
     } else {
         "│ "
     };
-    for depth in 1..=block.quote_depth.min(16) {
+    for depth in 1..=depth.min(block.quote_depth).min(16) {
         let style = block
-            .alert
-            .filter(|alert| alert.depth == depth)
+            .alerts
+            .iter()
+            .find(|alert| alert.depth == depth)
             .map_or("markdown/structure", |alert| alert_style(alert.tone));
         prefix.push(rail, style);
     }
+    prefix
+}
+
+/// Give the rows of a card, table, rule, or empty block the rails of its
+/// quotes, then add spacing. Spacing keeps the rails of the quotes the next
+/// block shares, so a quote's bar runs unbroken.
+fn frame(
+    rows: &mut Vec<PreparedRow>,
+    make_row: impl Fn() -> PreparedRow,
+    block: &Block,
+    unit: &ReadingUnit,
+    (inset, body): (u32, u32),
+    geometry: GeometryKey,
+) {
+    let glyphs = geometry.glyphs;
+    let rails = quote_rails(block, block.quote_depth, glyphs);
+    let carded = matches!(
+        block.kind,
+        BlockKind::Code(_) | BlockKind::Table(_) | BlockKind::Rule
+    ) || matches!(block.kind, BlockKind::Source { .. } if unit.atomic);
+    if rows.is_empty() {
+        rows.push(make_row());
+        rail(&mut rows[0], &rails, inset, body, glyphs);
+    } else if carded {
+        for row in rows.iter_mut() {
+            rail(row, &rails, inset, body, glyphs);
+        }
+    }
+    let join = quote_rails(block, block.quote_join, glyphs);
+    for _ in 0..geometry.spacing.min(3) {
+        let mut row = make_row();
+        rail(&mut row, &join, inset, body, glyphs);
+        rows.push(row);
+    }
+}
+
+/// Return the whole-unit selection and search marks and the ground at column
+/// `x` of `row`. Rails before a card's ground keep the text ground and no mark.
+fn cell_ground<'a>(
+    x: u32,
+    row: &PreparedRow,
+    marks: (bool, bool),
+    ground: &'a Paint,
+    text: &'a Paint,
+) -> (bool, bool, &'a Paint) {
+    if x < row.ground_x {
+        (false, false, text)
+    } else {
+        (marks.0, marks.1, ground)
+    }
+}
+
+/// Paint the active object's bar in the left margin of row `y`.
+fn margin_bar(render: &mut Render, bg: Paint, y: u32, glyphs: GlyphPreset) -> Result<()> {
+    let mut bar = render.resolve_style("markdown/object/bar");
+    bar.bg = bg;
+    let glyph = match glyphs {
+        GlyphPreset::Unicode => "▌",
+        GlyphPreset::Ascii => "|",
+    };
+    let local = Point { x: 0, y };
+    let local_area = Rect::new(0, y, 1, 1);
+    render.put_grapheme(bar.resolve_at(local_area, local), local, glyph)
+}
+
+/// Fill a row's ground across `span` visible cells. Cells before the row's
+/// `ground_x` take the text ground.
+fn fill_ground(
+    render: &mut Render,
+    row: &PreparedRow,
+    ground: &str,
+    scroll_x: u32,
+    y: u32,
+    span: u32,
+) -> Result<()> {
+    let split = row.ground_x.saturating_sub(scroll_x).min(span);
+    if split > 0 {
+        render.fill("markdown/text", Rect::new(0, y, split, 1), ' ')?;
+    }
+    render.fill(ground, Rect::new(split, y, span - split, 1), ' ')
+}
+
+/// Put `rails` at column `inset` of `row`, ahead of its runs. A card's
+/// ground starts after them.
+fn rail(row: &mut PreparedRow, rails: &Prefix, inset: u32, width: u32, glyphs: GlyphPreset) {
+    if rails.parts.is_empty() {
+        return;
+    }
+    let runs = take(&mut row.runs);
+    rails.draw(row, inset, width, glyphs);
+    row.ground_x = inset + rails.width().min(width);
+    row.runs.extend(runs);
+}
+
+/// Render quote rails, nesting, alert labels, and list markers. An alert's
+/// rail and label take the colour of its tone.
+fn block_prefix(block: &Block, glyphs: GlyphPreset) -> Prefix {
+    let mut prefix = quote_rails(block, block.quote_depth, glyphs);
     let list_depth = block.depth.saturating_sub(block.quote_depth);
     let indent = if block.list_marker.is_some() {
         list_depth.saturating_sub(1)
@@ -1264,7 +1365,8 @@ fn block_prefix(block: &Block, glyphs: GlyphPreset) -> Prefix {
     prefix.push(" ".repeat(indent.min(16) * 2), "markdown/structure");
     if let Some(kind) = &block.quote_kind {
         let style = block
-            .alert
+            .alerts
+            .last()
             .map_or("markdown/structure", |alert| alert_style(alert.tone));
         prefix.push(kind.clone(), style);
         prefix.push(" ", "markdown/structure");

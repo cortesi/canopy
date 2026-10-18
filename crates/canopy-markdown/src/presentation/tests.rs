@@ -692,3 +692,27 @@ fn an_alert_rail_and_label_take_its_tone() {
         "an ordinary quote keeps a quiet rail"
     );
 }
+
+#[test]
+fn a_quote_bar_runs_unbroken_through_spacing_and_cards() {
+    let p = PresentationSnapshot::prepare(
+        document("> one\n>\n> ```\n> code\n> ```\n\n> two\n"),
+        GeometryKey {
+            width: 30,
+            spacing: 1,
+            ..Default::default()
+        },
+        None,
+    );
+    let texts: Vec<_> = (0..p.height()).map(|row| row_text(&p, row)).collect();
+    assert_eq!(
+        texts,
+        ["│ one", "│ ", "│ code", "", "│ two", ""],
+        "spacing within a quote keeps the rail; spacing between quotes does not"
+    );
+    let card = p.row(2).unwrap();
+    assert_eq!(card.ground, "markdown/card");
+    assert_eq!(card.runs[0].x, 2, "the rail sits at the margin");
+    assert_eq!(card.runs[1].x, 4, "the card sits inside the rail");
+    assert_eq!(card.ground_x, 4, "the card ground starts after the rail");
+}

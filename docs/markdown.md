@@ -50,6 +50,10 @@ until it closes. The table inspector shows every value in full: values wrap
 within their columns, the columns fit the inspector's width, and the grid
 scrolls sideways only when even narrowed columns do not fit.
 
+A quote's rail runs unbroken down its whole length, through the blank rows
+between its blocks and beside the code cards, tables, and rules it holds.
+Adjacent quotes keep a gap between their rails.
+
 Alerts take the colour of their tone on their rail and label. GitHub's five
 kinds set the tones, and the common labels of other tools, such as Obsidian's
 `info`, `success`, `question`, and `danger`, take the tone of the closest

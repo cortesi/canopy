@@ -188,8 +188,11 @@ pub struct Block {
     pub quote_depth: usize,
     /// Uppercase alert label on the first leaf of an alert quote.
     pub quote_kind: Option<String>,
-    /// The innermost alert quote this block lies in, if any.
-    pub alert: Option<Alert>,
+    /// Quote rails that continue past this block into the next, because
+    /// both lie in the same quotes.
+    pub quote_join: usize,
+    /// The alert quotes this block lies in, outermost first.
+    pub alerts: Vec<Alert>,
     /// A generated bullet or parser-derived ordered marker.
     pub list_marker: Option<String>,
     /// Whether this leaf remains open at the receiving boundary.
@@ -667,8 +670,10 @@ struct Context {
     quote_depth: usize,
     /// Optional first-leaf alert label.
     quote_kind: Option<String>,
-    /// The innermost alert quote the leaf lies in.
-    alert: Option<Alert>,
+    /// Source start of each enclosing quote, outermost first.
+    quotes: Vec<usize>,
+    /// The alert quotes the leaf lies in, outermost first.
+    alerts: Vec<Alert>,
     /// Generated list marker for the containing item.
     marker: Option<String>,
     /// Source start of the enclosing construct.
@@ -741,6 +746,7 @@ fn collect(nodes: &[Node], context: &Context, out: &mut Vec<Leaf>) {
                 c.quote_depth += 1;
                 c.depth += 1;
                 c.enclosing = node.range.start;
+                c.quotes.push(node.range.start);
                 // The parser knows GitHub's five kinds; other common labels
                 // lead the quote as a marker line, which the alert drops.
                 let mut children = node.children.clone();
@@ -761,9 +767,9 @@ fn collect(nodes: &[Node], context: &Context, out: &mut Vec<Leaf>) {
                     tone,
                     depth: c.quote_depth,
                 };
-                // An alert nested inside this one keeps its own tone.
+                // Nested alerts collected first, so this one goes in front.
                 for leaf in &mut out[start..] {
-                    leaf.context.alert.get_or_insert(alert);
+                    leaf.context.alerts.insert(0, alert);
                 }
             }
             Some(Tag::FootnoteDefinition(label)) => {
@@ -977,6 +983,8 @@ struct Builder<'a> {
     previous: Option<&'a DocumentSnapshot>,
     /// Bounds controlling rich semantic adaptation.
     limits: &'a ParseLimits,
+    /// Enclosing quotes of the last block pushed.
+    quotes: Vec<usize>,
 }
 impl Builder<'_> {
     /// Reuse the latest active identity or allocate a never-recycled one.
@@ -1167,6 +1175,15 @@ impl Builder<'_> {
                 slug: String::new(),
             });
         }
+        if let Some(last) = self.document.blocks.last_mut() {
+            last.quote_join = self
+                .quotes
+                .iter()
+                .zip(&context.quotes)
+                .take_while(|(a, b)| a == b)
+                .count();
+        }
+        self.quotes.clone_from(&context.quotes);
         self.document.blocks.push(Block {
             id,
             source: range.clone(),
@@ -1175,7 +1192,8 @@ impl Builder<'_> {
             depth: context.depth,
             quote_depth: context.quote_depth,
             quote_kind: context.quote_kind.clone(),
-            alert: context.alert,
+            quote_join: 0,
+            alerts: context.alerts.clone(),
             list_marker: context.marker.clone(),
             provisional,
         });
@@ -1288,7 +1306,8 @@ impl Builder<'_> {
             depth: 0,
             quote_depth: 0,
             quote_kind: None,
-            alert: None,
+            quote_join: 0,
+            alerts: Vec::new(),
             list_marker: None,
             provisional: false,
         });
@@ -1512,6 +1531,7 @@ pub fn parse_document(
         },
         previous,
         limits,
+        quotes: Vec::new(),
     };
     let Some((initial, definitions)) = tree(&text, limits) else {
         builder.document.degraded = true;
@@ -2222,36 +2242,51 @@ mod tests {
         let doc = complete("> [!info]-\n> body text\n>\n> second\n");
         assert_eq!(doc.blocks[0].quote_kind.as_deref(), Some("INFO"));
         assert_eq!(doc.units[0].text, "body text", "the marker line goes");
-        let alert = Some(Alert {
+        let alert = [Alert {
             tone: AlertTone::Note,
             depth: 1,
-        });
-        assert_eq!(doc.blocks[0].alert, alert);
-        assert_eq!(doc.blocks[1].alert, alert, "every block of the alert");
+        }];
+        assert_eq!(doc.blocks[0].alerts, alert);
+        assert_eq!(doc.blocks[1].alerts, alert, "every block of the alert");
         assert_eq!(doc.blocks[1].quote_kind, None, "only the first is labelled");
 
         let doc = complete("> [!WARNING]\n> careful\n");
         assert_eq!(doc.blocks[0].quote_kind.as_deref(), Some("WARNING"));
         assert_eq!(
-            doc.blocks[0].alert.map(|alert| alert.tone),
+            doc.blocks[0].alerts.first().map(|alert| alert.tone),
             Some(AlertTone::Warning)
         );
 
         let doc = complete("> [!unknown]\n> stays text\n");
-        assert_eq!(doc.blocks[0].alert, None);
+        assert_eq!(doc.blocks[0].alerts, []);
         assert!(doc.units[0].text.starts_with("[!unknown]"));
 
         let doc = complete("> [!tip]\n> outer\n>\n> > [!danger]\n> > inner\n");
         let tones: Vec<_> = doc
             .blocks
             .iter()
-            .map(|block| block.alert.map(|alert| (alert.tone, alert.depth)))
+            .map(|block| {
+                block
+                    .alerts
+                    .iter()
+                    .map(|alert| (alert.tone, alert.depth))
+                    .collect::<Vec<_>>()
+            })
             .collect();
         assert_eq!(
             tones,
-            [Some((AlertTone::Tip, 1)), Some((AlertTone::Caution, 2)),],
-            "a nested alert keeps its own tone"
+            [
+                vec![(AlertTone::Tip, 1)],
+                vec![(AlertTone::Tip, 1), (AlertTone::Caution, 2)],
+            ],
+            "a nested alert keeps its own tone, and the outer rail keeps its"
         );
+    }
+    #[test]
+    fn quote_join_counts_the_quotes_a_block_shares_with_the_next() {
+        let doc = complete("> a\n>\n> > b\n>\n> c\n\n> d\n\ne\n");
+        let joins: Vec<_> = doc.blocks.iter().map(|block| block.quote_join).collect();
+        assert_eq!(joins, [1, 1, 0, 0, 0]);
     }
     #[test]
     fn loose_list_continuations_do_not_repeat_item_markers() {

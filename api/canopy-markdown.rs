@@ -825,8 +825,11 @@ pub mod document {
         pub quote_depth: usize,
         /// Uppercase alert label on the first leaf of an alert quote.
         pub quote_kind: Option<String>,
-        /// The innermost alert quote this block lies in, if any.
-        pub alert: Option<Alert>,
+        /// Quote rails that continue past this block into the next, because
+        /// both lie in the same quotes.
+        pub quote_join: usize,
+        /// The alert quotes this block lies in, outermost first.
+        pub alerts: Vec<Alert>,
         /// A generated bullet or parser-derived ordered marker.
         pub list_marker: Option<String>,
         /// Whether this leaf remains open at the receiving boundary.
@@ -1607,6 +1610,9 @@ pub mod presentation {
         pub source: Range<usize>,
         /// Ground palette role, painted across empty line ends.
         pub ground: &'static str,
+        /// First cell the ground covers. Cells before it take the text ground,
+        /// so quote rails stay outside a card.
+        pub ground_x: u32,
         /// Whether document selection treats the unit as one whole payload.
         pub atomic: bool,
     }
