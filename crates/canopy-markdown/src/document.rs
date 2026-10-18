@@ -1633,6 +1633,7 @@ fn obsidian_text(raw: &str) -> (String, Vec<(Range<usize>, InlineRole)>) {
                 None => out.push_str(marker),
             }
         } else if let Some(begin) = highlight
+            && begin < out.len()
             && !out.ends_with(char::is_whitespace)
         {
             highlight = None;
@@ -2214,7 +2215,11 @@ pub fn resolve_link(destination: &str, base: Option<&url::Url>) -> ResolvedLink 
         return ResolvedLink::Unavailable("URL contains control characters".into());
     }
     if let Some(fragment) = destination.strip_prefix('#') {
-        return ResolvedLink::Fragment(percent_decoded(fragment));
+        let fragment = percent_decoded(fragment);
+        if fragment.is_empty() {
+            return ResolvedLink::Unavailable("Link names no anchor".into());
+        }
+        return ResolvedLink::Fragment(fragment);
     }
     let parsed = match (url::Url::parse(destination), base) {
         (Err(url::ParseError::RelativeUrlWithoutBase), Some(base)) => base.join(destination),
@@ -2624,6 +2629,10 @@ mod tests {
         assert!(
             matches!(resolve_link("#Far%20Away",None),ResolvedLink::Fragment(s) if s=="Far Away")
         );
+        assert!(matches!(
+            resolve_link("#", None),
+            ResolvedLink::Unavailable(_)
+        ));
         for value in ["javascript:alert(1)", "https://example.com/\n"] {
             assert!(matches!(
                 resolve_link(value, None),
@@ -2822,6 +2831,7 @@ mod tests {
         assert_eq!(spaced.units[0].text, "if x == 1 or y == 2");
         assert!(spaced.units[0].spans.is_empty());
         assert_eq!(complete("a ==b == c\n").units[0].text, "a ==b == c");
+        assert_eq!(complete("a====b\n").units[0].text, "a====b");
         // Code shows its marks as written.
         let code = complete("```\nif a == b == c {} %% x %%\n```\n");
         assert_eq!(code.units[0].text, "if a == b == c {} %% x %%\n");

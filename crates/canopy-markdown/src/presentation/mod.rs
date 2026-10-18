@@ -560,8 +560,12 @@ impl PresentationSnapshot {
                 layout.table_height = layout
                     .table_height
                     .min((remaining as u32 - 1).saturating_sub(layout.table_start));
-                // Nor may an image.
-                layout.image = None;
+                // Nor may an image: it shrinks into the rows above it.
+                let rows = remaining as u32 - 1;
+                if let Some(image) = &mut layout.image {
+                    image.size.h = image.size.h.min(rows);
+                }
+                layout.image = layout.image.take().filter(|image| image.size.h > 0);
                 result.truncated = true;
             }
             result.truncated |= layout.rows.len() >= MAX_PREPARED_ROWS;

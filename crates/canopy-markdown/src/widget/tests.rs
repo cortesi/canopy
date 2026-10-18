@@ -1236,6 +1236,94 @@ fn a_recheck_asks_again_and_keeps_what_shows_until_it_hears() {
 }
 
 #[test]
+fn a_recheck_during_a_request_asks_again_after_its_answer() {
+    let (mut harness, manual) = configured("[[Later]]\n", ViewType::Rendered, false, |o| {
+        o.resources = true
+    });
+    settle(&mut harness, &manual);
+    let take = |harness: &mut Harness| {
+        harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests())
+    };
+    let first = take(&mut harness);
+    assert_eq!(first.len(), 1);
+    // The files change while the check is on its way.
+    harness.with_root_widget(|reader: &mut Markdown| {
+        reader.recheck_resources(&[ResourceKind::Link]);
+    });
+    assert_eq!(
+        take(&mut harness),
+        [],
+        "the check in flight is not asked twice"
+    );
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.supply_resource(ctx, first[0].id, Resource::Missing)
+        })
+        .unwrap();
+    assert!(harness.with_root_widget(|reader: &mut Markdown| reader.link_missing("Later")));
+    let again = take(&mut harness);
+    assert_eq!(again.len(), 1, "the stale answer is asked for again");
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.supply_resource(ctx, again[0].id, Resource::Found)
+        })
+        .unwrap();
+    assert!(!harness.with_root_widget(|reader: &mut Markdown| reader.link_missing("Later")));
+    assert!(!harness.with_root_widget(|reader: &mut Markdown| reader.resources_pending()));
+}
+
+#[test]
+fn a_recheck_counts_only_what_was_asked_toward_the_bound() {
+    // An embed past the bound is never asked for, so a recheck frees none
+    // of the bound for it.
+    let mut text = String::new();
+    for i in 0..RESOURCE_TOTAL {
+        text.push_str(&format!("[[n{i}]]\n\n"));
+    }
+    text.push_str("![[late]]\n");
+    let (mut harness, manual) = configured(&text, ViewType::Rendered, false, |o| {
+        o.resources = true;
+    });
+    settle(&mut harness, &manual);
+    let drain = |harness: &mut Harness| {
+        let mut asked = 0;
+        loop {
+            let requests =
+                harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests());
+            if requests.is_empty() {
+                return asked;
+            }
+            asked += requests.len();
+            harness
+                .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                    for request in requests {
+                        reader.supply_resource(ctx, request.id, Resource::Found)?;
+                    }
+                    Ok(())
+                })
+                .unwrap();
+        }
+    };
+    assert_eq!(
+        drain(&mut harness),
+        RESOURCE_TOTAL,
+        "the embed past the bound is skipped"
+    );
+    harness.with_root_widget(|reader: &mut Markdown| {
+        reader.recheck_resources(&[ResourceKind::Note]);
+    });
+    assert_eq!(drain(&mut harness), 0, "a skipped embed frees nothing");
+    harness.with_root_widget(|reader: &mut Markdown| {
+        reader.recheck_resources(&[ResourceKind::Link]);
+    });
+    assert_eq!(
+        drain(&mut harness),
+        RESOURCE_TOTAL,
+        "the links are asked again"
+    );
+}
+
+#[test]
 fn an_embedded_section_is_cut_by_its_anchor() {
     let note = "# Top\n\nIntro.\n\n## Plans\n\nShip it. ^ship\n\n### Detail\n\nMore.\n\n## Later\n\nNot now.\n";
     assert_eq!(

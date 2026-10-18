@@ -242,10 +242,16 @@ const EMBED_PARAGRAPHS: usize = 200;
 /// What the reader has done about one resource.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ResourceState {
-    /// Asked the host for it.
-    Requested,
-    /// Holds its answer, or never asks for it, as for a remote image.
-    Settled,
+    /// Asked the host for it. With `again`, a recheck came while the answer
+    /// was on its way, so the reader asks again once it arrives.
+    Requested {
+        /// Whether to ask again after the answer.
+        again: bool,
+    },
+    /// Holds the host's answer; the request counted toward the bound.
+    Answered,
+    /// Never asked for, as for a remote image or one past the bound.
+    Skipped,
 }
 
 /// What a document needs from its host: each link object's resource kind
@@ -1459,18 +1465,18 @@ impl Markdown {
                 break;
             }
             let ResolvedLink::Local(target) = link.resolve(base.as_ref()) else {
-                self.resource_states.insert(key, ResourceState::Settled);
+                self.resource_states.insert(key, ResourceState::Skipped);
                 continue;
             };
             // Past the bound, a resource keeps its text, as a remote one does.
             if self.resource_asked >= RESOURCE_TOTAL {
-                self.resource_states.insert(key, ResourceState::Settled);
+                self.resource_states.insert(key, ResourceState::Skipped);
                 continue;
             }
             self.resource_asked += 1;
             self.resource_id += 1;
             self.resource_states
-                .insert(key.clone(), ResourceState::Requested);
+                .insert(key.clone(), ResourceState::Requested { again: false });
             self.resource_requests
                 .insert(self.resource_id, (key, target.clone()));
             requests.push(ResourceRequest {
@@ -1495,8 +1501,10 @@ impl Markdown {
             return false;
         };
         resource_wants(&p.document).any(|(kind, link)| {
-            self.resource_states.get(&(kind, link.destination.clone()))
-                != Some(&ResourceState::Settled)
+            matches!(
+                self.resource_states.get(&(kind, link.destination.clone())),
+                None | Some(ResourceState::Requested { .. })
+            )
         })
     }
     /// Take the host's answer to a resource request. An answer for another
@@ -1513,8 +1521,15 @@ impl Markdown {
         let Some(((kind, destination), target)) = self.resource_requests.remove(&id) else {
             return Ok(());
         };
-        self.resource_states
-            .insert((kind, destination.clone()), ResourceState::Settled);
+        let key = (kind, destination.clone());
+        if self.resource_states.get(&key) == Some(&ResourceState::Requested { again: true }) {
+            // A recheck came while this answer was on its way, so the
+            // answer shows and the reader asks again.
+            self.resource_states.remove(&key);
+            self.resource_asked = self.resource_asked.saturating_sub(1);
+        } else {
+            self.resource_states.insert(key, ResourceState::Answered);
+        }
         if kind == ResourceKind::Link {
             // A link lays out again only when whether it names anything
             // changed, as a recheck can find.
@@ -1564,11 +1579,24 @@ impl Markdown {
     /// next [`Self::take_resource_requests`] asks for them; what the reader
     /// shows stays until their new answers arrive.
     pub fn recheck_resources(&mut self, kinds: &[ResourceKind]) {
-        let before = self.resource_states.len();
-        self.resource_states
-            .retain(|(kind, _), state| *state == ResourceState::Requested || !kinds.contains(kind));
+        let mut forgotten = 0;
+        self.resource_states.retain(|(kind, _), state| {
+            if !kinds.contains(kind) {
+                return true;
+            }
+            match state {
+                ResourceState::Answered => {
+                    forgotten += 1;
+                    false
+                }
+                ResourceState::Requested { again } => {
+                    *again = true;
+                    true
+                }
+                ResourceState::Skipped => true,
+            }
+        });
         // What is asked again counts toward the document's bound again.
-        let forgotten = before - self.resource_states.len();
         self.resource_asked = self.resource_asked.saturating_sub(forgotten);
     }
     /// Whether a local link to `destination` shows faint, because the host
