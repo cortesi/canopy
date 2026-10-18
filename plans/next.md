@@ -114,16 +114,8 @@ embeds, bounded in count, and supply fresh resources when one changes.
 
 ### C12: Let a host ask for resources again
 
-The reader asks once per document for each local link check, each embedded
-note, and each image, and keeps every answer (`widget/mod.rs`,
-`take_resource_requests`, `supply_resource`). When the host learns that
-files appeared, went, or changed, as fh's vault index does from watch
-reports, the reader keeps showing the old answers: a link stays faint, a
-missing embed stays missing, and a changed or removed note keeps its old
-text, until the document is replaced.
-
-Proposal: `Markdown::recheck_resources(&[ResourceKind], paths)`, which
-forgets settled answers of those kinds, all of them or only those whose
-targets the host names, so the next `take_resource_requests` asks again.
-Shown answers stay until their new answers arrive, so nothing flickers.
-fh's wikilinks plan depends on it, and it lands first.
+Done: `Markdown::recheck_resources(&[ResourceKind])` forgets settled answers
+of those kinds, so the next `take_resource_requests` asks again; what the
+reader shows stays until the new answers arrive. A found link that was
+missing stops showing faint. `Markdown::link_missing` tells a host or a test
+whether a link shows faint.

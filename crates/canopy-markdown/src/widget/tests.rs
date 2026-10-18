@@ -1175,6 +1175,67 @@ fn an_answer_for_a_replaced_document_changes_nothing() {
 }
 
 #[test]
+fn a_recheck_asks_again_and_keeps_what_shows_until_it_hears() {
+    let (mut harness, manual) = configured(
+        "![[note]]\n\n[[Gone]] and [[Here]]\n",
+        ViewType::Rendered,
+        false,
+        |o| o.resources = true,
+    );
+    harness.canopy.set_screen_size(Size::new(60, 16)).unwrap();
+    settle(&mut harness, &manual);
+    let take = |harness: &mut Harness| {
+        harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests())
+    };
+    let first = take(&mut harness);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.supply_resource(ctx, first[0].id, Resource::Text("First text.\n".into()))?;
+            reader.supply_resource(ctx, first[1].id, Resource::Missing)?;
+            reader.supply_resource(ctx, first[2].id, Resource::Found)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    assert!(harness.with_root_widget(|reader: &mut Markdown| reader.link_missing("Gone")));
+    assert!(harness.tbuf().contains_text("First text."));
+    // Links only: the embed is not asked for again.
+    harness.with_root_widget(|reader: &mut Markdown| {
+        reader.recheck_resources(&[ResourceKind::Link]);
+    });
+    let links = take(&mut harness);
+    assert_eq!(
+        links.iter().map(|request| request.kind).collect::<Vec<_>>(),
+        [ResourceKind::Link, ResourceKind::Link]
+    );
+    assert!(
+        harness.with_root_widget(|reader: &mut Markdown| reader.link_missing("Gone")),
+        "a link stays faint until its new answer arrives"
+    );
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.supply_resource(ctx, links[0].id, Resource::Found)?;
+            reader.supply_resource(ctx, links[1].id, Resource::Found)
+        })
+        .unwrap();
+    assert!(!harness.with_root_widget(|reader: &mut Markdown| reader.link_missing("Gone")));
+    // A changed note shows its new text.
+    harness.with_root_widget(|reader: &mut Markdown| {
+        reader.recheck_resources(&[ResourceKind::Note]);
+    });
+    let notes = take(&mut harness);
+    assert_eq!(notes.len(), 1);
+    assert_eq!(notes[0].kind, ResourceKind::Note);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.supply_resource(ctx, notes[0].id, Resource::Text("Second text.\n".into()))
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    assert!(harness.tbuf().contains_text("Second text."));
+    assert!(!harness.with_root_widget(|reader: &mut Markdown| reader.resources_pending()));
+}
+
+#[test]
 fn an_embedded_section_is_cut_by_its_anchor() {
     let note = "# Top\n\nIntro.\n\n## Plans\n\nShip it. ^ship\n\n### Detail\n\nMore.\n\n## Later\n\nNot now.\n";
     assert_eq!(

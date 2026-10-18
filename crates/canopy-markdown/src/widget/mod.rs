@@ -1515,15 +1515,25 @@ impl Markdown {
         };
         self.resource_states
             .insert((kind, destination.clone()), ResourceState::Settled);
-        if kind == ResourceKind::Link && !matches!(resource, Resource::Missing) {
-            return Ok(());
+        if kind == ResourceKind::Link {
+            // A link lays out again only when whether it names anything
+            // changed, as a recheck can find.
+            let missing = matches!(resource, Resource::Missing);
+            if missing == self.supplied.missing_links.contains(&destination) {
+                return Ok(());
+            }
+            let supplied = Arc::make_mut(&mut self.supplied);
+            if missing {
+                supplied.missing_links.insert(destination);
+            } else {
+                supplied.missing_links.remove(&destination);
+            }
+            self.generation += 1;
+            return self.schedule(ctx, true);
         }
         let supplied = Arc::make_mut(&mut self.supplied);
         let embed = match (kind, resource) {
-            (ResourceKind::Link, _) => {
-                supplied.missing_links.insert(destination.clone());
-                None
-            }
+            (ResourceKind::Link, _) => unreachable!("links return above"),
             (_, Resource::Image(image)) => {
                 let info = EmbedInfo::Size {
                     width: image.width(),
@@ -1548,6 +1558,24 @@ impl Markdown {
         }
         self.generation += 1;
         self.schedule(ctx, true)
+    }
+    /// Ask the host again for the displayed document's resources of `kinds`,
+    /// as when the files they name may have appeared, gone, or changed. The
+    /// next [`Self::take_resource_requests`] asks for them; what the reader
+    /// shows stays until their new answers arrive.
+    pub fn recheck_resources(&mut self, kinds: &[ResourceKind]) {
+        let before = self.resource_states.len();
+        self.resource_states
+            .retain(|(kind, _), state| *state == ResourceState::Requested || !kinds.contains(kind));
+        // What is asked again counts toward the document's bound again.
+        let forgotten = before - self.resource_states.len();
+        self.resource_asked = self.resource_asked.saturating_sub(forgotten);
+    }
+    /// Whether a local link to `destination` shows faint, because the host
+    /// found nothing it names.
+    #[must_use]
+    pub fn link_missing(&self, destination: &str) -> bool {
+        self.supplied.missing_links.contains(destination)
     }
     /// Drain the positions the reader left by its own jumps (fragments,
     /// block and heading anchors, footnotes, and the outline), oldest first.

@@ -148,6 +148,11 @@ impl Markdown {
     /// Enter object navigation without pausing follow until the cursor moves.
     pub fn interact(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Whether a local link to `destination` shows faint, because the host
+    /// found nothing it names.
+    #[must_use]
+    pub fn link_missing(&self, destination: &str) -> bool;
+
     /// The actual scrolling surface, when it is mounted.
     pub fn navigation_node(&self) -> Option<NodeId>;
 
@@ -173,6 +178,12 @@ impl Markdown {
     /// Whether the active view has caught up with accepted input and requested
     /// geometry.
     pub fn ready(&self) -> bool;
+
+    /// Ask the host again for the displayed document's resources of `kinds`,
+    /// as when the files they name may have appeared, gone, or changed. The
+    /// next [`Self::take_resource_requests`] asks for them; what the reader
+    /// shows stays until their new answers arrive.
+    pub fn recheck_resources(&mut self, kinds: &[ResourceKind]);
 
     /// Replace the document epoch, retaining host presentation and query
     /// preferences.
