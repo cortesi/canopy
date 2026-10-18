@@ -58,6 +58,10 @@ pub enum InlineRole {
     Strike,
     /// A parser link or recognized bare HTTP(S) URL.
     Link,
+    /// Obsidian's `==highlighted==` text, without its markers.
+    Highlight,
+    /// An Obsidian `#tag`.
+    Tag,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// A UTF-8 byte range in a reading unit and its semantic role.
@@ -549,6 +553,7 @@ pub fn parser_options() -> Options {
         | Options::ENABLE_GFM
         | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS
         | Options::ENABLE_WIKILINKS
+        | Options::ENABLE_MATH
 }
 
 #[derive(Clone, Debug)]
@@ -687,7 +692,7 @@ pub struct Alert {
 /// A marker stands alone on the quote's first line, as GitHub requires; an
 /// Obsidian fold sign may follow it. Only a label with a tone counts, so an
 /// unknown marker stays text.
-fn take_alert_marker(children: &mut Vec<Node>) -> Option<String> {
+fn take_alert_marker(children: &mut Vec<Node>) -> Option<(String, Option<String>)> {
     let paragraph = children
         .first_mut()
         .filter(|node| matches!(node.tag, Some(Tag::Paragraph)))?;
@@ -698,13 +703,13 @@ fn take_alert_marker(children: &mut Vec<Node>) -> Option<String> {
     else {
         return None;
     };
-    let label = text
-        .trim_end()
-        .trim_end_matches(['+', '-'])
-        .strip_prefix("[!")?
-        .strip_suffix(']')?;
+    // `[!label]`, a fold sign, and an optional title, as Obsidian writes a
+    // callout's first line.
+    let (label, after) = text.trim_start().strip_prefix("[!")?.split_once(']')?;
+    let title = after.trim_start_matches(['+', '-']).trim();
     AlertTone::of(label)?;
     let label = label.to_owned();
+    let title = (!title.is_empty()).then(|| title.to_owned());
     paragraph.children.remove(0);
     if matches!(
         paragraph
@@ -718,7 +723,7 @@ fn take_alert_marker(children: &mut Vec<Node>) -> Option<String> {
     if paragraph.children.is_empty() {
         children.remove(0);
     }
-    Some(label)
+    Some((label, title))
 }
 
 #[derive(Clone, Default)]
@@ -813,9 +818,10 @@ fn collect(nodes: &[Node], context: &Context, out: &mut Vec<Leaf>) {
                 // The parser knows GitHub's five kinds; other common labels
                 // lead the quote as a marker line, which the alert drops.
                 let mut children = node.children.clone();
-                let label = match kind {
-                    Some(kind) => Some(format!("{kind:?}")),
-                    None => take_alert_marker(&mut children),
+                let (label, title) = match kind {
+                    Some(kind) => (Some(format!("{kind:?}")), None),
+                    None => take_alert_marker(&mut children)
+                        .map_or((None, None), |(label, title)| (Some(label), title)),
                 };
                 collect(&children, &c, out);
                 let Some((label, tone)) =
@@ -823,8 +829,9 @@ fn collect(nodes: &[Node], context: &Context, out: &mut Vec<Leaf>) {
                 else {
                     continue;
                 };
+                // A callout's own title stands in place of its kind.
                 if let Some(first) = out.get_mut(start) {
-                    first.context.quote_kind = Some(label.to_uppercase());
+                    first.context.quote_kind = Some(title.unwrap_or_else(|| label.to_uppercase()));
                 }
                 let alert = Alert {
                     tone,
@@ -1059,6 +1066,69 @@ struct Builder<'a> {
     quotes: Vec<usize>,
 }
 impl Builder<'_> {
+    /// Interpret a table leaf, or a source card past the cell limit.
+    fn table_leaf(&mut self, leaf: &Leaf, alignments: &[Alignment], text: &str) -> Interpreted {
+        if count_cells(&leaf.node) > self.limits.max_table_cells {
+            self.document.degraded = true;
+            return (
+                BlockKind::Source {
+                    reason: "Table cell limit".into(),
+                },
+                UnitKind::Source,
+                text[leaf.node.range.clone()].to_owned(),
+                true,
+            );
+        }
+        let table = self.table(&leaf.node, alignments, leaf.context.enclosing, text);
+        let payload = table_text(&table);
+        (BlockKind::Table(table), UnitKind::Table, payload, true)
+    }
+    /// Interpret front matter of simple properties as a table of them.
+    fn front_matter(&mut self, leaf: &Leaf) -> Option<Interpreted> {
+        let properties = properties(&plain(&leaf.node.children))?;
+        let table = self.properties_table(&properties, &leaf.node.range, leaf.context.enclosing);
+        let payload = table_text(&table);
+        Some((BlockKind::Table(table), UnitKind::Table, payload, true))
+    }
+    /// A two-column table of front matter properties.
+    fn properties_table(
+        &mut self,
+        properties: &[(String, String)],
+        source: &Range<usize>,
+        enclosing: usize,
+    ) -> MarkdownTable {
+        let headers = ["Property", "Value"]
+            .iter()
+            .enumerate()
+            .map(|(index, text)| TableCell {
+                key: self.id(source.start, &format!("column:{index}"), enclosing),
+                source: None,
+                text: (*text).to_owned(),
+            })
+            .collect::<Vec<_>>();
+        let rows = properties
+            .iter()
+            .enumerate()
+            .map(|(row, (key, value))| TableRow {
+                key: self.id(source.start + row, "row", source.start),
+                cells: [key, value]
+                    .iter()
+                    .zip(&headers)
+                    .map(|(text, header)| TableCell {
+                        key: header.key,
+                        source: None,
+                        text: (*text).clone(),
+                    })
+                    .collect(),
+            })
+            .collect();
+        MarkdownTable {
+            alignments: vec![Alignment::None, Alignment::None],
+            ignored_excess: false,
+            headers,
+            rows,
+        }
+    }
     /// Index a block id, unless an earlier block already holds it.
     fn anchor(&mut self, id: String, source: Range<usize>) {
         if !self
@@ -1157,33 +1227,12 @@ impl Builder<'_> {
                         true,
                     )
                 }
-                Some(Tag::Table(alignments)) => {
-                    if count_cells(&leaf.node) > self.limits.max_table_cells {
-                        self.document.degraded = true;
-                        (
-                            BlockKind::Source {
-                                reason: "Table cell limit".into(),
-                            },
-                            UnitKind::Source,
-                            raw.to_owned(),
-                            true,
-                        )
-                    } else {
-                        let table = self.table(&leaf.node, alignments, context.enclosing, text);
-                        let payload = table_text(&table);
-                        (BlockKind::Table(table), UnitKind::Table, payload, true)
-                    }
+                Some(Tag::Table(alignments)) => self.table_leaf(leaf, alignments, text),
+                // Front matter of simple properties reads as a table of them.
+                Some(Tag::MetadataBlock(_)) => {
+                    self.front_matter(leaf).unwrap_or_else(|| source_leaf(raw))
                 }
-                // The terminal shows HTML and front matter as source, so
-                // their cards need no explanation.
-                Some(Tag::HtmlBlock | Tag::MetadataBlock(_)) => (
-                    BlockKind::Source {
-                        reason: String::new(),
-                    },
-                    UnitKind::Source,
-                    raw.to_owned(),
-                    true,
-                ),
+                Some(Tag::HtmlBlock) => source_leaf(raw),
                 _ if matches!(leaf.node.event, Some(Event::Rule)) => {
                     (BlockKind::Rule, UnitKind::Separator, String::new(), false)
                 }
@@ -1476,6 +1525,119 @@ fn inline(
     append_inline(nodes, &mut out, spans, links, soft_breaks, false);
     out
 }
+/// A leaf's interpretation: its block kind, unit kind, readable payload, and
+/// whether selection takes the unit whole.
+type Interpreted = (BlockKind, UnitKind, String, bool);
+/// Show `raw` as a source card. The terminal shows HTML and other front
+/// matter as source, so their cards need no explanation.
+fn source_leaf(raw: &str) -> Interpreted {
+    (
+        BlockKind::Source {
+            reason: String::new(),
+        },
+        UnitKind::Source,
+        raw.to_owned(),
+        true,
+    )
+}
+/// The properties of simple YAML front matter: `key: value` lines, and lists
+/// written `[a, b]` or as `- item` lines, which read as `a, b`. Front matter
+/// with nested maps, or anything else, has none, and shows as source.
+fn properties(yaml: &str) -> Option<Vec<(String, String)>> {
+    let unquote = |value: &str| {
+        let value = value.trim();
+        value
+            .strip_prefix('"')
+            .and_then(|v| v.strip_suffix('"'))
+            .or_else(|| value.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')))
+            .unwrap_or(value)
+            .to_owned()
+    };
+    let mut properties: Vec<(String, String)> = Vec::new();
+    for line in yaml.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed == "---" {
+            continue;
+        }
+        if let Some(item) = trimmed.strip_prefix("- ") {
+            let (_, value) = properties.last_mut()?;
+            if !value.is_empty() {
+                value.push_str(", ");
+            }
+            value.push_str(&unquote(item));
+            continue;
+        }
+        if line.starts_with(char::is_whitespace) {
+            return None;
+        }
+        let (key, value) = line.split_once(':')?;
+        let value = value.trim();
+        let value = value
+            .strip_prefix('[')
+            .and_then(|v| v.strip_suffix(']'))
+            .map_or_else(
+                || unquote(value),
+                |list| list.split(',').map(unquote).collect::<Vec<_>>().join(", "),
+            );
+        properties.push((key.trim().to_owned(), value));
+    }
+    (!properties.is_empty()).then_some(properties)
+}
+/// Interpret Obsidian's inline marks in one text run: a `%%comment%%` is
+/// dropped, `==highlight==` markers are dropped around the text they mark,
+/// and a `#tag` is marked. An unclosed `%%` or `==` stays as written.
+fn obsidian_text(raw: &str) -> (String, Vec<(Range<usize>, InlineRole)>) {
+    let mut out = String::with_capacity(raw.len());
+    let mut marks = Vec::new();
+    let mut rest = raw;
+    let mut highlight = None;
+    loop {
+        let next = [rest.find("%%"), rest.find("==")]
+            .into_iter()
+            .flatten()
+            .min();
+        let Some(at) = next else {
+            out.push_str(rest);
+            break;
+        };
+        out.push_str(&rest[..at]);
+        let marker = &rest[at..at + 2];
+        rest = &rest[at + 2..];
+        if marker == "%%" {
+            match rest.find("%%") {
+                Some(end) => {
+                    rest = &rest[end + 2..];
+                    // A comment between words leaves one space, not two.
+                    if out.ends_with(' ') && rest.starts_with(' ') {
+                        rest = &rest[1..];
+                    }
+                }
+                None => out.push_str(marker),
+            }
+        } else if let Some(begin) = highlight.take() {
+            marks.push((begin..out.len(), InlineRole::Highlight));
+        } else if rest.contains("==") {
+            highlight = Some(out.len());
+        } else {
+            out.push_str(marker);
+        }
+    }
+    let mut previous = None;
+    for (at, ch) in out.char_indices() {
+        let starts_word = previous.is_none_or(char::is_whitespace);
+        previous = Some(ch);
+        if ch != '#' || !starts_word {
+            continue;
+        }
+        let name = out[at + 1..]
+            .find(|c: char| !(c.is_alphanumeric() || matches!(c, '_' | '-' | '/')))
+            .map_or(&out[at + 1..], |end| &out[at + 1..at + 1 + end]);
+        if !name.is_empty() && !name.chars().all(|c| c.is_ascii_digit()) {
+            marks.push((at..at + 1 + name.len(), InlineRole::Tag));
+        }
+    }
+    (out, marks)
+}
 /// An image's readable text: its label, then its destination unless the
 /// label already names it, as an unlabelled embed's does.
 fn image_text(label: &str, destination: &str) -> String {
@@ -1649,32 +1811,54 @@ fn append_inline(
             }
         } else {
             match &node.event {
-                Some(Event::Text(text)) => {
-                    out.push_str(text);
-                    if !exclude_bare {
-                        for (bare_index, found) in bare_url_ranges(text).into_iter().enumerate() {
-                            let span = spans.len();
-                            let label = text[found.clone()].to_owned();
-                            spans.push(InlineSpan {
-                                range: start + found.start..start + found.end,
-                                role: InlineRole::Link,
-                                object: None,
-                            });
-                            links.push(PendingLink {
-                                source: node.range.clone(),
-                                span,
-                                identity_offset: found.start,
-                                bare_index: Some(bare_index),
-                                kind: ObjectKind::Link(Link {
-                                    label: label.clone(),
-                                    destination: label,
-                                    title: String::new(),
-                                    wiki: false,
-                                    labelled: true,
-                                }),
-                            });
-                        }
+                Some(Event::Text(raw)) => {
+                    let (text, marks) = obsidian_text(raw);
+                    out.push_str(&text);
+                    let urls = if exclude_bare {
+                        Vec::new()
+                    } else {
+                        bare_url_ranges(&text)
+                    };
+                    // A URL outranks a mark it overlaps: spans pushed later
+                    // win.
+                    for (range, role) in marks {
+                        spans.push(InlineSpan {
+                            range: start + range.start..start + range.end,
+                            role,
+                            object: None,
+                        });
                     }
+                    for (bare_index, found) in urls.into_iter().enumerate() {
+                        let span = spans.len();
+                        let label = text[found.clone()].to_owned();
+                        spans.push(InlineSpan {
+                            range: start + found.start..start + found.end,
+                            role: InlineRole::Link,
+                            object: None,
+                        });
+                        links.push(PendingLink {
+                            source: node.range.clone(),
+                            span,
+                            identity_offset: found.start,
+                            bare_index: Some(bare_index),
+                            kind: ObjectKind::Link(Link {
+                                label: label.clone(),
+                                destination: label,
+                                title: String::new(),
+                                wiki: false,
+                                labelled: true,
+                            }),
+                        });
+                    }
+                }
+                // Math shows as code.
+                Some(Event::InlineMath(text) | Event::DisplayMath(text)) => {
+                    out.push_str(text);
+                    spans.push(InlineSpan {
+                        range: start..out.len(),
+                        role: InlineRole::Code,
+                        object: None,
+                    });
                 }
                 Some(Event::InlineHtml(text)) => out.push_str(text),
                 Some(Event::Code(text)) => {
@@ -1831,7 +2015,25 @@ pub fn parse_document(
         }
     }
     leaves.sort_by_key(|leaf| leaf.node.range.start);
+    let mut in_comment = false;
     for leaf in &leaves {
+        // An Obsidian `%%` comment that spans blocks hides them all, through
+        // the block that closes it.
+        if in_comment {
+            in_comment = !text[leaf.node.range.clone()].trim_end().ends_with("%%");
+            continue;
+        }
+        if matches!(leaf.node.tag, Some(Tag::Paragraph)) {
+            let readable = plain(&leaf.node.children);
+            let readable = readable.trim();
+            if readable.starts_with("%%") {
+                in_comment = !(readable.len() >= 4 && readable.ends_with("%%"));
+                continue;
+            }
+            if readable.is_empty() && text[leaf.node.range.clone()].contains("%%") {
+                continue;
+            }
+        }
         // A paragraph of only a block id marks the block before it, and
         // shows nothing itself.
         if let Some(named) = &leaf.names {
@@ -2520,6 +2722,76 @@ mod tests {
                 .iter()
                 .any(|unit| unit.text == "Text inline (e.png) here.")
         );
+    }
+    #[test]
+    fn obsidian_inline_marks_highlight_tag_and_hide_comments() {
+        let doc = complete(
+            "Read ==this== now %%not this%% and #project/x, not C# or #1 or https://x.org/#y.\n\nMath $x^2$ here.\n",
+        );
+        let unit = &doc.units[0];
+        assert_eq!(
+            unit.text,
+            "Read this now and #project/x, not C# or #1 or https://x.org/#y."
+        );
+        let marked = |role: InlineRole| {
+            unit.spans
+                .iter()
+                .filter(|span| span.role == role)
+                .map(|span| &unit.text[span.range.clone()])
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(marked(InlineRole::Highlight), ["this"]);
+        assert_eq!(marked(InlineRole::Tag), ["#project/x"]);
+        assert_eq!(doc.units[1].text, "Math x^2 here.");
+        assert!(
+            doc.units[1]
+                .spans
+                .iter()
+                .any(|span| span.role == InlineRole::Code
+                    && doc.units[1].text[span.range.clone()] == *"x^2")
+        );
+        // An unclosed marker stays as written.
+        assert_eq!(
+            complete("a == b and 50%% off\n").units[0].text,
+            "a == b and 50%% off"
+        );
+    }
+
+    #[test]
+    fn comments_that_span_blocks_hide_them() {
+        let doc = complete(
+            "Before.\n\n%%\nHidden.\n\n- hidden item\n\n%%\n\n%%one paragraph%%\n\nAfter.\n",
+        );
+        let readable: Vec<&str> = doc.units.iter().map(|unit| unit.text.as_str()).collect();
+        assert_eq!(readable, ["Before.", "After."]);
+    }
+
+    #[test]
+    fn callouts_take_their_titles_and_front_matter_reads_as_properties() {
+        let doc = complete(
+            "---\ntitle: \"Trip\"\ntags: [a, b]\naliases:\n  - one\n  - two\n---\n\n> [!tip]- Pack light\n> Take less.\n",
+        );
+        let BlockKind::Table(table) = &doc.blocks[0].kind else {
+            panic!("front matter reads as a table: {:?}", doc.blocks[0].kind);
+        };
+        let rows: Vec<(&str, &str)> = table
+            .rows
+            .iter()
+            .map(|row| (row.cells[0].text.as_str(), row.cells[1].text.as_str()))
+            .collect();
+        assert_eq!(
+            rows,
+            [("title", "Trip"), ("tags", "a, b"), ("aliases", "one, two")]
+        );
+        let quote = doc
+            .blocks
+            .iter()
+            .find(|block| block.quote_kind.is_some())
+            .unwrap();
+        assert_eq!(quote.quote_kind.as_deref(), Some("Pack light"));
+        // Front matter with nested maps stays source.
+        let nested = complete("---\nmeta:\n  depth: 2\n---\n\nText.\n");
+        assert!(matches!(nested.blocks[0].kind, BlockKind::Source { .. }));
     }
     #[test]
     fn heading_slugs_disambiguate_generated_suffixes_and_literal_headings() {

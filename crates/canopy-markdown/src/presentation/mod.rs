@@ -58,6 +58,10 @@ const IMAGE_GRID_LIMIT: usize = 64;
 /// Rows of the area that a big heading lays out in, more than any face of
 /// the smallest size takes.
 const BIG_HEADING_ROWS: u32 = 8;
+/// How far a highlight's ground mixes the page toward yellow.
+const HIGHLIGHT_TINT: f32 = 0.28;
+/// How far a tag's cyan mixes toward the page.
+const TAG_QUIET: f32 = 0.2;
 /// How far a card's ground mixes the panel ground toward the text colour.
 const CARD_LIFT: f32 = 0.06;
 /// The hue of every heading, before it fits the palette's ground.
@@ -80,6 +84,8 @@ macro_rules! inline_roles {
             concat!($base, "/inline-code"),
             concat!($base, "/strike"),
             concat!($base, "/link"),
+            concat!($base, "/highlight"),
+            concat!($base, "/tag"),
         ]),*]
     };
 }
@@ -105,7 +111,7 @@ const HEADING_MARKER_ROLES: [&str; 6] = [
 const HEADING_RULE_ROLES: [&str; 3] = ["markdown/h1/rule", "markdown/h2/rule", "markdown/h3/rule"];
 /// Inline span roles of body text, then of each heading level, so a span in
 /// a heading keeps the heading's colour and weight.
-const INLINE_ROLES: [[&str; 5]; 7] = inline_roles!(
+const INLINE_ROLES: [[&str; 7]; 7] = inline_roles!(
     "markdown",
     "markdown/h1",
     "markdown/h2",
@@ -868,8 +874,12 @@ impl PresentationSnapshot {
                             style.attrs.italic |= syntax.attrs.italic;
                             style.attrs.underline |= syntax.attrs.underline;
                         }
-                        // Inline code keeps its own ground, in a heading too.
-                        if !run.role.ends_with("/inline-code") && !object {
+                        // Inline code and highlights keep their own ground,
+                        // in a heading too.
+                        if !run.role.ends_with("/inline-code")
+                            && !run.role.ends_with("/highlight")
+                            && !object
+                        {
                             style.bg = ground_bg.clone();
                         }
                     }
@@ -1950,7 +1960,7 @@ fn wrap(
     prefix: &Prefix,
     unit: &ReadingUnit,
     layout: TextLayout,
-    inline: &[&'static str; 5],
+    inline: &[&'static str; 7],
 ) {
     let TextLayout {
         inset,
@@ -2061,6 +2071,8 @@ fn wrap(
                 InlineRole::Code => 2,
                 InlineRole::Strike => 3,
                 InlineRole::Link => 4,
+                InlineRole::Highlight => 5,
+                InlineRole::Tag => 6,
             }]
         });
         add(
@@ -2192,6 +2204,8 @@ pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
         .fg("markdown", palette.fg)
         .bg("markdown", palette.bg)
         .attr("markdown/strong", Attr::Bold)
+        .bg("markdown/highlight", highlight_ground(palette))
+        .fg("markdown/tag", tag_colour(palette))
         .attr("markdown/emphasis", Attr::Italic)
         .attr("markdown/strike", Attr::CrossedOut)
         .fg("markdown/link", palette.accent)
@@ -2244,6 +2258,17 @@ pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
     rules.apply();
 }
 
+/// The ground of `==highlighted==` text: the palette's yellow, a little over
+/// the page, as a highlighter marks it.
+fn highlight_ground(palette: &Palette) -> Color {
+    palette.bg.mix(palette.yellow, HIGHLIGHT_TINT, Mix::Oklab)
+}
+
+/// The colour of a `#tag`: the palette's cyan, quietened toward the page.
+fn tag_colour(palette: &Palette) -> Color {
+    palette.cyan.mix(palette.bg, TAG_QUIET, Mix::Oklab)
+}
+
 /// Every heading takes one hue, a muted purple apart from the blue of links
 /// and the tones of alerts. On each palette it moves just far enough in
 /// lightness to read on the ground. The big first level and the second take
@@ -2261,7 +2286,7 @@ fn heading_rules<'a>(palette: &Palette, mut rules: StyleRules<'a>) -> StyleRules
                 .fg(tint(depth + HEADING_QUIET))
                 .attrs(AttrSet::default())
         };
-        let [emphasis, strong, code, strike, link] = inline;
+        let [emphasis, strong, code, strike, link, highlight, tag] = inline;
         rules = rules
             .style(role, base())
             .style(HEADING_MARKER_ROLES[level], quiet())
@@ -2269,7 +2294,9 @@ fn heading_rules<'a>(palette: &Palette, mut rules: StyleRules<'a>) -> StyleRules
             .style(strong, base())
             .style(code, base().bg(palette.panel_bg))
             .style(strike, base().attr(Attr::CrossedOut))
-            .style(link, base().fg(palette.accent).attr(Attr::Underline));
+            .style(link, base().fg(palette.accent).attr(Attr::Underline))
+            .style(highlight, base().bg(highlight_ground(palette)))
+            .style(tag, base());
         if let Some(rule) = HEADING_RULE_ROLES.get(level) {
             rules = rules.style(rule, quiet());
         }

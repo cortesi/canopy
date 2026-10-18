@@ -102,6 +102,9 @@ fn publish(revision: u64) -> Result<(), Error> {
 > > [!danger]
 > > The inner alert keeps its own tone, and the outer rail keeps its tone.
 
+> [!tip]+ Pack light
+> A callout's own title stands in place of its kind.
+
 > [!UNKNOWN]
 > An unknown label stays quote text.
 
@@ -112,6 +115,9 @@ breaks wrap as prose. A hard break ends here.\
 The next logical line stays separate.
 
 ![Local architecture sketch](images/architecture.png)
+
+Obsidian marks: ==highlighted== text, a #field/notes tag, inline math
+$e^{i\pi} + 1 = 0$, and a %%hidden%% comment.
 
 An Obsidian embed asks for a width in pixels:
 

@@ -1016,6 +1016,10 @@ pub mod document {
         Strike,
         /// A parser link or recognized bare HTTP(S) URL.
         Link,
+        /// Obsidian's `==highlighted==` text, without its markers.
+        Highlight,
+        /// An Obsidian `#tag`.
+        Tag,
     }
 
     /// A UTF-8 byte range in a reading unit and its semantic role.
