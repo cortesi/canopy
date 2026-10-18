@@ -13,7 +13,7 @@ use canopy::{
     error::Result,
     geom::{Point, Rect},
     render::Render,
-    style::{Attr, Mix, Paint, PartialStyle, StyleMap, StyleRules, themes::Palette},
+    style::{Attr, AttrSet, Mix, Paint, PartialStyle, StyleMap, StyleRules, themes::Palette},
     text,
 };
 #[cfg(feature = "syntax")]
@@ -40,6 +40,54 @@ const MAX_PREPARED_ROWS: usize = 262_144;
 const OBJECT_TINT: f32 = 0.25;
 /// Every readable byte of a unit, for whole-unit overlay tests.
 const WHOLE_UNIT: Range<usize> = 0..usize::MAX;
+/// How far each heading level mixes the heading hue toward the ground.
+const HEADING_STEP: f32 = 0.08;
+/// How much further a heading's markers and underline mix toward the ground.
+const HEADING_QUIET: f32 = 0.3;
+
+/// Inline span roles under one base role, in [`InlineRole`] order.
+macro_rules! inline_roles {
+    ($($base:literal),*) => {
+        [$([
+            concat!($base, "/emphasis"),
+            concat!($base, "/strong"),
+            concat!($base, "/inline-code"),
+            concat!($base, "/strike"),
+            concat!($base, "/link"),
+        ]),*]
+    };
+}
+/// Palette roles of each heading level, from `#` to `######`.
+const HEADING_ROLES: [&str; 6] = [
+    "markdown/h1",
+    "markdown/h2",
+    "markdown/h3",
+    "markdown/h4",
+    "markdown/h5",
+    "markdown/h6",
+];
+/// Palette roles of the `#` markers of each heading level.
+const HEADING_MARKER_ROLES: [&str; 6] = [
+    "markdown/h1/marker",
+    "markdown/h2/marker",
+    "markdown/h3/marker",
+    "markdown/h4/marker",
+    "markdown/h5/marker",
+    "markdown/h6/marker",
+];
+/// Palette roles of the underlines of the three underlined heading levels.
+const HEADING_RULE_ROLES: [&str; 3] = ["markdown/h1/rule", "markdown/h2/rule", "markdown/h3/rule"];
+/// Inline span roles of body text, then of each heading level, so a span in
+/// a heading keeps the heading's colour and weight.
+const INLINE_ROLES: [[&str; 5]; 7] = inline_roles!(
+    "markdown",
+    "markdown/h1",
+    "markdown/h2",
+    "markdown/h3",
+    "markdown/h4",
+    "markdown/h5",
+    "markdown/h6"
+);
 
 /// Document reading order: semantic unit index, then readable byte offset.
 type ReadingKey = (usize, usize);
@@ -277,7 +325,8 @@ impl PresentationSnapshot {
             } else {
                 false
             };
-            let signature = signature(block, unit, object, syntax_allowed);
+            let leading = result.blocks.is_empty();
+            let signature = signature(block, unit, object, syntax_allowed, leading);
             let mut layout = if let Some(old) = old_blocks
                 .get(&block.id)
                 .filter(|old| old.signature == signature)
@@ -305,6 +354,7 @@ impl PresentationSnapshot {
                     geometry,
                     result.document.source.revision,
                     syntax_allowed,
+                    leading,
                 );
                 // Reused blocks keep this: within an epoch, source only grows,
                 // so an unchanged span and text verify identically.
@@ -682,7 +732,8 @@ impl PresentationSnapshot {
                             style.attrs.italic |= syntax.attrs.italic;
                             style.attrs.underline |= syntax.attrs.underline;
                         }
-                        if run.role != "markdown/inline-code" && !object {
+                        // Inline code keeps its own ground, in a heading too.
+                        if !run.role.ends_with("/inline-code") && !object {
                             style.bg = ground_bg.clone();
                         }
                     }
@@ -782,8 +833,15 @@ fn overlaps(span: &Range<ReadingKey>, index: usize, bytes: &Range<usize>) -> boo
 }
 
 /// Hash semantic inputs used to decide immutable block reuse.
-fn signature(block: &Block, unit: &ReadingUnit, object: Option<u64>, syntax_allowed: bool) -> u64 {
+fn signature(
+    block: &Block,
+    unit: &ReadingUnit,
+    object: Option<u64>,
+    syntax_allowed: bool,
+    leading: bool,
+) -> u64 {
     let mut hash = DefaultHasher::new();
+    leading.hash(&mut hash);
     block.source.hash(&mut hash);
     block.depth.hash(&mut hash);
     block.quote_depth.hash(&mut hash);
@@ -817,7 +875,8 @@ fn signature(block: &Block, unit: &ReadingUnit, object: Option<u64>, syntax_allo
     hash.finish()
 }
 
-/// Prepare bounded display rows and any shared table preview.
+/// Prepare bounded display rows and any shared table preview. A `leading`
+/// block opens the document.
 fn prepare_block(
     block: &Block,
     unit: &ReadingUnit,
@@ -825,6 +884,7 @@ fn prepare_block(
     geometry: GeometryKey,
     revision: u64,
     syntax_allowed: bool,
+    leading: bool,
 ) -> BlockLayout {
     // A hostile viewport cannot cause an unbounded decoration allocation.
     let width = geometry.width.min(65535);
@@ -978,6 +1038,7 @@ fn prepare_block(
                     role: ground,
                     glyphs: geometry.glyphs,
                 },
+                &INLINE_ROLES[0],
             );
         }
         BlockKind::Source { reason } => {
@@ -1032,19 +1093,27 @@ fn prepare_block(
                 BlockKind::Heading { level } => Some(*level),
                 _ => None,
             };
-            let role = match heading {
-                Some(1) => "markdown/h1",
-                Some(2) => "markdown/h2",
-                Some(_) => "markdown/heading",
-                None => ground,
-            };
-            if let Some(level @ 3..=6) = heading {
-                prefix.push(format!("H{level} "), "markdown/structure");
+            // Levels beyond six clamp; the parser never yields them.
+            let level = heading.map(|level| usize::from(level.clamp(1, 6)));
+            let role = level.map_or(ground, |level| HEADING_ROLES[level - 1]);
+            // A top-level heading takes an extra row above, so it sits nearer
+            // the section it opens than the one it closes.
+            if level.is_some() && !leading && block.depth == 0 && block.quote_depth == 0 {
+                rows.push(make_row());
             }
             if let BlockKind::Footnote { label } = &block.kind {
                 prefix.push(format!("[{label}] "), "markdown/structure");
             }
+            // The Markdown markers name the level; wrapped lines hang under
+            // the text.
+            if let Some(level) = level {
+                prefix.push(
+                    format!("{} ", "#".repeat(level)),
+                    HEADING_MARKER_ROLES[level - 1],
+                );
+            }
             let prose = body.min(geometry.prose_width.clamp(1, 65535));
+            let text_start = rows.len();
             wrap(
                 &mut rows,
                 make_row,
@@ -1057,18 +1126,36 @@ fn prepare_block(
                     role,
                     glyphs: geometry.glyphs,
                 },
+                &INLINE_ROLES[level.unwrap_or(0)],
             );
-            if matches!(heading, Some(1 | 2)) {
+            // The top three levels are underlined, lighter at each level, from
+            // the markers to the end of the widest line. ASCII starts from
+            // Setext's `=` and `-`.
+            let underline = match (level, geometry.glyphs) {
+                (Some(1), GlyphPreset::Ascii) => Some(("=", 0)),
+                (Some(1), _) => Some(("━", 0)),
+                (Some(2), GlyphPreset::Ascii) => Some(("-", 1)),
+                (Some(2), _) => Some(("─", 1)),
+                (Some(3), GlyphPreset::Ascii) => Some((".", 2)),
+                (Some(3), _) => Some(("┄", 2)),
+                _ => None,
+            };
+            if let Some((glyph, index)) = underline {
+                let end = rows[text_start..]
+                    .iter()
+                    .flat_map(|row| row.runs.iter())
+                    .map(|run| run.x + text::width(run.text.trim_end()) as u32)
+                    .max()
+                    .unwrap_or(card_inset);
+                let width = end.saturating_sub(card_inset);
+                let rule_role = HEADING_RULE_ROLES[index];
                 let mut row = make_row();
                 decoration(
                     &mut row,
                     card_inset,
-                    &rule(
-                        geometry.glyphs,
-                        text::width(&unit.text).min(card_body).min(40),
-                    ),
+                    &glyph.repeat(width as usize),
                     card_body,
-                    "markdown/rule",
+                    rule_role,
                     None,
                     geometry.glyphs,
                 );
@@ -1511,6 +1598,7 @@ fn wrap(
     prefix: &Prefix,
     unit: &ReadingUnit,
     layout: TextLayout,
+    inline: &[&'static str; 5],
 ) {
     let TextLayout {
         inset,
@@ -1614,12 +1702,14 @@ fn wrap(
             .max_by_key(|(index, _)| *index)
             .map(|(_, span)| *span);
         let object = active.iter().find_map(|(_, span)| span.object);
-        let run_role = span.map_or(role, |s| match s.role {
-            InlineRole::Emphasis => "markdown/emphasis",
-            InlineRole::Strong => "markdown/strong",
-            InlineRole::Code => "markdown/inline-code",
-            InlineRole::Strike => "markdown/strike",
-            InlineRole::Link => "markdown/link",
+        let run_role = span.map_or(role, |s| {
+            inline[match s.role {
+                InlineRole::Emphasis => 0,
+                InlineRole::Strong => 1,
+                InlineRole::Code => 2,
+                InlineRole::Strike => 3,
+                InlineRole::Link => 4,
+            }]
         });
         add(
             &mut row,
@@ -1745,14 +1835,10 @@ pub fn register_styles(map: &mut StyleMap, palette: &Palette) {
 /// Pass directly to `Setup::widget_styles` to retain roles through theme
 /// changes.
 pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
-    rules
+    let mut rules = heading_rules(palette, rules);
+    rules = rules
         .fg("markdown", palette.fg)
         .bg("markdown", palette.bg)
-        .fg("markdown/h1", palette.accent)
-        .attr("markdown/h1", Attr::Bold)
-        .fg("markdown/h2", palette.accent)
-        .attr("markdown/h2", Attr::Bold)
-        .attr("markdown/heading", Attr::Bold)
         .attr("markdown/strong", Attr::Bold)
         .attr("markdown/emphasis", Attr::Italic)
         .attr("markdown/strike", Attr::CrossedOut)
@@ -1796,8 +1882,39 @@ pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
         )
         .fg("markdown/object", palette.fg)
         .fg("markdown/object/bar", palette.accent)
-        .fg("markdown/status", palette.muted_fg)
-        .apply();
+        .fg("markdown/status", palette.muted_fg);
+    rules.apply();
+}
+
+/// Every heading takes one hue, the palette's orange, which nothing else in
+/// a document uses: links take the accent and alerts their own tones. Each
+/// level below the first mixes the hue a step further toward the ground. The
+/// markers and underlines are quieter than their heading's text.
+fn heading_rules<'a>(palette: &Palette, mut rules: StyleRules<'a>) -> StyleRules<'a> {
+    let tint = |t: f32| palette.orange.mix(palette.bg, t, Mix::Oklab);
+    for (level, (role, inline)) in HEADING_ROLES.iter().zip(&INLINE_ROLES[1..]).enumerate() {
+        let depth = HEADING_STEP * level as f32;
+        let base = || PartialStyle::new().fg(tint(depth)).attr(Attr::Bold);
+        // Markers and underlines are structure, so they drop the weight.
+        let quiet = || {
+            PartialStyle::new()
+                .fg(tint(depth + HEADING_QUIET))
+                .attrs(AttrSet::default())
+        };
+        let [emphasis, strong, code, strike, link] = inline;
+        rules = rules
+            .style(role, base())
+            .style(HEADING_MARKER_ROLES[level], quiet())
+            .style(emphasis, base().attr(Attr::Italic))
+            .style(strong, base())
+            .style(code, base().bg(palette.panel_bg))
+            .style(strike, base().attr(Attr::CrossedOut))
+            .style(link, base().fg(palette.accent).attr(Attr::Underline));
+        if let Some(rule) = HEADING_RULE_ROLES.get(level) {
+            rules = rules.style(rule, quiet());
+        }
+    }
+    rules
 }
 
 #[cfg(test)]

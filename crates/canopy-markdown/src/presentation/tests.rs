@@ -45,8 +45,9 @@ fn heading_inline_roles_link_hits_and_copy_have_independent_expected_values() {
         "# Title\n\nalpha **bold** [site](https://example.com)\n",
         40,
     );
-    assert_eq!(row_text(&p, 0), "Title");
-    assert_eq!(row_text(&p, 1), "━━━━━");
+    assert_eq!(row_text(&p, 0), "# Title");
+    // The underline runs from the marker to the end of the text.
+    assert_eq!(row_text(&p, 1), "━".repeat(7));
     assert_eq!(row_text(&p, 2), "alpha bold site");
     assert!(
         p.row(2)
@@ -184,7 +185,65 @@ fn geometry_reuses_blocks_but_glyph_changes_reprepare() {
         Some(&a),
     );
     assert_eq!(c.stats.reused_blocks, 0);
-    assert_eq!(row_text(&c, 1), "-----");
+    assert!(row_text(&c, 1).chars().all(|c| c == '='));
+}
+
+#[test]
+fn headings_show_markers_and_underline_the_top_three_levels() {
+    let p = prepared(
+        "para\n\n## Sub `code`\n\n### Three\n\n#### Four *it*\n\n###### Six\n",
+        40,
+    );
+    let roles = |row: u32| {
+        p.row(row)
+            .unwrap()
+            .runs
+            .iter()
+            .map(|r| (r.text.clone(), r.role))
+            .collect::<Vec<_>>()
+    };
+    // Each heading after the first block takes an extra row above.
+    assert_eq!(row_text(&p, 0), "para");
+    assert_eq!(row_text(&p, 1), "");
+    assert_eq!(
+        roles(2),
+        [
+            ("## ".into(), "markdown/h2/marker"),
+            ("Sub ".into(), "markdown/h2"),
+            ("code".into(), "markdown/h2/inline-code")
+        ]
+    );
+    assert_eq!(row_text(&p, 3), "─".repeat(11));
+    assert_eq!(row_text(&p, 4), "");
+    assert_eq!(row_text(&p, 5), "### Three");
+    assert_eq!(row_text(&p, 6), "┄".repeat(9));
+    assert_eq!(row_text(&p, 7), "");
+    assert_eq!(
+        roles(8),
+        [
+            ("#### ".into(), "markdown/h4/marker"),
+            ("Four ".into(), "markdown/h4"),
+            ("it".into(), "markdown/h4/emphasis")
+        ]
+    );
+    // Below the third level, no underline follows.
+    assert_eq!(row_text(&p, 9), "");
+    assert_eq!(
+        roles(10),
+        [
+            ("###### ".into(), "markdown/h6/marker"),
+            ("Six".into(), "markdown/h6")
+        ]
+    );
+}
+
+#[test]
+fn a_wrapped_heading_hangs_under_its_text_and_is_underlined_to_its_widest_line() {
+    let p = prepared("# alphabet beta gamma\n", 18);
+    assert_eq!(row_text(&p, 0).trim_end(), "# alphabet beta");
+    assert_eq!(row_text(&p, 1), "  gamma");
+    // The trailing space of the wrapped line is not underlined.
+    assert_eq!(row_text(&p, 2), "━".repeat(15));
 }
 
 #[test]

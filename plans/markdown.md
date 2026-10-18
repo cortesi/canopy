@@ -339,8 +339,13 @@ Keep prose left aligned. Tables and code cards may use the full body width. Rese
 scrollbar gutter from the start so its appearance cannot change wrapping. The status strip
 and search prompt sit outside the document canvas.
 
-Headings are ordinary terminal text. H1 and H2 get strong roles, spacing, and short rules.
-H3 through H6 keep visible level distinctions through labels or attributes. Lists use hanging
+Headings are ordinary terminal text led by their `#` markers, and every level is bold in
+one hue, the palette's orange, which no other document element uses. Each level below the
+first mixes that hue a step toward the ground. Markers and underlines are quieter than the
+text. H1, H2, and H3 are underlined from the marker to the end of the widest line, with `━`,
+`─`, and `┄`, or `=`, `-`, and `.` in ASCII. Wrapped heading lines hang under the text. Each
+top-level heading takes an extra row above it, so it sits nearer its own section, and inline
+spans in a heading keep the heading's colour and weight. Lists use hanging
 indentation, `•`, `◦`, and `▪` for nested bullets, and the parser's ordered numbering. Task
 boxes are read-only content. Quote rails, restrained block spacing, and a distinct inline code
 ground establish hierarchy without consuming width.

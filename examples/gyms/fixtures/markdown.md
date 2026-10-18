@@ -105,7 +105,7 @@ fn publish(revision: u64) -> Result<(), Error> {
 > [!UNKNOWN]
 > An unknown label stays quote text.
 
-### Text, images, and references
+## Text, images, and references
 
 Soft line
 breaks wrap as prose. A hard break ends here.\
@@ -126,15 +126,35 @@ can jump to its source-positioned definition.
 hidden-card-needle remains searchable and copyable.
 </details>
 
+## Narrow layouts
+
+CJK: 界界界. Combining marks: é. Emoji: 👩‍💻. Long words still advance:
+antidisestablishmentarianism-supercalifragilisticexpialidocious.
+
+The source inspector includes unpainted definitions and the final newline.
+
 ---
 
-#### Narrow layouts
+# Heading weights
 
-CJK: 界界界. Combining marks: é. Emoji: 👩‍💻. Long words still advance:
-antidisestablishmentarianism-supercalifragilisticexpialidocious.
+Every level sits in one run here, so their weights compare side by side.
+
+## Second-level heading
+
+Body text under the second level.
+
+### Third-level heading with `code`
+
+Body text under the third level.
+
+#### Fourth-level heading with *emphasis*
+
+Body text under the fourth level.
 
 ##### Fifth-level heading
 
+Body text under the fifth level.
+
 ###### Sixth-level heading
 
-The source inspector includes unpainted definitions and the final newline.
+Body text under the sixth level, the last line of the fixture.

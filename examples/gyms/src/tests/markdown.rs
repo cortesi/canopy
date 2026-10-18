@@ -136,6 +136,11 @@ fn fixture_contains_release_acceptance_cases_and_tiny_viewports_settle() -> Resu
     ] {
         assert!(FIXTURE.contains(required));
     }
+    // One consecutive run holds every heading level, so they compare together.
+    let run = &FIXTURE[FIXTURE.find("\n# Heading weights").expect("heading run")..];
+    for level in 2..=6 {
+        assert!(run.contains(&format!("\n{} ", "#".repeat(level))));
+    }
     let mut h = gym()?;
     for size in [
         Size::new(40, 12),

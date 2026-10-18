@@ -1,6 +1,6 @@
 {
   "title": "Canopy widgets",
-  "generated": 1792281805,
+  "generated": 1792294235,
   "font_size": 14.0,
   "scale": 2.0,
   "sizes": [
@@ -360,6 +360,20 @@
       ]
     },
     {
+      "id": "headings",
+      "title": "Heading weights",
+      "caption": "All six heading levels in one run, each over a line of body text, to compare their weights.",
+      "script": "markdown.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "headings-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
       "id": "source-inspector",
       "title": "Pinned source",
       "caption": "The source inspector pins the displayed revision and retains original syntax.",
@@ -388,7 +402,12 @@
           "size": "110x36",
           "file": "source-110x36.png",
           "width": 1870,
-          "height": 1332
+          "height": 1332,
+          "missing": [
+            "界",
+            "👩",
+            "💻"
+          ]
         }
       ]
     },
