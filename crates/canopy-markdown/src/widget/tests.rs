@@ -877,10 +877,7 @@ fn the_status_line_shows_where_the_selected_link_leads() {
         false,
         |_| {},
     );
-    harness
-        .canopy
-        .set_screen_size(Size::new(80, 8))
-        .unwrap();
+    harness.canopy.set_screen_size(Size::new(80, 8)).unwrap();
     settle(&mut harness, &manual);
     // An unlabelled wikilink reads as Obsidian shows it.
     assert!(harness.tbuf().contains_text("Note › Plans and Here"));
@@ -930,6 +927,29 @@ fn reveal_anchor_finds_a_heading_by_slug_or_text() {
             .unwrap();
         service(&mut harness);
         assert_eq!(harness.tbuf().contains_text("Far Away"), found, "{anchor}");
+    }
+}
+
+#[test]
+fn block_links_reveal_their_block() {
+    for (target, shown) in [("^far", "Far block."), ("^quoted", "Quoted line.")] {
+        let text = format!(
+            "[[#{target}]]\n\n{}Far block. ^far\n\n> Quoted line.\n\n^quoted\n",
+            "Line.\n\n".repeat(40)
+        );
+        let (mut harness, manual) = fixture(&text, ViewType::Rendered, false, false, false);
+        settle(&mut harness, &manual);
+        assert!(!harness.tbuf().contains_text(shown));
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| reader.activate(ctx))
+            .unwrap();
+        service(&mut harness);
+        assert!(
+            harness.tbuf().contains_text(shown),
+            "{target}\n{}",
+            harness.tbuf().lines().join("\n")
+        );
+        assert!(!harness.tbuf().contains_text("^far"));
     }
 }
 

@@ -285,6 +285,14 @@ pub struct OutlineEntry {
     /// Lowercase heading fragment with source-order duplicate suffixes.
     pub slug: String,
 }
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// An Obsidian block id, `^id`, and the block it marks.
+pub struct BlockAnchor {
+    /// The id, without its `^`.
+    pub id: String,
+    /// The source of the marked block.
+    pub source: Range<usize>,
+}
 #[derive(Clone, Debug)]
 /// Immutable semantic interpretation of one accepted source revision.
 pub struct DocumentSnapshot {
@@ -300,6 +308,9 @@ pub struct DocumentSnapshot {
     pub objects: Vec<Object>,
     /// Heading index in source order.
     pub outline: Vec<OutlineEntry>,
+    /// Obsidian block ids in source order, each naming the block it marks.
+    /// The first block with an id keeps it.
+    pub block_anchors: Vec<BlockAnchor>,
     /// The trailing source region awaiting a closing boundary.
     pub provisional: Option<Range<usize>>,
     /// Whether a derived-work bound required a source-card fallback.
@@ -332,6 +343,9 @@ impl DocumentSnapshot {
             self.outline
                 .capacity()
                 .saturating_mul(size_of::<OutlineEntry>()),
+            self.block_anchors
+                .capacity()
+                .saturating_mul(size_of::<BlockAnchor>()),
             self.identities.capacity().saturating_mul(
                 2 * (size_of::<((usize, String, usize), u64)>() + size_of::<usize>()),
             ),
@@ -721,10 +735,13 @@ struct Leaf {
     node: Node,
     /// Inherited list, quote, and footnote metadata.
     context: Context,
+    /// For a paragraph of only a block id, the source of the block before it,
+    /// which the id names. The paragraph itself shows nothing.
+    names: Option<Range<usize>>,
 }
 /// Flatten semantic leaves while retaining container metadata.
 fn collect(nodes: &[Node], context: &Context, out: &mut Vec<Leaf>) {
-    for node in nodes {
+    for (index, node) in nodes.iter().enumerate() {
         match node.tag.as_ref() {
             Some(Tag::List(number)) => {
                 for (index, item) in node.children.iter().enumerate() {
@@ -814,6 +831,13 @@ fn collect(nodes: &[Node], context: &Context, out: &mut Vec<Leaf>) {
             _ if is_block(node) => out.push(Leaf {
                 node: node.clone(),
                 context: context.clone(),
+                names: index
+                    .checked_sub(1)
+                    .filter(|_| {
+                        matches!(node.tag, Some(Tag::Paragraph))
+                            && block_id(&plain(&node.children)).is_some()
+                    })
+                    .map(|previous| nodes[previous].range.clone()),
             }),
             _ => {
                 if node.tag.is_some() {
@@ -822,6 +846,7 @@ fn collect(nodes: &[Node], context: &Context, out: &mut Vec<Leaf>) {
                     out.push(Leaf {
                         node: node.clone(),
                         context: context.clone(),
+                        names: None,
                     });
                 }
             }
@@ -842,6 +867,7 @@ fn flush_inline(inline: &mut Vec<Node>, context: &Context, out: &mut Vec<Leaf>) 
             children: mem::take(inline),
         },
         context: context.clone(),
+        names: None,
     });
 }
 /// Identify parser constructs that establish reading-unit boundaries.
@@ -1020,6 +1046,37 @@ struct Builder<'a> {
     quotes: Vec<usize>,
 }
 impl Builder<'_> {
+    /// Index a block id, unless an earlier block already holds it.
+    fn anchor(&mut self, id: String, source: Range<usize>) {
+        if !self
+            .document
+            .block_anchors
+            .iter()
+            .any(|anchor| anchor.id == id)
+        {
+            self.document.block_anchors.push(BlockAnchor { id, source });
+        }
+    }
+    /// Index a trailing block marker on `payload` and drop it from the
+    /// readable text, its spans, and its breaks.
+    fn strip_block_id(
+        &mut self,
+        payload: &mut String,
+        spans: &mut [InlineSpan],
+        soft_breaks: &mut Vec<usize>,
+        source: &Range<usize>,
+    ) {
+        let Some((at, id)) = trailing_block_id(payload) else {
+            return;
+        };
+        self.anchor(id.to_owned(), source.clone());
+        payload.truncate(at);
+        for span in spans {
+            span.range.start = span.range.start.min(at);
+            span.range.end = span.range.end.min(at);
+        }
+        soft_breaks.retain(|offset| *offset < at);
+    }
     /// Reuse the latest active identity or allocate a never-recycled one.
     fn id(&mut self, start: usize, role: &str, enclosing: usize) -> u64 {
         let key = (start, role.to_owned(), enclosing);
@@ -1118,12 +1175,13 @@ impl Builder<'_> {
                     (BlockKind::Rule, UnitKind::Separator, String::new(), false)
                 }
                 _ => {
-                    let payload = inline(
+                    let mut payload = inline(
                         &leaf.node.children,
                         &mut spans,
                         &mut links,
                         &mut soft_breaks,
                     );
+                    self.strip_block_id(&mut payload, &mut spans, &mut soft_breaks, &range);
                     let kind = match leaf.node.tag.as_ref() {
                         Some(Tag::Heading { level, .. }) => BlockKind::Heading {
                             level: *level as u8,
@@ -1392,6 +1450,25 @@ fn inline(
     append_inline(nodes, &mut out, spans, links, soft_breaks, false);
     out
 }
+/// The id of a whole-text Obsidian block marker, `^id`.
+fn block_id(text: &str) -> Option<String> {
+    let id = text.trim().strip_prefix('^')?;
+    (!id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
+        .then(|| id.to_owned())
+}
+/// A trailing Obsidian block marker, ` ^id`: where the text before it ends,
+/// and the id.
+fn trailing_block_id(text: &str) -> Option<(usize, &str)> {
+    let trimmed = text.trim_end();
+    let caret = trimmed.rfind('^')?;
+    let id = &trimmed[caret + 1..];
+    let before = &trimmed[..caret];
+    let valid = !id.is_empty()
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        && before.ends_with(char::is_whitespace)
+        && !before.trim().is_empty();
+    valid.then(|| (before.trim_end().len(), id))
+}
 /// The label Obsidian shows for an unlabelled wikilink: its target without a
 /// `.md` extension, with its anchor after `›`.
 fn wiki_label(target: &str) -> String {
@@ -1597,6 +1674,7 @@ pub fn parse_document(
             units: Vec::new(),
             objects: Vec::new(),
             outline: Vec::new(),
+            block_anchors: Vec::new(),
             provisional: None,
             degraded: false,
             identities: HashMap::new(),
@@ -1653,6 +1731,7 @@ pub fn parse_document(
                     event: None,
                     children: Vec::new(),
                 },
+                names: None,
                 context: Context {
                     depth: quote_depth,
                     quote_depth,
@@ -1664,6 +1743,14 @@ pub fn parse_document(
     }
     leaves.sort_by_key(|leaf| leaf.node.range.start);
     for leaf in &leaves {
+        // A paragraph of only a block id marks the block before it, and
+        // shows nothing itself.
+        if let Some(named) = &leaf.names {
+            if let Some(id) = block_id(&plain(&leaf.node.children)) {
+                builder.anchor(id, named.clone());
+            }
+            continue;
+        }
         builder.leaf(leaf, &text);
     }
     let mut slugs = HashMap::<String, usize>::new();
@@ -2261,6 +2348,43 @@ mod tests {
             links[0].resolve(Some(&base)),
             local("work/verber", None, true)
         );
+    }
+    #[test]
+    fn block_ids_mark_their_blocks_and_leave_the_readable_text() {
+        let text = "Para one ^p1\n\n- item a ^li\n- item b\n\n^list\n\n| a |\n| - |\n| 1 |\n\n^tab\n\n## Head ^h\n\nx^y and ^bad! and ^p1 dup ^p1\n";
+        let doc = complete(text);
+        let ids: Vec<(&str, &str)> = doc
+            .block_anchors
+            .iter()
+            .map(|anchor| {
+                (
+                    anchor.id.as_str(),
+                    text[anchor.source.clone()].lines().next().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            ids,
+            [
+                ("p1", "Para one ^p1"),
+                ("li", "item a ^li"),
+                ("list", "- item a ^li"),
+                ("tab", "| a |"),
+                ("h", "## Head ^h"),
+            ]
+        );
+        let readable: Vec<&str> = doc.units.iter().map(|unit| unit.text.as_str()).collect();
+        assert!(readable.contains(&"Para one"));
+        assert!(readable.contains(&"item a"));
+        assert!(
+            !readable
+                .iter()
+                .any(|text| *text == "^list" || *text == "^tab")
+        );
+        // Only a whole trailing marker counts; the first holder of an id keeps it.
+        assert!(readable.contains(&"x^y and ^bad! and ^p1 dup"));
+        assert_eq!(doc.outline[0].text, "Head");
+        assert_eq!(doc.outline[0].slug, "head");
     }
     #[test]
     fn heading_slugs_disambiguate_generated_suffixes_and_literal_headings() {

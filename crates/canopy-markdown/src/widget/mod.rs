@@ -1255,20 +1255,34 @@ impl Markdown {
         self.action_status = status.into();
         Ok(true)
     }
-    /// Reveal what a link's `#` anchor names: a heading by its fragment slug
-    /// or by its text without regard to case. Returns whether one matched.
+    /// Reveal what a link's `#` anchor names: a block by its `^id`, or a
+    /// heading by its fragment slug or by its text without regard to case.
+    /// Returns whether one matched.
     pub fn reveal_anchor(&mut self, ctx: &mut dyn Context, anchor: &str) -> Result<bool> {
         let Some(p) = self.shared.borrow().presentation.clone() else {
             return Ok(false);
         };
         let anchor = anchor.trim();
-        let slug = heading_slug(anchor);
-        let Some(entry) = p.document.outline.iter().find(|e| {
-            e.slug == anchor || e.slug == slug || e.text.trim().eq_ignore_ascii_case(anchor)
-        }) else {
+        let start = if let Some(id) = anchor.strip_prefix('^') {
+            p.document
+                .block_anchors
+                .iter()
+                .find(|block| block.id == id)
+                .map(|block| block.source.start)
+        } else {
+            let slug = heading_slug(anchor);
+            p.document
+                .outline
+                .iter()
+                .find(|e| {
+                    e.slug == anchor || e.slug == slug || e.text.trim().eq_ignore_ascii_case(anchor)
+                })
+                .map(|e| e.source.start)
+        };
+        let Some(start) = start else {
             return Ok(false);
         };
-        self.jump_source(ctx, entry.source.start)?;
+        self.jump_source(ctx, start)?;
         Ok(true)
     }
     /// Save one return location and navigate to an accepted source byte.

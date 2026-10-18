@@ -196,8 +196,9 @@ impl Markdown {
     /// Return once from a fragment, footnote, or outline jump.
     pub fn return_from_jump(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
-    /// Reveal what a link's `#` anchor names: a heading by its fragment slug
-    /// or by its text without regard to case. Returns whether one matched.
+    /// Reveal what a link's `#` anchor names: a block by its `^id`, or a
+    /// heading by its fragment slug or by its text without regard to case.
+    /// Returns whether one matched.
     pub fn reveal_anchor(
         &mut self,
         ctx: &mut dyn Context,
@@ -853,6 +854,15 @@ pub mod document {
         pub provisional: bool,
     }
 
+    /// An Obsidian block id, `^id`, and the block it marks.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct BlockAnchor {
+        /// The id, without its `^`.
+        pub id: String,
+        /// The source of the marked block.
+        pub source: Range<usize>,
+    }
+
     /// The interpreted construct associated with one reading unit.
     #[derive(Clone, Debug)]
     pub enum BlockKind {
@@ -908,6 +918,9 @@ pub mod document {
         pub objects: Vec<Object>,
         /// Heading index in source order.
         pub outline: Vec<OutlineEntry>,
+        /// Obsidian block ids in source order, each naming the block it marks.
+        /// The first block with an id keeps it.
+        pub block_anchors: Vec<BlockAnchor>,
         /// The trailing source region awaiting a closing boundary.
         pub provisional: Option<Range<usize>>,
         /// Whether a derived-work bound required a source-card fallback.
