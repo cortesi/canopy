@@ -2,6 +2,7 @@
 
 use std::{
     cell::RefCell,
+    collections::VecDeque,
     fmt::Display,
     rc::Rc,
     result::Result as StdResult,
@@ -188,6 +189,9 @@ pub struct Markdown {
     acknowledged: usize,
     /// One return anchor for a fragment, footnote, or outline jump.
     return_position: Option<ReaderPosition>,
+    /// The position before each recent jump, oldest first, for the host's
+    /// own history.
+    jumps: VecDeque<ReaderPosition>,
     /// Last painted active viewport offset for follow observation.
     last_scroll: Option<Point>,
     /// Last painted allocation used to distinguish resize from navigation.
@@ -210,6 +214,8 @@ fn index(view: ViewType) -> usize {
 /// Vertical and horizontal scrollbar targets, in reader-local coordinates.
 type ScrollbarTracks = (Vec<(NodeId, Rect)>, Vec<(NodeId, Rect)>);
 
+/// Jumps the reader keeps for its host before it drops the oldest.
+const JUMP_LIMIT: usize = 32;
 /// Conditional Rendered activation route that Source can decline.
 const ACTIVATE_INTENT: &str = "markdown.activate";
 /// Conditional forward Rendered object traversal route.
@@ -281,6 +287,7 @@ impl Markdown {
             saved: [None, None],
             acknowledged,
             return_position: None,
+            jumps: VecDeque::new(),
             last_scroll: None,
             last_size: None,
             restoring: false,
@@ -332,6 +339,9 @@ impl Markdown {
         self.search_index = None;
         self.saved = [None, None];
         self.return_position = None;
+        self.jumps.clear();
+        // An action's status belongs to the document that took it.
+        self.action_status.clear();
         self.acknowledged = if receiving {
             0
         } else {
@@ -773,6 +783,18 @@ impl Markdown {
         } else {
             None
         };
+        // The reading anchor's own byte, so the byte and the viewport row
+        // describe one row, and a position restores exactly without its
+        // reading identity, as it must after a reload.
+        let source_byte = reading
+            .and_then(|(position, _)| {
+                self.shared
+                    .borrow()
+                    .presentation
+                    .as_ref()?
+                    .source_at_reading(position)
+            })
+            .unwrap_or(source_byte);
         Ok(ReaderPosition {
             epoch: self.epoch(),
             view: self.active,
@@ -1287,7 +1309,12 @@ impl Markdown {
     }
     /// Save one return location and navigate to an accepted source byte.
     fn jump_source(&mut self, ctx: &mut dyn Context, byte: usize) -> Result<()> {
-        self.return_position = Some(self.position(ctx)?);
+        let before = self.position(ctx)?;
+        if self.jumps.len() == JUMP_LIMIT {
+            self.jumps.pop_front();
+        }
+        self.jumps.push_back(before);
+        self.return_position = Some(before);
         self.shared.borrow_mut().follow = Follow::Paused;
         self.shared.borrow_mut().navigation += 1;
         self.restore(
@@ -1301,6 +1328,13 @@ impl Markdown {
                 horizontal: 0,
             },
         )
+    }
+    /// Drain the positions the reader left by its own jumps (fragments,
+    /// block and heading anchors, footnotes, and the outline), oldest first.
+    /// The reader keeps at most a few; a host with a history drains them
+    /// each turn.
+    pub fn take_jumps(&mut self) -> Vec<ReaderPosition> {
+        self.jumps.drain(..).collect()
     }
     /// Return once from a fragment, footnote, or outline jump.
     #[command]

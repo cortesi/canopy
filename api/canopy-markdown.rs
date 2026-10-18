@@ -282,6 +282,12 @@ impl Markdown {
     /// Finish typing while retaining the query and its highlights.
     pub fn submit_search(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Drain the positions the reader left by its own jumps (fragments,
+    /// block and heading anchors, footnotes, and the outline), oldest first.
+    /// The reader keeps at most a few; a host with a history drains them
+    /// each turn.
+    pub fn take_jumps(&mut self) -> Vec<ReaderPosition>;
+
     /// Drain complete immutable requests once. The host performs each action
     /// and replies.
     pub fn take_requests(&mut self, limit: usize) -> Vec<HostRequest>;
@@ -1756,6 +1762,10 @@ pub mod presentation {
 
         /// Restore a readable byte position after geometry changes.
         pub fn row_for_unit(&self, unit_id: u64, offset: usize) -> u32;
+
+        /// Map a reading position to verified source bytes, falling back to its
+        /// block's start.
+        pub fn source_at_reading(&self, position: ReadingPosition) -> Option<usize>;
 
         /// Map a row to verified source bytes, falling back to the block start.
         pub fn source_at_row(&self, row: u32) -> Option<usize>;

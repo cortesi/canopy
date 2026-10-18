@@ -515,6 +515,15 @@ impl PresentationSnapshot {
         let b = self.block_at(index)?;
         Some((b, b.rows.get((index - b.start) as usize)?))
     }
+    /// Map a reading position to verified source bytes, falling back to its
+    /// block's start.
+    pub fn source_at_reading(&self, position: ReadingPosition) -> Option<usize> {
+        let block = self.blocks.get(*self.unit_blocks.get(&position.unit_id)?)?;
+        let source = &block.rows.first()?.source;
+        Some(block.source_text_start.map_or(source.start, |start| {
+            start.saturating_add(position.offset).min(source.end)
+        }))
+    }
     /// Map a row to verified source bytes, falling back to the block start.
     pub fn source_at_row(&self, row: u32) -> Option<usize> {
         let (block, row) = self.block_row(row)?;

@@ -954,6 +954,33 @@ fn block_links_reveal_their_block() {
 }
 
 #[test]
+fn successful_jumps_queue_the_position_they_left() {
+    let text = format!("[[#Far]] [[#Missing]]\n\n{}# Far\n", "Line.\n\n".repeat(40));
+    let (mut harness, manual) = fixture(&text, ViewType::Rendered, false, false, false);
+    settle(&mut harness, &manual);
+    let start = harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.position(ctx))
+        .unwrap();
+    for _ in 0..2 {
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                reader.next_object(ctx, 1)?;
+                reader.activate(ctx)
+            })
+            .unwrap();
+        service(&mut harness);
+    }
+    // The heading jump queued where it left; the unknown anchor queued nothing.
+    let jumps = harness.with_root_widget(|reader: &mut Markdown| reader.take_jumps());
+    assert_eq!(jumps, [start]);
+    assert!(
+        harness
+            .with_root_widget(|reader: &mut Markdown| reader.take_jumps())
+            .is_empty()
+    );
+}
+
+#[test]
 fn clipboard_and_browser_admission_follow_root_capability_flags() {
     for enabled in [false, true] {
         let (mut harness, manual) = fixture(
