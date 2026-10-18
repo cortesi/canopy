@@ -514,7 +514,8 @@ pub struct TableLayoutOptions {
     /// suits bounded tables. Columns take their natural widths up to
     /// `max_width`, and longer values wrap at word boundaries over as many
     /// lines as they need. Each row is as tall as its tallest value, and
-    /// rules separate the rows once any of them wraps.
+    /// rules separate the rows once any of them wraps. A value past 16 KiB
+    /// ends in an ellipsis.
     /// [`PreparedTable::fit`] refits the columns to a view: wider, so values
     /// wrap less, or narrower, so the grid scrolls only when it must.
     pub wrap: bool,
@@ -837,7 +838,8 @@ impl PreparedTable {
         } else if base_sum <= room {
             flow::distribute(&self.natural, &base, room)
         } else {
-            let floor: Vec<u32> = base.iter().map(|width| (*width).min(WRAP_FLOOR)).collect();
+            let floor_width = WRAP_FLOOR.max(self.options.min_width);
+            let floor: Vec<u32> = base.iter().map(|width| (*width).min(floor_width)).collect();
             if floor.iter().sum::<u32>() <= room {
                 flow::distribute(&base, &floor, room)
             } else {
@@ -875,7 +877,7 @@ impl PreparedTable {
     }
     /// Count the rows from `row` on that fit in `lines` canvas lines, at
     /// least one.
-    pub fn rows_within(&self, row: usize, lines: u32) -> usize {
+    pub(crate) fn rows_within(&self, row: usize, lines: u32) -> usize {
         let Some(rows) = &self.rows else {
             return usize::try_from(lines.max(1)).unwrap_or(usize::MAX);
         };
@@ -887,6 +889,23 @@ impl PreparedTable {
             .iter()
             .zip(&rows.heights[row..])
             .take_while(|(top, height)| top.saturating_add(**height) <= end)
+            .count();
+        fits.max(1)
+    }
+    /// Count the rows up to and including `row` that fit in `lines` canvas
+    /// lines, at least one.
+    pub(crate) fn rows_before(&self, row: usize, lines: u32) -> usize {
+        let Some(rows) = &self.rows else {
+            return usize::try_from(lines.max(1)).unwrap_or(usize::MAX);
+        };
+        let Some(top) = rows.tops.get(row) else {
+            return 1;
+        };
+        let start = top.saturating_add(rows.heights[row]).saturating_sub(lines);
+        let fits = rows.tops[..=row]
+            .iter()
+            .rev()
+            .take_while(|top| **top >= start)
             .count();
         fits.max(1)
     }

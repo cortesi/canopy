@@ -195,9 +195,7 @@ impl TableView {
             .and_then(|id| ctx.view_of(id.into()))
             .map(|view| view.scroll)
             .unwrap_or(Point::ZERO);
-        let top = self
-            .geometry()
-            .row_at(offset.y)
+        let top = row_or_above(&self.geometry(), offset.y)
             .and_then(|row| self.table.data().rows().get(row))
             .map(|row| row.key.clone());
         self.end_drag(ctx)?;
@@ -231,7 +229,7 @@ impl TableView {
             let origin = if same {
                 let y = top
                     .and_then(|key| self.table.data().row_index(&key))
-                    .and_then(|row| self.table.row_lines(row))
+                    .and_then(|row| self.geometry().row_lines(row))
                     .map_or(offset.y, |(top, _)| top);
                 Point::new(offset.x, y)
             } else {
@@ -499,8 +497,16 @@ impl TableView {
         let mut paint = self.paint.borrow_mut();
         if !Arc::ptr_eq(&paint.base, &self.table) {
             paint.base = self.table.clone();
-            paint.table = self.table.clone();
-            paint.fitted = None;
+            // A new table fits the body's width at once, so scrolling and
+            // hits agree with what the next paint shows.
+            let fitted = paint
+                .fitted
+                .filter(|_| self.table.wraps())
+                .and_then(|width| Some((width, Arc::new(self.table.fit(width).ok()?))));
+            (paint.table, paint.fitted) = match fitted {
+                Some((width, table)) => (table, Some(width)),
+                None => (self.table.clone(), None),
+            };
         }
         paint.cursor = self.cursor();
         paint.selection = self.selection.clone();
@@ -731,7 +737,9 @@ impl TableView {
             .body
             .and_then(|id| ctx.view_of(id.into()))
             .map_or(1, |v| v.content.h.max(1));
-        let page = i32::try_from(self.geometry().rows_within(r, lines)).unwrap_or(i32::MAX);
+        let geometry = self.geometry();
+        let page_down = i32::try_from(geometry.rows_within(r, lines)).unwrap_or(i32::MAX);
+        let page_up = i32::try_from(geometry.rows_before(r, lines)).unwrap_or(i32::MAX);
         match key.key {
             KeyCode::Left | KeyCode::Char('h') => self.move_cursor(ctx, 0, -1, key.mods.shift),
             KeyCode::Right | KeyCode::Char('l') => self.move_cursor(ctx, 0, 1, key.mods.shift),
@@ -742,10 +750,10 @@ impl TableView {
             KeyCode::Char('L') => self.move_cursor(ctx, 0, 1, true),
             KeyCode::Char('K') => self.move_cursor(ctx, -1, 0, true),
             KeyCode::Char('J') => self.move_cursor(ctx, 1, 0, true),
-            KeyCode::PageUp => self.move_cursor(ctx, -page, 0, key.mods.shift),
+            KeyCode::PageUp => self.move_cursor(ctx, -page_up, 0, key.mods.shift),
             // Space pages down, as in the other read-only views.
             KeyCode::PageDown | KeyCode::Char(' ') => {
-                self.move_cursor(ctx, page, 0, key.mods.shift)
+                self.move_cursor(ctx, page_down, 0, key.mods.shift)
             }
             KeyCode::Home => self.move_to(ctx, r, 0, key.mods.shift),
             KeyCode::End => self.move_to(ctx, r, usize::MAX, key.mods.shift),
@@ -807,6 +815,13 @@ fn safe_prefix(value: &str, width: u32) -> String {
         .take((width as usize).saturating_mul(4))
         .map(|c| if display_control(c) { ' ' } else { c })
         .collect()
+}
+/// Return the body row at canvas line `y`. A rule between wrapped rows
+/// belongs to the row above it.
+fn row_or_above(geometry: &PreparedTable, y: u32) -> Option<usize> {
+    geometry
+        .row_at(y)
+        .or_else(|| geometry.row_at(y.saturating_sub(1)))
 }
 /// Select the first body cell when both data axes are nonempty.
 fn initial_cursor(data: &TableData) -> Option<(usize, usize)> {
@@ -1032,11 +1047,7 @@ impl Widget for TableView {
             let point = view.viewport_to_outer(mouse.location)?.clamped_point();
             let x = point.x.saturating_add(view.scroll.x);
             let y = point.y.saturating_add(view.scroll.y);
-            // A rule between wrapped rows belongs to the row above it.
-            let row = geometry
-                .row_at(y)
-                .or_else(|| geometry.row_at(y.saturating_sub(1)))
-                .unwrap_or(usize::MAX);
+            let row = row_or_above(&geometry, y).unwrap_or(usize::MAX);
             let column = geometry
                 .column_at(x)
                 .or_else(|| geometry.column_at(x.saturating_sub(1)))

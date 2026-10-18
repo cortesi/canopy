@@ -53,7 +53,6 @@ fn read_rgba(path: &Path) -> Result<RgbaImage> {
     Ok(image.into_rgba8())
 }
 
-/// Decode within a source budget, then shrink before building sampling tables.
 /// Decode the image at `path` as a preview that fits `bounds` pixels, under
 /// the same bounds as [`ImageView::set_preview_path`]: at most 32 * 1024 *
 /// 1024 source pixels, a 128 MiB decoder budget, and 1024 pixels an edge.
@@ -145,25 +144,42 @@ pub fn image_cells(
         origin: [-offset.0 / zoom, -offset.1 / zoom],
         step: [1.0 / (8.0 * zoom), 1.0 / (4.0 * zoom)],
     };
-    let Ok(source) = Image::new(image.as_raw(), width as usize, height as usize) else {
-        return cells;
-    };
-    let mut linear = LinearRaster::new();
-    resample(
-        &source,
-        placement,
-        cols * MATRIX,
-        rows * MATRIX,
-        &mut linear,
-    );
+    let scratch = (&mut LinearRaster::new(), &mut Vec::new());
     let grounds = vec![ground; cols * rows];
-    let mut opaque = Vec::new();
-    composite(&linear, &grounds, &mut opaque);
-    let stride = cols * MATRIX;
-    if let Ok(raster) = RasterView::new(&opaque, stride, rows * MATRIX, stride) {
-        rgb_into(&raster, SymbolSet::tier(tier), &mut cells);
-    }
+    match_cells(
+        image,
+        placement,
+        (cols, rows),
+        &grounds,
+        tier,
+        scratch,
+        &mut cells,
+    );
     cells
+}
+
+/// Match `image`, sampled at `placement`, to a grid of `cols` by `rows`
+/// cells in `tier` over one ground each, through reusable scratch rasters.
+/// Cells come row by row.
+fn match_cells(
+    image: &RgbaImage,
+    placement: Placement,
+    (cols, rows): (usize, usize),
+    grounds: &[[u8; 3]],
+    tier: Tier,
+    (linear, opaque): (&mut LinearRaster, &mut Vec<[u8; 3]>),
+    cells: &mut Vec<Cell<[u8; 3]>>,
+) {
+    let (width, height) = (image.width() as usize, image.height() as usize);
+    let Ok(source) = Image::new(image.as_raw(), width, height) else {
+        return;
+    };
+    resample(&source, placement, cols * MATRIX, rows * MATRIX, linear);
+    composite(linear, grounds, opaque);
+    let stride = cols * MATRIX;
+    if let Ok(raster) = RasterView::new(opaque, stride, rows * MATRIX, stride) {
+        rgb_into(&raster, SymbolSet::tier(tier), cells);
+    }
 }
 
 /// What a cached mosaic depends on, besides the ground of each cell.
@@ -344,22 +360,16 @@ impl ImageView {
             ],
             step: [1.0 / (8.0 * key.zoom), 1.0 / (4.0 * key.zoom)],
         };
-        let (width, height) = (self.image.width() as usize, self.image.height() as usize);
         cells.clear();
-        if let Ok(image) = Image::new(self.image.as_raw(), width, height) {
-            resample(
-                &image,
-                placement,
-                cols * MATRIX,
-                rows * MATRIX,
-                &mut self.linear,
-            );
-            composite(&self.linear, &self.grounds, &mut self.opaque);
-            let stride = cols * MATRIX;
-            if let Ok(raster) = RasterView::new(&self.opaque, stride, rows * MATRIX, stride) {
-                rgb_into(&raster, SymbolSet::tier(key.tier), &mut cells);
-            }
-        }
+        match_cells(
+            &self.image,
+            placement,
+            (cols, rows),
+            &self.grounds,
+            key.tier,
+            (&mut self.linear, &mut self.opaque),
+            &mut cells,
+        );
         self.matches += 1;
         // The grounds of this render move into the mosaic, and the buffer of
         // the last one becomes the scratch of the next.

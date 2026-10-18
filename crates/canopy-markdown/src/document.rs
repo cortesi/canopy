@@ -181,7 +181,7 @@ pub enum BlockKind {
     Embed(ImageBlock),
 }
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// An image alone in its paragraph: `![alt](path)`, or Obsidian's
+/// An image or embed alone in its paragraph: `![alt](path)`, or Obsidian's
 /// `![[path]]` with an optional `|width` or `|widthxheight` size in pixels.
 pub struct ImageBlock {
     /// The image's destination, and its alt text as the label.
@@ -230,10 +230,6 @@ pub struct Link {
     /// Whether the source wrote a `[[target|label]]` wikilink, whose
     /// destination names a host document rather than a URL.
     pub wiki: bool,
-    /// Whether the source gave the label: always for a Markdown link, and
-    /// for a wikilink only after a `|`. An unlabelled wikilink shows its
-    /// target as Obsidian does, `Note › Heading`.
-    pub labelled: bool,
 }
 impl Link {
     /// Classify the destination. A wikilink is always local to the host;
@@ -249,6 +245,7 @@ impl Link {
             Some((path, fragment)) => (path.trim(), Some(fragment.trim())),
             None => (self.destination.trim(), None),
         };
+        let fragment = fragment.filter(|fragment| !fragment.is_empty());
         match (path.is_empty(), fragment) {
             (true, Some(fragment)) => ResolvedLink::Fragment(fragment.to_owned()),
             (true, None) => ResolvedLink::Unavailable("Wikilink names no document".into()),
@@ -756,9 +753,10 @@ struct Leaf {
     node: Node,
     /// Inherited list, quote, and footnote metadata.
     context: Context,
-    /// For a paragraph of only a block id, the source of the block before it,
-    /// which the id names. The paragraph itself shows nothing.
-    names: Option<Range<usize>>,
+    /// For a paragraph of only a block id, the id and the source of the
+    /// block before it, which the id names. The paragraph itself shows
+    /// nothing.
+    names: Option<BlockAnchor>,
 }
 /// Flatten semantic leaves while retaining container metadata.
 fn collect(nodes: &[Node], context: &Context, out: &mut Vec<Leaf>) {
@@ -854,13 +852,12 @@ fn collect(nodes: &[Node], context: &Context, out: &mut Vec<Leaf>) {
             _ if is_block(node) => out.push(Leaf {
                 node: node.clone(),
                 context: context.clone(),
-                names: index
-                    .checked_sub(1)
-                    .filter(|_| {
-                        matches!(node.tag, Some(Tag::Paragraph))
-                            && block_id(&plain(&node.children)).is_some()
+                names: index.checked_sub(1).and_then(|previous| {
+                    Some(BlockAnchor {
+                        id: id_paragraph(node)?,
+                        source: nodes[previous].range.clone(),
                     })
-                    .map(|previous| nodes[previous].range.clone()),
+                }),
             }),
             _ => {
                 if node.tag.is_some() {
@@ -1088,7 +1085,7 @@ impl Builder<'_> {
     }
     /// Interpret front matter of simple properties as a table of them.
     fn front_matter(&mut self, leaf: &Leaf) -> Option<Interpreted> {
-        let properties = properties(&plain(&leaf.node.children))?;
+        let properties = properties(&raw_text(&leaf.node.children))?;
         let table = self.properties_table(&properties, &leaf.node.range, leaf.context.enclosing);
         let payload = table_text(&table);
         Some((BlockKind::Table(table), UnitKind::Table, payload, true))
@@ -1155,6 +1152,12 @@ impl Builder<'_> {
         let Some((at, id)) = trailing_block_id(payload) else {
             return;
         };
+        // A `^` in code or a link label is its text, not a marker.
+        if spans.iter().any(|span| {
+            span.range.end > at && matches!(span.role, InlineRole::Code | InlineRole::Link)
+        }) {
+            return;
+        }
         self.anchor(id.to_owned(), source.clone());
         payload.truncate(at);
         for span in spans {
@@ -1214,7 +1217,7 @@ impl Builder<'_> {
         } else {
             match leaf.node.tag.as_ref() {
                 Some(Tag::CodeBlock(code)) => {
-                    let payload = plain(&leaf.node.children);
+                    let payload = raw_text(&leaf.node.children);
                     let info = match code {
                         CodeBlockKind::Fenced(info) => info.to_string(),
                         CodeBlockKind::Indented => String::new(),
@@ -1541,8 +1544,9 @@ fn inline(
 /// A leaf's interpretation: its block kind, unit kind, readable payload, and
 /// whether selection takes the unit whole.
 type Interpreted = (BlockKind, UnitKind, String, bool);
-/// Show `raw` as a source card. The terminal shows HTML and other front
-/// matter as source, so their cards need no explanation.
+/// Show `raw` as a source card. The terminal shows HTML, and front matter
+/// that is not simple properties, as source, so their cards need no
+/// explanation.
 fn source_leaf(raw: &str) -> Interpreted {
     (
         BlockKind::Source {
@@ -1598,7 +1602,8 @@ fn properties(yaml: &str) -> Option<Vec<(String, String)>> {
 }
 /// Interpret Obsidian's inline marks in one text run: a `%%comment%%` is
 /// dropped, `==highlight==` markers are dropped around the text they mark,
-/// and a `#tag` is marked. An unclosed `%%` or `==` stays as written.
+/// and a `#tag` is marked. An unclosed `%%` or `==` stays as written, as does
+/// an `==` that opens before a space or closes after one.
 fn obsidian_text(raw: &str) -> (String, Vec<(Range<usize>, InlineRole)>) {
     let mut out = String::with_capacity(raw.len());
     let mut marks = Vec::new();
@@ -1627,13 +1632,23 @@ fn obsidian_text(raw: &str) -> (String, Vec<(Range<usize>, InlineRole)>) {
                 }
                 None => out.push_str(marker),
             }
-        } else if let Some(begin) = highlight.take() {
+        } else if let Some(begin) = highlight
+            && !out.ends_with(char::is_whitespace)
+        {
+            highlight = None;
             marks.push((begin..out.len(), InlineRole::Highlight));
-        } else if rest.contains("==") {
+        } else if highlight.is_none()
+            && !rest.starts_with(char::is_whitespace)
+            && rest.contains("==")
+        {
             highlight = Some(out.len());
         } else {
             out.push_str(marker);
         }
+    }
+    // A highlight whose only closer follows a space never closes.
+    if let Some(begin) = highlight {
+        out.insert_str(begin, "==");
     }
     let mut previous = None;
     for (at, ch) in out.char_indices() {
@@ -1661,7 +1676,7 @@ fn image_text(label: &str, destination: &str) -> String {
     }
 }
 /// Whether `destination` names an image file, by its extension.
-pub fn names_image(destination: &str) -> bool {
+fn names_image(destination: &str) -> bool {
     let path = destination.split(['#', '?']).next().unwrap_or(destination);
     path.rsplit_once('.').is_some_and(|(_, extension)| {
         ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"]
@@ -1717,14 +1732,23 @@ fn lone_image(node: &Node) -> Option<ImageBlock> {
             destination: dest_url.to_string(),
             title: title.to_string(),
             wiki,
-            labelled: true,
         },
         width: size.map(|(width, _)| width),
         height: size.and_then(|(_, height)| height),
     })
 }
-/// The id of a whole-text Obsidian block marker, `^id`.
-fn block_id(text: &str) -> Option<String> {
+/// The id of a paragraph of only an Obsidian block marker, `^id`, in plain
+/// text rather than code or a link.
+fn id_paragraph(node: &Node) -> Option<String> {
+    if !matches!(node.tag, Some(Tag::Paragraph))
+        || !node
+            .children
+            .iter()
+            .all(|child| matches!(child.event, Some(Event::Text(_))))
+    {
+        return None;
+    }
+    let text = raw_text(&node.children);
     let id = text.trim().strip_prefix('^')?;
     (!id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
         .then(|| id.to_owned())
@@ -1823,10 +1847,6 @@ fn append_inline(
                             destination: dest_url.to_string(),
                             title: title.to_string(),
                             wiki: matches!(link_type, LinkType::WikiLink { .. }),
-                            labelled: !matches!(
-                                link_type,
-                                LinkType::WikiLink { has_pothole: false }
-                            ),
                         }),
                     });
                 }
@@ -1868,7 +1888,6 @@ fn append_inline(
                                 destination: label,
                                 title: String::new(),
                                 wiki: false,
-                                labelled: true,
                             }),
                         });
                     }
@@ -1923,6 +1942,16 @@ fn append_inline(
             }
         }
     }
+}
+/// The text of literal content, such as code or front matter, as written.
+fn raw_text(nodes: &[Node]) -> String {
+    nodes
+        .iter()
+        .filter_map(|node| match &node.event {
+            Some(Event::Text(text)) => Some(&**text),
+            _ => None,
+        })
+        .collect()
 }
 /// Project readable payload without retaining interaction metadata.
 fn plain(nodes: &[Node]) -> String {
@@ -2059,9 +2088,7 @@ pub fn parse_document(
         // A paragraph of only a block id marks the block before it, and
         // shows nothing itself.
         if let Some(named) = &leaf.names {
-            if let Some(id) = block_id(&plain(&leaf.node.children)) {
-                builder.anchor(id, named.clone());
-            }
+            builder.anchor(named.id.clone(), named.source.clone());
             continue;
         }
         builder.leaf(leaf, &text);
@@ -2169,9 +2196,11 @@ pub enum ResolvedLink {
 /// `file:` URL, or a wikilink. The reader never touches the filesystem; the
 /// host decides what the path names.
 pub struct LocalLink {
-    /// The percent-decoded path, as written, without its fragment.
+    /// The path without its fragment, percent-decoded unless a wikilink
+    /// wrote it.
     pub path: String,
-    /// The percent-decoded heading or block anchor after `#`, if any.
+    /// The heading or block anchor after `#`, if any, percent-decoded unless
+    /// a wikilink wrote it.
     pub fragment: Option<String>,
     /// Whether a wikilink named the document. Its path may omit an
     /// extension, and the host may resolve it by name.
@@ -2185,7 +2214,7 @@ pub fn resolve_link(destination: &str, base: Option<&url::Url>) -> ResolvedLink 
         return ResolvedLink::Unavailable("URL contains control characters".into());
     }
     if let Some(fragment) = destination.strip_prefix('#') {
-        return ResolvedLink::Fragment(fragment.to_owned());
+        return ResolvedLink::Fragment(percent_decoded(fragment));
     }
     let parsed = match (url::Url::parse(destination), base) {
         (Err(url::ParseError::RelativeUrlWithoutBase), Some(base)) => base.join(destination),
@@ -2196,27 +2225,25 @@ pub fn resolve_link(destination: &str, base: Option<&url::Url>) -> ResolvedLink 
         Ok(url) if matches!(url.scheme(), "http" | "https") && url.host_str().is_some() => {
             ResolvedLink::External(url)
         }
-        Ok(url) if url.scheme() == "file" => local_link(&format!(
-            "{}{}",
-            url.path(),
-            url.fragment().map_or(String::new(), |f| format!("#{f}"))
-        )),
+        Ok(url) if url.scheme() == "file" => local_link(&url[url::Position::BeforePath..]),
         Ok(_) => ResolvedLink::Unavailable("URL scheme needs a host handler".into()),
         Err(_) => ResolvedLink::Unavailable("Relative URL needs a valid host base URL".into()),
     }
 }
+/// Decode `text`'s percent escapes, keeping any that do not form UTF-8.
+fn percent_decoded(text: &str) -> String {
+    percent_encoding::percent_decode_str(text)
+        .decode_utf8_lossy()
+        .into_owned()
+}
 /// Split a local destination into its decoded path and fragment.
 fn local_link(destination: &str) -> ResolvedLink {
-    let decode = |text: &str| {
-        percent_encoding::percent_decode_str(text)
-            .decode_utf8_lossy()
-            .into_owned()
-    };
     let (path, fragment) = match destination.split_once('#') {
-        Some((path, fragment)) => (path, Some(decode(fragment))),
+        Some((path, fragment)) => (path, Some(percent_decoded(fragment))),
         None => (destination, None),
     };
-    let path = decode(path.split_once('?').map_or(path, |(path, _)| path));
+    let fragment = fragment.filter(|fragment| !fragment.is_empty());
+    let path = percent_decoded(path.split_once('?').map_or(path, |(path, _)| path));
     if path.is_empty() {
         return ResolvedLink::Unavailable("Link names no document".into());
     }
@@ -2594,6 +2621,9 @@ mod tests {
             matches!(resolve_link("../a",Some(&base)),ResolvedLink::External(url) if url.as_str()=="https://example.com/a")
         );
         assert!(matches!(resolve_link("#part",None),ResolvedLink::Fragment(s) if s=="part"));
+        assert!(
+            matches!(resolve_link("#Far%20Away",None),ResolvedLink::Fragment(s) if s=="Far Away")
+        );
         for value in ["javascript:alert(1)", "https://example.com/\n"] {
             assert!(matches!(
                 resolve_link(value, None),
@@ -2648,8 +2678,13 @@ mod tests {
             local("/tmp/file", None, false)
         );
         assert_eq!(
-            resolve_link("file:///tmp/a%20b.md#x", None),
+            resolve_link("file:///tmp/a%20b.md?q#x", None),
             local("/tmp/a b.md", Some("x"), false)
+        );
+        // An empty fragment names no anchor.
+        assert_eq!(
+            resolve_link("note.md#", None),
+            local("note.md", None, false)
         );
         // A base URL still makes relative paths URLs, but not wikilinks.
         let base = url::Url::parse("https://example.com/docs/").unwrap();
@@ -2694,10 +2729,16 @@ mod tests {
                 .iter()
                 .any(|text| *text == "^list" || *text == "^tab")
         );
-        // Only a whole trailing marker counts; the first holder of an id keeps it.
+        // Only a whole trailing marker counts; the first holder of an id keeps
+        // it.
         assert!(readable.contains(&"x^y and ^bad! and ^p1 dup"));
         assert_eq!(doc.outline[0].text, "Head");
         assert_eq!(doc.outline[0].slug, "head");
+        // A `^` in code is its text.
+        let code = complete("Run `git log feature ^main`\n\n`^abc`\n");
+        assert!(code.block_anchors.is_empty());
+        let readable: Vec<&str> = code.units.iter().map(|unit| unit.text.as_str()).collect();
+        assert_eq!(readable, ["Run git log feature ^main", "^abc"]);
     }
     #[test]
     fn an_image_alone_in_its_paragraph_is_an_image_block() {
@@ -2772,11 +2813,18 @@ mod tests {
                 .any(|span| span.role == InlineRole::Code
                     && doc.units[1].text[span.range.clone()] == *"x^2")
         );
-        // An unclosed marker stays as written.
+        // An unclosed marker stays as written, as does one beside a space.
         assert_eq!(
             complete("a == b and 50%% off\n").units[0].text,
             "a == b and 50%% off"
         );
+        let spaced = complete("if x == 1 or y == 2\n");
+        assert_eq!(spaced.units[0].text, "if x == 1 or y == 2");
+        assert!(spaced.units[0].spans.is_empty());
+        assert_eq!(complete("a ==b == c\n").units[0].text, "a ==b == c");
+        // Code shows its marks as written.
+        let code = complete("```\nif a == b == c {} %% x %%\n```\n");
+        assert_eq!(code.units[0].text, "if a == b == c {} %% x %%\n");
     }
 
     #[test]

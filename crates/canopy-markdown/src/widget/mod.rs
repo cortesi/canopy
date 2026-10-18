@@ -4,6 +4,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, VecDeque},
     fmt::Display,
+    ops::Range,
     rc::Rc,
     result::Result as StdResult,
     sync::Arc,
@@ -48,7 +49,7 @@ use crate::{
         ResourceRequest,
     },
     inspector::{Inspector, InspectorContent, InspectorEvent, InspectorHandle, OutlineEntry},
-    presentation::{EmbedInfo, GeometryKey, ImagePixels, Supplied, style_rules},
+    presentation::{EmbedInfo, GeometryKey, Supplied, style_rules},
     search::{SearchAddress, SearchCase, SearchLimits, SearchMode, SearchQuery, SearchResults},
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, SourceAnchor, SourceMatches, SourceOptions},
@@ -180,6 +181,8 @@ pub struct Markdown {
     resource_requests: HashMap<u64, ((ResourceKind, String), LocalLink)>,
     /// The last resource request id; ids are never reused.
     resource_id: u64,
+    /// Resource requests the displayed document has made.
+    resource_asked: usize,
     /// What the host supplied for embeds and links, for layout.
     supplied: Arc<Supplied>,
     /// Bounded immutable effects awaiting host delivery or acknowledgement.
@@ -264,6 +267,34 @@ fn resource_wants(document: &DocumentSnapshot) -> impl Iterator<Item = (Resource
     })
 }
 
+/// The source of what a link's `#` anchor names in a document of `len`
+/// bytes: a block by its `^id`, or a heading, by its fragment slug or by its
+/// text without regard to case, and what follows it up to the next heading
+/// as high. An empty anchor names nothing.
+fn anchor_section(document: &DocumentSnapshot, len: usize, anchor: &str) -> Option<Range<usize>> {
+    let anchor = anchor.trim();
+    if anchor.is_empty() {
+        return None;
+    }
+    if let Some(id) = anchor.strip_prefix('^') {
+        return document
+            .block_anchors
+            .iter()
+            .find(|block| block.id == id)
+            .map(|block| block.source.clone());
+    }
+    let slug = heading_slug(anchor);
+    let at = document.outline.iter().position(|e| {
+        e.slug == anchor || e.slug == slug || e.text.trim().eq_ignore_ascii_case(anchor)
+    })?;
+    let entry = &document.outline[at];
+    let end = document.outline[at + 1..]
+        .iter()
+        .find(|next| next.level <= entry.level)
+        .map_or(len, |next| next.source.start);
+    Some(entry.source.start..end)
+}
+
 /// The readable paragraphs of the section of `text` that `anchor` names: a
 /// block by its `^id`, a heading and what follows it up to the next heading
 /// as high, or the whole note without an anchor. A heading keeps its `#`
@@ -273,29 +304,8 @@ fn embedded_section(text: &str, anchor: Option<&str>) -> Vec<String> {
         return Vec::new();
     };
     let document = parse_document(&store.snapshot(), &ParseLimits::default(), None);
-    let range = match anchor.map(str::trim) {
-        Some(anchor) if anchor.starts_with('^') => document
-            .block_anchors
-            .iter()
-            .find(|block| block.id == anchor[1..])
-            .map(|block| block.source.clone()),
-        Some(anchor) => {
-            let slug = heading_slug(anchor);
-            document
-                .outline
-                .iter()
-                .position(|e| {
-                    e.slug == anchor || e.slug == slug || e.text.trim().eq_ignore_ascii_case(anchor)
-                })
-                .map(|at| {
-                    let entry = &document.outline[at];
-                    let end = document.outline[at + 1..]
-                        .iter()
-                        .find(|next| next.level <= entry.level)
-                        .map_or(text.len(), |next| next.source.start);
-                    entry.source.start..end
-                })
-        }
+    let range = match anchor {
+        Some(anchor) => anchor_section(&document, text.len(), anchor),
         None => Some(0..text.len()),
     };
     let Some(range) = range else {
@@ -379,6 +389,7 @@ impl Markdown {
             resource_states: HashMap::new(),
             resource_requests: HashMap::new(),
             resource_id: 0,
+            resource_asked: 0,
             supplied: Arc::default(),
             requests: Requests::default(),
             action_status: String::new(),
@@ -448,8 +459,8 @@ impl Markdown {
         // So do its images, which a new document asks for again.
         self.resource_states.clear();
         self.resource_requests.clear();
+        self.resource_asked = 0;
         self.supplied = Arc::default();
-        self.shared.borrow_mut().overlays.images = ImagePixels::default();
         self.acknowledged = if receiving {
             0
         } else {
@@ -1134,6 +1145,7 @@ impl Markdown {
             .blocks
             .iter()
             .find(|b| b.unit_id == object.unit_id);
+        let mut inspected = None;
         let content = match &object.kind {
             ObjectKind::Code => {
                 let Some(BlockKind::Code(code)) = block.map(|b| &b.kind) else {
@@ -1197,11 +1209,12 @@ impl Markdown {
                     resolved: shown,
                     allow_open,
                 };
-                self.inspected_link = Some(resolved);
+                inspected = Some(resolved);
                 content
             }
         };
         self.open_inspector(ctx, content, Some(object.id), p.document.source.revision)?;
+        self.inspected_link = inspected;
         if let Some(found) = self
             .search_index
             .and_then(|i| self.results.as_ref()?.matches.get(i))
@@ -1335,7 +1348,7 @@ impl Markdown {
             InspectorEvent::CopySource { text, range } => {
                 self.queue_copy(ctx, CopyInput::Source { text, range }, None, revision)?;
             }
-            InspectorEvent::OpenUrl(_) => {
+            InspectorEvent::Open => {
                 if let Some(link) = self.inspected_link.clone() {
                     self.follow_link(&link, revision, None)?;
                 }
@@ -1392,27 +1405,10 @@ impl Markdown {
         let Some(p) = self.shared.borrow().presentation.clone() else {
             return Ok(false);
         };
-        let anchor = anchor.trim();
-        let start = if let Some(id) = anchor.strip_prefix('^') {
-            p.document
-                .block_anchors
-                .iter()
-                .find(|block| block.id == id)
-                .map(|block| block.source.start)
-        } else {
-            let slug = heading_slug(anchor);
-            p.document
-                .outline
-                .iter()
-                .find(|e| {
-                    e.slug == anchor || e.slug == slug || e.text.trim().eq_ignore_ascii_case(anchor)
-                })
-                .map(|e| e.source.start)
-        };
-        let Some(start) = start else {
+        let Some(section) = anchor_section(&p.document, p.document.source.len(), anchor) else {
             return Ok(false);
         };
-        self.jump_source(ctx, start)?;
+        self.jump_source(ctx, section.start)?;
         Ok(true)
     }
     /// Save one return location and navigate to an accepted source byte.
@@ -1459,15 +1455,19 @@ impl Markdown {
             if self.resource_states.contains_key(&key) {
                 continue;
             }
-            if self.resource_requests.len() >= RESOURCE_LIMIT
-                || self.resource_states.len() >= RESOURCE_TOTAL
-            {
+            if self.resource_requests.len() >= RESOURCE_LIMIT {
                 break;
             }
             let ResolvedLink::Local(target) = link.resolve(base.as_ref()) else {
                 self.resource_states.insert(key, ResourceState::Settled);
                 continue;
             };
+            // Past the bound, a resource keeps its text, as a remote one does.
+            if self.resource_asked >= RESOURCE_TOTAL {
+                self.resource_states.insert(key, ResourceState::Settled);
+                continue;
+            }
+            self.resource_asked += 1;
             self.resource_id += 1;
             self.resource_states
                 .insert(key.clone(), ResourceState::Requested);
@@ -1515,13 +1515,15 @@ impl Markdown {
         };
         self.resource_states
             .insert((kind, destination.clone()), ResourceState::Settled);
+        if kind == ResourceKind::Link && !matches!(resource, Resource::Missing) {
+            return Ok(());
+        }
         let supplied = Arc::make_mut(&mut self.supplied);
         let embed = match (kind, resource) {
-            (ResourceKind::Link, Resource::Missing) => {
+            (ResourceKind::Link, _) => {
                 supplied.missing_links.insert(destination.clone());
                 None
             }
-            (ResourceKind::Link, _) => return Ok(()),
             (_, Resource::Image(image)) => {
                 let info = EmbedInfo::Size {
                     width: image.width(),
@@ -1530,7 +1532,6 @@ impl Markdown {
                 self.shared
                     .borrow_mut()
                     .overlays
-                    .images
                     .images
                     .insert(destination.clone(), image);
                 Some(info)

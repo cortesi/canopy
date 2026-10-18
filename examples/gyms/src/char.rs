@@ -119,7 +119,7 @@ fn build_ruler_lines(width: usize) -> (String, String) {
 fn build_content() -> String {
     let mut lines = Vec::new();
 
-    lines.push("chargym: unicode and wide character samples".to_string());
+    lines.push("char: unicode and wide character samples".to_string());
     lines.push(String::new());
     lines.push(format!("Column ruler ({RULER_COLUMNS} cols):"));
 
@@ -163,7 +163,7 @@ fn build_content() -> String {
     lines.join("\n")
 }
 
-/// Root node for the chargym demo.
+/// Root node for the char demo.
 pub struct CharGym {
     /// Prebuilt content for the text widget.
     content: String,
@@ -176,7 +176,7 @@ impl Default for CharGym {
 }
 
 impl CharGym {
-    /// Construct a new chargym demo.
+    /// Construct a new char demo.
     pub fn new() -> Self {
         Self {
             content: build_content(),
@@ -186,7 +186,7 @@ impl CharGym {
 
 impl Widget for CharGym {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let frame_id = c.add_child(c.node_id(), Frame::new().with_title("chargym"))?;
+        let frame_id = c.add_child(c.node_id(), Frame::new().with_title("char"))?;
         c.add_child(
             frame_id,
             Text::new(self.content.clone())

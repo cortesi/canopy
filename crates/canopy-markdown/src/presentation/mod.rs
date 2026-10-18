@@ -34,9 +34,8 @@ use canopy_widgets::{
         TableData, TableGlyphs, TableLayoutOptions, TableRow, TableSelection, TableWindow,
     },
 };
-use unicode_segmentation::UnicodeSegmentation;
-
 use image::RgbaImage;
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::document::{
     AlertTone, Alignment, Block, BlockKind, CodeBlock, DocumentSnapshot, ImageBlock, InlineRole,
@@ -53,7 +52,7 @@ const OBJECT_TINT: f32 = 0.25;
 const WHOLE_UNIT: Range<usize> = 0..usize::MAX;
 /// Rows an image block takes at most.
 const IMAGE_ROWS: u32 = 16;
-/// Rows a note embed shows at most, beside its title.
+/// Rows a note embed shows, its title included, before an ellipsis ends it.
 const EMBED_ROWS: usize = 24;
 /// Mosaic grids the reader keeps before it draws them again.
 const IMAGE_GRID_LIMIT: usize = 64;
@@ -313,12 +312,20 @@ type Grid = Arc<Vec<Cell<[u8; 3]>>>;
 #[derive(Clone, Debug, Default)]
 pub struct ImagePixels {
     /// Supplied images, by destination.
-    pub images: HashMap<String, Arc<RgbaImage>>,
+    images: HashMap<String, Arc<RgbaImage>>,
     /// Mosaic grids drawn from them, shared by clones of these overlays.
     grids: Rc<RefCell<HashMap<GridKey, Grid>>>,
 }
 
 impl ImagePixels {
+    /// Hold `image` for `destination`, dropping any grids drawn from an
+    /// image it replaces.
+    pub(crate) fn insert(&mut self, destination: String, image: Arc<RgbaImage>) {
+        self.grids
+            .borrow_mut()
+            .retain(|key, _| key.0 != destination);
+        self.images.insert(destination, image);
+    }
     /// Return the cells of `destination`'s image in a box of `size`, drawing
     /// them once.
     fn cells(&self, destination: &str, size: Size, tier: Tier, ground: [u8; 3]) -> Option<Grid> {
@@ -553,6 +560,8 @@ impl PresentationSnapshot {
                 layout.table_height = layout
                     .table_height
                     .min((remaining as u32 - 1).saturating_sub(layout.table_start));
+                // Nor may an image.
+                layout.image = None;
                 result.truncated = true;
             }
             result.truncated |= layout.rows.len() >= MAX_PREPARED_ROWS;
@@ -576,7 +585,7 @@ impl PresentationSnapshot {
 
     /// Account on the preparing worker, before this layout can be published.
     fn estimate_bytes(&self) -> usize {
-        use std::{collections::HashSet, mem::size_of};
+        use std::mem::size_of;
         let mut bytes = size_of::<Self>().saturating_add(
             self.blocks
                 .capacity()
@@ -830,7 +839,10 @@ impl PresentationSnapshot {
                 && (row.ground == "markdown/card"
                     || (block.table.is_some() && table_rows.contains(&(y - block.start)))
                     || row.runs.iter().any(|run| run.object == block.object));
-            let active_row = active_card || row.runs.iter().any(|run| active(run.object));
+            // An image paints over its rows, so only the bar marks it.
+            let active_row = active_card
+                || row.runs.iter().any(|run| active(run.object))
+                || active(block.object) && block.image.is_some();
             let ground = if whole_selected {
                 "markdown/selection"
             } else if whole_search {
@@ -1301,6 +1313,7 @@ fn prepare_block(
             &mut rows,
             make_row,
             embed,
+            object,
             image_info,
             unit,
             &mut prefix,
@@ -1328,8 +1341,9 @@ fn prepare_block(
             // Levels beyond six clamp; the parser never yields them.
             let level = heading.map(|level| usize::from(level.clamp(1, 6)));
             let role = level.map_or(ground, |level| HEADING_ROLES[level - 1]);
-            // A top-level heading takes an extra row above, so it sits nearer
-            // the section it opens than the one it closes.
+            // A heading outside lists and quotes takes an extra row above, so
+            // it sits nearer the section it opens than the one it
+            // closes.
             if level.is_some() && !leading && block.depth == 0 && block.quote_depth == 0 {
                 rows.push(make_row());
             }
@@ -1470,9 +1484,8 @@ fn prepare_image(
     (inset, card_inset, body, rails): (u32, u32, u32, &Prefix),
     geometry: GeometryKey,
 ) -> Option<ImagePlacement> {
-    let room = body
-        .min(geometry.prose_width.clamp(1, 65535))
-        .saturating_sub(card_inset - inset);
+    let budget = body.min(geometry.prose_width.clamp(1, 65535));
+    let room = budget.saturating_sub(card_inset - inset);
     if let Some(EmbedInfo::Size { width, height }) = info {
         let size = image_box(Size::new(*width, *height), image, room);
         for _ in 0..size.h {
@@ -1486,38 +1499,54 @@ fn prepare_image(
             size,
         });
     }
-    prefix.push("Image: ", "markdown/structure");
+    let layout = TextLayout {
+        inset,
+        budget,
+        role: "markdown/image",
+        glyphs: geometry.glyphs,
+    };
+    prepare_unsupplied(rows, make_row, "Image: ", info, unit, prefix, layout);
+    None
+}
+
+/// Prepare an image or embed the host has not supplied: its label and text,
+/// with the reason when the host could not supply it.
+fn prepare_unsupplied(
+    rows: &mut Vec<PreparedRow>,
+    make_row: impl Fn() -> PreparedRow,
+    label: &'static str,
+    info: Option<&EmbedInfo>,
+    unit: &ReadingUnit,
+    prefix: &mut Prefix,
+    layout: TextLayout,
+) {
+    prefix.push(label, "markdown/structure");
     wrap(
         rows,
         &make_row,
         &unit.text,
         prefix,
         unit,
-        TextLayout {
-            inset,
-            budget: room.saturating_add(card_inset - inset),
-            role: "markdown/image",
-            glyphs: geometry.glyphs,
-        },
+        layout,
         &INLINE_ROLES[0],
     );
     if let Some(EmbedInfo::Failed(reason)) = info {
         let mut row = make_row();
+        let width = prefix.width();
         prefix
             .continuation()
-            .draw(&mut row, inset, prefix.width(), geometry.glyphs);
+            .draw(&mut row, layout.inset, width, layout.glyphs);
         decoration(
             &mut row,
-            inset + prefix.width(),
+            layout.inset + width,
             reason,
-            room.saturating_sub(prefix.width()),
+            layout.budget.saturating_sub(width),
             "markdown/card/label",
             None,
-            geometry.glyphs,
+            layout.glyphs,
         );
         rows.push(row);
     }
-    None
 }
 
 /// Prepare a note embed: its title and the embedded paragraphs on a quiet
@@ -1531,47 +1560,23 @@ fn prepare_embed(
     rows: &mut Vec<PreparedRow>,
     make_row: impl Fn() -> PreparedRow,
     embed: &ImageBlock,
+    object: Option<u64>,
     info: Option<&EmbedInfo>,
     unit: &ReadingUnit,
     prefix: &mut Prefix,
     (inset, card_inset, body, rails): (u32, u32, u32, &Prefix),
     geometry: GeometryKey,
 ) {
-    let room = body
-        .min(geometry.prose_width.clamp(1, 65535))
-        .saturating_sub(card_inset - inset);
+    let budget = body.min(geometry.prose_width.clamp(1, 65535));
+    let room = budget.saturating_sub(card_inset - inset);
     let Some(EmbedInfo::Text(paragraphs)) = info else {
-        prefix.push("Embed: ", "markdown/structure");
-        wrap(
-            rows,
-            &make_row,
-            &unit.text,
-            prefix,
-            unit,
-            TextLayout {
-                inset,
-                budget: room.saturating_add(card_inset - inset),
-                role: "markdown/image",
-                glyphs: geometry.glyphs,
-            },
-            &INLINE_ROLES[0],
-        );
-        if let Some(EmbedInfo::Failed(reason)) = info {
-            let mut row = make_row();
-            prefix
-                .continuation()
-                .draw(&mut row, inset, prefix.width(), geometry.glyphs);
-            decoration(
-                &mut row,
-                inset + prefix.width(),
-                reason,
-                room.saturating_sub(prefix.width()),
-                "markdown/card/label",
-                None,
-                geometry.glyphs,
-            );
-            rows.push(row);
-        }
+        let layout = TextLayout {
+            inset,
+            budget,
+            role: "markdown/image",
+            glyphs: geometry.glyphs,
+        };
+        prepare_unsupplied(rows, make_row, "Embed: ", info, unit, prefix, layout);
         return;
     };
     let rail_glyph = if geometry.glyphs == GlyphPreset::Ascii {
@@ -1606,7 +1611,7 @@ fn prepare_embed(
             rail_glyph,
             room,
             "markdown/embed/rail",
-            None,
+            object,
             geometry.glyphs,
         );
         decoration(
@@ -1615,7 +1620,7 @@ fn prepare_embed(
             &line,
             text_width,
             role,
-            None,
+            object,
             geometry.glyphs,
         );
         rows.push(row);
@@ -1645,7 +1650,15 @@ fn wrap_words(text: &str, width: u32) -> Vec<String> {
                 })
                 .find(|(_, used)| *used > width)
                 .map_or(line.len(), |(at, _)| at);
-            let rest = line.split_off(cut.max(1));
+            // A character wider than the line takes a line of its own.
+            let cut = match cut {
+                0 => line.chars().next().map_or(line.len(), char::len_utf8),
+                cut => cut,
+            };
+            if cut == line.len() {
+                break;
+            }
+            let rest = line.split_off(cut);
             lines.push(replace(&mut line, rest));
         }
     }

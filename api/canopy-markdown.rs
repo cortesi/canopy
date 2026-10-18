@@ -1001,7 +1001,7 @@ pub mod document {
         pub fn unit(&self, id: u64) -> Option<&ReadingUnit>;
     }
 
-    /// An image alone in its paragraph: `![alt](path)`, or Obsidian's
+    /// An image or embed alone in its paragraph: `![alt](path)`, or Obsidian's
     /// `![[path]]` with an optional `|width` or `|widthxheight` size in pixels.
     #[derive(Clone, Debug, Eq, Hash, PartialEq)]
     pub struct ImageBlock {
@@ -1055,10 +1055,6 @@ pub mod document {
         /// Whether the source wrote a `[[target|label]]` wikilink, whose
         /// destination names a host document rather than a URL.
         pub wiki: bool,
-        /// Whether the source gave the label: always for a Markdown link, and
-        /// for a wikilink only after a `|`. An unlabelled wikilink shows its
-        /// target as Obsidian does, `Note › Heading`.
-        pub labelled: bool,
     }
 
     impl Link {
@@ -1072,9 +1068,11 @@ pub mod document {
     /// host decides what the path names.
     #[derive(Clone, Debug, Eq, PartialEq)]
     pub struct LocalLink {
-        /// The percent-decoded path, as written, without its fragment.
+        /// The path without its fragment, percent-decoded unless a wikilink
+        /// wrote it.
         pub path: String,
-        /// The percent-decoded heading or block anchor after `#`, if any.
+        /// The heading or block anchor after `#`, if any, percent-decoded unless
+        /// a wikilink wrote it.
         pub fragment: Option<String>,
         /// Whether a wikilink named the document. Its path may omit an
         /// extension, and the host may resolve it by name.
@@ -1247,9 +1245,6 @@ pub mod document {
     /// with `-`. Punctuation is omitted; repeated headings gain source-order `-1`,
     /// `-2` suffixes.
     pub fn heading_slug(text: &str) -> String;
-
-    /// Whether `destination` names an image file, by its extension.
-    pub fn names_image(destination: &str) -> bool;
 
     /// Parse one accepted revision. Limits degrade accepted content to recoverable
     /// source cards.
@@ -1755,11 +1750,7 @@ pub mod presentation {
 
     /// Supplied images by destination, and the mosaic grids drawn from them.
     #[derive(Clone, Debug, Default)]
-    pub struct ImagePixels {
-        /// Supplied images, by destination.
-        pub images: HashMap<String, Arc<RgbaImage>>,
-        /* private fields */
-    }
+    pub struct ImagePixels {/* private fields */}
 
     impl !Send for ImagePixels {}
     impl !Sync for ImagePixels {}

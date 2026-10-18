@@ -842,3 +842,39 @@ fn a_wrapping_view_shows_every_value_in_full() -> Result<()> {
     assert!(cursor.is_some_and(|(row, _)| row > 0), "{cursor:?}");
     Ok(())
 }
+
+#[test]
+fn pages_in_a_wrapping_view_move_by_the_rows_that_fit_either_way() -> Result<()> {
+    let notes = "one two three four five six seven eight nine ten";
+    let mut builder = TableData::builder("w", 1, ["Key", "Notes"]);
+    for i in 0..8 {
+        builder = builder.row(format!("r{i}"), [format!("k{i}"), notes.to_owned()]);
+    }
+    let prepared = Arc::new(prepare(
+        Arc::new(builder.build().unwrap()),
+        TableLayoutOptions {
+            wrap: true,
+            ..Default::default()
+        },
+    )?);
+    let mut h = Harness::builder(TableView::new(prepared, Default::default()))
+        .register::<TableView>()
+        .size(30, 12)
+        .build()?;
+    h.render()?;
+    let row = |h: &mut Harness| -> Result<usize> {
+        Ok(with(h, |view, _| Ok(view.cursor_index()))?.map_or(0, |(row, _)| row))
+    };
+    h.key(KeyCode::PageDown)?;
+    let down = row(&mut h)?;
+    assert!(down > 1, "a page moves past more than one row: {down}");
+    h.key(KeyCode::Char('G'))?;
+    h.render()?;
+    h.key(KeyCode::PageUp)?;
+    assert_eq!(
+        row(&mut h)?,
+        7 - down,
+        "a page up from the end moves as far"
+    );
+    Ok(())
+}

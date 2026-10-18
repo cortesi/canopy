@@ -183,7 +183,8 @@ fn geometry_reuses_blocks_but_glyph_changes_reprepare() {
         Some(&a),
     );
     assert_eq!(c.stats.reused_blocks, 0);
-    assert!(row_text(&c, 1).chars().all(|c| c == '='));
+    let underline = row_text(&c, 1);
+    assert!(!underline.is_empty() && underline.chars().all(|c| c == '='));
 }
 
 #[test]
@@ -811,4 +812,10 @@ fn a_quote_bar_runs_unbroken_through_spacing_and_cards() {
     assert_eq!(card.runs[0].x, 2, "the rail sits at the margin");
     assert_eq!(card.runs[1].x, 4, "the card sits inside the rail");
     assert_eq!(card.ground_x, 4, "the card ground starts after the rail");
+}
+
+#[test]
+fn a_character_wider_than_the_line_takes_a_line_of_its_own() {
+    assert_eq!(wrap_words("中文", 1), ["中", "文"]);
+    assert_eq!(wrap_words("a 中b", 2), ["a", "中", "b"]);
 }

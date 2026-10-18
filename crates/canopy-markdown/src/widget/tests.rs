@@ -1112,6 +1112,69 @@ fn embeds_show_their_section_and_links_that_name_nothing_show_faint() {
 }
 
 #[test]
+fn links_past_the_request_bound_settle_without_asking() {
+    // Remote links never count toward the bound; local ones past it keep
+    // their text.
+    let mut text = String::new();
+    for i in 0..600 {
+        text.push_str(&format!("<https://example.com/{i}>\n\n"));
+    }
+    for i in 0..=RESOURCE_TOTAL {
+        text.push_str(&format!("[[n{i}]]\n\n"));
+    }
+    let (mut harness, manual) = configured(&text, ViewType::Rendered, false, |o| {
+        o.resources = true;
+    });
+    settle(&mut harness, &manual);
+    let mut asked = 0;
+    loop {
+        let requests =
+            harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests());
+        if requests.is_empty() {
+            break;
+        }
+        asked += requests.len();
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                for request in requests {
+                    reader.supply_resource(ctx, request.id, Resource::Found)?;
+                }
+                Ok(())
+            })
+            .unwrap();
+    }
+    assert_eq!(asked, RESOURCE_TOTAL);
+    assert!(!harness.with_root_widget(|reader: &mut Markdown| reader.resources_pending()));
+}
+
+#[test]
+fn an_answer_for_a_replaced_document_changes_nothing() {
+    let (mut harness, manual) = configured("[[Gone]]\n", ViewType::Rendered, false, |o| {
+        o.resources = true;
+    });
+    settle(&mut harness, &manual);
+    let old = harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests());
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader
+                .replace(ctx, DocumentInput::Complete("[[Gone]]\n".into()))
+                .map(drop)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.supply_resource(ctx, old[0].id, Resource::Missing)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    assert!(harness.with_root_widget(|reader: &mut Markdown| reader.resources_pending()));
+    let missing =
+        harness.with_root_widget(|reader: &mut Markdown| reader.supplied.missing_links.is_empty());
+    assert!(missing, "a stale answer marks nothing missing");
+}
+
+#[test]
 fn an_embedded_section_is_cut_by_its_anchor() {
     let note = "# Top\n\nIntro.\n\n## Plans\n\nShip it. ^ship\n\n### Detail\n\nMore.\n\n## Later\n\nNot now.\n";
     assert_eq!(

@@ -111,8 +111,8 @@ pub enum InspectorEvent {
         /// Exact UTF-8 byte interval selected at activation.
         range: Range<usize>,
     },
-    /// Open this pinned immutable destination through the host.
-    OpenUrl(String),
+    /// Follow the inspected link.
+    Open,
     /// Jump to this explicit source byte in the owning document.
     Navigate(usize),
 }
@@ -154,7 +154,7 @@ impl Mailbox {
 /// Return the immutable text bytes charged to one pending host action.
 fn event_bytes(event: &InspectorEvent) -> usize {
     match event {
-        InspectorEvent::CopyText(text) | InspectorEvent::OpenUrl(text) => text.len(),
+        InspectorEvent::CopyText(text) => text.len(),
         InspectorEvent::CopySource { text, .. } => text.len(),
         _ => 0,
     }
@@ -795,8 +795,8 @@ impl MarkdownInspector {
     /// the host.
     #[command(enabled = "open_status")]
     pub fn open_url(&self) -> Result<()> {
-        if let Some(url) = &self.open_url {
-            self.emit(InspectorEvent::OpenUrl(url.clone()))?;
+        if self.open_url.is_some() {
+            self.emit(InspectorEvent::Open)?;
         }
         Ok(())
     }
@@ -2281,12 +2281,7 @@ mod interaction_tests {
         harness.canopy.turn(TurnInput::Prepare)?;
         assert!(handle.take_events(4).is_empty());
         harness.key(key::Key::parse_spec("ctrl-o")?)?;
-        assert_eq!(
-            handle.take_events(4),
-            vec![InspectorEvent::OpenUrl(
-                "https://example.test/target".into()
-            )]
-        );
+        assert_eq!(handle.take_events(4), vec![InspectorEvent::Open]);
         Ok(())
     }
 

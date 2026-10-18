@@ -3202,7 +3202,6 @@ pub fn image_cells(
     tier: Tier,
 ) -> Vec<Cell<[u8; 3]>>;
 
-/// Decode within a source budget, then shrink before building sampling tables.
 /// Decode the image at `path` as a preview that fits `bounds` pixels, under
 /// the same bounds as [`ImageView::set_preview_path`]: at most 32 * 1024 *
 /// 1024 source pixels, a 128 MiB decoder budget, and 1024 pixels an edge.
@@ -4825,10 +4824,6 @@ pub mod table {
         /// First canvas line and line count of a body row.
         pub fn row_lines(&self, row: usize) -> Option<(u32, u32)>;
 
-        /// Count the rows from `row` on that fit in `lines` canvas lines, at
-        /// least one.
-        pub fn rows_within(&self, row: usize, lines: u32) -> usize;
-
         /// Bytes inspected for automatic measurement.
         pub fn sampled_bytes(&self) -> usize;
 
@@ -5085,7 +5080,8 @@ pub mod table {
         /// suits bounded tables. Columns take their natural widths up to
         /// `max_width`, and longer values wrap at word boundaries over as many
         /// lines as they need. Each row is as tall as its tallest value, and
-        /// rules separate the rows once any of them wraps.
+        /// rules separate the rows once any of them wraps. A value past 16 KiB
+        /// ends in an ellipsis.
         /// [`PreparedTable::fit`] refits the columns to a view: wider, so values
         /// wrap less, or narrower, so the grid scrolls only when it must.
         pub wrap: bool,

@@ -1,8 +1,9 @@
 //! Immutable, explicitly activated host actions and bounded reply tracking.
 
-use std::collections::{BTreeMap, BTreeSet};
-
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use image::RgbaImage;
 
