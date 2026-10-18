@@ -7,9 +7,9 @@ trajectory with `b` and `g f`, reveals block references, and draws embedded
 images and notes through the reader's resource protocol. A review of that
 work left these open points. Each needs a decision before it is built.
 
-Reader work lands in `crates/canopy-markdown`, table work in
-`crates/canopy-widgets`, and host work in fh (`../fh`), which migrates in the
-same change.
+Reader work lands in `crates/canopy-markdown`, table and highlighting work
+in `crates/canopy-widgets`, and host work in fh (`../fh`), which migrates in
+the same change. The browser's own follow-ups are in `../fh/plans/next.md`.
 
 ## Changes
 
@@ -106,16 +106,30 @@ Gym subcommands and files dropped the `gym` suffix. Script names
 `cursorgym/*`), and the `"tablegym"` dataset id keep it. Decide whether to
 rename them too; widget types and node paths keep the suffix by design.
 
-### C11: Watch embedded files
+### C13: Bound syntax highlighting
 
-Thumbnails and embedded notes refresh when the note reloads, but fh does
-not watch each embedded file. Proposal: watch the files a shown note
-embeds, bounded in count, and supply fresh resources when one changes.
+Selecting a large minified JavaScript file in fh's Diff mode blocks the UI
+for about 20 seconds, and returning to its cached diff blocks again. The
+case found was a 1.3 MB bundle of 28 lines, the longest 550 KB, in a
+private repository's `app/assets/viewer/viewer.js`. The same bytes named
+`viewer.txt` show in 0.7 s.
 
-### C12: Let a host ask for resources again
+`DiffView::render` and `draw_code` (`crates/canopy-widgets/src/diff_view.rs`)
+ask the highlighter for spans of the visible lines while rendering.
+`Source::spans_for` and `Engine::spans` (`highlight.rs`) call Syntect on
+every complete line before them. `MAX_STATEFUL_LINES` bounds how many lines
+are kept, not line length or parser work, so one long line parses in full
+even in a narrow pane. fh's `Changes::serve` calls `DiffContent::show` on a
+cached diff, which builds new highlighters, so every visit parses again.
 
-Done: `Markdown::recheck_resources(&[ResourceKind])` forgets settled answers
-of those kinds, so the next `take_resource_requests` asks again; what the
-reader shows stays until the new answers arrive. A found link that was
-missing stops showing faint. `Markdown::link_missing` tells a host or a test
-whether a link shows faint.
+Proposal: before Syntect runs, bound the source's bytes and its longest
+line, and show a source past either bound as plain text. A bound on lines
+skipped one at a time would break parser state, so the fallback covers the
+whole source. File views share the highlighter and get the same bound. fh
+keeps the prepared highlighters with its cached diff, so a revisit does not
+parse again. Highlighting off the render path is the alternative if full
+highlighting of such files matters.
+
+Test with long JavaScript and JSON lines: a first visit, a cached revisit,
+and fast selection changes. Input and frames must continue while the diff
+loads.
