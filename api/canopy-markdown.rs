@@ -12,7 +12,7 @@
 //! Parsing, preparation, and publication never perform external actions.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     error::Error,
     fmt::{Debug, Display},
     hash::Hash,
@@ -136,10 +136,6 @@ impl Markdown {
     /// Current follow policy.
     pub fn follow_state(&self) -> Follow;
 
-    /// Whether an image block of the displayed document still waits for its
-    /// image: not yet asked for, or asked for and unanswered.
-    pub fn images_pending(&self) -> bool;
-
     /// Inspect a pinned snapshot of the displayed source.
     pub fn inspect_source(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
@@ -188,6 +184,11 @@ impl Markdown {
 
     /// The requested view while preparation is pending.
     pub fn requested_view_type(&self) -> ViewType;
+
+    /// Whether the displayed document still waits for a resource: an image,
+    /// an embed, or a link check, not yet asked for, or asked for and
+    /// unanswered.
+    pub fn resources_pending(&self) -> bool;
 
     /// Restore a same-epoch logical source location in the active view.
     pub fn restore_position(
@@ -290,7 +291,9 @@ impl Markdown {
 
     /// Take the host's answer to a resource request. An answer for another
     /// document, or for an unknown request, changes nothing. An image lays
-    /// out again at its own aspect; a failure shows its reason.
+    /// out again at its own aspect, an embed shows the section its anchor
+    /// names, a link that names nothing shows faint, and a failure shows its
+    /// reason.
     pub fn supply_resource(
         &mut self,
         ctx: &mut dyn Context,
@@ -308,9 +311,11 @@ impl Markdown {
     /// and replies.
     pub fn take_requests(&mut self, limit: usize) -> Vec<HostRequest>;
 
-    /// Drain requests for the images the displayed document's image blocks
-    /// show, each once per document. Remote images are never fetched; they
-    /// keep their alt text. Without the `images` option, nothing is asked.
+    /// Drain requests for what the displayed document needs from the host:
+    /// each image block's image, each embed's note, and whether each local
+    /// link names anything, each once per document. Remote images are never
+    /// fetched; they keep their alt text. Without the `resources` option,
+    /// nothing is asked.
     pub fn take_resource_requests(&mut self) -> Vec<ResourceRequest>;
 
     /// Toggle Source and Rendered; a second invocation cancels a pending
@@ -362,9 +367,6 @@ impl Markdown {
     pub fn call_follow_state() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
-    pub fn call_images_pending() -> CommandCall;
-
-    /// Build a positional call with typed user arguments.
     pub fn call_inspect_source() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
@@ -387,6 +389,9 @@ impl Markdown {
 
     /// Build a positional call with typed user arguments.
     pub fn call_requested_view_type() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_resources_pending() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
     pub fn call_retry() -> CommandCall;
@@ -470,9 +475,6 @@ impl Markdown {
     pub fn spec_follow_state() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
-    pub fn spec_images_pending() -> &'static CommandSpec;
-
-    /// Return the command spec for this command.
     pub fn spec_inspect_source() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
@@ -495,6 +497,9 @@ impl Markdown {
 
     /// Return the command spec for this command.
     pub fn spec_requested_view_type() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_resources_pending() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_retry() -> &'static CommandSpec;
@@ -605,9 +610,11 @@ pub struct MarkdownOptions {
     /// destination first. A link that cannot be followed still opens the
     /// inspector.
     pub follow_links: bool,
-    /// Request the images of image blocks from the host, which supplies
-    /// them. Without it, an image block shows its alt text.
-    pub images: bool,
+    /// Request resources from the host, which supplies them: the images of
+    /// image blocks, the notes of `![[note]]` embeds, and whether each local
+    /// link names anything. Without it, image and embed blocks show their
+    /// text, and every link shows alike.
+    pub resources: bool,
     /// Base URL for resolving relative destinations. With one, relative links
     /// resolve to URLs rather than to host documents.
     pub base_url: Option<String>,
@@ -928,6 +935,9 @@ pub mod document {
         },
         /// An image alone in its paragraph, which a host may supply.
         Image(ImageBlock),
+        /// An Obsidian `![[note]]` embed alone in its paragraph, whose note or
+        /// section a host may supply.
+        Embed(ImageBlock),
     }
 
     /// Parser-normalized code payload and its original fence information.
@@ -1238,6 +1248,9 @@ pub mod document {
     /// `-2` suffixes.
     pub fn heading_slug(text: &str) -> String;
 
+    /// Whether `destination` names an image file, by its extension.
+    pub fn names_image(destination: &str) -> bool;
+
     /// Parse one accepted revision. Limits degrade accepted content to recoverable
     /// source cards.
     pub fn parse_document(
@@ -1524,8 +1537,8 @@ pub mod executor {
         pub generation: u64,
         /// Optional query over this request's exact projection.
         pub search: Option<WorkSearch>,
-        /// What the reader knows of the document's images.
-        pub images: Arc<ImageSizes>,
+        /// What the host supplied for the document's embeds and links.
+        pub supplied: Arc<Supplied>,
     }
 
     impl WorkRequest {
@@ -1634,6 +1647,10 @@ pub mod host {
     pub enum Resource {
         /// The image, which the host bounds in size.
         Image(Arc<RgbaImage>),
+        /// The note's text, which the host bounds in size.
+        Text(String),
+        /// What a link check names exists.
+        Found,
         /// Nothing the request names exists.
         Missing,
         /// The host could not supply it, and why.
@@ -1641,10 +1658,16 @@ pub mod host {
     }
 
     /// What a resource request asks the host for.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub enum ResourceKind {
         /// An image an image block shows.
         Image,
+        /// The text of a note an embed shows; the reader takes the section its
+        /// anchor names.
+        Note,
+        /// Whether a local link names anything, so a link that names nothing can
+        /// show faint.
+        Link,
     }
 
     /// A resource the document needs from the host. Unlike a [`HostAction`], a
@@ -1674,6 +1697,22 @@ pub mod presentation {
     //! Prepared terminal presentation.
     //! Immutable Markdown geometry. Preparation owns wrapping; painting visits only
     //! visible rows.
+
+    /// What the host supplied for an embed, by its destination.
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+    pub enum EmbedInfo {
+        /// The supplied image's size in pixels.
+        Size {
+            /// Width in pixels.
+            width: u32,
+            /// Height in pixels.
+            height: u32,
+        },
+        /// The embedded note or section, as readable paragraphs.
+        Text(Arc<[String]>),
+        /// The host could not supply it, and why.
+        Failed(String),
+    }
 
     /// All preferences that influence line layout. Width includes the reserved
     /// gutter.
@@ -1714,20 +1753,6 @@ pub mod presentation {
         pub source: Range<usize>,
     }
 
-    /// What the reader knows of an image, by its destination.
-    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-    pub enum ImageInfo {
-        /// The supplied image's size in pixels.
-        Size {
-            /// Width in pixels.
-            width: u32,
-            /// Height in pixels.
-            height: u32,
-        },
-        /// The host could not supply it, and why.
-        Failed(String),
-    }
-
     /// Supplied images by destination, and the mosaic grids drawn from them.
     #[derive(Clone, Debug, Default)]
     pub struct ImagePixels {
@@ -1738,9 +1763,6 @@ pub mod presentation {
 
     impl !Send for ImagePixels {}
     impl !Sync for ImagePixels {}
-
-    /// What the reader knows of each image, by its destination.
-    pub type ImageSizes = HashMap<String, ImageInfo>;
 
     /// Reader-owned decoration applied without invalidating geometry.
     #[derive(Clone, Debug, Default)]
@@ -1867,13 +1889,14 @@ pub mod presentation {
             previous: Option<&Self>,
         ) -> Self;
 
-        /// Prepare as [`Self::prepare`] does, with what the reader knows of the
-        /// document's images, so an image block reserves its image's rows.
+        /// Prepare as [`Self::prepare`] does, with what the host supplied: an
+        /// image block reserves its image's rows, an embed shows its text, and a
+        /// link that names nothing shows faint.
         pub fn prepare_with(
             document: Arc<DocumentSnapshot>,
             geometry: GeometryKey,
             previous: Option<&Self>,
-            images: &ImageSizes,
+            supplied: &Supplied,
         ) -> Self;
 
         /// Share the identical dataset and geometry with the table inspector.
@@ -1897,6 +1920,16 @@ pub mod presentation {
 
         /// Canvas width from the geometry key.
         pub fn width(&self) -> u32;
+    }
+
+    /// What the host has supplied for a document: its embeds, by destination,
+    /// and the local link destinations that name nothing.
+    #[derive(Clone, Debug, Default, Eq, PartialEq)]
+    pub struct Supplied {
+        /// Supplied embeds, by destination.
+        pub embeds: HashMap<String, EmbedInfo>,
+        /// Local link destinations that name nothing.
+        pub missing_links: HashSet<String>,
     }
 
     /// Install palette roles once; all colors are resolved during painting.

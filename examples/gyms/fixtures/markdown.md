@@ -126,7 +126,12 @@ An Obsidian embed asks for a width in pixels:
 Inline <span class="literal">HTML</span> stays visible. A reference to
 [the late guide][late] resolves through its admitted definition. A note[^one]
 can jump to its source-positioned definition. A wikilink such as
-[[work/verber#Plans|Verber]] names a note for the host to find.
+[[work/verber#Plans|Verber]] names a note for the host to find, and one
+that names nothing, such as [[Nowhere]], shows faint.
+
+An embed shows the section of the note it names:
+
+![[work/verber#Plans]]
 
 [^one]: A footnote remains here, in source order.
 

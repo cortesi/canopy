@@ -176,6 +176,9 @@ pub enum BlockKind {
     },
     /// An image alone in its paragraph, which a host may supply.
     Image(ImageBlock),
+    /// An Obsidian `![[note]]` embed alone in its paragraph, whose note or
+    /// section a host may supply.
+    Embed(ImageBlock),
 }
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// An image alone in its paragraph: `![alt](path)`, or Obsidian's
@@ -1240,8 +1243,14 @@ impl Builder<'_> {
                     let image = lone_image(&leaf.node).expect("checked");
                     // It reads, and copies, as an inline image does.
                     let payload = image_text(&image.link.label, &image.link.destination);
-                    // The image is one whole payload, its alt text.
-                    (BlockKind::Image(image), UnitKind::Prose, payload, true)
+                    // A wikilink embed of anything but an image embeds a note.
+                    let kind = if image.link.wiki && !names_image(&image.link.destination) {
+                        BlockKind::Embed(image)
+                    } else {
+                        BlockKind::Image(image)
+                    };
+                    // The block is one whole payload, its alt text.
+                    (kind, UnitKind::Prose, payload, true)
                 }
                 _ => {
                     let mut payload = inline(
@@ -1278,6 +1287,7 @@ impl Builder<'_> {
             BlockKind::Rule => "rule",
             BlockKind::Footnote { .. } => "footnote",
             BlockKind::Image(_) => "image",
+            BlockKind::Embed(_) => "embed",
         };
         let id = self.id(range.start, role, context.enclosing);
         let unit_id = self.id(range.start, &format!("unit:{role}"), context.enclosing);
@@ -1288,6 +1298,7 @@ impl Builder<'_> {
                     | BlockKind::Table(_)
                     | BlockKind::Source { .. }
                     | BlockKind::Image(_)
+                    | BlockKind::Embed(_)
             ) {
                 let object_id = self.id(range.start, &format!("object:{role}"), context.enclosing);
                 self.document.objects.push(Object {
@@ -1297,8 +1308,10 @@ impl Builder<'_> {
                     kind: match &kind {
                         BlockKind::Code(_) => ObjectKind::Code,
                         BlockKind::Table(_) => ObjectKind::Table,
-                        // An image follows as its link does.
-                        BlockKind::Image(image) => ObjectKind::Link(image.link.clone()),
+                        // An image or embed follows as its link does.
+                        BlockKind::Image(image) | BlockKind::Embed(image) => {
+                            ObjectKind::Link(image.link.clone())
+                        }
                         _ => ObjectKind::Source,
                     },
                 });
@@ -1646,6 +1659,15 @@ fn image_text(label: &str, destination: &str) -> String {
     } else {
         format!("{label} ({destination})")
     }
+}
+/// Whether `destination` names an image file, by its extension.
+pub fn names_image(destination: &str) -> bool {
+    let path = destination.split(['#', '?']).next().unwrap_or(destination);
+    path.rsplit_once('.').is_some_and(|(_, extension)| {
+        ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"]
+            .iter()
+            .any(|known| extension.eq_ignore_ascii_case(known))
+    })
 }
 /// The image a paragraph holds alone, beside whitespace.
 fn lone_image(node: &Node) -> Option<ImageBlock> {

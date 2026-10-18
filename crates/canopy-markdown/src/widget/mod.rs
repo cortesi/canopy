@@ -37,8 +37,8 @@ use canopy_widgets::{
 use crate::{
     Follow, MarkdownOptions, Mode, ViewType,
     document::{
-        BlockKind, DocumentSnapshot, LocalLink, ObjectKind, ReadingPosition, ReadingRange,
-        ResolvedLink, heading_slug,
+        BlockKind, DocumentSnapshot, Link, LocalLink, ObjectKind, ParseLimits, ReadingPosition,
+        ReadingRange, ResolvedLink, heading_slug, parse_document,
     },
     executor::{
         CopyInput, PreparedView, SearchOutput, WorkHandle, WorkRequest, WorkResult, WorkSearch,
@@ -48,7 +48,7 @@ use crate::{
         ResourceRequest,
     },
     inspector::{Inspector, InspectorContent, InspectorEvent, InspectorHandle, OutlineEntry},
-    presentation::{GeometryKey, ImageInfo, ImagePixels, ImageSizes, style_rules},
+    presentation::{EmbedInfo, GeometryKey, ImagePixels, Supplied, style_rules},
     search::{SearchAddress, SearchCase, SearchLimits, SearchMode, SearchQuery, SearchResults},
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, SourceAnchor, SourceMatches, SourceOptions},
@@ -172,16 +172,16 @@ pub struct Markdown {
     inspector: Option<OpenInspector>,
     /// Destination of the link the inspector shows, which its Open follows.
     inspected_link: Option<ResolvedLink>,
-    /// What the reader has done about each image block's image, by
+    /// What the reader has done about each resource, by kind and
     /// destination: asked for it, or settled it.
-    image_states: HashMap<String, ImageState>,
-    /// Resource requests awaiting the host's reply, by id, with the
-    /// destination each names.
-    resource_requests: HashMap<u64, String>,
+    resource_states: HashMap<(ResourceKind, String), ResourceState>,
+    /// Resource requests awaiting the host's reply, by id, with the kind
+    /// and destination each names and its target.
+    resource_requests: HashMap<u64, ((ResourceKind, String), LocalLink)>,
     /// The last resource request id; ids are never reused.
     resource_id: u64,
-    /// What the reader knows of each supplied image, for layout.
-    image_sizes: Arc<ImageSizes>,
+    /// What the host supplied for embeds and links, for layout.
+    supplied: Arc<Supplied>,
     /// Bounded immutable effects awaiting host delivery or acknowledgement.
     requests: Requests,
     /// Latest status of an explicitly activated host effect.
@@ -231,16 +231,89 @@ type ScrollbarTracks = (Vec<(NodeId, Rect)>, Vec<(NodeId, Rect)>);
 const JUMP_LIMIT: usize = 32;
 /// Resource requests awaiting replies at once.
 const RESOURCE_LIMIT: usize = 8;
-/// Images one document asks for at most.
-const IMAGE_LIMIT: usize = 64;
+/// Resources one document asks for at most.
+const RESOURCE_TOTAL: usize = 512;
+/// Paragraphs an embed takes from its note at most.
+const EMBED_PARAGRAPHS: usize = 200;
 
-/// What the reader has done about one image.
+/// What the reader has done about one resource.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ImageState {
+enum ResourceState {
     /// Asked the host for it.
     Requested,
     /// Holds its answer, or never asks for it, as for a remote image.
     Settled,
+}
+
+/// What a document needs from its host: each link object's resource kind
+/// (an image block's image, an embed's note, or a link check) and its link.
+fn resource_wants(document: &DocumentSnapshot) -> impl Iterator<Item = (ResourceKind, &Link)> {
+    document.objects.iter().filter_map(|object| {
+        let ObjectKind::Link(link) = &object.kind else {
+            return None;
+        };
+        let kind = document
+            .unit_position(object.unit_id)
+            .and_then(|index| document.blocks.get(index))
+            .map_or(ResourceKind::Link, |block| match &block.kind {
+                BlockKind::Image(_) => ResourceKind::Image,
+                BlockKind::Embed(_) => ResourceKind::Note,
+                _ => ResourceKind::Link,
+            });
+        Some((kind, link))
+    })
+}
+
+/// The readable paragraphs of the section of `text` that `anchor` names: a
+/// block by its `^id`, a heading and what follows it up to the next heading
+/// as high, or the whole note without an anchor. A heading keeps its `#`
+/// markers.
+fn embedded_section(text: &str, anchor: Option<&str>) -> Vec<String> {
+    let Ok(store) = SourceStore::static_text(text.to_owned()) else {
+        return Vec::new();
+    };
+    let document = parse_document(&store.snapshot(), &ParseLimits::default(), None);
+    let range = match anchor.map(str::trim) {
+        Some(anchor) if anchor.starts_with('^') => document
+            .block_anchors
+            .iter()
+            .find(|block| block.id == anchor[1..])
+            .map(|block| block.source.clone()),
+        Some(anchor) => {
+            let slug = heading_slug(anchor);
+            document
+                .outline
+                .iter()
+                .position(|e| {
+                    e.slug == anchor || e.slug == slug || e.text.trim().eq_ignore_ascii_case(anchor)
+                })
+                .map(|at| {
+                    let entry = &document.outline[at];
+                    let end = document.outline[at + 1..]
+                        .iter()
+                        .find(|next| next.level <= entry.level)
+                        .map_or(text.len(), |next| next.source.start);
+                    entry.source.start..end
+                })
+        }
+        None => Some(0..text.len()),
+    };
+    let Some(range) = range else {
+        return Vec::new();
+    };
+    document
+        .blocks
+        .iter()
+        .zip(&document.units)
+        .filter(|(block, _)| block.source.start >= range.start && block.source.end <= range.end)
+        .map(|(block, unit)| match block.kind {
+            BlockKind::Heading { level } => {
+                format!("{} {}", "#".repeat(usize::from(level)), unit.text)
+            }
+            _ => unit.text.clone(),
+        })
+        .take(EMBED_PARAGRAPHS)
+        .collect()
 }
 /// Conditional Rendered activation route that Source can decline.
 const ACTIVATE_INTENT: &str = "markdown.activate";
@@ -303,10 +376,10 @@ impl Markdown {
             query_error: None,
             inspector: None,
             inspected_link: None,
-            image_states: HashMap::new(),
+            resource_states: HashMap::new(),
             resource_requests: HashMap::new(),
             resource_id: 0,
-            image_sizes: Arc::default(),
+            supplied: Arc::default(),
             requests: Requests::default(),
             action_status: String::new(),
             failure: None,
@@ -373,9 +446,9 @@ impl Markdown {
         // An action's status belongs to the document that took it.
         self.action_status.clear();
         // So do its images, which a new document asks for again.
-        self.image_states.clear();
+        self.resource_states.clear();
         self.resource_requests.clear();
-        self.image_sizes = Arc::default();
+        self.supplied = Arc::default();
         self.shared.borrow_mut().overlays.images = ImagePixels::default();
         self.acknowledged = if receiving {
             0
@@ -1364,12 +1437,14 @@ impl Markdown {
             },
         )
     }
-    /// Drain requests for the images the displayed document's image blocks
-    /// show, each once per document. Remote images are never fetched; they
-    /// keep their alt text. Without the `images` option, nothing is asked.
+    /// Drain requests for what the displayed document needs from the host:
+    /// each image block's image, each embed's note, and whether each local
+    /// link names anything, each once per document. Remote images are never
+    /// fetched; they keep their alt text. Without the `resources` option,
+    /// nothing is asked.
     pub fn take_resource_requests(&mut self) -> Vec<ResourceRequest> {
         let mut requests = Vec::new();
-        if !self.options.images {
+        if !self.options.resources {
             return requests;
         }
         let Some(p) = self.shared.borrow().presentation.clone() else {
@@ -1378,69 +1453,77 @@ impl Markdown {
         if p.document.source.epoch != self.epoch() {
             return requests;
         }
-        for block in &p.document.blocks {
-            let BlockKind::Image(image) = &block.kind else {
-                continue;
-            };
-            let destination = &image.link.destination;
-            if self.image_states.contains_key(destination) {
+        let base = self.base_url();
+        for (kind, link) in resource_wants(&p.document) {
+            let key = (kind, link.destination.clone());
+            if self.resource_states.contains_key(&key) {
                 continue;
             }
             if self.resource_requests.len() >= RESOURCE_LIMIT
-                || self.image_states.len() >= IMAGE_LIMIT
+                || self.resource_states.len() >= RESOURCE_TOTAL
             {
                 break;
             }
-            let ResolvedLink::Local(target) = image.link.resolve(self.base_url().as_ref()) else {
-                self.image_states
-                    .insert(destination.clone(), ImageState::Settled);
+            let ResolvedLink::Local(target) = link.resolve(base.as_ref()) else {
+                self.resource_states.insert(key, ResourceState::Settled);
                 continue;
             };
             self.resource_id += 1;
-            self.image_states
-                .insert(destination.clone(), ImageState::Requested);
+            self.resource_states
+                .insert(key.clone(), ResourceState::Requested);
             self.resource_requests
-                .insert(self.resource_id, destination.clone());
+                .insert(self.resource_id, (key, target.clone()));
             requests.push(ResourceRequest {
                 id: self.resource_id,
                 epoch: self.epoch(),
                 target,
-                kind: ResourceKind::Image,
+                kind,
             });
         }
         requests
     }
-    /// Whether an image block of the displayed document still waits for its
-    /// image: not yet asked for, or asked for and unanswered.
+    /// Whether the displayed document still waits for a resource: an image,
+    /// an embed, or a link check, not yet asked for, or asked for and
+    /// unanswered.
     #[command]
-    pub fn images_pending(&self) -> bool {
-        if !self.options.images {
+    pub fn resources_pending(&self) -> bool {
+        if !self.options.resources {
             return false;
         }
         let shared = self.shared.borrow();
         let Some(p) = shared.presentation.as_ref() else {
             return false;
         };
-        p.document.blocks.iter().any(|block| {
-            matches!(&block.kind, BlockKind::Image(image)
-                if self.image_states.get(&image.link.destination) != Some(&ImageState::Settled))
+        resource_wants(&p.document).any(|(kind, link)| {
+            self.resource_states.get(&(kind, link.destination.clone()))
+                != Some(&ResourceState::Settled)
         })
     }
     /// Take the host's answer to a resource request. An answer for another
     /// document, or for an unknown request, changes nothing. An image lays
-    /// out again at its own aspect; a failure shows its reason.
+    /// out again at its own aspect, an embed shows the section its anchor
+    /// names, a link that names nothing shows faint, and a failure shows its
+    /// reason.
     pub fn supply_resource(
         &mut self,
         ctx: &mut dyn Context,
         id: u64,
         resource: Resource,
     ) -> Result<()> {
-        let Some(destination) = self.resource_requests.remove(&id) else {
+        let Some(((kind, destination), target)) = self.resource_requests.remove(&id) else {
             return Ok(());
         };
-        let info = match resource {
-            Resource::Image(image) => {
-                let info = ImageInfo::Size {
+        self.resource_states
+            .insert((kind, destination.clone()), ResourceState::Settled);
+        let supplied = Arc::make_mut(&mut self.supplied);
+        let embed = match (kind, resource) {
+            (ResourceKind::Link, Resource::Missing) => {
+                supplied.missing_links.insert(destination.clone());
+                None
+            }
+            (ResourceKind::Link, _) => return Ok(()),
+            (_, Resource::Image(image)) => {
+                let info = EmbedInfo::Size {
                     width: image.width(),
                     height: image.height(),
                 };
@@ -1450,14 +1533,18 @@ impl Markdown {
                     .images
                     .images
                     .insert(destination.clone(), image);
-                info
+                Some(info)
             }
-            Resource::Missing => ImageInfo::Failed("not found".into()),
-            Resource::Failed(reason) => ImageInfo::Failed(reason),
+            (_, Resource::Text(text)) => Some(EmbedInfo::Text(
+                embedded_section(&text, target.fragment.as_deref()).into(),
+            )),
+            (_, Resource::Missing) => Some(EmbedInfo::Failed("not found".into())),
+            (_, Resource::Found) => Some(EmbedInfo::Failed("nothing to show".into())),
+            (_, Resource::Failed(reason)) => Some(EmbedInfo::Failed(reason)),
         };
-        self.image_states
-            .insert(destination.clone(), ImageState::Settled);
-        Arc::make_mut(&mut self.image_sizes).insert(destination, info);
+        if let Some(embed) = embed {
+            supplied.embeds.insert(destination, embed);
+        }
         self.generation += 1;
         self.schedule(ctx, true)
     }
@@ -1741,7 +1828,7 @@ impl Markdown {
             limits: self.options.parse_limits,
             generation: self.generation,
             search,
-            images: self.image_sizes.clone(),
+            supplied: self.supplied.clone(),
         };
         let Some(lane) = &self.lane else {
             return Ok(());

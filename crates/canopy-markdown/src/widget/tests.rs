@@ -996,7 +996,7 @@ fn image_blocks_ask_the_host_and_lay_out_what_it_supplies() {
     let text = "![Local](pics/a.png)\n\n![Remote](https://example.com/b.png)\n\nAfter.\n";
     for enabled in [false, true] {
         let (mut harness, manual) = configured(text, ViewType::Rendered, false, |options| {
-            options.images = enabled;
+            options.resources = enabled;
         });
         settle(&mut harness, &manual);
         // Before the image arrives, its alt text and destination stand in.
@@ -1052,9 +1052,81 @@ fn image_blocks_ask_the_host_and_lay_out_what_it_supplies() {
 }
 
 #[test]
+fn embeds_show_their_section_and_links_that_name_nothing_show_faint() {
+    let (mut harness, manual) = configured(
+        "![[note#Plans]]\n\n[[Gone]] and [[Here]]\n",
+        ViewType::Rendered,
+        false,
+        |o| o.resources = true,
+    );
+    harness.canopy.set_screen_size(Size::new(60, 16)).unwrap();
+    settle(&mut harness, &manual);
+    let requests =
+        harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests());
+    let kinds: Vec<(ResourceKind, &str)> = requests
+        .iter()
+        .map(|request| (request.kind, request.target.path.as_str()))
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            (ResourceKind::Note, "note"),
+            (ResourceKind::Link, "Gone"),
+            (ResourceKind::Link, "Here")
+        ]
+    );
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.supply_resource(
+                ctx,
+                requests[0].id,
+                Resource::Text("# Note\n\n## Plans\n\nShip it.\n\n## Later\n\nNot now.\n".into()),
+            )?;
+            reader.supply_resource(ctx, requests[1].id, Resource::Missing)?;
+            reader.supply_resource(ctx, requests[2].id, Resource::Found)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    assert!(!harness.with_root_widget(|reader: &mut Markdown| reader.resources_pending()));
+    let screen = harness.tbuf().lines().join("\n");
+    assert!(
+        screen.contains("## Plans") && screen.contains("Ship it."),
+        "{screen}"
+    );
+    assert!(!screen.contains("Not now."), "{screen}");
+    let roles = harness.with_root_widget(|reader: &mut Markdown| {
+        let p = reader.shared.borrow().presentation.clone().unwrap();
+        (0..p.height())
+            .flat_map(|row| p.row(row).unwrap().runs.clone())
+            .filter(|run| run.text == "Gone" || run.text == "Here")
+            .map(|run| (run.text, run.role))
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(
+        roles,
+        [
+            ("Gone".to_owned(), "markdown/missing-link"),
+            ("Here".to_owned(), "markdown/link")
+        ]
+    );
+}
+
+#[test]
+fn an_embedded_section_is_cut_by_its_anchor() {
+    let note = "# Top\n\nIntro.\n\n## Plans\n\nShip it. ^ship\n\n### Detail\n\nMore.\n\n## Later\n\nNot now.\n";
+    assert_eq!(
+        embedded_section(note, Some("Plans")),
+        ["## Plans", "Ship it.", "### Detail", "More."]
+    );
+    assert_eq!(embedded_section(note, Some("^ship")), ["Ship it."]);
+    assert_eq!(embedded_section(note, None).len(), 8);
+    assert!(embedded_section(note, Some("Missing")).is_empty());
+}
+
+#[test]
 fn a_failed_image_shows_why() {
     let (mut harness, manual) = configured("![Gone](gone.png)\n", ViewType::Rendered, false, |o| {
-        o.images = true;
+        o.resources = true;
     });
     settle(&mut harness, &manual);
     let id =

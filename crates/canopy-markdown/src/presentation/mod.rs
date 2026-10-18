@@ -3,9 +3,9 @@
 
 use std::{
     cell::RefCell,
-    collections::{HashMap, hash_map::DefaultHasher},
+    collections::{HashMap, HashSet, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
-    mem::{discriminant, take},
+    mem::{discriminant, replace, take},
     ops::Range,
     rc::Rc,
     sync::Arc,
@@ -40,7 +40,7 @@ use image::RgbaImage;
 
 use crate::document::{
     AlertTone, Alignment, Block, BlockKind, CodeBlock, DocumentSnapshot, ImageBlock, InlineRole,
-    ReadingPosition, ReadingRange, ReadingUnit,
+    ObjectKind, ReadingPosition, ReadingRange, ReadingUnit,
 };
 
 /// Bounded row count for one derived presentation.
@@ -53,11 +53,15 @@ const OBJECT_TINT: f32 = 0.25;
 const WHOLE_UNIT: Range<usize> = 0..usize::MAX;
 /// Rows an image block takes at most.
 const IMAGE_ROWS: u32 = 16;
+/// Rows a note embed shows at most, beside its title.
+const EMBED_ROWS: usize = 24;
 /// Mosaic grids the reader keeps before it draws them again.
 const IMAGE_GRID_LIMIT: usize = 64;
 /// Rows of the area that a big heading lays out in, more than any face of
 /// the smallest size takes.
 const BIG_HEADING_ROWS: u32 = 8;
+/// How far a link that names nothing mixes the accent toward the page.
+const MISSING_QUIET: f32 = 0.5;
 /// How far a highlight's ground mixes the page toward yellow.
 const HIGHLIGHT_TINT: f32 = 0.28;
 /// How far a tag's cyan mixes toward the page.
@@ -272,9 +276,9 @@ pub struct PaintOverlays {
     pub images: ImagePixels,
 }
 
-/// What the reader knows of an image, by its destination.
+/// What the host supplied for an embed, by its destination.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum ImageInfo {
+pub enum EmbedInfo {
     /// The supplied image's size in pixels.
     Size {
         /// Width in pixels.
@@ -282,12 +286,21 @@ pub enum ImageInfo {
         /// Height in pixels.
         height: u32,
     },
+    /// The embedded note or section, as readable paragraphs.
+    Text(Arc<[String]>),
     /// The host could not supply it, and why.
     Failed(String),
 }
 
-/// What the reader knows of each image, by its destination.
-pub type ImageSizes = HashMap<String, ImageInfo>;
+/// What the host has supplied for a document: its embeds, by destination,
+/// and the local link destinations that name nothing.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Supplied {
+    /// Supplied embeds, by destination.
+    pub embeds: HashMap<String, EmbedInfo>,
+    /// Local link destinations that name nothing.
+    pub missing_links: HashSet<String>,
+}
 
 /// The key of a cached mosaic grid: destination, cells across and down, the
 /// tier, and the ground under the image.
@@ -344,8 +357,10 @@ struct BlockInputs<'a> {
     syntax_allowed: bool,
     /// Whether the block opens the document.
     leading: bool,
-    /// What the reader knows of an image block's image.
-    image: Option<&'a ImageInfo>,
+    /// What the host supplied for an image or embed block.
+    embed: Option<&'a EmbedInfo>,
+    /// Link objects whose destinations name nothing.
+    missing: &'a HashSet<u64>,
 }
 
 /// Semantic address under a prepared document cell.
@@ -390,16 +405,17 @@ impl PresentationSnapshot {
         geometry: GeometryKey,
         previous: Option<&Self>,
     ) -> Self {
-        Self::prepare_with(document, geometry, previous, &ImageSizes::new())
+        Self::prepare_with(document, geometry, previous, &Supplied::default())
     }
 
-    /// Prepare as [`Self::prepare`] does, with what the reader knows of the
-    /// document's images, so an image block reserves its image's rows.
+    /// Prepare as [`Self::prepare`] does, with what the host supplied: an
+    /// image block reserves its image's rows, an embed shows its text, and a
+    /// link that names nothing shows faint.
     pub fn prepare_with(
         document: Arc<DocumentSnapshot>,
         geometry: GeometryKey,
         previous: Option<&Self>,
-        images: &ImageSizes,
+        supplied: &Supplied,
     ) -> Self {
         let mut result = Self {
             unit_order: document
@@ -425,6 +441,16 @@ impl PresentationSnapshot {
             .flat_map(|old| old.blocks.iter().map(|b| (b.id, b)))
             .collect();
         let document = result.document.clone();
+        // Link objects whose destinations the host found to name nothing.
+        let missing: HashSet<u64> = document
+            .objects
+            .iter()
+            .filter(|object| {
+                matches!(&object.kind, ObjectKind::Link(link)
+                    if supplied.missing_links.contains(&link.destination))
+            })
+            .map(|object| object.id)
+            .collect();
         let units: HashMap<_, _> = document.units.iter().map(|u| (u.id, u)).collect();
         let objects: HashMap<_, _> = document.objects.iter().map(|o| (o.unit_id, o.id)).collect();
         for block in &document.blocks {
@@ -454,10 +480,13 @@ impl PresentationSnapshot {
             let inputs = BlockInputs {
                 syntax_allowed,
                 leading: result.blocks.is_empty(),
-                image: match &block.kind {
-                    BlockKind::Image(image) => images.get(&image.link.destination),
+                embed: match &block.kind {
+                    BlockKind::Image(image) | BlockKind::Embed(image) => {
+                        supplied.embeds.get(&image.link.destination)
+                    }
                     _ => None,
                 },
+                missing: &missing,
             };
             let signature = signature(block, unit, object, inputs);
             let mut layout = if let Some(old) = old_blocks
@@ -986,11 +1015,17 @@ fn signature(block: &Block, unit: &ReadingUnit, object: Option<u64>, inputs: Blo
     let BlockInputs {
         syntax_allowed,
         leading,
-        image,
+        embed,
+        missing,
     } = inputs;
     let mut hash = DefaultHasher::new();
     leading.hash(&mut hash);
-    image.hash(&mut hash);
+    embed.hash(&mut hash);
+    for span in &unit.spans {
+        span.object
+            .is_some_and(|object| missing.contains(&object))
+            .hash(&mut hash);
+    }
     block.source.hash(&mut hash);
     block.depth.hash(&mut hash);
     block.quote_depth.hash(&mut hash);
@@ -1057,7 +1092,8 @@ fn prepare_block(
     let BlockInputs {
         syntax_allowed,
         leading,
-        image: image_info,
+        embed: image_info,
+        missing,
     } = inputs;
     // A hostile viewport cannot cause an unbounded decoration allocation.
     let width = geometry.width.min(65535);
@@ -1261,6 +1297,16 @@ fn prepare_block(
                 geometry,
             );
         }
+        BlockKind::Embed(embed) => prepare_embed(
+            &mut rows,
+            make_row,
+            embed,
+            image_info,
+            unit,
+            &mut prefix,
+            (inset, card_inset, body, &rails),
+            geometry,
+        ),
         BlockKind::Rule => {
             let mut row = make_row();
             decoration(
@@ -1380,6 +1426,16 @@ fn prepare_block(
             }
         }
     }
+    // A link whose destination names nothing shows faint.
+    if !missing.is_empty() {
+        for run in rows.iter_mut().flat_map(|row| row.runs.iter_mut()) {
+            if run.object.is_some_and(|object| missing.contains(&object))
+                && run.role.ends_with("/link")
+            {
+                run.role = "markdown/missing-link";
+            }
+        }
+    }
     frame(&mut rows, make_row, block, unit, (inset, body), geometry);
     BlockLayout {
         id: block.id,
@@ -1408,7 +1464,7 @@ fn prepare_image(
     rows: &mut Vec<PreparedRow>,
     make_row: impl Fn() -> PreparedRow,
     image: &ImageBlock,
-    info: Option<&ImageInfo>,
+    info: Option<&EmbedInfo>,
     unit: &ReadingUnit,
     prefix: &mut Prefix,
     (inset, card_inset, body, rails): (u32, u32, u32, &Prefix),
@@ -1417,7 +1473,7 @@ fn prepare_image(
     let room = body
         .min(geometry.prose_width.clamp(1, 65535))
         .saturating_sub(card_inset - inset);
-    if let Some(ImageInfo::Size { width, height }) = info {
+    if let Some(EmbedInfo::Size { width, height }) = info {
         let size = image_box(Size::new(*width, *height), image, room);
         for _ in 0..size.h {
             let mut row = make_row();
@@ -1445,7 +1501,7 @@ fn prepare_image(
         },
         &INLINE_ROLES[0],
     );
-    if let Some(ImageInfo::Failed(reason)) = info {
+    if let Some(EmbedInfo::Failed(reason)) = info {
         let mut row = make_row();
         prefix
             .continuation()
@@ -1462,6 +1518,139 @@ fn prepare_image(
         rows.push(row);
     }
     None
+}
+
+/// Prepare a note embed: its title and the embedded paragraphs on a quiet
+/// rail once the host supplies them, and its title until then, with the
+/// reason when the host could not.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "a block's layout state, as its caller holds it"
+)]
+fn prepare_embed(
+    rows: &mut Vec<PreparedRow>,
+    make_row: impl Fn() -> PreparedRow,
+    embed: &ImageBlock,
+    info: Option<&EmbedInfo>,
+    unit: &ReadingUnit,
+    prefix: &mut Prefix,
+    (inset, card_inset, body, rails): (u32, u32, u32, &Prefix),
+    geometry: GeometryKey,
+) {
+    let room = body
+        .min(geometry.prose_width.clamp(1, 65535))
+        .saturating_sub(card_inset - inset);
+    let Some(EmbedInfo::Text(paragraphs)) = info else {
+        prefix.push("Embed: ", "markdown/structure");
+        wrap(
+            rows,
+            &make_row,
+            &unit.text,
+            prefix,
+            unit,
+            TextLayout {
+                inset,
+                budget: room.saturating_add(card_inset - inset),
+                role: "markdown/image",
+                glyphs: geometry.glyphs,
+            },
+            &INLINE_ROLES[0],
+        );
+        if let Some(EmbedInfo::Failed(reason)) = info {
+            let mut row = make_row();
+            prefix
+                .continuation()
+                .draw(&mut row, inset, prefix.width(), geometry.glyphs);
+            decoration(
+                &mut row,
+                inset + prefix.width(),
+                reason,
+                room.saturating_sub(prefix.width()),
+                "markdown/card/label",
+                None,
+                geometry.glyphs,
+            );
+            rows.push(row);
+        }
+        return;
+    };
+    let rail_glyph = if geometry.glyphs == GlyphPreset::Ascii {
+        "| "
+    } else {
+        "│ "
+    };
+    let text_width = room.saturating_sub(2).max(1);
+    let mut lines = vec![(embed.link.label.clone(), "markdown/embed/title")];
+    for (index, paragraph) in paragraphs.iter().enumerate() {
+        if index > 0 {
+            lines.push((String::new(), "markdown/embed"));
+        }
+        for line in paragraph.lines() {
+            lines.extend(
+                wrap_words(line, text_width)
+                    .into_iter()
+                    .map(|wrapped| (wrapped, "markdown/embed")),
+            );
+        }
+    }
+    if lines.len() > EMBED_ROWS {
+        lines.truncate(EMBED_ROWS);
+        lines.push(("…".into(), "markdown/embed"));
+    }
+    for (line, role) in lines {
+        let mut row = make_row();
+        rail(&mut row, rails, inset, body, geometry.glyphs);
+        decoration(
+            &mut row,
+            card_inset,
+            rail_glyph,
+            room,
+            "markdown/embed/rail",
+            None,
+            geometry.glyphs,
+        );
+        decoration(
+            &mut row,
+            card_inset + 2,
+            &line,
+            text_width,
+            role,
+            None,
+            geometry.glyphs,
+        );
+        rows.push(row);
+    }
+}
+
+/// Break `text` into lines of at most `width` cells at spaces, and a word
+/// wider than a line across lines.
+fn wrap_words(text: &str, width: u32) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    for word in text.split(' ') {
+        let fits = text::width(&line) + u32::from(!line.is_empty()) + text::width(word) <= width;
+        if !line.is_empty() && !fits {
+            lines.push(take(&mut line));
+        }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(word);
+        while text::width(&line) > width {
+            let cut = line
+                .char_indices()
+                .scan(0, |used, (at, ch)| {
+                    *used += text::width(ch.encode_utf8(&mut [0; 4]));
+                    Some((at, *used))
+                })
+                .find(|(_, used)| *used > width)
+                .map_or(line.len(), |(at, _)| at);
+            let rest = line.split_off(cut.max(1));
+            lines.push(replace(&mut line, rest));
+        }
+    }
+    lines.push(line);
+    lines
 }
 
 /// The cells an image of `pixels` takes: as large as `room` columns and
@@ -2254,7 +2443,19 @@ pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
         .fg("markdown/object", palette.fg)
         .fg("markdown/object/bar", palette.accent)
         .fg("markdown/status", palette.muted_fg)
-        .fg("markdown/image", palette.muted_fg);
+        .fg("markdown/image", palette.muted_fg)
+        .fg("markdown/embed", palette.muted_fg)
+        .style(
+            "markdown/embed/title",
+            PartialStyle::new().fg(palette.muted_fg).attr(Attr::Bold),
+        )
+        .fg("markdown/embed/rail", palette.faint_fg)
+        .style(
+            "markdown/missing-link",
+            PartialStyle::new()
+                .fg(palette.accent.mix(palette.bg, MISSING_QUIET, Mix::Oklab))
+                .attr(Attr::Underline),
+        );
     rules.apply();
 }
 

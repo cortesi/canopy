@@ -8,7 +8,7 @@ use canopy::{
 };
 use canopy_markdown::{
     DocumentInput, FinishOutcome, Markdown, MarkdownOptions, Mode, ViewType,
-    host::{HostAction, HostOutcome, HostReply, HostRequest, Resource},
+    host::{HostAction, HostOutcome, HostReply, HostRequest, Resource, ResourceKind},
     presentation::GlyphPreset,
 };
 use canopy_widgets::Text;
@@ -119,7 +119,7 @@ impl MarkdownGym {
             clipboard: true,
             browser: true,
             local_links: true,
-            images: true,
+            resources: true,
             base_url: Some("https://example.com/docs/".into()),
             glyphs: if self.ascii {
                 GlyphPreset::Ascii
@@ -191,7 +191,7 @@ impl MarkdownGym {
     /// A worker/publication readiness predicate, independent of frame timing.
     #[command]
     pub fn ready(&self, ctx: &mut dyn Context) -> Result<bool> {
-        reader(ctx, |md, _| Ok(md.ready() && !md.images_pending()))
+        reader(ctx, |md, _| Ok(md.ready() && !md.resources_pending()))
     }
     #[command]
     /// Latest source revision accepted by the reader.
@@ -425,12 +425,19 @@ impl MarkdownGym {
         }
         Ok(())
     }
-    /// Answer each image request with the gym's own landscape, so image
-    /// blocks show without files.
-    fn serve_images(&self, ctx: &mut dyn Context) -> Result<()> {
+    /// Answer each resource request without files: images with the gym's
+    /// own landscape, embeds with a short note, and link checks with found,
+    /// except for a link to `Nowhere`.
+    fn serve_resources(&self, ctx: &mut dyn Context) -> Result<()> {
         reader(ctx, |md, ctx| {
             for request in md.take_resource_requests() {
-                md.supply_resource(ctx, request.id, Resource::Image(landscape()))?;
+                let resource = match request.kind {
+                    ResourceKind::Image => Resource::Image(landscape()),
+                    ResourceKind::Note => Resource::Text(EMBEDDED_NOTE.into()),
+                    ResourceKind::Link if request.target.path == "Nowhere" => Resource::Missing,
+                    ResourceKind::Link => Resource::Found,
+                };
+                md.supply_resource(ctx, request.id, resource)?;
             }
             Ok(())
         })
@@ -487,7 +494,7 @@ impl Widget for MarkdownGym {
     }
     fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
         self.collect_host(ctx)?;
-        self.serve_images(ctx)?;
+        self.serve_resources(ctx)?;
         Ok(Some(Duration::from_millis(16)))
     }
 }
@@ -501,6 +508,10 @@ impl Register for MarkdownGym {
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
     builder.script("markdowngym", BINDINGS)
 }
+
+/// The note the gym supplies for every embed; an embed shows the section its
+/// anchor names.
+const EMBEDDED_NOTE: &str = "# Verber\n\nAn embedded note.\n\n## Plans\n\nShip the trajectory, then the embeds. ^ship\n\nKeep the reader quiet.\n\n## Later\n\nNot embedded.\n";
 
 /// A small landscape: sky over hills, with a sun, drawn without a file.
 fn landscape() -> Arc<image::RgbaImage> {

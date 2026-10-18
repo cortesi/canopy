@@ -97,9 +97,11 @@ pub struct MarkdownOptions {
     /// destination first. A link that cannot be followed still opens the
     /// inspector.
     pub follow_links: bool,
-    /// Request the images of image blocks from the host, which supplies
-    /// them. Without it, an image block shows its alt text.
-    pub images: bool,
+    /// Request resources from the host, which supplies them: the images of
+    /// image blocks, the notes of `![[note]]` embeds, and whether each local
+    /// link names anything. Without it, image and embed blocks show their
+    /// text, and every link shows alike.
+    pub resources: bool,
     /// Base URL for resolving relative destinations. With one, relative links
     /// resolve to URLs rather than to host documents.
     pub base_url: Option<String>,
@@ -131,7 +133,7 @@ impl Default for MarkdownOptions {
             browser: false,
             local_links: false,
             follow_links: false,
-            images: false,
+            resources: false,
             base_url: None,
         }
     }

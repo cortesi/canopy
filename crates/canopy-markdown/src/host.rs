@@ -20,10 +20,16 @@ pub enum HostAction {
 }
 
 /// What a resource request asks the host for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ResourceKind {
     /// An image an image block shows.
     Image,
+    /// The text of a note an embed shows; the reader takes the section its
+    /// anchor names.
+    Note,
+    /// Whether a local link names anything, so a link that names nothing can
+    /// show faint.
+    Link,
 }
 
 /// A resource the document needs from the host. Unlike a [`HostAction`], a
@@ -46,6 +52,10 @@ pub struct ResourceRequest {
 pub enum Resource {
     /// The image, which the host bounds in size.
     Image(Arc<RgbaImage>),
+    /// The note's text, which the host bounds in size.
+    Text(String),
+    /// What a link check names exists.
+    Found,
     /// Nothing the request names exists.
     Missing,
     /// The host could not supply it, and why.
