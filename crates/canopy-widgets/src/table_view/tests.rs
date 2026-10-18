@@ -792,6 +792,20 @@ fn shift_click_keeps_its_anchor_and_the_gutter_stops_at_the_body() -> Result<()>
 }
 
 #[test]
+fn space_pages_down_like_page_down() -> Result<()> {
+    let mut cursors = Vec::new();
+    for page in [KeyCode::PageDown, KeyCode::Char(' ')] {
+        let mut h = harness(30, 12, 6)?;
+        h.render()?;
+        h.key(page)?;
+        cursors.push(with(&mut h, |v, _| Ok(v.cursor_index()))?);
+    }
+    assert!(cursors[0].is_some_and(|(row, _)| row > 0), "{cursors:?}");
+    assert_eq!(cursors[0], cursors[1]);
+    Ok(())
+}
+
+#[test]
 fn a_wrapping_view_shows_every_value_in_full() -> Result<()> {
     let notes = "one two three four five six seven eight nine ten eleven twelve";
     let data = Arc::new(

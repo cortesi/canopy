@@ -2335,6 +2335,7 @@ impl Register for Markdown {
             ("l", NavIntent::Right),
             ("PageUp", NavIntent::PageUp),
             ("PageDown", NavIntent::PageDown),
+            ("Space", NavIntent::PageDown),
             ("Home", NavIntent::First),
             ("g", NavIntent::First),
             ("End", NavIntent::Last),

@@ -1567,6 +1567,42 @@ fn vi_letters_jump_to_document_edges_in_both_views() {
 }
 
 #[test]
+fn space_pages_down_like_page_down_in_both_views() {
+    let (mut harness, manual) = fixture(&long_document(), ViewType::Rendered, false, false, false);
+    settle(&mut harness, &manual);
+    for view in [ViewType::Rendered, ViewType::Source] {
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                reader.set_view_type(ctx, view)?;
+                Ok(())
+            })
+            .unwrap();
+        settle(&mut harness, &manual);
+        let mut offsets = Vec::new();
+        for key in ["PageDown", "Space"] {
+            harness
+                .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                    ctx.set_focus(reader.navigation_node().unwrap())?;
+                    Ok(())
+                })
+                .unwrap();
+            harness.key(Key::parse_spec("Home").unwrap()).unwrap();
+            harness.key(Key::parse_spec(key).unwrap()).unwrap();
+            service(&mut harness);
+            offsets.push(
+                harness
+                    .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                        Ok(reader.view_offset(ctx))
+                    })
+                    .unwrap(),
+            );
+        }
+        assert!(offsets[0] > 0, "{view:?}");
+        assert_eq!(offsets[0], offsets[1], "{view:?}");
+    }
+}
+
+#[test]
 fn an_inspector_covers_the_reader_body_and_nothing_beyond_it() {
     let (mut harness, manual) =
         fixture("# Title\n\nbody\n", ViewType::Rendered, false, false, false);

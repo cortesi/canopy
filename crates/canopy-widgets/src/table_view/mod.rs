@@ -657,6 +657,7 @@ impl TableView {
                         | 'Y'
                         | 'v'
                         | 'V'
+                        | ' '
                 )
         )
     }
@@ -742,7 +743,10 @@ impl TableView {
             KeyCode::Char('K') => self.move_cursor(ctx, -1, 0, true),
             KeyCode::Char('J') => self.move_cursor(ctx, 1, 0, true),
             KeyCode::PageUp => self.move_cursor(ctx, -page, 0, key.mods.shift),
-            KeyCode::PageDown => self.move_cursor(ctx, page, 0, key.mods.shift),
+            // Space pages down, as in the other read-only views.
+            KeyCode::PageDown | KeyCode::Char(' ') => {
+                self.move_cursor(ctx, page, 0, key.mods.shift)
+            }
             KeyCode::Home => self.move_to(ctx, r, 0, key.mods.shift),
             KeyCode::End => self.move_to(ctx, r, usize::MAX, key.mods.shift),
             KeyCode::Char('0') => self.move_to(ctx, r, 0, false),
