@@ -196,10 +196,9 @@ impl Markdown {
     /// Return once from a fragment, footnote, or outline jump.
     pub fn return_from_jump(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
-    /// Reveal the first heading that a link's `#` anchor names: by its
-    /// fragment slug, or by its text without regard to case. Returns whether
-    /// one matched.
-    pub fn reveal_heading(
+    /// Reveal what a link's `#` anchor names: a heading by its fragment slug
+    /// or by its text without regard to case. Returns whether one matched.
+    pub fn reveal_anchor(
         &mut self,
         ctx: &mut dyn Context,
         anchor: &str,
@@ -979,6 +978,10 @@ pub mod document {
         /// Whether the source wrote a `[[target|label]]` wikilink, whose
         /// destination names a host document rather than a URL.
         pub wiki: bool,
+        /// Whether the source gave the label: always for a Markdown link, and
+        /// for a wikilink only after a `|`. An unlabelled wikilink shows its
+        /// target as Obsidian does, `Note › Heading`.
+        pub labelled: bool,
     }
 
     impl Link {

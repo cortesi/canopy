@@ -210,6 +210,10 @@ pub struct Link {
     /// Whether the source wrote a `[[target|label]]` wikilink, whose
     /// destination names a host document rather than a URL.
     pub wiki: bool,
+    /// Whether the source gave the label: always for a Markdown link, and
+    /// for a wikilink only after a `|`. An unlabelled wikilink shows its
+    /// target as Obsidian does, `Note › Heading`.
+    pub labelled: bool,
 }
 impl Link {
     /// Classify the destination. A wikilink is always local to the host;
@@ -226,7 +230,7 @@ impl Link {
             None => (self.destination.trim(), None),
         };
         match (path.is_empty(), fragment) {
-            (true, Some(fragment)) => ResolvedLink::Fragment(heading_slug(fragment)),
+            (true, Some(fragment)) => ResolvedLink::Fragment(fragment.to_owned()),
             (true, None) => ResolvedLink::Unavailable("Wikilink names no document".into()),
             (false, _) => ResolvedLink::Local(LocalLink {
                 path: path.to_owned(),
@@ -1388,6 +1392,24 @@ fn inline(
     append_inline(nodes, &mut out, spans, links, soft_breaks, false);
     out
 }
+/// The label Obsidian shows for an unlabelled wikilink: its target without a
+/// `.md` extension, with its anchor after `›`.
+fn wiki_label(target: &str) -> String {
+    let (path, anchor) = match target.split_once('#') {
+        Some((path, anchor)) => (path.trim(), Some(anchor.trim())),
+        None => (target.trim(), None),
+    };
+    let path = path
+        .len()
+        .checked_sub(3)
+        .filter(|at| path.is_char_boundary(*at) && path[*at..].eq_ignore_ascii_case(".md"))
+        .map_or(path, |at| &path[..at]);
+    match anchor {
+        Some(anchor) if path.is_empty() => anchor.to_owned(),
+        Some(anchor) => format!("{path} › {anchor}"),
+        None => path.to_owned(),
+    }
+}
 /// Append readable inline content without interpreting terminal controls.
 fn append_inline(
     nodes: &[Node],
@@ -1401,7 +1423,20 @@ fn append_inline(
         let start = out.len();
         if let Some(tag) = &node.tag {
             let excluded = exclude_bare || matches!(tag, Tag::Link { .. } | Tag::Image { .. });
+            let child_spans = spans.len();
             append_inline(&node.children, out, spans, links, soft_breaks, excluded);
+            // An unlabelled wikilink shows its target as Obsidian does.
+            if let Tag::Link {
+                link_type: LinkType::WikiLink { has_pothole: false },
+                dest_url,
+                ..
+            } = tag
+            {
+                out.truncate(start);
+                spans.truncate(child_spans);
+                soft_breaks.retain(|at| *at < start);
+                out.push_str(&wiki_label(dest_url));
+            }
             if let Tag::Image { dest_url, .. } = tag {
                 out.push_str(" (");
                 out.push_str(dest_url);
@@ -1438,6 +1473,10 @@ fn append_inline(
                             destination: dest_url.to_string(),
                             title: title.to_string(),
                             wiki: matches!(link_type, LinkType::WikiLink { .. }),
+                            labelled: !matches!(
+                                link_type,
+                                LinkType::WikiLink { has_pothole: false }
+                            ),
                         }),
                     });
                 }
@@ -1465,6 +1504,7 @@ fn append_inline(
                                     destination: label,
                                     title: String::new(),
                                     wiki: false,
+                                    labelled: true,
                                 }),
                             });
                         }
@@ -2181,8 +2221,8 @@ mod tests {
                 .collect::<Vec<_>>(),
             [
                 ("Verber", true),
-                ("Note#Plans", true),
-                ("#Local Part", true),
+                ("Note › Plans", true),
+                ("Local Part", true),
                 ("m", false)
             ]
         );
@@ -2199,7 +2239,7 @@ mod tests {
             [
                 local("work/verber", None, true),
                 local("Note", Some("Plans"), true),
-                ResolvedLink::Fragment("local-part".into()),
+                ResolvedLink::Fragment("Local Part".into()),
                 local("my note.md", Some("a b"), false),
             ]
         );

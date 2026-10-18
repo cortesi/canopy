@@ -1041,10 +1041,8 @@ impl Markdown {
             }
             ObjectKind::Link(link) => {
                 let resolved = link.resolve(self.base_url().as_ref());
-                if let ResolvedLink::Fragment(slug) = &resolved {
-                    if let Some(entry) = p.document.outline.iter().find(|e| &e.slug == slug) {
-                        self.jump_source(ctx, entry.source.start)?;
-                    }
+                if let ResolvedLink::Fragment(anchor) = &resolved {
+                    self.reveal_anchor(ctx, anchor)?;
                     return Ok(());
                 }
                 if self.options.follow_links
@@ -1215,6 +1213,22 @@ impl Markdown {
         }
         Ok(())
     }
+    /// Where the selected link leads, so it can be checked before it is
+    /// followed.
+    fn selected_destination(&self) -> Option<String> {
+        let shared = self.shared.borrow();
+        let id = shared.overlays.active_object?;
+        let p = shared.presentation.as_ref()?;
+        let ObjectKind::Link(link) = &p.document.objects.iter().find(|o| o.id == id)?.kind else {
+            return None;
+        };
+        Some(match link.resolve(self.base_url().as_ref()) {
+            ResolvedLink::Fragment(anchor) => format!("#{anchor}"),
+            ResolvedLink::External(url) => url.to_string(),
+            ResolvedLink::Local(local) => local_display(&local),
+            ResolvedLink::Unavailable(reason) => reason,
+        })
+    }
     /// Ask the host to follow a link it can service: a URL through its
     /// browser, a document of its own through its local links. Returns
     /// whether a request went out.
@@ -1241,20 +1255,17 @@ impl Markdown {
         self.action_status = status.into();
         Ok(true)
     }
-    /// Reveal the first heading that a link's `#` anchor names: by its
-    /// fragment slug, or by its text without regard to case. Returns whether
-    /// one matched.
-    pub fn reveal_heading(&mut self, ctx: &mut dyn Context, anchor: &str) -> Result<bool> {
+    /// Reveal what a link's `#` anchor names: a heading by its fragment slug
+    /// or by its text without regard to case. Returns whether one matched.
+    pub fn reveal_anchor(&mut self, ctx: &mut dyn Context, anchor: &str) -> Result<bool> {
         let Some(p) = self.shared.borrow().presentation.clone() else {
             return Ok(false);
         };
+        let anchor = anchor.trim();
         let slug = heading_slug(anchor);
-        let Some(entry) = p
-            .document
-            .outline
-            .iter()
-            .find(|e| e.slug == slug || e.text.trim().eq_ignore_ascii_case(anchor.trim()))
-        else {
+        let Some(entry) = p.document.outline.iter().find(|e| {
+            e.slug == anchor || e.slug == slug || e.text.trim().eq_ignore_ascii_case(anchor)
+        }) else {
             return Ok(false);
         };
         self.jump_source(ctx, entry.source.start)?;
@@ -1883,7 +1894,8 @@ impl Markdown {
                 .as_ref()
                 .map_or(String::new(), |s| format!(" · {s}")),
             if self.action_status.is_empty() {
-                String::new()
+                self.selected_destination()
+                    .map_or(String::new(), |shown| format!(" · → {shown}"))
             } else {
                 format!(" · {}", self.action_status)
             }

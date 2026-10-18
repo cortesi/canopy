@@ -870,6 +870,34 @@ fn followed_links_request_the_host_at_once_and_inspected_links_on_open() {
 }
 
 #[test]
+fn the_status_line_shows_where_the_selected_link_leads() {
+    let (mut harness, manual) = configured(
+        "[[Note#Plans]] and [[#Here]]\n\n# Here\n",
+        ViewType::Rendered,
+        false,
+        |_| {},
+    );
+    harness
+        .canopy
+        .set_screen_size(Size::new(80, 8))
+        .unwrap();
+    settle(&mut harness, &manual);
+    // An unlabelled wikilink reads as Obsidian shows it.
+    assert!(harness.tbuf().contains_text("Note › Plans and Here"));
+    for expected in ["→ [[Note#Plans]]", "→ #Here"] {
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| reader.next_object(ctx, 1))
+            .unwrap();
+        service(&mut harness);
+        assert!(
+            harness.tbuf().contains_text(expected),
+            "{expected}\n{}",
+            harness.tbuf().lines().join("\n")
+        );
+    }
+}
+
+#[test]
 fn local_links_without_host_support_open_the_inspector() {
     let (mut harness, manual) = configured("[[Note]]\n", ViewType::Rendered, false, |options| {
         options.follow_links = true;
@@ -884,7 +912,7 @@ fn local_links_without_host_support_open_the_inspector() {
 }
 
 #[test]
-fn reveal_heading_finds_a_heading_by_slug_or_text() {
+fn reveal_anchor_finds_a_heading_by_slug_or_text() {
     let text = format!("{}## Far Away\n\nEnd.\n", "Line.\n\n".repeat(40));
     for (anchor, found) in [
         ("far-away", true),
@@ -896,7 +924,7 @@ fn reveal_heading_finds_a_heading_by_slug_or_text() {
         settle(&mut harness, &manual);
         harness
             .with_root_widget_context(|reader: &mut Markdown, ctx| {
-                assert_eq!(reader.reveal_heading(ctx, anchor)?, found, "{anchor}");
+                assert_eq!(reader.reveal_anchor(ctx, anchor)?, found, "{anchor}");
                 Ok(())
             })
             .unwrap();
