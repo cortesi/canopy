@@ -400,7 +400,6 @@ impl Canopy {
     /// Apply cursor look rules to the current looks, and again after every
     /// theme switch.
     pub(crate) fn add_cursor_rules(&mut self, rules: CursorRules) {
-        rules(&self.palette, &mut self.cursor_looks);
         self.cursor_rules.push(rules);
         self.rebuild_cursor_looks();
         self.core.invalidate(crate::Invalidation::Paint);
