@@ -267,20 +267,10 @@ fn parse_command_param(pat: &syn::PatType, index: usize) -> Result<ParamMeta> {
     let ty = (*pat.ty).clone();
     let ty_str = type_to_string(&ty);
 
-    if let Some(mutable) = is_context_ref(&ty, "Context") {
-        return Ok(ParamMeta {
-            ident,
-            user_ident,
-            name,
-            ty,
-            ty_str,
-            kind: ParamKind::Context { mutable },
-            is_option: false,
-            doc: None,
-        });
-    }
-
-    let (kind, is_option) = classify_value_param(&ty)?;
+    let (kind, is_option) = match is_context_ref(&ty, "Context") {
+        Some(mutable) => (ParamKind::Context { mutable }, false),
+        None => classify_value_param(&ty)?,
+    };
 
     Ok(ParamMeta {
         ident,
