@@ -948,7 +948,7 @@ mod tests {
     use super::*;
     use crate::{
         document::{ParseLimits, parse_document},
-        presentation::GeometryKey,
+        presentation::{GeometryKey, Supplied},
         source_store::SourceStore,
     };
 
@@ -968,6 +968,7 @@ mod tests {
                 ..Default::default()
             },
             old,
+            &Supplied::default(),
         ))
     }
     fn mounted(text: &str) -> Result<(Harness, Rc<RefCell<SurfaceState>>)> {
@@ -1087,7 +1088,8 @@ mod tests {
                 Arc::new(PresentationSnapshot::prepare(
                     Arc::new(next_document.clone()),
                     old.geometry,
-                    Some(&old)
+                    Some(&old),
+                    &Supplied::default()
                 ))
             )?);
             next_document.units[0].text = "other".into();
@@ -1096,7 +1098,8 @@ mod tests {
                 Arc::new(PresentationSnapshot::prepare(
                     Arc::new(next_document),
                     old.geometry,
-                    None
+                    None,
+                    &Supplied::default()
                 ))
             )?);
             assert!(state.borrow().overlays.selection.is_none());
@@ -1218,6 +1221,7 @@ mod tests {
                 ..old.geometry
             },
             None,
+            &Supplied::default(),
         ));
         with(&mut h, |surface, ctx| {
             assert!(!surface.publish(ctx, next)?);

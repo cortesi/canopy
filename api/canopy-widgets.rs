@@ -3,7 +3,7 @@
 // Package: canopy-widgets
 // Publish: crates.io
 // Declared features: default, devtools, graphics, syntax, terminal-widget
-// Workspace dependencies: canopy, canopy-mosaic
+// Workspace dependencies: canopy, canopy-mosaic, canopy-xmark (optional)
 // Workspace dependents: canopy-markdown, canopyctl, gyms, hello, todo
 // Unnameable: crate::image_view::ZoomDirection
 
@@ -4200,8 +4200,9 @@ pub mod highlight {
     /// A syntect-backed highlighter.
     ///
     /// Language detection uses the file name or extension, then the first
-    /// source line. Parser state is retained for at most 4,000 lines; later
-    /// lines highlight independently.
+    /// source line. Parser state is retained for at most 4,000 lines or
+    /// 512 KiB; later lines highlight independently. A source with a line
+    /// longer than 4 KiB, such as a minified bundle, shows as plain text.
     #[derive(Debug)]
     pub struct SyntectHighlighter {/* private fields */}
 

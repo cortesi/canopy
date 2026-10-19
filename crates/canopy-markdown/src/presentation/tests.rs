@@ -28,6 +28,7 @@ fn prepared(text: &str, width: u32) -> PresentationSnapshot {
             ..Default::default()
         },
         None,
+        &Supplied::default(),
     )
 }
 fn row_text(p: &PresentationSnapshot, row: u32) -> String {
@@ -164,8 +165,14 @@ fn code_cards_show_every_line_clip_wide_ones_and_keep_atomic_payload() {
 #[test]
 fn geometry_reuses_blocks_but_glyph_changes_reprepare() {
     let document = document("# Reuse\n\nparagraph\n");
-    let a = PresentationSnapshot::prepare(document.clone(), GeometryKey::default(), None);
-    let b = PresentationSnapshot::prepare(document.clone(), a.geometry, Some(&a));
+    let a = PresentationSnapshot::prepare(
+        document.clone(),
+        GeometryKey::default(),
+        None,
+        &Supplied::default(),
+    );
+    let b =
+        PresentationSnapshot::prepare(document.clone(), a.geometry, Some(&a), &Supplied::default());
     assert_eq!(b.stats.prepared_blocks, 0);
     assert_eq!(b.stats.reused_blocks, 2);
     assert!(Arc::ptr_eq(&a.blocks[0].rows, &b.blocks[0].rows));
@@ -181,6 +188,7 @@ fn geometry_reuses_blocks_but_glyph_changes_reprepare() {
             ..a.geometry
         },
         Some(&a),
+        &Supplied::default(),
     );
     assert_eq!(c.stats.reused_blocks, 0);
     let underline = row_text(&c, 1);
@@ -249,6 +257,7 @@ fn a_first_level_heading_draws_in_big_text_that_reads_as_the_heading() {
                 ..Default::default()
             },
             None,
+            &Supplied::default(),
         )
     };
     // Octants draw the title in two rows; every one reads as the heading.
@@ -311,6 +320,7 @@ fn cumulative_syntax_payload_budget_obeys_zero_and_n_minus_one_n_n_plus_one() {
                 ..Default::default()
             },
             None,
+            &Supplied::default(),
         );
         let reserved = if limit == 0 {
             0
@@ -331,7 +341,8 @@ fn cumulative_syntax_payload_budget_obeys_zero_and_n_minus_one_n_n_plus_one() {
             .flat_map(|r| &r.runs)
             .any(|run| run.syntax.is_some());
         assert_eq!(styled, limit >= total);
-        let cached = PresentationSnapshot::prepare(doc.clone(), p.geometry, Some(&p));
+        let cached =
+            PresentationSnapshot::prepare(doc.clone(), p.geometry, Some(&p), &Supplied::default());
         assert_eq!(cached.stats.syntax_bytes, reserved);
         assert_eq!(cached.stats.reused_blocks, 2);
     }
@@ -370,6 +381,7 @@ fn ascii_preset_uses_ascii_for_all_generated_decoration() {
             ..Default::default()
         },
         None,
+        &Supplied::default(),
     );
     for row in 0..p.height() {
         for run in &p.row(row).unwrap().runs {
@@ -662,6 +674,7 @@ fn palette_switch_recolors_prepared_code_without_reflow_or_losing_font_attribute
                     preview.prepared.document.clone(),
                     preview.prepared.geometry,
                     Some(&preview.prepared),
+                    &Supplied::default(),
                 );
                 assert_eq!(reused.stats.reused_blocks, 1);
                 assert_eq!(reused.stats.prepared_blocks, 0);
@@ -800,6 +813,7 @@ fn a_quote_bar_runs_unbroken_through_spacing_and_cards() {
             ..Default::default()
         },
         None,
+        &Supplied::default(),
     );
     let texts: Vec<_> = (0..p.height()).map(|row| row_text(&p, row)).collect();
     assert_eq!(

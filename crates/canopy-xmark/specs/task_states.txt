@@ -1,0 +1,35 @@
+# Task states
+
+Beyond `[ ]` and `[x]`, a task list marker may hold any other visible
+character, as Obsidian's themes and its Tasks plugin use them. Such a task
+shows as done, marked with its state.
+
+```````````````````````````````` example_xmark
+- [ ] open
+- [x] done
+- [/] doing
+- [-] dropped
+.
+<ul>
+<li><input disabled="" type="checkbox"/>
+open</li>
+<li><input disabled="" type="checkbox" checked=""/>
+done</li>
+<li><input disabled="" type="checkbox" checked="" data-task="/"/>
+doing</li>
+<li><input disabled="" type="checkbox" checked="" data-task="-"/>
+dropped</li>
+</ul>
+````````````````````````````````
+
+A bracket of two characters, or of a bracket, is no task.
+
+```````````````````````````````` example_xmark
+- [ab] text
+- []] text
+.
+<ul>
+<li>[ab] text</li>
+<li>[]] text</li>
+</ul>
+````````````````````````````````

@@ -57,13 +57,24 @@ Draw pictures and large text with block mosaic characters.
 - Items: 58
 - Exposes: none
 
+## canopy-xmark
+
+A pull parser for [CommonMark](https://commonmark.org), with GitHub's and Obsidian's syntax, forked from pulldown-cmark.
+
+- Publish: crates.io
+- Declared features: default, html
+- Workspace dependencies: none
+- Workspace dependents: canopy-markdown, canopy-widgets
+- Items: 158
+- Exposes: InternalBitFlags, bitflags
+
 ## canopy-widgets
 
 Built-in widgets for canopy applications.
 
 - Publish: crates.io
 - Declared features: default, devtools, graphics, syntax, terminal-widget
-- Workspace dependencies: canopy, canopy-mosaic
+- Workspace dependencies: canopy, canopy-mosaic, canopy-xmark (optional)
 - Workspace dependents: canopy-markdown, canopyctl, gyms, hello, todo
 - Unnameable: crate::image_view::ZoomDirection
 - Items: 918
@@ -75,10 +86,10 @@ Interactive Markdown reading and exact source viewing for Canopy.
 
 - Publish: crates.io
 - Declared features: default, syntax
-- Workspace dependencies: canopy, canopy-widgets
+- Workspace dependencies: canopy, canopy-widgets, canopy-xmark
 - Workspace dependents: gyms
-- Items: 327
-- Exposes: canopy, canopy-widgets, image, pulldown-cmark, url
+- Items: 322
+- Exposes: canopy, canopy-widgets, canopy-xmark, image, url
 
 ## hello
 

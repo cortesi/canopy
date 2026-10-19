@@ -3,7 +3,7 @@
 // Package: canopy-markdown
 // Publish: crates.io
 // Declared features: default, syntax
-// Workspace dependencies: canopy, canopy-widgets
+// Workspace dependencies: canopy, canopy-widgets, canopy-xmark
 // Workspace dependents: gyms
 
 //! Interactive Markdown reading and exact source viewing for Canopy.
@@ -36,8 +36,8 @@ use canopy_widgets::{
     editor::{LineNumbers, TextPosition, TextRange, WrapMode},
     table::PreparedTable,
 };
+use canopy_xmark::{Alignment, BlockQuoteKind};
 use image::RgbaImage;
-use pulldown_cmark::{Alignment, Options};
 use url::Url;
 
 /// Source replacement with an explicit initial lifecycle.
@@ -217,6 +217,9 @@ impl Markdown {
     /// Reveal what a link's `#` anchor names: a block by its `^id`, or a
     /// heading by its fragment slug or by its text without regard to case.
     /// Returns whether one matched.
+    ///
+    /// The host navigates here, so it keeps its own history: the reveal
+    /// records no jump and leaves no return position.
     pub fn reveal_anchor(
         &mut self,
         ctx: &mut dyn Context,
@@ -841,7 +844,7 @@ pub mod document {
     //! Semantic documents, source mappings, and actionable objects.
     //! Source-addressed Markdown semantics, independent of widgets and geometry.
 
-    pub use pulldown_cmark::Alignment;
+    pub use canopy_xmark::Alignment;
     /// An alert quote a block lies in.
     #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub struct Alert {
@@ -873,12 +876,7 @@ pub mod document {
         Caution,
     }
 
-    impl AlertTone {
-        /// Return the tone of an alert label, ignoring case, or nothing for a
-        /// label no common vocabulary uses.
-        #[must_use]
-        pub fn of(label: &str) -> Option<Self>;
-    }
+    impl From<BlockQuoteKind> for AlertTone {}
 
     /// One semantic leaf with source and container metadata.
     #[derive(Clone, Debug)]
@@ -982,8 +980,9 @@ pub mod document {
         pub block_anchors: Vec<BlockAnchor>,
         /// The trailing source region awaiting a closing boundary.
         pub provisional: Option<Range<usize>>,
-        /// Whether a derived-work bound required a source-card fallback.
-        pub degraded: bool,
+        /// The bound that turned content into source cards, if one did, such
+        /// as "table cell limit". The reader says the document is partial.
+        pub degraded: Option<String>,
         /* private fields */
     }
 
@@ -1248,15 +1247,6 @@ pub mod document {
         Separator,
     }
 
-    /// Recognize HTTP(S) URLs in ordinary text, balancing parentheses and trimming
-    /// punctuation.
-    pub fn bare_url_ranges(text: &str) -> Vec<Range<usize>>;
-
-    /// Lowercase Unicode letters/digits, retain `_` and `-`, replace whitespace
-    /// with `-`. Punctuation is omitted; repeated headings gain source-order `-1`,
-    /// `-2` suffixes.
-    pub fn heading_slug(text: &str) -> String;
-
     /// Parse one accepted revision. Limits degrade accepted content to recoverable
     /// source cards.
     pub fn parse_document(
@@ -1264,9 +1254,6 @@ pub mod document {
         limits: &ParseLimits,
         previous: Option<&DocumentSnapshot>,
     ) -> DocumentSnapshot;
-
-    /// The supported syntax is CommonMark with these explicit extensions.
-    pub fn parser_options() -> Options;
 
     /// Resolve without filesystem inference. Only control-free HTTP(S) URLs can
     /// open by default. Without a base URL, a relative path or `file:` URL is
@@ -1883,18 +1870,11 @@ pub mod presentation {
             overlays: &PaintOverlays,
         ) -> canopy::error::Result<PaintStats>;
 
-        /// Run this on the document worker. A palette change does not invalidate
-        /// it.
-        pub fn prepare(
-            document: Arc<DocumentSnapshot>,
-            geometry: GeometryKey,
-            previous: Option<&Self>,
-        ) -> Self;
-
-        /// Prepare as [`Self::prepare`] does, with what the host supplied: an
+        /// Run this on the document worker, with what the host supplied: an
         /// image block reserves its image's rows, an embed shows its text, and a
-        /// link that names nothing shows faint.
-        pub fn prepare_with(
+        /// link that names nothing shows faint. A palette change does not
+        /// invalidate it.
+        pub fn prepare(
             document: Arc<DocumentSnapshot>,
             geometry: GeometryKey,
             previous: Option<&Self>,

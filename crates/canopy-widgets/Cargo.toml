@@ -10,12 +10,13 @@ doctest = false
 
 [features]
 default = ["syntax", "terminal-widget", "graphics", "devtools"]
-syntax = ["dep:syntect", "dep:two-face"]
+syntax = ["dep:canopy-xmark", "dep:syntect", "dep:two-face"]
 terminal-widget = ["dep:itty-core"]
 graphics = ["dep:image", "dep:fontdue"]
 devtools = ["dep:tracing-subscriber"]
 
 [dependencies]
+canopy-xmark = { workspace = true, optional = true }
 canopy.workspace = true
 canopy-mosaic.workspace = true
 

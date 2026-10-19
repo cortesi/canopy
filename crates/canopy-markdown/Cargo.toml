@@ -14,12 +14,11 @@ default = ["syntax"]
 syntax = ["canopy-widgets/syntax"]
 
 [dependencies]
+canopy-xmark.workspace = true
 canopy.workspace = true
 canopy-widgets = { workspace = true, features = ["graphics"] }
 image = { version = "0.25.10", default-features = false }
-pulldown-cmark = { version = "0.13.4", default-features = false }
 url = "2.5"
-percent-encoding = "2.3"
 grep-matcher = "0.1.9"
 grep-regex = "0.1.14"
 unicode-segmentation.workspace = true

@@ -1,14 +1,12 @@
 //! Source-addressed Markdown semantics, independent of widgets and geometry.
-use std::{
-    collections::{HashMap, HashSet},
-    iter, mem,
-    ops::Range,
-    slice,
-    sync::Arc,
-};
+use std::{borrow::Borrow, collections::HashMap, iter, mem, ops::Range, slice, sync::Arc};
 
-pub use pulldown_cmark::Alignment;
-use pulldown_cmark::{CodeBlockKind, Event, LinkType, Options, Parser, Tag};
+pub use canopy_xmark::Alignment;
+use canopy_xmark::{
+    BlockQuoteKind, CodeBlockKind, DefaultParserCallbacks, EmbedKind, Event, Limits, LinkTarget,
+    LinkType, Options, Parser, Resume, Tag, TailMark, TailWatch, percent_decode, split_destination,
+    split_wikilink,
+};
 
 use crate::source_store::SourceSnapshot;
 
@@ -241,17 +239,13 @@ impl Link {
         if self.destination.chars().any(char::is_control) {
             return ResolvedLink::Unavailable("Link contains control characters".into());
         }
-        let (path, fragment) = match self.destination.split_once('#') {
-            Some((path, fragment)) => (path.trim(), Some(fragment.trim())),
-            None => (self.destination.trim(), None),
-        };
-        let fragment = fragment.filter(|fragment| !fragment.is_empty());
+        let LinkTarget { path, fragment } = split_wikilink(&self.destination);
         match (path.is_empty(), fragment) {
-            (true, Some(fragment)) => ResolvedLink::Fragment(fragment.to_owned()),
+            (true, Some(fragment)) => ResolvedLink::Fragment(fragment),
             (true, None) => ResolvedLink::Unavailable("Wikilink names no document".into()),
-            (false, _) => ResolvedLink::Local(LocalLink {
-                path: path.to_owned(),
-                fragment: fragment.map(str::to_owned),
+            (false, fragment) => ResolvedLink::Local(LocalLink {
+                path,
+                fragment,
                 wiki: true,
             }),
         }
@@ -330,14 +324,17 @@ pub struct DocumentSnapshot {
     pub block_anchors: Vec<BlockAnchor>,
     /// The trailing source region awaiting a closing boundary.
     pub provisional: Option<Range<usize>>,
-    /// Whether a derived-work bound required a source-card fallback.
-    pub degraded: bool,
+    /// The bound that turned content into source cards, if one did, such
+    /// as "table cell limit". The reader says the document is partial.
+    pub degraded: Option<String>,
     /// Active source-role identities retained for the next publication.
     identities: HashMap<(usize, String, usize), u64>,
     /// Constant-time lookup from unit identity to reading-order index.
     unit_index: HashMap<u64, usize>,
     /// Worker-computed semantic allocation estimate, excluding accepted source.
     estimated_bytes: usize,
+    /// The parse, which the next appended revision reuses.
+    parse: Option<Arc<ParseCache>>,
 }
 impl DocumentSnapshot {
     /// Conservative owned semantic-model bytes, excluding accepted source and
@@ -544,18 +541,6 @@ impl DocumentSnapshot {
     }
 }
 
-/// The supported syntax is CommonMark with these explicit extensions.
-pub fn parser_options() -> Options {
-    Options::ENABLE_TABLES
-        | Options::ENABLE_FOOTNOTES
-        | Options::ENABLE_STRIKETHROUGH
-        | Options::ENABLE_TASKLISTS
-        | Options::ENABLE_GFM
-        | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS
-        | Options::ENABLE_WIKILINKS
-        | Options::ENABLE_MATH
-}
-
 #[derive(Clone, Debug)]
 /// A bounded parser tree node with its original event range.
 struct Node {
@@ -568,73 +553,170 @@ struct Node {
     /// Nested parser nodes in source order.
     children: Vec<Self>,
 }
-/// Build a bounded source-addressed parser tree and collect the source spans
-/// of the reference definitions that the parser retained.
-fn tree(text: &str, limits: &ParseLimits) -> Option<(Vec<Node>, Vec<Range<usize>>)> {
+/// One parse's tree, and what the parse of an appended revision reuses.
+struct Parsed {
+    /// The top-level nodes.
+    roots: Vec<Arc<Node>>,
+    /// The events read through each top-level node, counted from the start
+    /// of the document.
+    events: Vec<usize>,
+    /// Where the tail watch stood after each top-level node.
+    marks: Vec<TailMark>,
+    /// Every reference definition's source span.
+    definitions: Vec<Range<usize>>,
+    /// What the stream's open tail needs.
+    watch: TailWatch,
+    /// What the parser learned, for resuming after a prefix.
+    resume: Resume,
+}
+
+/// What a revision's parse keeps for the next, appended revision.
+#[derive(Debug)]
+struct ParseCache {
+    /// The top-level nodes.
+    roots: Vec<Arc<Node>>,
+    /// The events read through each top-level node.
+    events: Vec<usize>,
+    /// Where the tail watch stood after each top-level node.
+    marks: Vec<TailMark>,
+    /// Every reference definition's source span.
+    definitions: Vec<Range<usize>>,
+    /// What the parser learned.
+    resume: Resume,
+}
+
+/// Build a bounded source-addressed parser tree of `text` from `from`, a
+/// line that starts a top-level block, after a prefix whose parse learned
+/// `resume`, read `spent` events, and left its tail watch at `mark`.
+fn tree(
+    text: &str,
+    limits: &ParseLimits,
+    from: usize,
+    resume: &Resume,
+    (spent, mark): (usize, TailMark),
+) -> Option<Parsed> {
     let mut roots = Vec::new();
+    let mut root_events = Vec::new();
+    let mut marks = Vec::new();
     let mut stack: Vec<Node> = Vec::new();
-    let mut count = 0;
-    let events = Parser::new_ext(text, parser_options()).into_offset_iter();
-    let definitions = events
-        .reference_definitions()
-        .iter()
-        .map(|(_, definition)| definition.span.clone())
-        .collect();
-    for (event, range) in events {
+    let mut watch = TailWatch::after(mark);
+    let mut count = spent;
+    // The parser stops itself past the limits, before it builds the rest.
+    let bounds = Limits {
+        max_items: limits.max_nodes.saturating_sub(spent),
+        max_depth: limits.max_depth,
+    };
+    let mut events = Parser::new_resumed(
+        text,
+        Options::obsidian(),
+        bounds,
+        from,
+        resume,
+        DefaultParserCallbacks,
+    )
+    .into_offset_iter();
+    let definitions = events.reference_definitions().spans().to_vec();
+    for (event, range) in events.by_ref() {
+        watch.observe(&event, &range);
         count += 1;
-        if count > limits.max_nodes {
-            return None;
-        }
-        match event {
+        let node = match event {
             Event::Start(tag) => {
-                if stack.len() >= limits.max_depth {
-                    return None;
-                }
                 stack.push(Node {
                     range,
                     tag: Some(tag.into_static()),
                     event: None,
                     children: Vec::new(),
                 });
+                continue;
             }
-            Event::End(_) => {
-                let node = stack.pop()?;
-                if let Some(parent) = stack.last_mut() {
-                    parent.children.push(node);
-                } else {
-                    roots.push(node);
-                }
-            }
-            event => {
-                let node = Node {
-                    range,
-                    tag: None,
-                    event: Some(event.into_static()),
-                    children: Vec::new(),
-                };
-                if let Some(parent) = stack.last_mut() {
-                    push_merged(&mut parent.children, node);
-                } else {
-                    push_merged(&mut roots, node);
-                }
-            }
+            Event::End(_) => stack.pop()?,
+            event => Node {
+                range,
+                tag: None,
+                event: Some(event.into_static()),
+                children: Vec::new(),
+            },
+        };
+        if let Some(parent) = stack.last_mut() {
+            parent.children.push(node);
+        } else {
+            roots.push(Arc::new(node));
+            root_events.push(count);
+            marks.push(watch.mark());
         }
     }
-    Some((roots, definitions))
-}
-/// Join adjacent text events before detecting bare URLs.
-fn push_merged(nodes: &mut Vec<Node>, node: Node) {
-    if let Some(last) = nodes.last_mut()
-        && let (Some(Event::Text(before)), Some(Event::Text(after))) = (&last.event, &node.event)
-    {
-        let mut merged = String::with_capacity(before.len() + after.len());
-        merged.push_str(before);
-        merged.push_str(after);
-        last.event = Some(Event::Text(merged.into()));
-        last.range.end = node.range.end;
-        return;
+    if events.limit_hit() {
+        return None;
     }
-    nodes.push(node);
+    let resume = events.resume();
+    Some(Parsed {
+        roots,
+        events: root_events,
+        marks,
+        definitions,
+        watch,
+        resume,
+    })
+}
+
+/// Parse `text`, the hidden text of `source`, reusing what the parse of
+/// `previous` settled when `source` only appended to it.
+///
+/// Every top-level block but the last is settled by the next one. An append
+/// that brings a comment marker or a definition could change them, and so
+/// parses everything again.
+fn parse_tree(
+    text: &str,
+    source: &SourceSnapshot,
+    limits: &ParseLimits,
+    previous: Option<&DocumentSnapshot>,
+) -> Option<Parsed> {
+    let resumable = previous.and_then(|previous| {
+        let cache = previous.parse.as_ref()?;
+        let appended = previous.source.epoch == source.epoch
+            && previous.source.len() < source.len()
+            && previous.degraded.is_none();
+        let keep = cache.roots.len().checked_sub(1).filter(|keep| *keep > 0)?;
+        let last = cache.roots[keep].range.start;
+        let settle = text[..last].rfind(['\n', '\r']).map_or(0, |at| at + 1);
+        // Comments and inline footnotes reach across blocks: a comment's
+        // markers pair over the whole text, and an inline footnote's note
+        // ends the document.
+        let safe = appended
+            && settle > 0
+            && cache.roots[keep - 1].range.end <= settle
+            && !text.contains("%%")
+            && !text.contains("^[")
+            && !text[settle..].contains("]:");
+        safe.then_some((cache, keep, settle))
+    });
+    let Some((cache, keep, settle)) = resumable else {
+        return tree(text, limits, 0, &Resume::default(), Default::default());
+    };
+    let before = cache.resume.before(settle);
+    let after = (cache.events[keep - 1], cache.marks[keep - 1]);
+    let suffix = tree(text, limits, settle, &before, after)?;
+    let mut roots = cache.roots[..keep].to_vec();
+    roots.extend(suffix.roots);
+    let mut events = cache.events[..keep].to_vec();
+    events.extend(suffix.events);
+    let mut marks = cache.marks[..keep].to_vec();
+    marks.extend(suffix.marks);
+    let mut definitions: Vec<_> = cache
+        .definitions
+        .iter()
+        .filter(|definition| definition.start < settle)
+        .cloned()
+        .collect();
+    definitions.extend(suffix.definitions);
+    Some(Parsed {
+        roots,
+        events,
+        marks,
+        definitions,
+        watch: suffix.watch,
+        resume: before.then(suffix.resume),
+    })
 }
 /// The semantic tone of an alert, which sets its colour.
 ///
@@ -658,22 +740,15 @@ pub enum AlertTone {
     Caution,
 }
 
-impl AlertTone {
-    /// Return the tone of an alert label, ignoring case, or nothing for a
-    /// label no common vocabulary uses.
-    #[must_use]
-    pub fn of(label: &str) -> Option<Self> {
-        Some(match label.to_ascii_lowercase().as_str() {
-            "note" | "info" | "todo" | "abstract" | "summary" | "tldr" | "quote" | "cite"
-            | "example" => Self::Note,
-            "tip" | "hint" | "success" | "check" | "done" => Self::Tip,
-            "important" => Self::Important,
-            "warning" | "attention" | "question" | "help" | "faq" => Self::Warning,
-            "caution" | "danger" | "error" | "failure" | "fail" | "missing" | "bug" => {
-                Self::Caution
-            }
-            _ => return None,
-        })
+impl From<BlockQuoteKind> for AlertTone {
+    fn from(kind: BlockQuoteKind) -> Self {
+        match kind {
+            BlockQuoteKind::Note => Self::Note,
+            BlockQuoteKind::Tip => Self::Tip,
+            BlockQuoteKind::Important => Self::Important,
+            BlockQuoteKind::Warning => Self::Warning,
+            BlockQuoteKind::Caution => Self::Caution,
+        }
     }
 }
 
@@ -684,46 +759,6 @@ pub struct Alert {
     pub tone: AlertTone,
     /// The alert quote's rail, counting quote rails from the outermost.
     pub depth: usize,
-}
-
-/// Return the label of an alert marker that leads a quote, such as `info` in
-/// `> [!info]`, and remove the marker line from `children`.
-///
-/// A marker stands alone on the quote's first line, as GitHub requires; an
-/// Obsidian fold sign may follow it. Only a label with a tone counts, so an
-/// unknown marker stays text.
-fn take_alert_marker(children: &mut Vec<Node>) -> Option<(String, Option<String>)> {
-    let paragraph = children
-        .first_mut()
-        .filter(|node| matches!(node.tag, Some(Tag::Paragraph)))?;
-    let Some(Event::Text(text)) = paragraph
-        .children
-        .first()
-        .and_then(|node| node.event.as_ref())
-    else {
-        return None;
-    };
-    // `[!label]`, a fold sign, and an optional title, as Obsidian writes a
-    // callout's first line.
-    let (label, after) = text.trim_start().strip_prefix("[!")?.split_once(']')?;
-    let title = after.trim_start_matches(['+', '-']).trim();
-    AlertTone::of(label)?;
-    let label = label.to_owned();
-    let title = (!title.is_empty()).then(|| title.to_owned());
-    paragraph.children.remove(0);
-    if matches!(
-        paragraph
-            .children
-            .first()
-            .and_then(|node| node.event.as_ref()),
-        Some(Event::SoftBreak | Event::HardBreak)
-    ) {
-        paragraph.children.remove(0);
-    }
-    if paragraph.children.is_empty() {
-        children.remove(0);
-    }
-    Some((label, title))
 }
 
 #[derive(Clone, Default)]
@@ -759,8 +794,9 @@ struct Leaf {
     names: Option<BlockAnchor>,
 }
 /// Flatten semantic leaves while retaining container metadata.
-fn collect(nodes: &[Node], context: &Context, out: &mut Vec<Leaf>) {
+fn collect<N: Borrow<Node>>(nodes: &[N], context: &Context, out: &mut Vec<Leaf>) {
     for (index, node) in nodes.iter().enumerate() {
+        let node = node.borrow();
         match node.tag.as_ref() {
             Some(Tag::List(number)) => {
                 for (index, item) in node.children.iter().enumerate() {
@@ -809,33 +845,51 @@ fn collect(nodes: &[Node], context: &Context, out: &mut Vec<Leaf>) {
                     leaf.context.marker = None;
                 }
             }
-            Some(Tag::BlockQuote(kind)) => {
+            Some(quote @ (Tag::BlockQuote(_) | Tag::Callout(_))) => {
                 let start = out.len();
                 let mut c = context.clone();
                 c.quote_depth += 1;
                 c.depth += 1;
                 c.enclosing = node.range.start;
                 c.quotes.push(node.range.start);
-                // The parser knows GitHub's five kinds; other common labels
-                // lead the quote as a marker line, which the alert drops.
-                let mut children = node.children.clone();
-                let (label, title) = match kind {
-                    Some(kind) => (Some(format!("{kind:?}")), None),
-                    None => take_alert_marker(&mut children)
-                        .map_or((None, None), |(label, title)| (Some(label), title)),
+                collect(&node.children, &c, out);
+                // A GitHub alert names its kind, and a callout its label and
+                // title.
+                let (kind, label, mut title) = match quote {
+                    Tag::Callout(callout) => (
+                        callout.kind,
+                        callout.label.to_string(),
+                        callout.title.as_deref().map(str::to_owned),
+                    ),
+                    Tag::BlockQuote(Some(kind)) => (*kind, format!("{kind:?}"), None),
+                    _ => continue,
                 };
-                collect(&children, &c, out);
-                let Some((label, tone)) =
-                    label.and_then(|label| AlertTone::of(&label).map(|tone| (label, tone)))
-                else {
-                    continue;
-                };
+                // A callout of only its marker line shows its title as its
+                // one line, under its label, or its label alone.
+                if out.len() == start {
+                    let start = node.range.start;
+                    out.push(Leaf {
+                        node: Node {
+                            range: node.range.clone(),
+                            tag: Some(Tag::Paragraph),
+                            event: None,
+                            children: vec![Node {
+                                range: start..start,
+                                tag: None,
+                                event: Some(Event::Text(title.take().unwrap_or_default().into())),
+                                children: Vec::new(),
+                            }],
+                        },
+                        context: c.clone(),
+                        names: None,
+                    });
+                }
                 // A callout's own title stands in place of its kind.
                 if let Some(first) = out.get_mut(start) {
                     first.context.quote_kind = Some(title.unwrap_or_else(|| label.to_uppercase()));
                 }
                 let alert = Alert {
-                    tone,
+                    tone: kind.into(),
                     depth: c.quote_depth,
                 };
                 // Nested alerts collected first, so this one goes in front.
@@ -849,15 +903,26 @@ fn collect(nodes: &[Node], context: &Context, out: &mut Vec<Leaf>) {
                 c.enclosing = node.range.start;
                 collect(&node.children, &c, out);
             }
+            // A block id between blocks names the block before it.
+            None if matches!(node.event, Some(Event::BlockId(_))) => {
+                let (Some(Event::BlockId(id)), Some(previous)) =
+                    (&node.event, index.checked_sub(1))
+                else {
+                    continue;
+                };
+                out.push(Leaf {
+                    node: node.clone(),
+                    context: context.clone(),
+                    names: Some(BlockAnchor {
+                        id: id.to_string(),
+                        source: nodes[previous].borrow().range.clone(),
+                    }),
+                });
+            }
             _ if is_block(node) => out.push(Leaf {
                 node: node.clone(),
                 context: context.clone(),
-                names: index.checked_sub(1).and_then(|previous| {
-                    Some(BlockAnchor {
-                        id: id_paragraph(node)?,
-                        source: nodes[previous].range.clone(),
-                    })
-                }),
+                names: None,
             }),
             _ => {
                 if node.tag.is_some() {
@@ -908,152 +973,6 @@ fn is_block(node: &Node) -> bool {
     ) || matches!(node.event, Some(Event::Rule))
 }
 
-/// Recognize a complete blank line after the first line, across CR, LF, and
-/// CRLF endings. Lines of only spaces and tabs are blank.
-fn blank_boundary(text: &str) -> bool {
-    let bytes = text.as_bytes();
-    let mut start = 0;
-    let mut first = true;
-    while let Some(len) = bytes[start..]
-        .iter()
-        .position(|byte| matches!(byte, b'\n' | b'\r'))
-    {
-        let end = start + len;
-        if !first
-            && bytes[start..end]
-                .iter()
-                .all(|byte| matches!(byte, b' ' | b'\t'))
-        {
-            return true;
-        }
-        first = false;
-        start = end
-            + if bytes[end..].starts_with(b"\r\n") {
-                2
-            } else {
-                1
-            };
-    }
-    false
-}
-/// Recognize a complete CR, LF, or CRLF source line.
-fn complete_line(text: &str) -> bool {
-    text.ends_with('\n') || text.ends_with('\r')
-}
-/// A parser-recognized closing fence ends before its line terminator. EOF
-/// remains provisional until a terminator arrives, since an append can turn
-/// the apparent fence into code. Container-boundary closure ends after the
-/// preceding line terminator and is not an explicit fence.
-fn fence_closed(node: &Node, text: &str) -> bool {
-    text.as_bytes()
-        .get(node.range.end)
-        .is_some_and(|byte| matches!(byte, b'\n' | b'\r'))
-        && !text[..node.range.end].ends_with(['\n', '\r'])
-}
-/// Apply explicit HTML terminators and blank-line closure rules.
-fn html_closed(raw: &str) -> bool {
-    let lower = raw.trim_start().to_ascii_lowercase();
-    let delimiter = if lower.starts_with("<!--") {
-        Some("-->")
-    } else if lower.starts_with("<?") {
-        Some("?>")
-    } else if lower.starts_with("<![cdata[") {
-        Some("]]>")
-    } else if lower.starts_with("<!") {
-        Some(">")
-    } else if lower.starts_with("<script") {
-        Some("</script>")
-    } else if lower.starts_with("<pre") {
-        Some("</pre>")
-    } else if lower.starts_with("<style") {
-        Some("</style>")
-    } else if lower.starts_with("<textarea") {
-        Some("</textarea>")
-    } else {
-        None
-    };
-    delimiter.is_some_and(|delimiter| lower.contains(delimiter)) || blank_boundary(raw)
-}
-// RefDefs retains only the winning definition. Recover invisible duplicate
-// blocks from source lines as well, so the last duplicate cannot disappear
-// while receiving.
-/// Recover invisible duplicate definition blocks omitted from RefDefs.
-fn definition_records(
-    text: &str,
-    leaves: &[Leaf],
-    mut definitions: Vec<Range<usize>>,
-) -> Vec<Range<usize>> {
-    let mut offset = 0;
-    let mut leaf_index = 0;
-    let mut starts: HashSet<_> = definitions.iter().map(|range| range.start).collect();
-    for line in text.split_inclusive('\n') {
-        let mut content = line.trim_start_matches(' ');
-        // Container prefixes are syntax; the label retains its absolute source
-        // position.
-        while let Some(rest) = content.strip_prefix('>') {
-            content = rest.trim_start_matches(' ');
-        }
-        let start = offset + line.len() - content.len();
-        while leaf_index < leaves.len() && leaves[leaf_index].node.range.end <= start {
-            leaf_index += 1;
-        }
-        let painted = leaves
-            .get(leaf_index)
-            .is_some_and(|leaf| leaf.node.range.contains(&start));
-        if !painted
-            && content.starts_with('[')
-            && !content.starts_with("[^")
-            && content.find("]:").is_some_and(|end| end > 1)
-            && !starts.contains(&start)
-        {
-            let following = leaves
-                .get(leaf_index)
-                .filter(|leaf| leaf.node.range.start > start)
-                .map_or(text.len(), |leaf| leaf.node.range.start);
-            definitions.push(start..following);
-            starts.insert(start);
-        }
-        offset += line.len();
-    }
-    definitions
-}
-/// Classify the final source leaf or invisible definition while receiving.
-fn provisional_region(
-    text: &str,
-    leaves: &[Leaf],
-    definitions: &[Range<usize>],
-) -> Option<Range<usize>> {
-    let leaf = leaves.iter().max_by_key(|l| l.node.range.start);
-    let definition = definitions.iter().max_by_key(|r| r.start);
-    if let Some(def) = definition.filter(|r| leaf.is_none_or(|l| r.start > l.node.range.start)) {
-        let after = &text[def.end.min(text.len())..];
-        // A definition can gain a title on the following line until a blank
-        // line or another block.
-        if blank_boundary(&text[def.start..]) || !after.trim().is_empty() {
-            return None;
-        }
-        return Some(def.start..text.len());
-    }
-    let leaf = leaf?;
-    let raw = &text[leaf.node.range.start..];
-    let closed = match leaf.node.tag.as_ref() {
-        Some(Tag::CodeBlock(CodeBlockKind::Fenced(_))) => fence_closed(&leaf.node, text),
-        Some(Tag::CodeBlock(CodeBlockKind::Indented)) => {
-            blank_boundary(&text[leaf.node.range.end..])
-        }
-        Some(Tag::Heading { .. }) => complete_line(raw),
-        Some(Tag::Table(_)) => false,
-        Some(Tag::HtmlBlock) => html_closed(raw),
-        Some(Tag::MetadataBlock(_)) => raw
-            .lines()
-            .skip(1)
-            .any(|line| matches!(line.trim(), "---" | "...")),
-        _ if matches!(leaf.node.event, Some(Event::Rule)) => complete_line(raw),
-        _ => blank_boundary(raw),
-    };
-    (!closed).then_some(leaf.node.range.start..text.len())
-}
-
 /// Worker-local semantic construction and identity reconciliation.
 struct Builder<'a> {
     /// The semantic snapshot under construction.
@@ -1069,7 +988,7 @@ impl Builder<'_> {
     /// Interpret a table leaf, or a source card past the cell limit.
     fn table_leaf(&mut self, leaf: &Leaf, alignments: &[Alignment], text: &str) -> Interpreted {
         if count_cells(&leaf.node) > self.limits.max_table_cells {
-            self.document.degraded = true;
+            self.document.degraded = Some("table cell limit".into());
             return (
                 BlockKind::Source {
                     reason: "Table cell limit".into(),
@@ -1079,7 +998,7 @@ impl Builder<'_> {
                 true,
             );
         }
-        let table = self.table(&leaf.node, alignments, leaf.context.enclosing, text);
+        let table = self.table(&leaf.node, alignments, leaf.context.enclosing);
         let payload = table_text(&table);
         (BlockKind::Table(table), UnitKind::Table, payload, true)
     }
@@ -1140,31 +1059,11 @@ impl Builder<'_> {
             self.document.block_anchors.push(BlockAnchor { id, source });
         }
     }
-    /// Index a trailing block marker on `payload` and drop it from the
-    /// readable text, its spans, and its breaks.
-    fn strip_block_id(
-        &mut self,
-        payload: &mut String,
-        spans: &mut [InlineSpan],
-        soft_breaks: &mut Vec<usize>,
-        source: &Range<usize>,
-    ) {
-        let Some((at, id)) = trailing_block_id(payload) else {
-            return;
-        };
-        // A `^` in code or a link label is its text, not a marker.
-        if spans.iter().any(|span| {
-            span.range.end > at && matches!(span.role, InlineRole::Code | InlineRole::Link)
-        }) {
-            return;
+    /// Index the block id that ends a block's inline `nodes`, if one does.
+    fn trailing_id(&mut self, nodes: &[Node], source: &Range<usize>) {
+        if let Some(Event::BlockId(id)) = nodes.last().and_then(|node| node.event.as_ref()) {
+            self.anchor(id.to_string(), source.clone());
         }
-        self.anchor(id.to_owned(), source.clone());
-        payload.truncate(at);
-        for span in spans {
-            span.range.start = span.range.start.min(at);
-            span.range.end = span.range.end.min(at);
-        }
-        soft_breaks.retain(|offset| *offset < at);
     }
     /// Reuse the latest active identity or allocate a never-recycled one.
     fn id(&mut self, start: usize, role: &str, enclosing: usize) -> u64 {
@@ -1243,11 +1142,10 @@ impl Builder<'_> {
                     (BlockKind::Rule, UnitKind::Separator, String::new(), false)
                 }
                 _ if lone_image(&leaf.node).is_some() => {
-                    let image = lone_image(&leaf.node).expect("checked");
+                    let (image, note) = lone_image(&leaf.node).expect("checked");
                     // It reads, and copies, as an inline image does.
                     let payload = image_text(&image.link.label, &image.link.destination);
-                    // A wikilink embed of anything but an image embeds a note.
-                    let kind = if image.link.wiki && !names_image(&image.link.destination) {
+                    let kind = if note {
                         BlockKind::Embed(image)
                     } else {
                         BlockKind::Image(image)
@@ -1256,13 +1154,13 @@ impl Builder<'_> {
                     (kind, UnitKind::Prose, payload, true)
                 }
                 _ => {
-                    let mut payload = inline(
+                    let payload = inline(
                         &leaf.node.children,
                         &mut spans,
                         &mut links,
                         &mut soft_breaks,
                     );
-                    self.strip_block_id(&mut payload, &mut spans, &mut soft_breaks, &range);
+                    self.trailing_id(&leaf.node.children, &range);
                     let kind = match leaf.node.tag.as_ref() {
                         Some(Tag::Heading { level, .. }) => BlockKind::Heading {
                             level: *level as u8,
@@ -1319,23 +1217,8 @@ impl Builder<'_> {
                     },
                 });
             }
-            let mut bare_sources: HashMap<(usize, usize), Vec<Range<usize>>> = HashMap::new();
-            for mut pending in links {
-                if let Some(index) = pending.bare_index {
-                    let positions = bare_sources
-                        .entry((pending.source.start, pending.source.end))
-                        .or_insert_with(|| bare_url_ranges(&text[pending.source.clone()]));
-                    if let Some(found) = positions.get(index) {
-                        pending.source =
-                            pending.source.start + found.start..pending.source.start + found.end;
-                        pending.identity_offset = 0;
-                    }
-                }
-                let object_id = self.id(
-                    pending.source.start,
-                    &format!("link:{}", pending.identity_offset),
-                    range.start,
-                );
+            for pending in links {
+                let object_id = self.id(pending.source.start, "link", range.start);
                 if let Some(span) = spans.get_mut(pending.span) {
                     span.object = Some(object_id);
                 }
@@ -1354,7 +1237,7 @@ impl Builder<'_> {
                 source: range.clone(),
                 level: *level,
                 text: payload.clone(),
-                slug: String::new(),
+                slug: heading_id(leaf.node.tag.as_ref()),
             });
         }
         if let Some(last) = self.document.blocks.last_mut() {
@@ -1393,13 +1276,7 @@ impl Builder<'_> {
         });
     }
     /// Adapt parser table structure without splitting source on pipes.
-    fn table(
-        &mut self,
-        node: &Node,
-        alignments: &[Alignment],
-        enclosing: usize,
-        text: &str,
-    ) -> MarkdownTable {
+    fn table(&mut self, node: &Node, alignments: &[Alignment], enclosing: usize) -> MarkdownTable {
         let columns = alignments.len();
         let mut headers = Vec::new();
         let mut rows = Vec::new();
@@ -1408,17 +1285,11 @@ impl Builder<'_> {
             if !matches!(row.tag, Some(Tag::TableHead | Tag::TableRow)) {
                 continue;
             }
-            if let Some(last) = row
+            // The parser drops cells past the header's count, and says so.
+            ignored_excess |= row
                 .children
                 .iter()
-                .filter(|n| matches!(n.tag, Some(Tag::TableCell)))
-                .nth(columns.saturating_sub(1))
-            {
-                let tail = text.get(last.range.end..row.range.end).unwrap_or("").trim();
-                if !tail.is_empty() && tail != "|" {
-                    ignored_excess = true;
-                }
-            }
+                .any(|cell| matches!(cell.event, Some(Event::IgnoredCells(_))));
             let mut cells = Vec::new();
             for (index, cell) in row
                 .children
@@ -1523,10 +1394,6 @@ struct PendingLink {
     source: Range<usize>,
     /// Index of the corresponding readable style span.
     span: usize,
-    /// Occurrence discriminator when exact bare source mapping is unavailable.
-    identity_offset: usize,
-    /// Bare URL occurrence within one merged text event.
-    bare_index: Option<usize>,
     /// The admitted interaction target payload.
     kind: ObjectKind,
 }
@@ -1538,7 +1405,7 @@ fn inline(
     soft_breaks: &mut Vec<usize>,
 ) -> String {
     let mut out = String::new();
-    append_inline(nodes, &mut out, spans, links, soft_breaks, false);
+    append_inline(nodes, &mut out, spans, links, soft_breaks);
     out
 }
 /// A leaf's interpretation: its block kind, unit kind, readable payload, and
@@ -1600,72 +1467,13 @@ fn properties(yaml: &str) -> Option<Vec<(String, String)>> {
     }
     (!properties.is_empty()).then_some(properties)
 }
-/// Interpret Obsidian's inline marks in one text run: a `%%comment%%` is
-/// dropped, `==highlight==` markers are dropped around the text they mark,
-/// and a `#tag` is marked. An unclosed `%%` or `==` stays as written, as does
-/// an `==` that opens before a space or closes after one.
-fn obsidian_text(raw: &str) -> (String, Vec<(Range<usize>, InlineRole)>) {
-    let mut out = String::with_capacity(raw.len());
-    let mut marks = Vec::new();
-    let mut rest = raw;
-    let mut highlight = None;
-    loop {
-        let next = [rest.find("%%"), rest.find("==")]
-            .into_iter()
-            .flatten()
-            .min();
-        let Some(at) = next else {
-            out.push_str(rest);
-            break;
-        };
-        out.push_str(&rest[..at]);
-        let marker = &rest[at..at + 2];
-        rest = &rest[at + 2..];
-        if marker == "%%" {
-            match rest.find("%%") {
-                Some(end) => {
-                    rest = &rest[end + 2..];
-                    // A comment between words leaves one space, not two.
-                    if out.ends_with(' ') && rest.starts_with(' ') {
-                        rest = &rest[1..];
-                    }
-                }
-                None => out.push_str(marker),
-            }
-        } else if let Some(begin) = highlight
-            && begin < out.len()
-            && !out.ends_with(char::is_whitespace)
-        {
-            highlight = None;
-            marks.push((begin..out.len(), InlineRole::Highlight));
-        } else if highlight.is_none()
-            && !rest.starts_with(char::is_whitespace)
-            && rest.contains("==")
-        {
-            highlight = Some(out.len());
-        } else {
-            out.push_str(marker);
-        }
+/// The unique GitHub id the parser gave a heading, or "" for a heading of no
+/// text.
+fn heading_id(tag: Option<&Tag<'_>>) -> String {
+    match tag {
+        Some(Tag::Heading { id: Some(id), .. }) => id.to_string(),
+        _ => String::new(),
     }
-    // A highlight whose only closer follows a space never closes.
-    if let Some(begin) = highlight {
-        out.insert_str(begin, "==");
-    }
-    let mut previous = None;
-    for (at, ch) in out.char_indices() {
-        let starts_word = previous.is_none_or(char::is_whitespace);
-        previous = Some(ch);
-        if ch != '#' || !starts_word {
-            continue;
-        }
-        let name = out[at + 1..]
-            .find(|c: char| !(c.is_alphanumeric() || matches!(c, '_' | '-' | '/')))
-            .map_or(&out[at + 1..], |end| &out[at + 1..at + 1 + end]);
-        if !name.is_empty() && !name.chars().all(|c| c.is_ascii_digit()) {
-            marks.push((at..at + 1 + name.len(), InlineRole::Tag));
-        }
-    }
-    (out, marks)
 }
 /// An image's readable text: its label, then its destination unless the
 /// label already names it, as an unlabelled embed's does.
@@ -1676,17 +1484,9 @@ fn image_text(label: &str, destination: &str) -> String {
         format!("{label} ({destination})")
     }
 }
-/// Whether `destination` names an image file, by its extension.
-fn names_image(destination: &str) -> bool {
-    let path = destination.split(['#', '?']).next().unwrap_or(destination);
-    path.rsplit_once('.').is_some_and(|(_, extension)| {
-        ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"]
-            .iter()
-            .any(|known| extension.eq_ignore_ascii_case(known))
-    })
-}
-/// The image a paragraph holds alone, beside whitespace.
-fn lone_image(node: &Node) -> Option<ImageBlock> {
+/// The image or embed a paragraph holds alone, beside whitespace, and
+/// whether it embeds a note.
+fn lone_image(node: &Node) -> Option<(ImageBlock, bool)> {
     if !matches!(node.tag, Some(Tag::Paragraph)) {
         return None;
     }
@@ -1698,91 +1498,37 @@ fn lone_image(node: &Node) -> Option<ImageBlock> {
     if rest.next().is_some() {
         return None;
     }
-    let Some(Tag::Image {
-        link_type,
-        dest_url,
-        title,
-        ..
-    }) = &image.tag
-    else {
-        return None;
-    };
-    let wiki = matches!(link_type, LinkType::WikiLink { .. });
     let label = plain(&image.children);
-    // An Obsidian image's label after `|` is its size when it reads as one.
-    let size = wiki
-        .then(|| {
-            let (width, height) = match label.trim().split_once('x') {
-                Some((width, height)) => (width, Some(height)),
-                None => (label.trim(), None),
-            };
-            Some((
-                width.parse::<u32>().ok()?,
-                height.map(str::parse::<u32>).transpose().ok()?,
-            ))
-        })
-        .flatten();
-    let alt = if size.is_some() || (wiki && label.trim() == dest_url.as_ref()) {
-        wiki_label(dest_url)
-    } else {
-        label
-    };
-    Some(ImageBlock {
-        link: Link {
-            label: alt,
-            destination: dest_url.to_string(),
-            title: title.to_string(),
-            wiki,
-        },
-        width: size.map(|(width, _)| width),
-        height: size.and_then(|(_, height)| height),
-    })
-}
-/// The id of a paragraph of only an Obsidian block marker, `^id`, in plain
-/// text rather than code or a link.
-fn id_paragraph(node: &Node) -> Option<String> {
-    if !matches!(node.tag, Some(Tag::Paragraph))
-        || !node
-            .children
-            .iter()
-            .all(|child| matches!(child.event, Some(Event::Text(_))))
-    {
-        return None;
-    }
-    let text = raw_text(&node.children);
-    let id = text.trim().strip_prefix('^')?;
-    (!id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
-        .then(|| id.to_owned())
-}
-/// A trailing Obsidian block marker, ` ^id`: where the text before it ends,
-/// and the id.
-fn trailing_block_id(text: &str) -> Option<(usize, &str)> {
-    let trimmed = text.trim_end();
-    let caret = trimmed.rfind('^')?;
-    let id = &trimmed[caret + 1..];
-    let before = &trimmed[..caret];
-    let valid = !id.is_empty()
-        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
-        && before.ends_with(char::is_whitespace)
-        && !before.trim().is_empty();
-    valid.then(|| (before.trim_end().len(), id))
-}
-/// The label Obsidian shows for an unlabelled wikilink: its target without a
-/// `.md` extension, with its anchor after `›`.
-fn wiki_label(target: &str) -> String {
-    let (path, anchor) = match target.split_once('#') {
-        Some((path, anchor)) => (path.trim(), Some(anchor.trim())),
-        None => (target.trim(), None),
-    };
-    let path = path
-        .len()
-        .checked_sub(3)
-        .filter(|at| path.is_char_boundary(*at) && path[*at..].eq_ignore_ascii_case(".md"))
-        .map_or(path, |at| &path[..at]);
-    match anchor {
-        Some(anchor) if path.is_empty() => anchor.to_owned(),
-        Some(anchor) => format!("{path} › {anchor}"),
-        None => path.to_owned(),
+    match &image.tag {
+        Some(Tag::Image {
+            dest_url, title, ..
+        }) => Some((
+            ImageBlock {
+                link: Link {
+                    label,
+                    destination: dest_url.to_string(),
+                    title: title.to_string(),
+                    wiki: false,
+                },
+                width: None,
+                height: None,
+            },
+            false,
+        )),
+        Some(Tag::Embed(embed)) => Some((
+            ImageBlock {
+                link: Link {
+                    label,
+                    destination: embed.target.to_string(),
+                    title: String::new(),
+                    wiki: true,
+                },
+                width: embed.width,
+                height: embed.height,
+            },
+            embed.kind == EmbedKind::Note,
+        )),
+        _ => None,
     }
 }
 /// Append readable inline content without interpreting terminal controls.
@@ -1792,35 +1538,28 @@ fn append_inline(
     spans: &mut Vec<InlineSpan>,
     links: &mut Vec<PendingLink>,
     soft_breaks: &mut Vec<usize>,
-    exclude_bare: bool,
 ) {
     for node in nodes {
         let start = out.len();
         if let Some(tag) = &node.tag {
-            let excluded = exclude_bare || matches!(tag, Tag::Link { .. } | Tag::Image { .. });
             let child_spans = spans.len();
-            append_inline(&node.children, out, spans, links, soft_breaks, excluded);
-            // An unlabelled wikilink shows its target as Obsidian does.
-            if let Tag::Link {
-                link_type: LinkType::WikiLink { has_pothole: false },
-                dest_url,
-                ..
-            } = tag
-            {
-                out.truncate(start);
-                spans.truncate(child_spans);
-                soft_breaks.retain(|at| *at < start);
-                out.push_str(&wiki_label(dest_url));
-            }
-            if let Tag::Image { dest_url, .. } = tag {
+            append_inline(&node.children, out, spans, links, soft_breaks);
+            let image = match tag {
+                Tag::Image { dest_url, .. } => Some(dest_url.as_ref()),
+                Tag::Embed(embed) => Some(embed.target.as_ref()),
+                _ => None,
+            };
+            if let Some(destination) = image {
                 let label = out[start..].to_owned();
                 out.truncate(start);
-                out.push_str(&image_text(&label, dest_url));
+                spans.truncate(child_spans);
+                out.push_str(&image_text(&label, destination));
             }
             let role = match tag {
                 Tag::Emphasis => Some(InlineRole::Emphasis),
                 Tag::Strong => Some(InlineRole::Strong),
                 Tag::Strikethrough => Some(InlineRole::Strike),
+                Tag::Highlight => Some(InlineRole::Highlight),
                 Tag::Link { .. } => Some(InlineRole::Link),
                 _ => None,
             };
@@ -1841,8 +1580,6 @@ fn append_inline(
                     links.push(PendingLink {
                         source: node.range.clone(),
                         span,
-                        identity_offset: 0,
-                        bare_index: None,
                         kind: ObjectKind::Link(Link {
                             label: out[start..].into(),
                             destination: dest_url.to_string(),
@@ -1854,45 +1591,18 @@ fn append_inline(
             }
         } else {
             match &node.event {
-                Some(Event::Text(raw)) => {
-                    let (text, marks) = obsidian_text(raw);
-                    out.push_str(&text);
-                    let urls = if exclude_bare {
-                        Vec::new()
-                    } else {
-                        bare_url_ranges(&text)
-                    };
-                    // A URL outranks a mark it overlaps: spans pushed later
-                    // win.
-                    for (range, role) in marks {
-                        spans.push(InlineSpan {
-                            range: start + range.start..start + range.end,
-                            role,
-                            object: None,
-                        });
-                    }
-                    for (bare_index, found) in urls.into_iter().enumerate() {
-                        let span = spans.len();
-                        let label = text[found.clone()].to_owned();
-                        spans.push(InlineSpan {
-                            range: start + found.start..start + found.end,
-                            role: InlineRole::Link,
-                            object: None,
-                        });
-                        links.push(PendingLink {
-                            source: node.range.clone(),
-                            span,
-                            identity_offset: found.start,
-                            bare_index: Some(bare_index),
-                            kind: ObjectKind::Link(Link {
-                                label: label.clone(),
-                                destination: label,
-                                title: String::new(),
-                                wiki: false,
-                            }),
-                        });
-                    }
+                Some(Event::Text(text)) => out.push_str(text),
+                Some(Event::Hashtag(name)) => {
+                    out.push('#');
+                    out.push_str(name);
+                    spans.push(InlineSpan {
+                        range: start..out.len(),
+                        role: InlineRole::Tag,
+                        object: None,
+                    });
                 }
+                // A block id names its block, and shows nothing.
+                Some(Event::BlockId(_)) => {}
                 // Math shows as code.
                 Some(Event::InlineMath(text) | Event::DisplayMath(text)) => {
                     out.push_str(text);
@@ -1919,6 +1629,12 @@ fn append_inline(
                 Some(Event::TaskListMarker(done)) => {
                     out.push_str(if *done { "[x] " } else { "[ ] " })
                 }
+                // Another state reads as Obsidian writes it.
+                Some(Event::TaskState(state)) => {
+                    out.push('[');
+                    out.push(*state);
+                    out.push_str("] ");
+                }
                 Some(Event::FootnoteReference(label)) => {
                     out.push('[');
                     out.push_str(label);
@@ -1932,8 +1648,6 @@ fn append_inline(
                     links.push(PendingLink {
                         source: node.range.clone(),
                         span,
-                        identity_offset: 0,
-                        bare_index: None,
                         kind: ObjectKind::Footnote {
                             label: label.to_string(),
                         },
@@ -2001,27 +1715,39 @@ pub fn parse_document(
             outline: Vec::new(),
             block_anchors: Vec::new(),
             provisional: None,
-            degraded: false,
+            degraded: None,
             identities: HashMap::new(),
             unit_index: HashMap::new(),
             estimated_bytes: 0,
+            parse: None,
         },
         previous,
         limits,
         quotes: Vec::new(),
     };
-    let Some((initial, definitions)) = tree(&text, limits) else {
-        builder.document.degraded = true;
+    // Comments are hidden before parsing. Every byte keeps its offset, so
+    // source ranges still index `text`, which source cards show.
+    let parsed = canopy_xmark::hide_comments(&text, Options::obsidian());
+    let Some(Parsed {
+        roots,
+        events,
+        marks,
+        definitions,
+        watch,
+        resume,
+    }) = parse_tree(&parsed, source, limits, previous)
+    else {
+        builder.document.degraded = Some("node or depth limit".into());
         builder.source_fallback(&text, "Semantic node or depth limit");
         builder.document.estimated_bytes = builder.document.estimate_bytes();
         return builder.document;
     };
     let mut leaves = Vec::new();
-    collect(&initial, &Context::default(), &mut leaves);
-    let definitions = definition_records(&text, &leaves, definitions);
-    if !source.lifecycle.is_complete() {
-        builder.document.provisional = provisional_region(&text, &leaves, &definitions);
-    }
+    collect(&roots, &Context::default(), &mut leaves);
+    let tail = (!source.lifecycle.is_complete())
+        .then(|| watch.open_tail(&parsed, &definitions))
+        .flatten();
+    builder.document.provisional = tail.as_ref().map(|tail| tail.start..text.len());
     if let Some(region) = &builder.document.provisional {
         let excluded: Vec<_> = definitions
             .iter()
@@ -2029,7 +1755,7 @@ pub fn parse_document(
             .cloned()
             .collect();
         if !excluded.is_empty() {
-            let mut bytes = text.as_bytes().to_vec();
+            let mut bytes = parsed.as_bytes().to_vec();
             for range in excluded {
                 for byte in &mut bytes[range] {
                     if *byte != b'\n' && *byte != b'\r' {
@@ -2039,16 +1765,13 @@ pub fn parse_document(
             }
             let masked =
                 String::from_utf8(bytes).expect("offset-preserving ASCII masks preserve UTF-8");
-            if let Some((nodes, _)) = tree(&masked, limits) {
+            if let Some(masked) = tree(&masked, limits, 0, &Resume::default(), Default::default()) {
                 leaves.clear();
-                collect(&nodes, &Context::default(), &mut leaves);
+                collect(&masked.roots, &Context::default(), &mut leaves);
             }
             let range = region.clone();
             let line_start = text[..range.start].rfind('\n').map_or(0, |at| at + 1);
-            let quote_depth = text[line_start..range.start]
-                .chars()
-                .filter(|ch| *ch == '>')
-                .count();
+            let quote_depth = tail.as_ref().map_or(0, |tail| tail.quote_depth);
             leaves.push(Leaf {
                 node: Node {
                     range,
@@ -2067,25 +1790,7 @@ pub fn parse_document(
         }
     }
     leaves.sort_by_key(|leaf| leaf.node.range.start);
-    let mut in_comment = false;
     for leaf in &leaves {
-        // An Obsidian `%%` comment that spans blocks hides them all, through
-        // the block that closes it.
-        if in_comment {
-            in_comment = !text[leaf.node.range.clone()].trim_end().ends_with("%%");
-            continue;
-        }
-        if matches!(leaf.node.tag, Some(Tag::Paragraph)) {
-            let readable = plain(&leaf.node.children);
-            let readable = readable.trim();
-            if readable.starts_with("%%") {
-                in_comment = !(readable.len() >= 4 && readable.ends_with("%%"));
-                continue;
-            }
-            if readable.is_empty() && text[leaf.node.range.clone()].contains("%%") {
-                continue;
-            }
-        }
         // A paragraph of only a block id marks the block before it, and
         // shows nothing itself.
         if let Some(named) = &leaf.names {
@@ -2094,91 +1799,17 @@ pub fn parse_document(
         }
         builder.leaf(leaf, &text);
     }
-    let mut slugs = HashMap::<String, usize>::new();
-    let mut used_slugs = HashSet::new();
-    for heading in &mut builder.document.outline {
-        let base = heading_slug(&heading.text);
-        let count = slugs.entry(base.clone()).or_default();
-        loop {
-            let slug = if *count == 0 {
-                base.clone()
-            } else {
-                format!("{base}-{count}")
-            };
-            *count += 1;
-            if used_slugs.insert(slug.clone()) {
-                heading.slug = slug;
-                break;
-            }
-        }
-    }
+    builder.document.parse = Some(Arc::new(ParseCache {
+        roots,
+        events,
+        marks,
+        definitions,
+        resume,
+    }));
     builder.document.estimated_bytes = builder.document.estimate_bytes();
     builder.document
 }
 
-/// Lowercase Unicode letters/digits, retain `_` and `-`, replace whitespace
-/// with `-`. Punctuation is omitted; repeated headings gain source-order `-1`,
-/// `-2` suffixes.
-pub fn heading_slug(text: &str) -> String {
-    text.chars()
-        .flat_map(char::to_lowercase)
-        .filter_map(|c| {
-            if c.is_alphanumeric() || matches!(c, '_' | '-') {
-                Some(c)
-            } else if c.is_whitespace() {
-                Some('-')
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-/// Recognize HTTP(S) URLs in ordinary text, balancing parentheses and trimming
-/// punctuation.
-pub fn bare_url_ranges(text: &str) -> Vec<Range<usize>> {
-    let mut out = Vec::new();
-    let mut at = 0;
-    while at < text.len() {
-        let rest = &text[at..];
-        let boundary = text[..at]
-            .chars()
-            .next_back()
-            .is_none_or(|c| c.is_whitespace() || matches!(c, '(' | '*' | '_' | '~'));
-        if boundary && (rest.starts_with("https://") || rest.starts_with("http://")) {
-            let mut end = rest
-                .find(|c: char| c.is_whitespace() || matches!(c, '<' | '>' | '\u{0}'))
-                .unwrap_or(rest.len());
-            let opens = rest[..end].bytes().filter(|byte| *byte == b'(').count();
-            let mut closes = rest[..end].bytes().filter(|byte| *byte == b')').count();
-            loop {
-                let url = &rest[..end];
-                let Some(last) = url.chars().next_back() else {
-                    break;
-                };
-                if matches!(
-                    last,
-                    '.' | ',' | ':' | ';' | '!' | '?' | '\'' | '"' | '*' | '_' | '~'
-                ) || last == ')' && closes > opens
-                {
-                    end -= last.len_utf8();
-                    if last == ')' {
-                        closes -= 1;
-                    }
-                } else {
-                    break;
-                }
-            }
-            if url::Url::parse(&rest[..end]).is_ok() {
-                out.push(at..at + end);
-                at += end;
-                continue;
-            }
-        }
-        at += rest.chars().next().map_or(1, char::len_utf8);
-    }
-    out
-}
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// A destination classified without filesystem inference or shell
 /// interpolation.
@@ -2215,7 +1846,7 @@ pub fn resolve_link(destination: &str, base: Option<&url::Url>) -> ResolvedLink 
         return ResolvedLink::Unavailable("URL contains control characters".into());
     }
     if let Some(fragment) = destination.strip_prefix('#') {
-        let fragment = percent_decoded(fragment);
+        let fragment = percent_decode(fragment);
         if fragment.is_empty() {
             return ResolvedLink::Unavailable("Link names no anchor".into());
         }
@@ -2235,20 +1866,9 @@ pub fn resolve_link(destination: &str, base: Option<&url::Url>) -> ResolvedLink 
         Err(_) => ResolvedLink::Unavailable("Relative URL needs a valid host base URL".into()),
     }
 }
-/// Decode `text`'s percent escapes, keeping any that do not form UTF-8.
-fn percent_decoded(text: &str) -> String {
-    percent_encoding::percent_decode_str(text)
-        .decode_utf8_lossy()
-        .into_owned()
-}
 /// Split a local destination into its decoded path and fragment.
 fn local_link(destination: &str) -> ResolvedLink {
-    let (path, fragment) = match destination.split_once('#') {
-        Some((path, fragment)) => (path, Some(percent_decoded(fragment))),
-        None => (destination, None),
-    };
-    let fragment = fragment.filter(|fragment| !fragment.is_empty());
-    let path = percent_decoded(path.split_once('?').map_or(path, |(path, _)| path));
+    let LinkTarget { path, fragment } = split_destination(destination);
     if path.is_empty() {
         return ResolvedLink::Unavailable("Link names no document".into());
     }
@@ -2274,6 +1894,62 @@ mod tests {
         let mut s = SourceStore::stream();
         s.append(text).unwrap();
         parse_document(&s.snapshot(), &ParseLimits::default(), None)
+    }
+    /// What a document reads as, apart from its identities.
+    fn reading(doc: &DocumentSnapshot) -> String {
+        let mut out = format!("{:?}\n{:?}\n", doc.provisional, doc.degraded);
+        for (block, unit) in doc.blocks.iter().zip(&doc.units) {
+            // Table cells carry identities, which a fresh parse allocates
+            // anew.
+            let kind = format!("{:?}", block.kind);
+            let mut kind = kind.as_str();
+            let mut plain = String::new();
+            while let Some(at) = kind.find("key: ") {
+                plain.push_str(&kind[..at]);
+                kind = kind[at + 5..].trim_start_matches(|c: char| c.is_ascii_digit());
+            }
+            plain.push_str(kind);
+            out.push_str(&format!(
+                "{:?} {plain} {:?} {:?} {:?}\n",
+                block.source, block.quote_kind, block.alerts, unit.text
+            ));
+        }
+        for entry in &doc.outline {
+            out.push_str(&format!("{} {}\n", entry.slug, entry.text));
+        }
+        for anchor in &doc.block_anchors {
+            out.push_str(&format!("{} {:?}\n", anchor.id, anchor.source));
+        }
+        for object in &doc.objects {
+            out.push_str(&format!("{:?} {:?}\n", object.source, object.kind));
+        }
+        out
+    }
+    #[test]
+    fn an_inline_footnote_reads_as_a_footnote() {
+        let doc = complete("Text^[an inline note].\n\nAfter.\n");
+        let readable: Vec<&str> = doc.units.iter().map(|unit| unit.text.as_str()).collect();
+        assert_eq!(readable, ["Text[inline-1].", "an inline note", "After."]);
+        assert!(matches!(doc.blocks[1].kind, BlockKind::Footnote { .. }));
+    }
+    #[test]
+    fn a_stream_parsed_in_pieces_reads_as_a_whole_parse() {
+        let text = "# Intro\n\nSee [the site][site], a note[^n], and #tag.\n\n[site]: https://example.com\n\n[^n]: The note.\n\n# Intro\n\n> [!tip] Water\n> Drink.\n\n- one\n- two ^two\n\n^list\n\n| a | b |\n| - | - |\n| 1 | 2 | 3 |\n\n```rust\nfn main() {}\n```\n\nAgain [site] and[^n] [[Note#Intro]].\n\n## Later\n\nA long paragraph\nthat wraps\nover lines.\n\n# Intro\n";
+        let mut store = SourceStore::stream();
+        let mut previous: Option<DocumentSnapshot> = None;
+        for chunk in text.as_bytes().chunks(7) {
+            store.append(str::from_utf8(chunk).unwrap()).unwrap();
+            let snapshot = store.snapshot();
+            let pieces = parse_document(&snapshot, &ParseLimits::default(), previous.as_ref());
+            let whole = parse_document(&snapshot, &ParseLimits::default(), None);
+            assert_eq!(
+                reading(&pieces),
+                reading(&whole),
+                "at {} bytes",
+                snapshot.len()
+            );
+            previous = Some(pieces);
+        }
     }
     fn assert_spans(doc: &DocumentSnapshot) {
         let text = doc.source.text();
@@ -2496,12 +2172,6 @@ mod tests {
     }
     #[test]
     fn whitespace_only_lines_are_blank_boundaries() {
-        for text in ["a\r\nb", "a\n  ", "\nb\n", "a\r"] {
-            assert!(!blank_boundary(text), "{text:?}");
-        }
-        for text in ["a\n\n", "a\r\n\r\n", "a\r\r", "a\n \t\n", "a\r\n  \r\nb"] {
-            assert!(blank_boundary(text), "{text:?}");
-        }
         let doc = receiving("see https://example.com\n \t\n");
         assert_eq!(doc.provisional, None);
         assert!(
@@ -2582,7 +2252,7 @@ mod tests {
                 },
                 None,
             );
-            assert!(doc.degraded);
+            assert!(doc.degraded.is_some());
             assert_eq!(doc.readable_text(), text);
         }
         let source = SourceStore::static_text("A | B\n- | -\nx | y").unwrap();
@@ -2594,7 +2264,7 @@ mod tests {
             },
             None,
         );
-        assert!(doc.degraded);
+        assert!(doc.degraded.is_some());
         assert_eq!(doc.readable_text(), &*source.snapshot().text());
     }
     #[test]
@@ -2847,6 +2517,23 @@ mod tests {
     }
 
     #[test]
+    fn percent_signs_in_code_open_no_comment() {
+        let doc = complete(
+            "`%%…%%` marks a comment.\n\n%%a%% shows the rest.\n\n```\n%%\n```\n\nAfter.\n",
+        );
+        let readable: Vec<&str> = doc.units.iter().map(|unit| unit.text.as_str()).collect();
+        assert_eq!(
+            readable,
+            [
+                "%%…%% marks a comment.",
+                "shows the rest.",
+                "%%\n",
+                "After."
+            ]
+        );
+    }
+
+    #[test]
     fn callouts_take_their_titles_and_front_matter_reads_as_properties() {
         let doc = complete(
             "---\ntitle: \"Trip\"\ntags: [a, b]\naliases:\n  - one\n  - two\n---\n\n> [!tip]- Pack light\n> Take less.\n",
@@ -2938,7 +2625,8 @@ mod tests {
                     },
                     None
                 )
-                .degraded,
+                .degraded
+                .is_some(),
                 degraded
             );
         }
@@ -2952,7 +2640,8 @@ mod tests {
                     },
                     None
                 )
-                .degraded,
+                .degraded
+                .is_some(),
                 degraded
             );
         }
@@ -2969,7 +2658,8 @@ mod tests {
                     },
                     None
                 )
-                .degraded,
+                .degraded
+                .is_some(),
                 degraded
             );
         }
@@ -3011,6 +2701,29 @@ mod tests {
         assert_eq!(doc.blocks[3].list_marker.as_deref(), Some("4."));
     }
     #[test]
+    fn a_callout_of_only_its_marker_line_keeps_that_line() {
+        let doc = complete("> [!tip]- Remember water\n");
+        assert_eq!(doc.blocks[0].quote_kind.as_deref(), Some("TIP"));
+        assert_eq!(doc.units[0].text, "Remember water", "the title is its line");
+        for (text, kind) in [("> [!tip]\n", "TIP"), ("> [!info]-\n", "INFO")] {
+            let doc = complete(text);
+            assert_eq!(
+                doc.blocks.len(),
+                1,
+                "{text:?}: a bare marker shows its label"
+            );
+            assert_eq!(doc.blocks[0].quote_kind.as_deref(), Some(kind));
+            assert_eq!(doc.units[0].text, "");
+        }
+        let doc = complete("> [!tip] Water\n>\n> body\n");
+        assert_eq!(doc.blocks[0].quote_kind.as_deref(), Some("Water"));
+        assert_eq!(
+            doc.units[0].text, "body",
+            "with a body, the title labels it"
+        );
+    }
+
+    #[test]
     fn common_alert_labels_take_the_tone_of_the_closest_github_kind() {
         use super::{Alert, AlertTone};
 
@@ -3024,9 +2737,13 @@ mod tests {
             ("danger", AlertTone::Caution),
             ("bug", AlertTone::Caution),
         ] {
-            assert_eq!(AlertTone::of(label), Some(tone), "{label}");
+            assert_eq!(
+                BlockQuoteKind::from_label(label).map(AlertTone::from),
+                Some(tone),
+                "{label}"
+            );
         }
-        assert_eq!(AlertTone::of("unknown"), None);
+        assert_eq!(BlockQuoteKind::from_label("unknown"), None);
 
         let doc = complete("> [!info]-\n> body text\n>\n> second\n");
         assert_eq!(doc.blocks[0].quote_kind.as_deref(), Some("INFO"));

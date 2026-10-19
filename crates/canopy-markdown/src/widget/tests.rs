@@ -927,6 +927,11 @@ fn reveal_anchor_finds_a_heading_by_slug_or_text() {
             .unwrap();
         service(&mut harness);
         assert_eq!(harness.tbuf().contains_text("Far Away"), found, "{anchor}");
+        // The host keeps its own history, so its reveal is no jump.
+        harness.with_root_widget(|reader: &mut Markdown| {
+            assert!(reader.take_jumps().is_empty(), "{anchor}");
+            assert!(reader.return_position.is_none(), "{anchor}");
+        });
     }
 }
 
@@ -2227,4 +2232,25 @@ fn an_inspector_covers_the_reader_body_and_nothing_beyond_it() {
             Ok(())
         })
         .unwrap();
+}
+
+#[test]
+fn a_partly_rendered_document_says_so_in_its_status() {
+    let text = "| a | b |\n| - | - |\n| 1 | 2 |\n\nAfter.\n";
+    let (mut harness, manual) = configured(text, ViewType::Rendered, false, |options| {
+        options.parse_limits.max_table_cells = 2;
+    });
+    settle(&mut harness, &manual);
+    let status = |harness: &mut Harness| {
+        harness.with_root_widget(|reader: &mut Markdown| reader.chrome.borrow().text.clone())
+    };
+    let shown = status(&mut harness);
+    assert!(
+        shown.contains("Complete · Partial: table cell limit"),
+        "{shown}"
+    );
+    let (mut harness, manual) = fixture(text, ViewType::Rendered, false, false, false);
+    settle(&mut harness, &manual);
+    let shown = status(&mut harness);
+    assert!(!shown.contains("Partial"), "{shown}");
 }

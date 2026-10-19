@@ -1,0 +1,40 @@
+# Heading ids
+
+Each heading takes the id GitHub gives it, from its text: lowercase, with
+punctuation dropped and spaces as hyphens. A repeat takes `-1`, `-2`.
+
+```````````````````````````````` example_xmark
+# Hello, World!
+
+## Hello, World!
+
+### `code` and _more_
+
+#### [A link](https://example.com) here
+.
+<h1 id="hello-world">Hello, World!</h1>
+<h2 id="hello-world-1">Hello, World!</h2>
+<h3 id="code-and-more"><code>code</code> and <em>more</em></h3>
+<h4 id="a-link-here"><a href="https://example.com">A link</a> here</h4>
+````````````````````````````````
+
+A heading of only punctuation takes no id, but its repeats take `-1` and
+`-2`, as on GitHub. A suffix never repeats an id the document already has.
+
+```````````````````````````````` example_xmark
+# !!!
+
+# !!!
+
+# a-1
+
+# a
+
+# a
+.
+<h1>!!!</h1>
+<h1 id="-1">!!!</h1>
+<h1 id="a-1">a-1</h1>
+<h1 id="a">a</h1>
+<h1 id="a-2">a</h1>
+````````````````````````````````

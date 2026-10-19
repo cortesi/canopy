@@ -1,0 +1,83 @@
+# Comments
+
+Obsidian's comments, `%%…%%`, hide what they wrap, within a line or across
+blocks.
+
+```````````````````````````````` example_xmark
+Read %%not this%% and this.
+.
+<p>Read and this.</p>
+````````````````````````````````
+
+```````````````````````````````` example_xmark
+%%Hidden%% opening.
+.
+<p>opening.</p>
+````````````````````````````````
+
+A comment can span blocks, and a paragraph it hides entirely shows nothing.
+
+```````````````````````````````` example_xmark
+Before.
+
+%%
+Hidden.
+
+- hidden item
+%%
+
+After.
+.
+<p>Before.</p>
+<p>After.</p>
+````````````````````````````````
+
+A comment can close in the middle of a block, and the rest of it shows.
+
+```````````````````````````````` example_xmark
+end of draft %%
+
+hidden
+
+still hidden %% Back to text.
+
+After.
+.
+<p>end of draft</p>
+<p>Back to text.</p>
+<p>After.</p>
+````````````````````````````````
+
+A comment hides what it wraps before anything else is read, so a delimiter
+inside it opens or closes nothing.
+
+```````````````````````````````` example_xmark
+a **b %%c** d%% e
+.
+<p>a **b e</p>
+````````````````````````````````
+
+```````````````````````````````` example_xmark
+**a %%b
+c%% d**
+.
+<p><strong>a
+d</strong></p>
+````````````````````````````````
+
+Code and math show their markers, and a lone marker shows as written.
+
+```````````````````````````````` example_xmark
+`%%…%%` marks a comment, and so does $%%$.
+
+```
+%%
+```
+
+One %% alone.
+.
+<p><code>%%…%%</code> marks a comment, and so does <span class="math math-inline">%%</span>.</p>
+<pre><code>%%
+</code></pre>
+<p>One %% alone.</p>
+````````````````````````````````

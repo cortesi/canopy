@@ -5,6 +5,7 @@ mod big_text;
 mod cargo_env;
 mod luau_grammar;
 mod unicode_mosaics;
+mod xmark_specs;
 
 use std::{
     fs,
@@ -68,6 +69,14 @@ enum Task {
         #[arg(long)]
         check: bool,
     },
+    /// Generate canopy-xmark's spec tests in `tests/suite` from its spec
+    /// files.
+    XmarkSpecs {
+        /// Fail when the tests differ from what the specs give, and write
+        /// nothing.
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 /// Run the `cargo xtask` entry point.
@@ -81,6 +90,7 @@ fn main() -> ExitCode {
         Task::LuauGrammar { checkout } => luau_grammar::run(&root, &checkout),
         Task::BigText { check } => big_text::run(&root, check),
         Task::UnicodeMosaics { data, check } => unicode_mosaics::run(&root, &data, check),
+        Task::XmarkSpecs { check } => xmark_specs::run(&root, check),
         Task::Score { args } => {
             let mut command = vec!["run", "--quiet", "-p", "mosaic-score", "--"];
             command.extend(args.iter().map(String::as_str));

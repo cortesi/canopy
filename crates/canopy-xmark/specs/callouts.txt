@@ -1,0 +1,111 @@
+# Callouts
+
+Obsidian's callouts are block quotes whose first line is `[!label]`, with an
+optional fold sign and title. Any label in the common vocabularies opens
+one, and takes the GitHub kind closest in meaning.
+
+```````````````````````````````` example_xmark
+> [!tip] Pack light
+> Take less.
+.
+<blockquote class="markdown-alert-tip">
+<p class="markdown-alert-title">Pack light</p>
+<p>Take less.</p>
+</blockquote>
+````````````````````````````````
+
+A fold sign may follow the label, and a label of another vocabulary takes
+the closest kind.
+
+```````````````````````````````` example_xmark
+> [!info]-
+> body
+.
+<blockquote class="markdown-alert-note">
+<p>body</p>
+</blockquote>
+````````````````````````````````
+
+```````````````````````````````` example_xmark
+> [!faq]+ Why?
+> Because.
+.
+<blockquote class="markdown-alert-warning">
+<p class="markdown-alert-title">Why?</p>
+<p>Because.</p>
+</blockquote>
+````````````````````````````````
+
+A callout may hold only its title, or nothing.
+
+```````````````````````````````` example_xmark
+> [!tip] Title only
+.
+<blockquote class="markdown-alert-tip">
+<p class="markdown-alert-title">Title only</p>
+</blockquote>
+````````````````````````````````
+
+```````````````````````````````` example_xmark
+> [!danger]
+.
+<blockquote class="markdown-alert-caution">
+</blockquote>
+````````````````````````````````
+
+GitHub's own kinds are callouts too.
+
+```````````````````````````````` example_xmark
+> [!NOTE]
+> GitHub's kind.
+.
+<blockquote class="markdown-alert-note">
+<p>GitHub's kind.</p>
+</blockquote>
+````````````````````````````````
+
+An unknown label, or a title not set apart by a space, opens no callout.
+
+```````````````````````````````` example_xmark
+> [!custom] x
+> body
+.
+<blockquote>
+<p>[!custom] x
+body</p>
+</blockquote>
+````````````````````````````````
+
+```````````````````````````````` example_xmark
+> [!tip]title
+.
+<blockquote>
+<p>[!tip]title</p>
+</blockquote>
+````````````````````````````````
+
+Callouts nest, and a lazy line continues one.
+
+```````````````````````````````` example_xmark
+> [!info] Outer
+> > [!success] Inner
+> > text
+.
+<blockquote class="markdown-alert-note">
+<p class="markdown-alert-title">Outer</p>
+<blockquote class="markdown-alert-tip">
+<p class="markdown-alert-title">Inner</p>
+<p>text</p>
+</blockquote>
+</blockquote>
+````````````````````````````````
+
+```````````````````````````````` example_xmark
+> [!tip] T
+lazy
+.
+<blockquote class="markdown-alert-tip">
+<p class="markdown-alert-title">T</p>
+<p>lazy</p>
+</blockquote>
+````````````````````````````````

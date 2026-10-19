@@ -1,0 +1,768 @@
+Run this with `cargo test --features gen-tests suite::table`.
+
+Adapted from original by replacing `td` elements by `th` elements inside `thead`
+and disabling the third test.
+
+False match
+===========
+
+```````````````````````````````` example
+Test header
+-----------
+.
+<h2>Test header</h2>
+````````````````````````````````
+
+
+True match
+==========
+
+```````````````````````````````` example
+Test|Table
+----|-----
+.
+<table><thead><tr><th>Test</th><th>Table</th></tr></thead><tbody></tbody>
+</table>
+````````````````````````````````
+
+
+Actual rows in it
+=================
+
+```````````````````````````````` DISABLED example
+Test|Table
+----|-----
+Test row
+Test|2
+
+Test ending
+.
+<table><thead><tr><th>Test</th><th>Table</th></tr></thead><tbody>
+<tr><td>Test row</td></tr>
+<tr><td>Test</td><td>2</td></tr>
+</tbody></table>
+<p>Test ending</p>
+````````````````````````````````
+
+
+Test with quote
+===============
+
+```````````````````````````````` example
+> Test  | Table
+> ------|------
+> Row 1 | Every
+> Row 2 | Day
+>
+> Paragraph
+.
+<blockquote>
+<table><thead><tr><th>Test</th><th>Table</th></tr></thead><tbody>
+<tr><td>Row 1</td><td>Every</td></tr>
+<tr><td>Row 2</td><td>Day</td></tr>
+</tbody></table>
+<p>Paragraph</p>
+</blockquote>
+````````````````````````````````
+
+
+Test with list
+==============
+
+```````````````````````````````` example
+ 1. First entry
+ 2. Second entry
+
+    Col 1|Col 2
+    -|-
+    Row 1|Part 2
+    Row 2|Part 2
+.
+<ol>
+<li>
+<p>First entry</p>
+</li>
+<li>
+<p>Second entry</p>
+<table><thead><tr><th>Col 1</th><th>Col 2</th></tr></thead><tbody>
+<tr><td>Row 1</td><td>Part 2</td></tr>
+<tr><td>Row 2</td><td>Part 2</td></tr>
+</tbody></table>
+</li>
+</ol>
+````````````````````````````````
+
+
+Test with border
+================
+
+```````````````````````````````` example
+|Col 1|Col 2|
+|-----|-----|
+|R1C1 |R1C2 |
+|R2C1 |R2C2 |
+.
+<table><thead><tr><th>Col 1</th><th>Col 2</th></tr></thead><tbody>
+<tr><td>R1C1</td><td>R1C2</td></tr>
+<tr><td>R2C1</td><td>R2C2</td></tr>
+</tbody></table>
+````````````````````````````````
+
+
+Test with empty cells
+=====================
+
+Empty cells should work.
+
+```````````````````````````````` example
+| Col 1 | Col 2 |
+|-------|-------|
+|       |       |
+|       |       |
+.
+<table><thead><tr><th>Col 1</th><th>Col 2</th></tr></thead><tbody>
+<tr><td></td><td></td></tr>
+<tr><td></td><td></td></tr>
+</tbody></table>
+````````````````````````````````
+
+... and properly mix with filled cells.
+
+```````````````````````````````` example
+| Col 1 | Col 2 |
+|-------|-------|
+|   x   |       |
+|       |    x  |
+.
+<table><thead><tr><th>Col 1</th><th>Col 2</th></tr></thead><tbody>
+<tr><td>x</td><td></td></tr>
+<tr><td></td><td>x</td></tr>
+</tbody></table>
+````````````````````````````````
+
+
+Table with UTF-8
+================
+
+Basic example.
+
+```````````````````````````````` example
+|Col 1|Col 2|
+|-----|-----|
+|✓    |✓    |
+|✓    |✓    |
+.
+<table><thead><tr><th>Col 1</th><th>Col 2</th></tr></thead><tbody>
+<tr><td>✓</td><td>✓</td></tr>
+<tr><td>✓</td><td>✓</td></tr>
+</tbody></table>
+````````````````````````````````
+
+More advanced example.
+
+```````````````````````````````` example
+|  Target                       | std |rustc|cargo| notes                      |
+|-------------------------------|-----|-----|-----|----------------------------|
+| `x86_64-unknown-linux-musl`   |  ✓  |     |     | 64-bit Linux with MUSL     |
+| `arm-linux-androideabi`       |  ✓  |     |     | ARM Android                |
+| `arm-unknown-linux-gnueabi`   |  ✓  |  ✓  |     | ARM Linux (2.6.18+)        |
+| `arm-unknown-linux-gnueabihf` |  ✓  |  ✓  |     | ARM Linux (2.6.18+)        |
+| `aarch64-unknown-linux-gnu`   |  ✓  |     |     | ARM64 Linux (2.6.18+)      |
+| `mips-unknown-linux-gnu`      |  ✓  |     |     | MIPS Linux (2.6.18+)       |
+| `mipsel-unknown-linux-gnu`    |  ✓  |     |     | MIPS (LE) Linux (2.6.18+)  |
+.
+<table><thead><tr><th>Target</th><th>std</th><th>rustc</th><th>cargo</th><th>notes</th></tr></thead><tbody>
+<tr><td><code>x86_64-unknown-linux-musl</code></td><td>✓</td><td></td><td></td><td>64-bit Linux with MUSL</td></tr>
+<tr><td><code>arm-linux-androideabi</code></td><td>✓</td><td></td><td></td><td>ARM Android</td></tr>
+<tr><td><code>arm-unknown-linux-gnueabi</code></td><td>✓</td><td>✓</td><td></td><td>ARM Linux (2.6.18+)</td></tr>
+<tr><td><code>arm-unknown-linux-gnueabihf</code></td><td>✓</td><td>✓</td><td></td><td>ARM Linux (2.6.18+)</td></tr>
+<tr><td><code>aarch64-unknown-linux-gnu</code></td><td>✓</td><td></td><td></td><td>ARM64 Linux (2.6.18+)</td></tr>
+<tr><td><code>mips-unknown-linux-gnu</code></td><td>✓</td><td></td><td></td><td>MIPS Linux (2.6.18+)</td></tr>
+<tr><td><code>mipsel-unknown-linux-gnu</code></td><td>✓</td><td></td><td></td><td>MIPS (LE) Linux (2.6.18+)</td></tr>
+</tbody></table>
+````````````````````````````````
+
+Hiragana-containing pseudo-table.
+
+```````````````````````````````` example
+|-|-|
+|ぃ|い|
+.
+<p>|-|-|
+|ぃ|い|</p>
+````````````````````````````````
+
+Hiragana-containing actual table.
+
+```````````````````````````````` example
+|ぁ|ぃ|
+|-|-|
+|ぃ|ぃ|
+.
+<table><thead><tr><th>ぁ</th><th>ぃ</th></tr></thead><tbody>
+<tr><td>ぃ</td><td>ぃ</td></tr>
+</tbody></table>
+````````````````````````````````
+
+Test russian symbols.
+
+```````````````````````````````` example
+|Колонка 1|Колонка 2|
+|---------|---------|
+|Ячейка 1 |Ячейка 2 |
+.
+<table><thead><tr><th>Колонка 1</th><th>Колонка 2</th></tr></thead><tbody>
+<tr><td>Ячейка 1</td><td>Ячейка 2</td></tr>
+</tbody></table>
+````````````````````````````````
+
+
+Test cases based on <https://github.com/github/cmark-gfm/issues/180>
+and <https://github.com/raphlinus/pulldown-cmark/issues/540>.
+
+Pulldown-cmark gives "heavy" tables (with a leading `|`) higher priority than
+"light" tables for paragraph interruption. This is compatible with *older*
+versions of GitHub, but 2023-06-21 GitHub treats them the same.
+
+A quick run through <https://babelmark.github.io> shows, of the
+implementations that support pipe tables at all[^1]:
+
+| Implementation     -> | a | b | c | d | e | f | g | h | i | j |
+| --------------------- | - | - | - | - | - | - | - | - | - | - |
+| **pulldown-cmark**    | ✓ | x | x | x | x | ✓ | x | x | ✓ | x |
+| github/cmark-gfm      | ✓ | x | ✓ | x | ✓ | ✓ | ✓ | ✓ | ✓ | x |
+| pycmarkgfm            | ✓ | x | ✓ | x | ✓ | ✓ | ✓ | ✓ | ✓ | x |
+| DFM[^2]               | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - | - | x |
+| league/commonmark GFM | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | x | ✓ | x |
+| s9e/TextFormatter     | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | x | x | x |
+| markdown-it[^3][^4]   | ✓ | x | ✓ | x | ✓ | ✓ | ✓ | x | - | - |
+| php-markdown-extra    | ✓ | x | ✓ | x | ✓ | ✓ | ✓ | x | x | x |
+| markdig               | x | x | x | x | x | x | x | x | x | x |
+| MD4C                  | x | x | x | x | x | x | x | x | x | x |
+| parsedown             | x | x | x | x | x | x | x | x | x | x |
+| maruku[^3]            | x | x | x | x | x | x | x | x | x | - |
+| cebe                  | x | x | x | x | x | x | x | x | x | x |
+| pandoc                | x | x | x | x | x | x | x | x | x | x |
+| multimarkdown         | x | x | x | x | x | x | x | x | x | x |
+
+While pulldown-cmark could probably afford to align itself with GFM, tables
+interrupting paragraphs is not a portable feature, and anyone trying to write
+widely-compatible markdown syntax can't rely on it.
+
+[^1]:
+    Implementations that "support pipe tables at all" were identified by
+    including "table a" without a preceding paragraph and seeing if it
+    produced an HTML table for *that*.
+
+[^2]:
+    On "table h" and "table i", DFM sees a table with no cells, followed
+    by a paragraph with `b` in it.
+
+[^3]:
+    On "table j", maruku and markdown-it see a table with no cells, followed
+    by a paragraph with `b` in it.
+
+[^4]:
+    On "table i", markdown-it sees a table with no cells, followed
+    by a paragraph with `b` in it.
+
+```````````````````````````````` example
+table a
+|  a  |  b  |
+| --- | --- |
+|  c  |  d  |
+
+
+table b
+    |  a  |  b  |
+    | --- | --- |
+    |  c  |  d  |
+
+
+table c
+ a  |  b
+--- | ---
+ c  |  d
+
+
+table d
+    a | b
+    --|--
+    c | d
+
+
+table e
+a | b
+--|--
+c | d
+
+table f
+  |  a  |  b  |
+  | --- | --- |
+  |  c  |  d  |
+
+
+table g
+   a  |  b
+  --- | ---
+   c  |  d
+
+table h
+a
+|-|
+b
+
+table i
+| a
+|-
+b
+
+table j
+| a
+-
+b
+.
+<p>table a</p>
+<table><thead><tr><th>a</th><th>b</th></tr></thead><tbody>
+<tr><td>c</td><td>d</td></tr>
+</tbody></table>
+<p>table b
+|  a  |  b  |
+| --- | --- |
+|  c  |  d  |</p>
+<p>table c
+a  |  b
+--- | ---
+c  |  d</p>
+<p>table d
+a | b
+--|--
+c | d</p>
+<p>table e
+a | b
+--|--
+c | d</p>
+<p>table f</p>
+<table><thead><tr><th>a</th><th>b</th></tr></thead><tbody>
+<tr><td>c</td><td>d</td></tr>
+</tbody></table>
+<p>table g
+a  |  b
+--- | ---
+c  |  d</p>
+<p>table h
+a
+|-|
+b</p>
+<p>table i</p>
+<table><thead><tr><th>a</th></tr></thead><tbody>
+<tr><td>b</td></tr>
+</tbody></table>
+<h2>table j
+| a</h2>
+<p>b</p>
+````````````````````````````````
+
+
+Test case based on <https://github.com/github/cmark-gfm/issues/333>.
+Normally, we'd follow GFM's lead, but this one seems like a bug,
+and Pandoc, the other big, authoritative Extended Markdown parser,
+treats it as a table.
+
+Like the example above showing interruption, this ambiguity is tested:
+
+| Implementation     -> | parsed as |
+| --------------------- | --------- |
+| **pulldown-cmark**    | table     |
+| github/cmark-gfm      | list      |
+| pycmarkgfm            | list      |
+| markdown-it           | table     |
+| php-markdown-extra    | table     |
+| DFM                   | table     |
+| league/commonmark GFM | list      |
+| s9e/TextFormatter     | table     |
+| markdig               | table     |
+| MD4C                  | list      |
+| parsedown             | table     |
+| maruku                | table     |
+| cebe                  | table     |
+| pandoc                | table     |
+| multimarkdown         | table     |
+
+```````````````````````````````` example
+a | b
+- | -
+1 | 2
+.
+<table><thead><tr><th>a</th><th>b</th></tr></thead><tbody>
+<tr><td>1</td><td>2</td></tr>
+</tbody></table>
+````````````````````````````````
+
+
+Hard line breaks are not allowed at the end of table header lines.
+It's about a 50:50 split on babelmark, but this change makes pulldown-cmark
+consistent with GFM and Pandoc.
+
+| Implementation     -> | parsed as |
+| --------------------- | --------- |
+| **pulldown-cmark**    | paragraph |
+| github/cmark-gfm      | paragraph |
+| pycmarkgfm            | paragraph |
+| markdown-it           | table     |
+| php-markdown-extra    | table     |
+| DFM                   | table     |
+| league/commonmark GFM | paragraph |
+| s9e/TextFormatter     | table     |
+| markdig               | paragraph |
+| MD4C                  | paragraph |
+| parsedown             | table     |
+| maruku                | table     |
+| cebe                  | paragraph |
+| pandoc                | paragraph |
+| multimarkdown         | table     |
+
+```````````````````````````````` example
+a | b\
+- | -
+1 | 2
+.
+<p>a | b\</p>
+<ul>
+<li>| -
+1 | 2</li>
+</ul>
+````````````````````````````````
+
+
+As a block structure, table parsing has a higher priority than backslashes.
+This is consistent with how other paragraph-interrupting structures work,
+and is what GitHub does.
+
+```````````````````````````````` example
+a\
+| b | c |
+|---|---|
+| d | e |
+.
+<p>a\</p>
+<table><thead><tr><th>b</th><th>c</th></tr></thead><tbody>
+<tr><td>d</td><td>e</td></tr>
+</tbody></table>
+````````````````````````````````
+
+
+As a special case, pipes in inline code in tables are escaped
+with backslashes.
+
+The parsing rule for CommonMark is that block structures are parsed before
+inline structures are. Normally, this means backslashes aren't allowed to have
+any effect on block structures at all. Tables do consider backslashes, but
+not the same way inline syntax does: they have higher precedence than anything
+else, as-if they were parsed in a completely separate pass.
+
+This rule should be identical to GitHub's. See
+<https://gist.github.com/notriddle/c027512ee849f12098fec3a3256c89d3>
+for what they do. This is totally different from Pandoc's `commonmark_x`,
+for example, and from many other Markdown parsers, because of some weird
+corner cases it creates.
+
+```````````````````````````````` example
+| Description | Test case |
+|-------------|-----------|
+| Single      | `\`       |
+| Double      | `\\`      |
+| Basic test  | `\|`      |
+| Basic test 2| `\|\|\`   |
+| Basic test 3| `x\|y\|z\`|
+| Not pipe    | `\.`      |
+| Combo       | `\.\|\`   |
+| Extra       | `\\\.`    |
+| Wait, what? | `\\|`     |
+| Wait, what? | `\\\|`    |
+| Wait, what? | `\\\\|`   |
+| Wait, what? | `\\\\\|`  |
+| Wait, what? |          \|
+| Wait, what? |         \\|
+| Wait, what? |        \\\|
+| Wait, what?x|          \|x
+| Wait, what?x|         \\|x
+| Wait, what?x|        \\\|x
+| Direct trail|         \.|x
+.
+<table><thead><tr><th>Description</th><th>Test case</th></tr></thead><tbody>
+<tr><td>Single</td><td><code>\</code></td></tr>
+<tr><td>Double</td><td><code>\\</code></td></tr>
+<tr><td>Basic test</td><td><code>|</code></td></tr>
+<tr><td>Basic test 2</td><td><code>||\</code></td></tr>
+<tr><td>Basic test 3</td><td><code>x|y|z\</code></td></tr>
+<tr><td>Not pipe</td><td><code>\.</code></td></tr>
+<tr><td>Combo</td><td><code>\.|\</code></td></tr>
+<tr><td>Extra</td><td><code>\\\.</code></td></tr>
+<tr><td>Wait, what?</td><td><code>\|</code></td></tr>
+<tr><td>Wait, what?</td><td><code>\\|</code></td></tr>
+<tr><td>Wait, what?</td><td><code>\\\|</code></td></tr>
+<tr><td>Wait, what?</td><td><code>\\\\|</code></td></tr>
+<tr><td>Wait, what?</td><td>|</td></tr>
+<tr><td>Wait, what?</td><td>|</td></tr>
+<tr><td>Wait, what?</td><td>\|</td></tr>
+<tr><td>Wait, what?x</td><td>|x</td></tr>
+<tr><td>Wait, what?x</td><td>|x</td></tr>
+<tr><td>Wait, what?x</td><td>\|x</td></tr>
+<tr><td>Direct trail</td><td>.</td></tr>
+</tbody></table>
+````````````````````````````````
+
+
+Example with code blocks in the table's header.
+
+```````````````````````````````` example
+| Single | `\|` |
+|--|--|
+| Single | `\|` |
+
+
+| Double | `\\|` |
+|--|--|
+| Double | `\\|` |
+
+
+| Double Twice | `\\|\\|` |
+|--|--|
+| Double Twice | `\\|\\|` |
+
+
+| Triple | `\\\|` |
+|--|--|
+| Triple | `\\\|` |
+.
+<table><thead><tr><th>Single</th><th><code>|</code></th></tr></thead><tbody>
+<tr><td>Single</td><td><code>|</code></td></tr>
+</tbody></table>
+<table><thead><tr><th>Double</th><th><code>\|</code></th></tr></thead><tbody>
+<tr><td>Double</td><td><code>\|</code></td></tr>
+</tbody></table>
+<table><thead><tr><th>Double Twice</th><th><code>\|\|</code></th></tr></thead><tbody>
+<tr><td>Double Twice</td><td><code>\|\|</code></td></tr>
+</tbody></table>
+<table><thead><tr><th>Triple</th><th><code>\\|</code></th></tr></thead><tbody>
+<tr><td>Triple</td><td><code>\\|</code></td></tr>
+</tbody></table>
+````````````````````````````````
+
+
+Table rows must have at least one cell.
+A single pipe, on its own, doesn't count.
+
+The behavior on babelmark is pretty diverse,
+but this behavior is chosen to align with GFM.
+
+✓ means it treats the zero cell lines with only a pipe as not being valid
+rows, but otherwise parses as a table.
+
+x means it treats the zero cell lines with only a pipe as a valid row.
+
+? means it does something else.
+
+| Implementation     -> | first | second | third |
+| --------------------- | ----- | ------ | ----- |
+| **pulldown-cmark**    |   ✓   |   ✓    |   ✓   |
+| github/cmark-gfm      |   ✓   |   ✓    |   ✓   |
+| pycmarkgfm            |   ✓   |   ✓    |   ✓   |
+| pandoc gfm[^4]        |   ✓   |   ✓    |   ✓   |
+| parsedown             |   x   |   x    |   ✓   |
+| php-markdown-extra    |   x   |   x    |   ✓   |
+| markdown-it           |   x   |   x    | ✓[^3] |
+| DFM                   |   x   |   x    |   x   |
+| league/commonmark GFM |   x   |   x    |   x   |
+| s9e/TextFormatter     |   x   |   x    |   x   |
+| MD4C                  |   x   |   x    |   x   |
+| cebe                  |   x   |   x    |   x   |
+| pandoc                |   x   |   x    |   x   |
+| multimarkdown         | ?[^1] |  ?[^1] | ?[^1] |
+| markdig               | ?[^1] |  ?[^1] | ?[^1] |
+| maruku                | ?[^2] |  ?[^2] | ?[^2] |
+
+[babelmark test cases](https://babelmark.github.io/?text=No+single-pipe+lines.+This+test+case+is+a+%22null+hypothesis%22+used+to+recognize+table+support.%0A%0A%7C+Table+%7C+Header+%7C%0A%7C-------%7C--------%7C%0A%7C+Table+%7C+Body+++%7C%0A%0AThis+the+first+test+case.%0A%0A%7C+Table+%7C+Header+%7C%0A%7C-------%7C--------%7C%0A%7C+Table+%7C+Body+++%7C%0A%7C%0A%7C+Not+++%7C+Enough+%7C%0A%0AThis+the+second+test+case.%0A%0A%7C+Table+%7C+Header+%7C%0A%7C-------%7C--------%7C%0A%7C%0A%0AThis+the+third+test+case.%0A%0A%7C%0A%7C-------%7C--------%7C%0A%7C+Table+%7C+Body+++%7C%0A)
+
+[^1]: Multimarkdown and Markdig don't recognize these at tables at all,
+even though I know they support pipe tables.
+
+[^2]: Maruku swallows much of the text entirely in these test cases.
+
+[^3]: Markdown-it changed some time between the version on their playground
+<https://markdown-it.github.io/#md3=%7B%22source%22%3A%22%7C%20Table%20%7C%20Header%20%7C%5Cn%7C-------%7C--------%7C%5Cn%7C%20Table%20%7C%20Body%20%20%20%7C%5Cn%7C%5Cn%7C%20Not%20%20%20%7C%20Enough%20%7C%5Cn%5Cn%7C%20Table%20%7C%20Header%20%7C%5Cn%7C-------%7C--------%7C%5Cn%7C%5Cn%5Cn%7C%5Cn%7C-------%7C--------%7C%5Cn%7C%20Table%20%7C%20Body%20%20%20%7C%5Cn%22%2C%22defaults%22%3A%7B%22html%22%3Afalse%2C%22xhtmlOut%22%3Afalse%2C%22breaks%22%3Afalse%2C%22langPrefix%22%3A%22language-%22%2C%22linkify%22%3Atrue%2C%22typographer%22%3Atrue%2C%22_highlight%22%3Atrue%2C%22_strict%22%3Afalse%2C%22_view%22%3A%22html%22%7D%7D> and the version Babelmark 3 uses.
+
+[^4]: Not on babelmark 3. I ran it on <https://pandoc.org/try/?params=%7B%22text%22%3A%22%7C+Table+%7C+Header+%7C%5Cn%7C-------%7C--------%7C%5Cn%7C+Table+%7C+Body+++%7C%5Cn%7C%5Cn%7C+Not+++%7C+Enough+%7C%5Cn%5Cn%7C+Table+%7C+Header+%7C%5Cn%7C-------%7C--------%7C%5Cn%7C%5Cn%5Cn%7C%5Cn%7C-------%7C--------%7C%5Cn%7C+Table+%7C+Body+++%7C%5Cn%22%2C%22to%22%3A%22html5%22%2C%22from%22%3A%22gfm%22%2C%22standalone%22%3Afalse%2C%22embed-resources%22%3Afalse%2C%22table-of-contents%22%3Afalse%2C%22number-sections%22%3Afalse%2C%22citeproc%22%3Afalse%2C%22html-math-method%22%3A%22plain%22%2C%22wrap%22%3A%22auto%22%2C%22highlight-style%22%3Anull%2C%22files%22%3A%7B%7D%2C%22template%22%3Anull%7D>
+
+```````````````````````````````` example
+| Table | Header |
+|-------|--------|
+| Table | Body   |
+|
+| Not   | Enough |
+
+
+| Table | Header |
+|-------|--------|
+| Table | Body   |
+|→
+| Not   | Enough |
+.
+<table><thead><tr><th>Table</th><th>Header</th></tr></thead><tbody>
+<tr><td>Table</td><td>Body</td></tr>
+</tbody></table>
+<p>|
+| Not   | Enough |</p>
+<table><thead><tr><th>Table</th><th>Header</th></tr></thead><tbody>
+<tr><td>Table</td><td>Body</td></tr>
+</tbody></table>
+<p>|
+| Not   | Enough |</p>
+````````````````````````````````
+
+```````````````````````````````` example
+| Table | Header |
+|-------|--------|
+|
+.
+<table><thead><tr><th>Table</th><th>Header</th></tr></thead><tbody>
+</tbody></table>
+<p>|</p>
+````````````````````````````````
+
+```````````````````````````````` example
+|
+|-------|--------|
+| Table | Body   |
+.
+<p>|
+|-------|--------|
+| Table | Body   |</p>
+````````````````````````````````
+
+Double escaping in link URLs
+
+<https://markdown-it.github.io/#md3=%7B%22source%22%3A%22%7C%20Single%20%7C%20%5Btest%5D%28first%5C%5C%7Csecond%29%20%7C%5Cn%7C--%7C--%7C%5Cn%5Cn%7C%20Double%20%7C%20%5Btest%5D%28first%5C%5C%5C%5C%7Csecond%29%20%7C%5Cn%7C--%7C--%7C%5Cn%5Cn%7C%20Triple%20%7C%20%5Btest%5D%28first%5C%5C%5C%5C%5C%5C%7Csecond%29%20%7C%5Cn%7C--%7C--%7C%5Cn%22%2C%22defaults%22%3A%7B%22html%22%3Afalse%2C%22xhtmlOut%22%3Afalse%2C%22breaks%22%3Afalse%2C%22langPrefix%22%3A%22language-%22%2C%22linkify%22%3Atrue%2C%22typographer%22%3Atrue%2C%22_highlight%22%3Atrue%2C%22_strict%22%3Afalse%2C%22_view%22%3A%22src%22%7D%7D>
+
+<https://gist.github.com/notriddle/a789116ccec90d261242f3e5fd3bf0ee>
+
+```````````````````````````````` example
+| Single | [test](first\|second) |
+|--|--|
+
+| Double | [test](first\\|second) |
+|--|--|
+
+| Triple | [test](first\\\|second) |
+|--|--|
+.
+<table><thead><tr><th>Single</th><th><a href="first%7Csecond">test</a></th></tr></thead><tbody>
+</tbody></table>
+<table><thead><tr><th>Double</th><th><a href="first%7Csecond">test</a></th></tr></thead><tbody>
+</tbody></table>
+<table><thead><tr><th>Triple</th><th><a href="first%5C%7Csecond">test</a></th></tr></thead><tbody>
+</tbody></table>
+````````````````````````````````
+
+Double escaping in link references
+
+<https://gist.github.com/notriddle/02d6dfe2559a1a05fa9308e0bf4a9c39>
+
+<https://markdown-it.github.io/#md3=%7B%22source%22%3A%22%7C%20Single%20%7C%20%5Bfirst%5C%5C%7Csecond%5D%20%7C%5Cn%7C--%7C--%7C%5Cn%5Cn%7C%20Double%20%7C%20%5Bfirst%5C%5C%5C%5C%7Csecond%5D%20%7C%5Cn%7C--%7C--%7C%5Cn%5Cn%7C%20Triple%20%7C%20%5Bfirst%5C%5C%5C%5C%5C%5C%7Csecond%5D%20%7C%5Cn%7C--%7C--%7C%5Cn%5Cn%5Bfirst%5C%5C%7Csecond%5D%3A%20https%3A%2F%2Frust-lang.org%5Cn%5Cn%5Bfirst%5C%5C%5C%5C%7Csecond%5D%3A%20https%3A%2F%2Fdocs.rs%22%2C%22defaults%22%3A%7B%22html%22%3Afalse%2C%22xhtmlOut%22%3Afalse%2C%22breaks%22%3Afalse%2C%22langPrefix%22%3A%22language-%22%2C%22linkify%22%3Atrue%2C%22typographer%22%3Atrue%2C%22_highlight%22%3Atrue%2C%22_strict%22%3Afalse%2C%22_view%22%3A%22html%22%7D%7D>
+
+```````````````````````````````` example
+| Single | [first\|second] |
+|--|--|
+
+| Double | [first\\|second] |
+|--|--|
+
+| Triple | [first\\\|second] |
+|--|--|
+
+[first\|second]: https://rust-lang.org
+
+[first\\|second]: https://docs.rs
+.
+<table><thead><tr><th>Single</th><th>[first|second]</th></tr></thead><tbody>
+</tbody></table>
+<table><thead><tr><th>Double</th><th><a href="https://rust-lang.org">first|second</a></th></tr></thead><tbody>
+</tbody></table>
+<table><thead><tr><th>Triple</th><th><a href="https://docs.rs">first\|second</a></th></tr></thead><tbody>
+</tbody></table>
+````````````````````````````````
+
+Double escaping in table interruption
+
+```````````````````````````````` example
+Q: Knock knock.
+A: Who's there.
+Q: Interrupting cow.
+A: Interrupting —?
+| `Moo\\|ooo` |
+|-------------|
+| `ooo\\|ooo` |
+.
+<p>Q: Knock knock.
+A: Who's there.
+Q: Interrupting cow.
+A: Interrupting —?</p>
+<table><thead><tr><th><code>Moo\|ooo</code></th></tr></thead><tbody>
+<tr><td><code>ooo\|ooo</code></td></tr>
+</tbody></table>
+````````````````````````````````
+
+Double escaping in image alt text
+
+```````````````````````````````` example
+| ![Moo\\|Moo](image.png) |
+|-------------|
+| ![Moo\\\|Moo](image.png) |
+.
+<table><thead><tr><th><img src="image.png" alt="Moo|Moo" /></th></tr></thead><tbody>
+<tr><td><img src="image.png" alt="Moo\|Moo" /></td></tr>
+</tbody></table>
+````````````````````````````````
+
+Double escaping in link title
+
+```````````````````````````````` example
+| [Moo](https://example.org "Example\\|Link") |
+|---------------------------------------------|
+| [Moo](https://example.org "Example\\\|Link") |
+.
+<table><thead><tr><th><a href="https://example.org" title="Example|Link">Moo</a></th></tr></thead><tbody>
+<tr><td><a href="https://example.org" title="Example\|Link">Moo</a></td></tr>
+</tbody></table>
+````````````````````````````````
+
+Blank list items and lists that don't start at one can interrupt tables.
+
+```````````````````````````````` example
+moo | moo
+----|----
+moo | moo
+*
+.
+<table><thead><tr><th>moo</th><th>moo</th></tr></thead><tbody>
+<tr><td>moo</td><td>moo</td></tr>
+</tbody></table>
+<ul>
+<li></li>
+</ul>
+````````````````````````````````
+
+```````````````````````````````` example
+moo | moo
+----|----
+moo | moo
+2.
+.
+<table><thead><tr><th>moo</th><th>moo</th></tr></thead><tbody>
+<tr><td>moo</td><td>moo</td></tr>
+</tbody></table>
+<ol start="2">
+<li></li>
+</ol>
+````````````````````````````````

@@ -1,0 +1,31 @@
+# Obsidian wikilinks and embeds
+
+An unlabelled wikilink shows its target as Obsidian does: without `.md`,
+and with its anchor after `›`. A label after `|` shows as written.
+
+```````````````````````````````` example_xmark
+[[Garden]], [[Projects/Garden.md]], [[Garden#Plan]], [[#^here]], and [[Garden|the garden]].
+.
+<p><a href="Garden">Garden</a>, <a href="Projects/Garden.md">Projects/Garden</a>, <a href="Garden#Plan">Garden › Plan</a>, <a href="#^here">^here</a>, and <a href="Garden">the garden</a>.</p>
+````````````````````````````````
+
+A wikilink image is an embed: of an image, by its extension, or of a note.
+An image's label is its alt text, or its size in pixels.
+
+```````````````````````````````` example_xmark
+![[gradient.png]]
+
+![[gradient.png|80]]
+
+![[checker.png|48x48]]
+
+![[gradient.png|A gradient]]
+
+![[Garden#Plan]]
+.
+<p><img src="gradient.png" alt="gradient.png" /></p>
+<p><img src="gradient.png" alt="gradient.png" width="80" /></p>
+<p><img src="checker.png" alt="checker.png" width="48" height="48" /></p>
+<p><img src="gradient.png" alt="A gradient" /></p>
+<p><a class="internal-embed" href="Garden#Plan">Garden › Plan</a></p>
+````````````````````````````````

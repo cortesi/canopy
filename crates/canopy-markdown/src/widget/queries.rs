@@ -235,7 +235,7 @@ pub(super) fn state(reader: &Markdown, ctx: &dyn ViewContext) -> Result<ArgValue
                 ("source_only", ArgValue::Bool(reader.options.source_only)),
                 (
                     "semantic_degraded",
-                    ArgValue::Bool(document.is_some_and(|document| document.degraded)),
+                    ArgValue::Bool(document.is_some_and(|document| document.degraded.is_some())),
                 ),
                 (
                     "presentation_truncated",
@@ -520,7 +520,7 @@ mod tests {
         MarkdownOptions,
         document::{ParseLimits, parse_document},
         executor::{ExecutorOptions, MarkdownExecutor},
-        presentation::{GeometryKey, PresentationSnapshot},
+        presentation::{GeometryKey, PresentationSnapshot, Supplied},
         source_view::SourceMatches,
     };
 
@@ -545,6 +545,7 @@ mod tests {
             document,
             GeometryKey::default(),
             None,
+            &Supplied::default(),
         )));
         reader.displayed = Some(source);
     }

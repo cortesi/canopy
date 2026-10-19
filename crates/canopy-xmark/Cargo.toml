@@ -1,0 +1,33 @@
+[package]
+name = "canopy-xmark"
+version = "0.0.1"
+authors = [
+    "Aldo Cortesi <aldo@corte.si>",
+    "Raph Levien <raph.levien@gmail.com>",
+    "Marcus Klaas de Vries <mail@marcusklaas.nl>",
+]
+edition.workspace = true
+license = "MIT"
+description = "A CommonMark pull parser with GitHub and Obsidian syntax, forked from pulldown-cmark"
+keywords = ["markdown", "commonmark", "obsidian"]
+categories = ["text-processing"]
+readme = "README.md"
+exclude = ["/third_party/**/*", "/specs/**/*"]
+
+[lib]
+doctest = false
+
+[dependencies]
+bitflags = "2"
+memchr = "2.5"
+unicase = "2.6"
+
+[dev-dependencies]
+regex = "1.6"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+html = []

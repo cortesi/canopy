@@ -1147,7 +1147,7 @@ fn prepare(shared: &Shared, id: u64, request: WorkRequest) -> Result<PreparedWor
             if shared.cancelled(id) {
                 return Err(WorkError::Cancelled);
             }
-            let presentation = PresentationSnapshot::prepare_with(
+            let presentation = PresentationSnapshot::prepare(
                 document.clone(),
                 request.geometry,
                 request.previous.as_deref(),

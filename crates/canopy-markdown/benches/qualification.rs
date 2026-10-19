@@ -26,7 +26,7 @@ use canopy_markdown::{
     document::{BlockKind, ParseLimits, parse_document},
     executor::{ExecutorOptions, MarkdownExecutor, PreparedView, WorkHandle, WorkRequest},
     options::ViewType,
-    presentation::{GeometryKey, PaintOverlays, PaintStats, PresentationSnapshot},
+    presentation::{GeometryKey, PaintOverlays, PaintStats, PresentationSnapshot, Supplied},
     source_store::{DocumentInput, FinishOutcome, SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, PreparedSource, SourceOptions},
 };
@@ -345,6 +345,7 @@ fn run_fixture(report: &mut Report, config: &Config, name: &str, bytes: usize) {
                 document.clone(),
                 geometry(),
                 None,
+                &Supplied::default(),
             ));
         },
     );
@@ -352,6 +353,7 @@ fn run_fixture(report: &mut Report, config: &Config, name: &str, bytes: usize) {
         document.clone(),
         geometry(),
         None,
+        &Supplied::default(),
     ));
     report.counters.insert(
         format!("{name}.rendered_derived_bytes"),
@@ -364,8 +366,12 @@ fn run_fixture(report: &mut Report, config: &Config, name: &str, bytes: usize) {
         config.cold,
         None,
         || {
-            let next =
-                PresentationSnapshot::prepare(document.clone(), geometry(), Some(&presentation));
+            let next = PresentationSnapshot::prepare(
+                document.clone(),
+                geometry(),
+                Some(&presentation),
+                &Supplied::default(),
+            );
             assert_eq!(
                 next.stats.prepared_blocks, 0,
                 "unchanged geometry must reuse every block"
@@ -454,6 +460,7 @@ fn run_fixture(report: &mut Report, config: &Config, name: &str, bytes: usize) {
                 ..geometry()
             },
             Some(&presentation),
+            &Supplied::default(),
         ));
     });
 }
@@ -580,6 +587,7 @@ fn stream(report: &mut Report, config: &Config, pattern: StreamPattern) {
         )),
         geometry(),
         None,
+        &Supplied::default(),
     ));
     let mut harness = mounted(current.clone());
     let mut accepted = Vec::<(u64, u64, Instant)>::new();

@@ -4,7 +4,6 @@ use std::{
     cell::RefCell,
     collections::{HashMap, VecDeque},
     fmt::Display,
-    ops::Range,
     rc::Rc,
     result::Result as StdResult,
     sync::Arc,
@@ -39,7 +38,7 @@ use crate::{
     Follow, MarkdownOptions, Mode, ViewType,
     document::{
         BlockKind, DocumentSnapshot, Link, LocalLink, ObjectKind, ParseLimits, ReadingPosition,
-        ReadingRange, ResolvedLink, heading_slug, parse_document,
+        ReadingRange, ResolvedLink, parse_document,
     },
     executor::{
         CopyInput, PreparedView, SearchOutput, WorkHandle, WorkRequest, WorkResult, WorkSearch,
@@ -273,34 +272,6 @@ fn resource_wants(document: &DocumentSnapshot) -> impl Iterator<Item = (Resource
     })
 }
 
-/// The source of what a link's `#` anchor names in a document of `len`
-/// bytes: a block by its `^id`, or a heading, by its fragment slug or by its
-/// text without regard to case, and what follows it up to the next heading
-/// as high. An empty anchor names nothing.
-fn anchor_section(document: &DocumentSnapshot, len: usize, anchor: &str) -> Option<Range<usize>> {
-    let anchor = anchor.trim();
-    if anchor.is_empty() {
-        return None;
-    }
-    if let Some(id) = anchor.strip_prefix('^') {
-        return document
-            .block_anchors
-            .iter()
-            .find(|block| block.id == id)
-            .map(|block| block.source.clone());
-    }
-    let slug = heading_slug(anchor);
-    let at = document.outline.iter().position(|e| {
-        e.slug == anchor || e.slug == slug || e.text.trim().eq_ignore_ascii_case(anchor)
-    })?;
-    let entry = &document.outline[at];
-    let end = document.outline[at + 1..]
-        .iter()
-        .find(|next| next.level <= entry.level)
-        .map_or(len, |next| next.source.start);
-    Some(entry.source.start..end)
-}
-
 /// The readable paragraphs of the section of `text` that `anchor` names: a
 /// block by its `^id`, a heading and what follows it up to the next heading
 /// as high, or the whole note without an anchor. A heading keeps its `#`
@@ -311,7 +282,7 @@ fn embedded_section(text: &str, anchor: Option<&str>) -> Vec<String> {
     };
     let document = parse_document(&store.snapshot(), &ParseLimits::default(), None);
     let range = match anchor {
-        Some(anchor) => anchor_section(&document, text.len(), anchor),
+        Some(anchor) => canopy_xmark::section(text, anchor),
         None => Some(0..text.len()),
     };
     let Some(range) = range else {
@@ -1190,7 +1161,9 @@ impl Markdown {
             ObjectKind::Link(link) => {
                 let resolved = link.resolve(self.base_url().as_ref());
                 if let ResolvedLink::Fragment(anchor) = &resolved {
-                    self.reveal_anchor(ctx, anchor)?;
+                    if let Some(byte) = self.anchor_byte(anchor) {
+                        self.jump_source(ctx, byte)?;
+                    }
                     return Ok(());
                 }
                 if self.options.follow_links
@@ -1407,15 +1380,20 @@ impl Markdown {
     /// Reveal what a link's `#` anchor names: a block by its `^id`, or a
     /// heading by its fragment slug or by its text without regard to case.
     /// Returns whether one matched.
+    ///
+    /// The host navigates here, so it keeps its own history: the reveal
+    /// records no jump and leaves no return position.
     pub fn reveal_anchor(&mut self, ctx: &mut dyn Context, anchor: &str) -> Result<bool> {
-        let Some(p) = self.shared.borrow().presentation.clone() else {
+        let Some(byte) = self.anchor_byte(anchor) else {
             return Ok(false);
         };
-        let Some(section) = anchor_section(&p.document, p.document.source.len(), anchor) else {
-            return Ok(false);
-        };
-        self.jump_source(ctx, section.start)?;
+        self.go_to_source(ctx, byte)?;
         Ok(true)
+    }
+    /// Return where the shown document's section for `anchor` starts.
+    fn anchor_byte(&self, anchor: &str) -> Option<usize> {
+        let p = self.shared.borrow().presentation.clone()?;
+        canopy_xmark::section(&p.document.source.text(), anchor).map(|section| section.start)
     }
     /// Save one return location and navigate to an accepted source byte.
     fn jump_source(&mut self, ctx: &mut dyn Context, byte: usize) -> Result<()> {
@@ -1425,6 +1403,10 @@ impl Markdown {
         }
         self.jumps.push_back(before);
         self.return_position = Some(before);
+        self.go_to_source(ctx, byte)
+    }
+    /// Navigate to an accepted source byte.
+    fn go_to_source(&mut self, ctx: &mut dyn Context, byte: usize) -> Result<()> {
         self.shared.borrow_mut().follow = Follow::Paused;
         self.shared.borrow_mut().navigation += 1;
         self.restore(
@@ -2179,6 +2161,19 @@ impl Markdown {
             Lifecycle::Complete(FinishOutcome::Completed) => "Complete".into(),
             Lifecycle::Complete(FinishOutcome::Aborted(reason)) => format!("Aborted: {reason}"),
         };
+        // What the rendered view leaves out, so a reader knows to look at
+        // the source.
+        let partial = (self.active == ViewType::Rendered)
+            .then(|| self.shared.borrow().presentation.clone())
+            .flatten()
+            .and_then(|shown| {
+                shown
+                    .document
+                    .degraded
+                    .clone()
+                    .or_else(|| shown.truncated.then(|| "layout limit".to_owned()))
+            })
+            .map_or(String::new(), |reason| format!(" · Partial: {reason}"));
         let label = if self.active == ViewType::Source {
             "Rendered | [Source]"
         } else {
@@ -2210,7 +2205,7 @@ impl Markdown {
             String::new()
         };
         let text = format!(
-            "{label}  {mode} · {lifecycle} · {follow}{update}{new}{}{}{}",
+            "{label}  {mode} · {lifecycle}{partial} · {follow}{update}{new}{}{}{}",
             self.options
                 .status
                 .as_ref()

@@ -170,6 +170,7 @@ mod syntect_highlighter {
     use std::{
         cell::{Cell, RefCell},
         fmt, mem,
+        ops::Range,
         path::Path,
         sync::OnceLock,
     };
@@ -246,6 +247,18 @@ mod syntect_highlighter {
     /// render. Past this point lines highlight without the state above them.
     const MAX_STATEFUL_LINES: usize = 4_000;
 
+    /// Bytes a prepared source will walk before it stops carrying parser
+    /// state, for sources whose lines are long.
+    const MAX_STATEFUL_BYTES: usize = 512 * 1024;
+
+    /// The longest line that is highlighted.
+    ///
+    /// Grammars match each line with regular expressions whose cost grows
+    /// with the line, so one minified line of hundreds of kilobytes takes
+    /// seconds. A source with a longer line shows as plain text, since
+    /// skipping that line alone would leave the parser state wrong below it.
+    const MAX_LINE_BYTES: usize = 4_096;
+
     /// A grammar: a syntax, and the set that holds it.
     ///
     /// A syntax parses only against its own set, so the two travel together.
@@ -268,11 +281,7 @@ mod syntect_highlighter {
         /// extension, then as a syntax name, and a few common names such as
         /// `shell` and `golang` stand for others. Plain text names no grammar.
         pub fn for_fence(info: &str) -> Option<Self> {
-            let token = info
-                .trim_start()
-                .split(|c: char| c.is_whitespace() || c == ',')
-                .next()
-                .filter(|token| !token.is_empty())?;
+            let token = canopy_xmark::fence_language(info)?;
             let token = FENCE_ALIASES
                 .iter()
                 .find(|(alias, _)| alias.eq_ignore_ascii_case(token))
@@ -558,46 +567,37 @@ mod syntect_highlighter {
         }
     }
 
-    /// A fenced code block open in a Markdown source.
+    /// The body of a fenced code block in a Markdown source.
     struct Fence {
-        /// The fence character, a backtick or a tilde.
-        marker: char,
-        /// The length of the opening run. A run at least this long closes the
-        /// fence.
-        len: usize,
-        /// Highlighter for the body, when a grammar covers the fence's
-        /// language.
-        engine: Option<Engine>,
+        /// The indices of the body's lines.
+        lines: Range<usize>,
+        /// The grammar the fence's language names, if one covers it.
+        grammar: Option<Grammar>,
     }
 
-    impl Fence {
-        /// Return the fence that `line` opens, if it opens one.
-        ///
-        /// A run of three or more backticks or tildes opens a fence. Any indent
-        /// may come before it, so a fence inside a list item opens too. The
-        /// info string after a run of backticks holds no backtick.
-        fn open(line: &str, theme: &'static Theme) -> Option<Self> {
-            let rest = line.trim_start();
-            let marker = rest.chars().next().filter(|c| matches!(c, '`' | '~'))?;
-            let len = rest.chars().take_while(|&c| c == marker).count();
-            // The marker is one byte long, so the run ends at byte `len`.
-            let info = &rest[len..];
-            if len < 3 || (marker == '`' && info.contains('`')) {
-                return None;
-            }
-            Some(Self {
-                marker,
-                len,
-                engine: Grammar::for_fence(info).map(|grammar| Engine::new(grammar, theme)),
+    /// The fences of a Markdown source of `lines`, in order, as the Markdown
+    /// parser reads them.
+    fn fences(lines: &[String]) -> Vec<Fence> {
+        let text = lines.concat();
+        let mut starts = Vec::with_capacity(lines.len());
+        let mut at = 0;
+        for line in lines {
+            starts.push(at);
+            at += line.len();
+        }
+        // The line that holds byte `at`.
+        let line_of = |at: usize| {
+            starts
+                .partition_point(|&start| start <= at)
+                .saturating_sub(1)
+        };
+        canopy_xmark::fenced_code(&text)
+            .into_iter()
+            .map(|code| Fence {
+                lines: line_of(code.body.start)..line_of(code.body.end.saturating_sub(1)) + 1,
+                grammar: Grammar::for_fence(&code.info),
             })
-        }
-
-        /// Return whether `line` closes the fence.
-        fn closed_by(&self, line: &str) -> bool {
-            let rest = line.trim_start();
-            let run = rest.chars().take_while(|&c| c == self.marker).count();
-            run >= self.len && rest[run..].trim().is_empty()
-        }
+            .collect()
     }
 
     /// One source text and the highlighting walked over it so far.
@@ -609,13 +609,14 @@ mod syntect_highlighter {
         lines: Vec<String>,
         /// Theme the spans take their styles from.
         theme: &'static Theme,
-        /// Whether the source is Markdown, whose fences highlight their bodies
-        /// in their own languages.
-        markdown: bool,
         /// Highlighter positioned after the last cached line.
         engine: Engine,
-        /// The fence the walk is inside, in a Markdown source.
-        fence: Option<Fence>,
+        /// The fences of a Markdown source, in order.
+        fences: Vec<Fence>,
+        /// The first fence the walk has not left.
+        next_fence: usize,
+        /// Highlighter for the body of the fence the walk is inside.
+        fence_engine: Option<Engine>,
         /// Spans for every line walked so far.
         spans: Vec<Vec<HighlightSpan>>,
     }
@@ -623,17 +624,19 @@ mod syntect_highlighter {
     impl Source {
         /// Hold `lines` to highlight in `grammar` and `theme`.
         fn new(grammar: Grammar, lines: Vec<String>, theme: &'static Theme) -> Self {
+            let markdown = grammar
+                .syntax
+                .scope
+                .build_string()
+                .starts_with("text.html.markdown");
             Self {
                 grammar,
+                fences: if markdown { fences(&lines) } else { Vec::new() },
                 lines,
                 theme,
-                markdown: grammar
-                    .syntax
-                    .scope
-                    .build_string()
-                    .starts_with("text.html.markdown"),
                 engine: Engine::new(grammar, theme),
-                fence: None,
+                next_fence: 0,
+                fence_engine: None,
                 spans: Vec::new(),
             }
         }
@@ -664,26 +667,26 @@ mod syntect_highlighter {
         /// it. The fence lines themselves, and a body in no known language,
         /// stay with the source's highlighter.
         fn walk_line(&mut self) {
-            let text = &self.lines[self.spans.len()];
-            let in_body = match &self.fence {
-                Some(fence) if fence.closed_by(text) => {
-                    self.fence = None;
-                    false
-                }
-                Some(_) => true,
-                None => {
-                    if self.markdown {
-                        self.fence = Fence::open(text, self.theme);
-                    }
-                    false
-                }
-            };
-            let engine = match &mut self.fence {
-                Some(Fence {
-                    engine: Some(engine),
-                    ..
-                }) if in_body => engine,
-                _ => &mut self.engine,
+            let line = self.spans.len();
+            while self
+                .fences
+                .get(self.next_fence)
+                .is_some_and(|fence| fence.lines.end <= line)
+            {
+                self.next_fence += 1;
+                self.fence_engine = None;
+            }
+            let grammar = self
+                .fences
+                .get(self.next_fence)
+                .filter(|fence| fence.lines.contains(&line))
+                .and_then(|fence| fence.grammar);
+            let text = &self.lines[line];
+            let engine = match grammar {
+                Some(grammar) => self
+                    .fence_engine
+                    .get_or_insert_with(|| Engine::new(grammar, self.theme)),
+                None => &mut self.engine,
             };
             let spans = engine.spans(text);
             self.spans.push(spans);
@@ -693,8 +696,9 @@ mod syntect_highlighter {
     /// A syntect-backed highlighter.
     ///
     /// Language detection uses the file name or extension, then the first
-    /// source line. Parser state is retained for at most 4,000 lines; later
-    /// lines highlight independently.
+    /// source line. Parser state is retained for at most 4,000 lines or
+    /// 512 KiB; later lines highlight independently. A source with a line
+    /// longer than 4 KiB, such as a minified bundle, shows as plain text.
     pub struct SyntectHighlighter {
         /// Theme used for highlighting.
         theme: &'static Theme,
@@ -822,7 +826,9 @@ mod syntect_highlighter {
             // A plain-text syntax may still be a recognizable script, so
             // consult the first line before committing to it.
             let hint = self.grammar.get();
-            let grammar = if hint.is_plain() {
+            let grammar = if text.split('\n').any(|line| line.len() > MAX_LINE_BYTES) {
+                Grammar::plain()
+            } else if hint.is_plain() {
                 Grammar::extended(|set| {
                     set.find_syntax_by_first_line(text.lines().next().unwrap_or_default())
                 })
@@ -830,9 +836,14 @@ mod syntect_highlighter {
             } else {
                 hint
             };
+            let mut bytes = 0;
             let lines = text
                 .split_inclusive('\n')
                 .take(MAX_STATEFUL_LINES)
+                .take_while(|line| {
+                    bytes += line.len();
+                    bytes <= MAX_STATEFUL_BYTES
+                })
                 .map(str::to_string)
                 .collect::<Vec<_>>();
             *self.source.borrow_mut() = Some(Source::new(grammar, lines, self.theme));
@@ -844,7 +855,11 @@ mod syntect_highlighter {
             {
                 return self.paint_spans(spans);
             }
-            // No prepared source, or a line beyond it: highlight on its own.
+            // No prepared source, or a line beyond it: highlight on its own,
+            // unless it is too long to.
+            if text.len() > MAX_LINE_BYTES {
+                return Vec::new();
+            }
             self.paint_spans(Engine::new(self.current_grammar(), self.theme).spans(text))
         }
     }
@@ -1253,6 +1268,34 @@ mod syntect_highlighter {
                 colors(&SyntectHighlighter::new("rs"), 0, "let x = 1;"),
                 "uncached lines retain stateless highlighting"
             );
+        }
+
+        #[test]
+        fn a_source_with_a_long_line_shows_as_plain_text() {
+            let highlighter = SyntectHighlighter::new("js");
+            let long = "var a=1;".repeat(MAX_LINE_BYTES / 8 + 1);
+            highlighter.prepare(&format!("var x = 1;\n{long}\n"));
+            assert_eq!(highlighter.syntax_name(), "Plain Text");
+            assert_eq!(
+                colors(&highlighter, 0, "var x = 1;"),
+                colors(&SyntectHighlighter::new("txt"), 0, "var x = 1;"),
+                "every line is plain, not only the long one"
+            );
+            let unprepared = SyntectHighlighter::new("js");
+            assert!(
+                unprepared.highlight_line(0, &long).is_empty(),
+                "a long line on its own stays plain"
+            );
+        }
+
+        #[test]
+        fn preparing_long_lines_retains_a_bounded_prefix() {
+            let highlighter = SyntectHighlighter::new("rs");
+            let line = format!("// {}\n", "x".repeat(4_000));
+            highlighter.prepare(&line.repeat(MAX_STATEFUL_BYTES / line.len() * 2));
+            let prepared = highlighter.source.borrow();
+            let prepared = prepared.as_ref().expect("source was prepared");
+            assert_eq!(prepared.lines.len(), MAX_STATEFUL_BYTES / line.len());
         }
 
         #[test]

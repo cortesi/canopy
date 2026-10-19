@@ -405,20 +405,11 @@ pub struct PresentationSnapshot {
 }
 
 impl PresentationSnapshot {
-    /// Run this on the document worker. A palette change does not invalidate
-    /// it.
-    pub fn prepare(
-        document: Arc<DocumentSnapshot>,
-        geometry: GeometryKey,
-        previous: Option<&Self>,
-    ) -> Self {
-        Self::prepare_with(document, geometry, previous, &Supplied::default())
-    }
-
-    /// Prepare as [`Self::prepare`] does, with what the host supplied: an
+    /// Run this on the document worker, with what the host supplied: an
     /// image block reserves its image's rows, an embed shows its text, and a
-    /// link that names nothing shows faint.
-    pub fn prepare_with(
+    /// link that names nothing shows faint. A palette change does not
+    /// invalidate it.
+    pub fn prepare(
         document: Arc<DocumentSnapshot>,
         geometry: GeometryKey,
         previous: Option<&Self>,
@@ -2362,17 +2353,19 @@ fn clipped(
 /// Prepare palette role spans for every line of a code card.
 fn code_syntax(info: &str, payload: &str) -> SyntaxLines {
     use canopy_widgets::highlight::{Highlighter, SyntectHighlighter};
-    // The bundled Markdown highlighter resolves fences through Grammar, so
-    // aliases and named grammars agree with the code inspector.
-    let token = info.split_whitespace().next().unwrap_or("");
-    let highlighter = SyntectHighlighter::for_path("preview.md").with_palette_roles();
-    highlighter.prepare(&format!("```{token}\n{payload}"));
+    // The fence's grammar resolves as the code inspector's does.
+    let Some(grammar) = Grammar::for_fence(info) else {
+        return Vec::new();
+    };
+    let highlighter = SyntectHighlighter::new("").with_palette_roles();
+    highlighter.set_grammar(grammar);
+    highlighter.prepare(payload);
     payload
         .lines()
         .enumerate()
         .map(|(i, line)| {
             highlighter
-                .highlight_line(i + 1, line)
+                .highlight_line(i, line)
                 .into_iter()
                 .map(|span| (span.range, span.style))
                 .collect()
