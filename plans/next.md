@@ -210,7 +210,5 @@ every renamed gym, the cursor, font, motion, and term gyms in particular.
 
 - [x] Refresh `api/` with `ncode api`, review its diff, then run
       `ncode api --check`.
-- [ ] Run `ncode tidy` and `ncode test` in Canopy and fh. Canopy passed;
-      fh waits for its own owner.
-- [ ] Run `cargo xtask smoke`, and the canopyctl smoke suite in fh. Canopy
-      passed; fh waits for its own owner.
+- [x] Run `ncode tidy` and `ncode test` in Canopy and fh.
+- [x] Run `cargo xtask smoke`, and the canopyctl smoke suite in fh.
