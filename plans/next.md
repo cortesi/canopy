@@ -208,7 +208,9 @@ every renamed gym, the cursor, font, motion, and term gyms in particular.
 
 ### Stage 5: Acceptance
 
-- [ ] Refresh `api/` with `ncode api`, review its diff, then run
+- [x] Refresh `api/` with `ncode api`, review its diff, then run
       `ncode api --check`.
-- [ ] Run `ncode tidy` and `ncode test` in Canopy and fh.
-- [ ] Run `cargo xtask smoke`, and the canopyctl smoke suite in fh.
+- [ ] Run `ncode tidy` and `ncode test` in Canopy and fh. Canopy passed;
+      fh waits for its own owner.
+- [ ] Run `cargo xtask smoke`, and the canopyctl smoke suite in fh. Canopy
+      passed; fh waits for its own owner.
