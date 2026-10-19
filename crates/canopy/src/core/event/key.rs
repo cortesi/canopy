@@ -246,7 +246,7 @@ impl Key {
         if spec.chars().count() == 1 {
             return Ok(Self::from(parse_key_code(spec).map_err(ParseError::new)?).normalize());
         }
-        let (mods, key_part) = parse_spec_parts(spec, &['-', '+']).map_err(ParseError::new)?;
+        let (mods, key_part) = parse_spec_parts(spec).map_err(ParseError::new)?;
         Ok((mods + parse_key_code(key_part).map_err(ParseError::new)?).normalize())
     }
 
@@ -278,16 +278,11 @@ impl Key {
 }
 
 /// Split an input specification into its modifier set and its trailing body.
-///
-/// The separators differ per input kind: key specs accept `-` and `+`, mouse
-/// specs only `-`.
-pub(crate) fn parse_spec_parts<'a>(
-    spec: &'a str,
-    separators: &[char],
-) -> Result<(Mods, &'a str), String> {
+/// Modifiers separate with `-` or `+`.
+pub(crate) fn parse_spec_parts(spec: &str) -> Result<(Mods, &str), String> {
     let parts = spec
         .trim()
-        .split(separators)
+        .split(['-', '+'])
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>();
     let Some((body, modifier_parts)) = parts.split_last() else {

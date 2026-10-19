@@ -105,8 +105,7 @@ impl Mouse {
     /// [`Display`](fmt::Display) writes parses back to the same spec. `Leave`
     /// runs no binding, so it is not a spec.
     pub fn parse_spec(spec: &str) -> Result<Self, ParseError> {
-        let (modifiers, body) =
-            key::parse_spec_parts(spec, &['-', '+']).map_err(ParseError::new)?;
+        let (modifiers, body) = key::parse_spec_parts(spec).map_err(ParseError::new)?;
 
         let lower = body.to_ascii_lowercase();
         if lower.ends_with("leave") {
