@@ -211,8 +211,9 @@ callout tag. A callout of only a marker line keeps its title, or shows its
 label. The label vocabulary and its tones live in the crate, so the
 terminal and the preview agree. Replaces `take_alert_marker`, the bare
 marker leaf in `collect`, and `AlertTone::of` (canopy), and
-`common_alerts`, `marker_label`, and `alert_kind` (fh). Settles fh's
-`next.md` C4. Folding itself (`next.md` C5) stays a reader decision.
+`common_alerts`, `marker_label`, and `alert_kind` (fh). Settles the
+preview's alert vocabulary. Folding itself (`next.md` C8) stays a reader
+decision.
 
 #### C9: Inline footnotes
 
