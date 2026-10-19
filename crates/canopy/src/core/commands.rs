@@ -1127,6 +1127,12 @@ impl CommandSet {
         self.commands.get(id).copied()
     }
 
+    /// Get a command by id, or fail with [`CommandError::UnknownCommand`].
+    pub(crate) fn require(&self, id: &str) -> Result<&'static CommandSpec, CommandError> {
+        self.get(id)
+            .ok_or_else(|| CommandError::UnknownCommand { id: id.to_string() })
+    }
+
     /// Iterate over all command specs.
     pub fn iter(&self) -> impl Iterator<Item = (&'static str, &'static CommandSpec)> + '_ {
         self.commands.iter().map(|(k, v)| (*k, *v))
@@ -1474,12 +1480,7 @@ pub(crate) fn resolve_posted(
     origin: NodeId,
     call: &CommandCall,
 ) -> Result<NodeId, CommandError> {
-    let spec = core
-        .commands
-        .get(call.id.0)
-        .ok_or_else(|| CommandError::UnknownCommand {
-            id: call.id.0.to_string(),
-        })?;
+    let spec = core.commands.require(call.id.0)?;
     (spec.check)(&call.args)?;
     validate_node_args(core, &call.args)?;
     let resolver = CommandResolver::for_target(core, call.target_or(origin));
@@ -1492,12 +1493,7 @@ fn dispatch_inner(
     target: CommandTarget,
     call: &CommandCall,
 ) -> Result<ArgValue, CommandError> {
-    let spec = core
-        .commands
-        .get(call.id.0)
-        .ok_or_else(|| CommandError::UnknownCommand {
-            id: call.id.0.to_string(),
-        })?;
+    let spec = core.commands.require(call.id.0)?;
     validate_node_args(core, &call.args)?;
     let resolution = checked_resolution(&CommandResolver::for_target(core, target), spec)?;
     dispatch_on_node(core, resolution.target(), spec, &call.args)
@@ -1531,13 +1527,9 @@ pub(crate) fn command_status(
     origin: NodeId,
     call: &CommandCall,
 ) -> CoreResult<CommandStatus> {
-    let Some(spec) = core.commands.get(call.id.0) else {
-        return Ok(CommandStatus::Disabled(
-            CommandError::UnknownCommand {
-                id: call.id.0.to_string(),
-            }
-            .to_string(),
-        ));
+    let spec = match core.commands.require(call.id.0) {
+        Ok(spec) => spec,
+        Err(error) => return Ok(CommandStatus::Disabled(error.to_string())),
     };
     let target = call.target_or(origin);
     let resolution = match checked_resolution(&CommandResolver::for_target(core, target), spec) {

@@ -35,11 +35,7 @@ pub(super) fn dispatch_explicit(
     args: CommandArgs,
 ) -> Result<ArgValue> {
     with_current_canopy(scope, |canopy, origin| {
-        let spec = canopy.core.commands.get(name).ok_or_else(|| {
-            error::Error::from(commands::CommandError::UnknownCommand {
-                id: name.to_string(),
-            })
-        })?;
+        let spec = canopy.core.commands.require(name)?;
         let call = spec.call_with(args).with_target(target);
         commands::dispatch(&mut canopy.core, origin, &call).map_err(error::Error::from)
     })
