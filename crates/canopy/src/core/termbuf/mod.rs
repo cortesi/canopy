@@ -843,29 +843,17 @@ fn buffer_matches_shift_in_rect(current: &TermBuf, prev: &TermBuf, rect: Rect, s
     let rect_top = rect.tl.y as i32;
     let rect_bottom = rect_top + rect.h as i32;
 
-    if shift > 0 {
-        for y in rect_top + shift..rect_bottom {
-            let row = y as usize * width;
-            let prev_row = (y - shift) as usize * width;
-            let cur_slice = &current.cells[row + rect_x..row + rect_x + rect_w];
-            let prev_slice = &prev.cells[prev_row + rect_x..prev_row + rect_x + rect_w];
-            if cur_slice != prev_slice {
-                return false;
-            }
-        }
+    let mut rows = if shift > 0 {
+        rect_top + shift..rect_bottom
     } else {
-        let limit = rect_bottom + shift;
-        for y in rect_top..limit {
-            let row = y as usize * width;
-            let prev_row = (y - shift) as usize * width;
-            let cur_slice = &current.cells[row + rect_x..row + rect_x + rect_w];
-            let prev_slice = &prev.cells[prev_row + rect_x..prev_row + rect_x + rect_w];
-            if cur_slice != prev_slice {
-                return false;
-            }
-        }
-    }
-    true
+        rect_top..rect_bottom + shift
+    };
+    rows.all(|y| {
+        let row = y as usize * width;
+        let prev_row = (y - shift) as usize * width;
+        current.cells[row + rect_x..row + rect_x + rect_w]
+            == prev.cells[prev_row + rect_x..prev_row + rect_x + rect_w]
+    })
 }
 
 /// Determine whether the current line matches the previous line shifted by
