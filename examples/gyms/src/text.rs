@@ -134,5 +134,5 @@ root.default_bindings()
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.script("textgym", DEFAULT_BINDINGS)
+    builder.script("text", DEFAULT_BINDINGS)
 }

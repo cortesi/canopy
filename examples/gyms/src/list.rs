@@ -267,5 +267,5 @@ pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
             setup.widget_styles(setup_style);
             Ok(())
         })
-        .script("listgym", DEFAULT_BINDINGS)
+        .script("list", DEFAULT_BINDINGS)
 }

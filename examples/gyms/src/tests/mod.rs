@@ -4,6 +4,7 @@ mod frame;
 mod help;
 mod list;
 mod markdown;
+mod names;
 mod shell;
 mod smoke;
 mod style;

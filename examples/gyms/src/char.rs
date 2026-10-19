@@ -201,5 +201,5 @@ impl Widget for CharGym {
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.script("chargym", crate::TEXT_SCROLL_BINDINGS)
+    builder.script("char", crate::TEXT_SCROLL_BINDINGS)
 }

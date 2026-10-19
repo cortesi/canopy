@@ -24,13 +24,13 @@ const SWATCH_WIDTH: u32 = 32;
 
 /// Rows: a label and the style path of its swatch.
 const ROWS: [(&str, &str); 7] = [
-    ("blink", "motiongym/blink"),
-    ("pulse", "motiongym/pulse"),
-    ("fade", "motiongym/fade"),
-    ("hue loop", "motiongym/hue"),
-    ("drift", "motiongym/drift"),
-    ("sweep", "motiongym/sweep"),
-    ("text", "motiongym/text"),
+    ("blink", "motion/blink"),
+    ("pulse", "motion/pulse"),
+    ("fade", "motion/fade"),
+    ("hue loop", "motion/hue"),
+    ("drift", "motion/drift"),
+    ("sweep", "motion/sweep"),
+    ("text", "motion/text"),
 ];
 
 /// Demo node that paints the motion swatches.
@@ -57,9 +57,9 @@ impl Widget for MotionGym {
         for (index, (label, style)) in ROWS.iter().enumerate() {
             let y = origin.y.saturating_add(2 * index as u32 + 1);
             let x = origin.x.saturating_add(1);
-            r.text("motiongym/label", Line::new(x, y, LABEL_WIDTH), label)?;
+            r.text("motion/label", Line::new(x, y, LABEL_WIDTH), label)?;
             let swatch = x.saturating_add(LABEL_WIDTH);
-            if *style == "motiongym/text" {
+            if *style == "motion/text" {
                 let text = "the quick brown fox";
                 r.text(style, Line::new(swatch, y, text.len() as u32), text)?;
             } else {
@@ -114,21 +114,21 @@ fn swatches(p: &Palette, rules: StyleRules<'_>) {
     .with_drift(Drift::Sweep(secs(3.0)))
     .with_pause(Pause::Never);
     rules
-        .fg("motiongym/label", p.muted_fg)
+        .fg("motion/label", p.muted_fg)
         .bg(
-            "motiongym/blink",
+            "motion/blink",
             Animation::blink(p.accent, p.element_bg, secs(0.5), secs(0.5)),
         )
         .bg(
-            "motiongym/pulse",
+            "motion/pulse",
             Animation::pulse(p.blue, p.magenta, secs(2.0)),
         )
-        .bg("motiongym/fade", Animation::fade(p.bg, p.green, secs(2.0)))
-        .bg("motiongym/hue", hue)
-        .bg("motiongym/drift", Paint::gradient(drift))
-        .bg("motiongym/sweep", Paint::gradient(sweep))
+        .bg("motion/fade", Animation::fade(p.bg, p.green, secs(2.0)))
+        .bg("motion/hue", hue)
+        .bg("motion/drift", Paint::gradient(drift))
+        .bg("motion/sweep", Paint::gradient(sweep))
         .fg(
-            "motiongym/text",
+            "motion/text",
             Animation::pulse(
                 p.fg,
                 Color::Rgb { r: 0, g: 0, b: 0 }.mix(p.fg, 0.3, Mix::Oklab),
@@ -151,5 +151,5 @@ pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
             setup.widget_styles(swatches);
             Ok(())
         })
-        .script("motiongym", DEFAULT_BINDINGS)
+        .script("motion", DEFAULT_BINDINGS)
 }

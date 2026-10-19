@@ -436,7 +436,7 @@ impl Widget for TermGym {
     }
 
     fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        r.push_layer("termgym");
+        r.push_layer("term");
         Ok(())
     }
 }
@@ -463,15 +463,15 @@ fn setup_style(palette: &Palette, rules: StyleRules<'_>) {
         .bg(palette.accent)
         .attrs(selected_attrs);
 
-    let rules = crate::selectable_entry_styles(palette, rules, "termgym/entry");
+    let rules = crate::selectable_entry_styles(palette, rules, "term/entry");
     rules
-        .prefix("termgym/button")
+        .prefix("term/button")
         .style_all(&["border", "fill", "text"], button_normal)
         .style_all(
             &["selected/border", "selected/fill", "selected/text"],
             button_selected,
         )
-        .prefix("termgym/frame")
+        .prefix("term/frame")
         .fg("", palette.frame)
         .style(
             "focused",
@@ -490,5 +490,5 @@ pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
             setup.widget_styles(setup_style);
             Ok(())
         })
-        .script("termgym", DEFAULT_BINDINGS)
+        .script("term", DEFAULT_BINDINGS)
 }

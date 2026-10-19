@@ -390,7 +390,7 @@ impl FontGym {
                 .fixed_height(1)
                 .into(),
         )?;
-        let label = c.add_child(row, Text::new(label).with_style("fontgym/control"))?;
+        let label = c.add_child(row, Text::new(label).with_style("font/control"))?;
         c.set_layout_override(
             label.into(),
             Layout::fill().fixed_width(CONTROL_LABEL_WIDTH).into(),
@@ -493,7 +493,7 @@ impl FontGym {
         )?;
         let size = c.add_child(
             size_row,
-            Text::new(size_label(self.height)).with_style("fontgym/value"),
+            Text::new(size_label(self.height)).with_style("font/value"),
         )?;
         c.set_layout_override(size.into(), Layout::fill().fixed_width(8).into())?;
         c.add_child(
@@ -674,7 +674,7 @@ impl Widget for FontBlock {
             Layout::fill().fixed_height(self.banner_height).into(),
         )?;
 
-        let label_id = ctx.create_detached(FontLabel::new(self.label.clone(), "fontgym/label"))?;
+        let label_id = ctx.create_detached(FontLabel::new(self.label.clone(), "font/label"))?;
         ctx.set_layout_override(
             label_id.into(),
             Layout::fill().fixed_height(LABEL_HEIGHT).into(),
@@ -790,11 +790,11 @@ fn drifting_gradient(angle_deg: f32, colors: [Color; 4]) -> Paint {
 /// Install the gym's styles, over whatever theme is in use.
 fn setup_style(_palette: &Palette, rules: StyleRules<'_>) {
     let mut rules = rules
-        .attr("fontgym/control", Attr::Bold)
-        .fg("fontgym/control", rgb!("#E9ECEF"))
-        .attr("fontgym/value", Attr::Bold)
-        .fg("fontgym/value", rgb!("#FFD166"))
-        .fg("fontgym/label", rgb!("#A3B1C2"));
+        .attr("font/control", Attr::Bold)
+        .fg("font/control", rgb!("#E9ECEF"))
+        .attr("font/value", Attr::Bold)
+        .fg("font/value", rgb!("#FFD166"))
+        .fg("font/label", rgb!("#A3B1C2"));
     for spec in &BANNERS {
         rules = rules.fg(
             spec.style,
@@ -850,7 +850,7 @@ pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
             setup.widget_styles(setup_style);
             Ok(())
         })
-        .script("fontgym", DEFAULT_BINDINGS)
+        .script("font", DEFAULT_BINDINGS)
 }
 
 #[cfg(test)]

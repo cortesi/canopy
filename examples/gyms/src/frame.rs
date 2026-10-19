@@ -143,6 +143,6 @@ impl Register for FrameGym {
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
     builder
-        .script("framegym-prefix", FRAMEGYM_PREFIX)
-        .script("framegym-scroll", crate::TEXT_SCROLL_BINDINGS)
+        .script("frame-prefix", FRAMEGYM_PREFIX)
+        .script("frame-scroll", crate::TEXT_SCROLL_BINDINGS)
 }

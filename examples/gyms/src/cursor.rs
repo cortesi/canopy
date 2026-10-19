@@ -146,9 +146,9 @@ impl Widget for CursorSample {
         r.fill("", rect, ' ')?;
         let origin = view.content_origin();
         let label = if ctx.is_focused() {
-            "cursorgym/label/focused"
+            "cursor/label/focused"
         } else {
-            "cursorgym/label"
+            "cursor/label"
         };
         r.text(
             label,
@@ -157,7 +157,7 @@ impl Widget for CursorSample {
         )?;
         let x = origin.x.saturating_add(LABEL_WIDTH);
         r.text(
-            "cursorgym/sample",
+            "cursor/sample",
             Line::new(x, origin.y, SAMPLE.len() as u32),
             SAMPLE,
         )?;
@@ -204,12 +204,12 @@ pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
         .configure(|setup| {
             setup.widget_styles(|palette, rules| {
                 rules
-                    .fg("cursorgym/label", palette.muted_fg)
-                    .fg("cursorgym/label/focused", palette.accent)
-                    .fg("cursorgym/sample", palette.fg)
+                    .fg("cursor/label", palette.muted_fg)
+                    .fg("cursor/label/focused", palette.accent)
+                    .fg("cursor/sample", palette.fg)
                     .apply();
             });
             Ok(())
         })
-        .script("cursorgym", DEFAULT_BINDINGS)
+        .script("cursor", DEFAULT_BINDINGS)
 }

@@ -1114,5 +1114,5 @@ impl Register for Stylegym {
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.script("stylegym", DEFAULT_BINDINGS)
+    builder.script("style", DEFAULT_BINDINGS)
 }

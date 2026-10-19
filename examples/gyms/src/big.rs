@@ -953,7 +953,7 @@ pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
             setup.widget_styles(styles);
             Ok(())
         })
-        .script("biggym", DEFAULT_BINDINGS)
+        .script("big", DEFAULT_BINDINGS)
 }
 
 #[cfg(test)]

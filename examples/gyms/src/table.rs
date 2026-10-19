@@ -263,7 +263,7 @@ impl TableGym {
             .iter()
             .map(|row| TableRow::new(format!("row-{row:03}"), values(*row)))
             .collect();
-        let data = Arc::new(TableData::new("tablegym", self.revision, columns, rows)?);
+        let data = Arc::new(TableData::new("table", self.revision, columns, rows)?);
         Ok(Arc::new(table::prepare(
             data,
             TableLayoutOptions {
@@ -412,5 +412,5 @@ impl Widget for TableGym {
 /// controls.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.script("tablegym", BINDINGS)
+    builder.script("table", BINDINGS)
 }

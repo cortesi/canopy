@@ -506,7 +506,7 @@ impl Register for MarkdownGym {
 }
 /// Add the gym's explicit stream and presentation control bindings.
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.script("markdowngym", BINDINGS)
+    builder.script("markdown", BINDINGS)
 }
 
 /// The note the gym supplies for every embed; an embed shows the section its

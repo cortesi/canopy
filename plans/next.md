@@ -202,9 +202,9 @@ every renamed gym, the cursor, font, motion, and term gyms in particular.
 
 ### Stage 4: Gym names
 
-- [ ] Rename the script owners, style paths, and dataset id, with the
+- [x] Rename the script owners, style paths, and dataset id, with the
       mapping, the scan, and the style tests (C8).
-- [ ] Run `ncode test -p gyms` and `cargo xtask smoke`.
+- [x] Run `ncode test -p gyms` and `cargo xtask smoke`.
 
 ### Stage 5: Acceptance
 

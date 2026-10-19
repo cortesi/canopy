@@ -1417,5 +1417,5 @@ pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
             setup.widget_styles(styles);
             Ok(())
         })
-        .script("chartgym", DEFAULT_BINDINGS)
+        .script("chart", DEFAULT_BINDINGS)
 }
