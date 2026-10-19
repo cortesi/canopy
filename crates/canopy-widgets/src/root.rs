@@ -478,7 +478,6 @@ impl Register for Root {
         #[cfg(feature = "devtools")]
         Inspector::register(setup)?;
         Button::register(setup)?;
-        Help::register(setup)?;
         register_help_bindings(setup)?;
         register_notice_bindings(setup)?;
         setup.register_mode_hook("root.mode_help", sync_mode_help);

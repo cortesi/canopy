@@ -1,6 +1,4 @@
-use canopy::{
-    CanopyBuilder, Context, ContextExt, Register, Setup, Widget, error::Result, layout::Layout,
-};
+use canopy::{CanopyBuilder, Context, ContextExt, Widget, error::Result, layout::Layout};
 use canopy_widgets::{Frame, Text};
 
 /// Simple pager widget for file contents.
@@ -27,13 +25,6 @@ impl Widget for Pager {
         )?;
 
         c.set_layout_override(c.node_id(), Layout::fill().into())?;
-        Ok(())
-    }
-}
-
-impl Register for Pager {
-    fn register(setup: &mut Setup) -> Result<()> {
-        setup.add_commands::<Text>()?;
         Ok(())
     }
 }

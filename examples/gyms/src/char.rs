@@ -1,8 +1,6 @@
 //! Chargym: A Unicode width and wide character demo.
 
-use canopy::{
-    CanopyBuilder, Context, ContextExt, Register, Setup, Widget, error::Result, layout::Layout,
-};
+use canopy::{CanopyBuilder, Context, ContextExt, Widget, error::Result, layout::Layout};
 use canopy_widgets::{CanvasWidth, Frame, Text};
 use unicode_width::UnicodeWidthStr;
 
@@ -196,13 +194,6 @@ impl Widget for CharGym {
         )?;
 
         c.set_layout_override(c.node_id(), Layout::fill().into())?;
-        Ok(())
-    }
-}
-
-impl Register for CharGym {
-    fn register(setup: &mut Setup) -> Result<()> {
-        setup.add_commands::<Text>()?;
         Ok(())
     }
 }

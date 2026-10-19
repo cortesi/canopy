@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 use canopy::{
-    NodeName, ViewContext, Widget, derive_commands,
+    NodeName, ViewContext, Widget,
     error::Result,
     geom::{Line, Size},
     layout::{Constraint, MeasureConstraints, Measurement},
@@ -50,7 +50,6 @@ impl Selectable for Text {
     }
 }
 
-#[derive_commands]
 impl Text {
     /// Construct a text widget with raw content.
     pub fn new(raw: impl Into<String>) -> Self {

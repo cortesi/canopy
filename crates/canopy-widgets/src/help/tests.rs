@@ -103,7 +103,6 @@ fn harness_with(
     bindings: Vec<AvailableBinding<key::Key>>,
 ) -> Result<Harness> {
     let mut harness = Harness::builder(BindingList::new())
-        .register::<BindingList>()
         .size(width, height)
         .build()?;
     let focus = harness.root;

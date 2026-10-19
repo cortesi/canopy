@@ -3,9 +3,8 @@
 use std::mem;
 
 use canopy::{
-    NodeName, Register, Setup, ViewContext, Widget,
+    NodeName, ViewContext, Widget,
     commands::CommandStatus,
-    derive_commands,
     error::Result,
     geom::{Line, Size},
     input::{
@@ -41,7 +40,6 @@ pub struct BindingList {
     snapshot: Option<BindingSnapshot>,
 }
 
-#[derive_commands]
 impl BindingList {
     /// Construct an empty list.
     pub(crate) const fn new() -> Self {
@@ -66,12 +64,6 @@ impl BindingList {
     pub(super) fn display_lines(&self, width: u32) -> Vec<DisplayLine> {
         let rows = self.snapshot.as_ref().map_or_else(Vec::new, snapshot_rows);
         display_lines(&rows, width)
-    }
-}
-
-impl Register for BindingList {
-    fn register(setup: &mut Setup) -> Result<()> {
-        setup.add_commands::<Self>()
     }
 }
 

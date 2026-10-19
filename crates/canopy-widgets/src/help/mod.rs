@@ -7,8 +7,8 @@ mod tests;
 
 pub use binding_list::BindingList;
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
-    ViewContextExt, Widget, derive_commands,
+    Context, ContextExt, EventOutcome, NodeId, NodeName, TypedId, ViewContext, ViewContextExt,
+    Widget,
     error::{Error, Result},
     input::Event,
     layout::{Edges, Layout},
@@ -24,7 +24,6 @@ use crate::Dialog;
 /// visible around the help panel. It still consumes mouse input.
 pub struct Help;
 
-#[derive_commands]
 impl Help {
     /// Build the complete help subtree and return its root.
     pub(crate) fn install(context: &mut dyn Context) -> Result<NodeId> {
@@ -71,13 +70,5 @@ impl Widget for Help {
 
     fn name(&self) -> NodeName {
         NodeName::convert("help")
-    }
-}
-
-impl Register for Help {
-    fn register(setup: &mut Setup) -> Result<()> {
-        setup.add_commands::<Self>()?;
-        BindingList::register(setup)?;
-        Ok(())
     }
 }

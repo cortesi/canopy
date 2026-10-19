@@ -3171,8 +3171,6 @@ impl Text {
     pub fn with_wrap_width(self, width: u32) -> Self;
 }
 
-impl CommandNode for Text {}
-
 impl Selectable for Text {}
 
 impl Widget for Text {}

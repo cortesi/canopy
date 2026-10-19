@@ -2,9 +2,7 @@
 
 use std::{path::PathBuf, time::Duration};
 
-use canopy::{
-    ContextExt, Register, error::Result, geom::Size, input::key::Key, testing::harness::Harness,
-};
+use canopy::{ContextExt, error::Result, geom::Size, input::key::Key, testing::harness::Harness};
 use canopy_markdown::Markdown;
 use canopy_widgets::Root;
 
@@ -15,7 +13,7 @@ use crate::{
 
 #[test]
 fn the_launcher_shell_adds_a_footer_naming_the_demo_and_the_help_key() -> Result<()> {
-    let canopy = char::binding_setup(demo_canopy().configure(char::CharGym::register))
+    let canopy = char::binding_setup(demo_canopy())
         .assemble(|canopy| {
             Root::new().install(canopy, DemoShell::new(char::CharGym::new()))?;
             Ok(())

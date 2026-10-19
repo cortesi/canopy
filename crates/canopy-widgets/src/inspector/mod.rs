@@ -1,8 +1,8 @@
 mod logs;
 
 use canopy::{
-    Context, ContextExt, NodeId, NodeName, Register, Setup, ViewContext, Widget, derive_commands,
-    error::Result, layout::Layout, render::Render,
+    Context, ContextExt, NodeId, NodeName, Register, Setup, ViewContext, Widget, error::Result,
+    layout::Layout, render::Render,
 };
 use logs::Logs;
 
@@ -36,7 +36,6 @@ canopy.keymap({
 /// Keeps the latest 1,000 log entries, truncating each to 4,096 UTF-8 bytes.
 pub struct Inspector;
 
-#[derive_commands]
 impl Inspector {
     /// Construct a new inspector.
     fn new() -> Self {
@@ -73,7 +72,6 @@ impl Widget for Inspector {
 
 impl Register for Inspector {
     fn register(setup: &mut Setup) -> Result<()> {
-        setup.add_commands::<Self>()?;
         setup.register_default_bindings("inspector", DEFAULT_BINDINGS)?;
         Logs::register(setup)?;
         Ok(())

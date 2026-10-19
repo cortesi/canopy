@@ -260,7 +260,7 @@ impl Demo {
                 builder.configure(widget_editor::WidgetEditor::register),
             ),
             Self::Big => big::binding_setup(builder.configure(big::BigGym::register)),
-            Self::Char => char::binding_setup(builder.configure(char::CharGym::register)),
+            Self::Char => char::binding_setup(builder),
             Self::Chart => chart::binding_setup(builder.configure(chart::ChartGym::register)),
             Self::Cursor => cursor::binding_setup(builder),
             Self::Editor => editor::binding_setup(builder.configure(editor::EditorGym::register)),
@@ -276,7 +276,7 @@ impl Demo {
                 markdown::binding_setup(builder.configure(markdown::MarkdownGym::register))
             }
             Self::Motion => motion::binding_setup(builder),
-            Self::Pager { .. } => pager::binding_setup(builder.configure(pager::Pager::register)),
+            Self::Pager { .. } => pager::binding_setup(builder),
             Self::Style => style::binding_setup(builder.configure(style::Stylegym::register)),
             Self::Table => table::binding_setup(builder.configure(table::TableGym::register)),
             Self::Term => term::binding_setup(builder.configure(term::TermGym::register)),
