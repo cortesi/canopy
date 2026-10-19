@@ -43,7 +43,7 @@ use crate::{
         layout::{LineLayout, Wrap, WrapSegment, layout_line},
     },
     highlight::{HighlightSpan, Highlighter},
-    run_paint,
+    run_paint::{self, column},
 };
 
 /// Tab stop a model built from texts assumes.
@@ -1236,11 +1236,6 @@ impl Widget for DiffView {
     fn name(&self) -> NodeName {
         NodeName::convert("diff_view")
     }
-}
-
-/// Convert a `usize` cell count to the coordinate type.
-fn column(value: usize) -> u32 {
-    u32::try_from(value).unwrap_or(u32::MAX)
 }
 
 /// Return each change head's index from its header and changed-row flags.
