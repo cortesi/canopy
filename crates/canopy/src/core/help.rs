@@ -123,13 +123,18 @@ impl From<IntentName> for BindingTarget {
 }
 
 impl Core {
-    /// Return a key that reaches `target` from the current focus.
+    /// Return a key that reaches `target` on the route from `start`, or from
+    /// the current focus when `start` is `None`.
     ///
     /// Discovery explains each candidate key as [`Core::available_bindings`]
     /// does, so a key another binding or a widget shadows is not offered.
-    pub(crate) fn key_for(&self, target: &BindingTarget) -> Result<Option<Key>> {
+    pub(crate) fn key_for(
+        &self,
+        start: Option<NodeId>,
+        target: &BindingTarget,
+    ) -> Result<Option<Key>> {
         for key in self.input_map.candidate_keys() {
-            let explanation = self.explain_key(None, key)?;
+            let explanation = self.explain_key(start, key)?;
             let Some(winner) = explanation.outcome.winner() else {
                 continue;
             };

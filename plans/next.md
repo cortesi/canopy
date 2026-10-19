@@ -179,7 +179,7 @@ every renamed gym, the cursor, font, motion, and term gyms in particular.
 
 - [x] Add `NodeArena::require` and `require_mut`, and use them at each
       lookup site that C1 names (C1).
-- [ ] Pass the route start through `Core::key_for`, with a test from the
+- [x] Pass the route start through `Core::key_for`, with a test from the
       prediction path (C2).
 - [ ] Let a node observe another node's scroll, with its tests (C9).
 - [ ] Run `ncode test -p canopy`.

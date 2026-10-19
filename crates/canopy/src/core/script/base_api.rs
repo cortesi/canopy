@@ -2258,7 +2258,7 @@ fn host_key_for<'s>(
     host_value(scope, |canopy, _| {
         Ok(canopy
             .core
-            .key_for(&target)?
+            .key_for(None, &target)?
             .map_or(ArgValue::Null, |key| ArgValue::String(key.label())))
     })
 }

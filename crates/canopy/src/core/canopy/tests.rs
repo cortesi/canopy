@@ -1,7 +1,8 @@
 use std::{
     any::Any,
-    cell::Cell,
+    cell::{Cell, RefCell},
     panic::{AssertUnwindSafe, catch_unwind},
+    rc::Rc,
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -21,8 +22,8 @@ use crate::{
     error::{Error, NodeOperationKind, Result, ScriptErrorKind},
     geom::{PointI32, RectI32},
     input::{
-        BindingActionKind, BindingId, BindingPhase, BindingTier, Event, InputSpec, KeyExpectation,
-        ModalBindings, ModalOptions, RouteOutcome, RouteWinner, key, mouse,
+        BindingActionKind, BindingId, BindingPhase, BindingTarget, BindingTier, Event, InputSpec,
+        KeyExpectation, ModalBindings, ModalOptions, RouteOutcome, RouteWinner, key, mouse,
     },
     layout::{Edges, Layout},
     path::Path,
@@ -2723,6 +2724,77 @@ fn a_declining_child_leaves_an_action_to_its_accepting_ancestor() -> Result<()> 
         BindingVerdict::NoConsumer,
         "the diagnostic follows the same route as dispatch"
     );
+    Ok(())
+}
+
+/// A container that asks, while it predicts a key, which key reaches the
+/// `test.clear` intent.
+struct KeyForAsker {
+    /// Each answer `key_for` gave during a prediction.
+    answers: Rc<RefCell<Vec<Option<key::Key>>>>,
+    /// Whether a `key_for` call is running. Its own discovery predicts keys
+    /// on this widget again, and those nested predictions must not ask.
+    asking: Cell<bool>,
+}
+
+impl Widget for KeyForAsker {
+    fn key_outcome(&self, _key: key::Key, context: &dyn ViewContext) -> EventOutcome {
+        if self.asking.replace(true) {
+            return EventOutcome::Ignore;
+        }
+        let target = BindingTarget::Intent(
+            inputmap::IntentName::new("test.clear").expect("the intent name is valid"),
+        );
+        let answer = context.key_for(&target);
+        self.asking.set(false);
+        self.answers.borrow_mut().push(answer);
+        EventOutcome::Ignore
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("key_for_asker")
+    }
+}
+
+#[test]
+fn key_for_in_a_prediction_follows_the_predicted_focus() -> Result<()> {
+    let mut canopy = clear_intent_app();
+    let answers = Rc::new(RefCell::new(Vec::new()));
+    let asker = canopy.core.create_detached(KeyForAsker {
+        answers: Rc::clone(&answers),
+        asking: Cell::new(false),
+    })?;
+    canopy.core.attach(canopy.core.root, asker)?;
+    let leaf = |accepted| IntentLeaf {
+        intent: "test.clear",
+        accepted,
+        honest: true,
+        calls: Arc::new(AtomicUsize::new(0)),
+        raw: Arc::new(AtomicUsize::new(0)),
+    };
+    let declining = canopy.core.create_detached(leaf(false))?;
+    let accepting = canopy.core.create_detached(leaf(true))?;
+    canopy.core.attach(asker, declining)?;
+    canopy.core.attach(asker, accepting)?;
+    canopy.core.set_focus(declining)?;
+    let clear = key::Key::parse_spec("ctrl-x")?;
+    bind_intent(
+        &mut canopy,
+        clear,
+        default_options(None, "Clear", None)?,
+        inputmap::IntentName::new("test.clear")?,
+    )?;
+
+    // From the live focus, no node accepts the intent.
+    canopy.explain_key(Some(declining), 'y'.into())?;
+    assert_eq!(answers.borrow().as_slice(), &[None]);
+
+    // The prediction for the other leaf names the key that reaches the intent
+    // there, although the live focus has not moved.
+    answers.borrow_mut().clear();
+    canopy.explain_key(Some(accepting), 'y'.into())?;
+    assert_eq!(answers.borrow().as_slice(), &[Some(clear)]);
+    assert_eq!(canopy.core.focus, Some(declining));
     Ok(())
 }
 

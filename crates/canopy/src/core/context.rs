@@ -170,10 +170,12 @@ pub trait ViewContext: sealed::ViewContext {
     /// Does the current node have focus?
     fn is_focused(&self) -> bool;
 
-    /// Return a key that reaches `target` from the current focus, if any.
+    /// Return a key that reaches `target` from the focus this context
+    /// reports, if any.
     ///
     /// Discovery follows the same route as key dispatch, so a key another
-    /// binding or a widget shadows is not offered.
+    /// binding or a widget shadows is not offered. During key prediction the
+    /// route starts at the predicted focus, as [`Self::focused_node`] reports.
     fn key_for(&self, target: &BindingTarget) -> Option<Key>;
 
     /// Return the currently focused node, including one not yet laid out.
@@ -1045,7 +1047,12 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
     }
 
     fn key_for(&self, target: &BindingTarget) -> Option<Key> {
-        self.core.key_for(target).ok().flatten()
+        // A prediction context answers for its route focus, so the key it
+        // names is one that reaches the target on that route.
+        self.core
+            .key_for(self.focused_node(), target)
+            .ok()
+            .flatten()
     }
 
     fn is_focused(&self) -> bool {
