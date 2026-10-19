@@ -159,9 +159,9 @@ impl ListGym {
     }
 
     /// Execute a closure with mutable access to the list widget.
-    fn with_list<F, R>(&self, c: &mut dyn Context, mut f: F) -> Result<R>
+    fn with_list<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
     where
-        F: FnMut(&mut List<ListEntry>, &mut dyn Context) -> Result<R>,
+        F: FnOnce(&mut List<ListEntry>, &mut dyn Context) -> Result<R>,
     {
         let lists: Vec<_> = c.descendants::<List<ListEntry>>(c.node_id()).collect();
         let list_id = lists
@@ -170,7 +170,7 @@ impl ListGym {
             .find(|id| c.is_on_focus_path((*id).into()))
             .or_else(|| lists.first().copied())
             .ok_or_else(|| Error::Invalid("list not initialized".into()))?;
-        c.with_widget_mut(list_id, |list: &mut List<ListEntry>, ctx| f(list, ctx))
+        c.with_widget_mut(list_id, f)
     }
 
     #[command]

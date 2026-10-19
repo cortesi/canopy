@@ -438,7 +438,7 @@ fn with_todo<R>(
     cnpy: &mut Canopy,
     f: impl FnOnce(&mut Todo, &mut dyn Context) -> Result<R>,
 ) -> Result<R> {
-    cnpy.with_root_context(|ctx| ctx.with_unique_descendant::<Todo, _>(|todo, ctx| f(todo, ctx)))
+    cnpy.with_root_context(|ctx| ctx.with_unique_descendant::<Todo, _>(f))
 }
 
 /// Register the Todo automation fixtures.
