@@ -1182,17 +1182,22 @@ impl Editor {
             self.search = SearchState::new();
             return;
         }
+        let top = self.view_top(ctx);
+        self.search.set_smart_query(&self.buffer, query, top);
+        self.reveal_search_match(ctx);
+    }
+
+    /// Lay out the view, and return the start of the text line at its top.
+    fn view_top(&mut self, ctx: &dyn ViewContext) -> TextPosition {
         let view_rect = ctx.view().view_rect();
         self.update_layout(view_rect, self.gutter_width());
-        let top = match self.layout.total_lines() {
+        let line = match self.layout.total_lines() {
             0 => 0,
             lines => self
                 .layout
                 .line_for_display((view_rect.tl.y as usize).min(lines - 1)),
         };
-        self.search
-            .set_smart_query(&self.buffer, query, TextPosition::new(top, 0));
-        self.reveal_search_match(ctx);
+        TextPosition::new(line, 0)
     }
 
     /// Highlight precomputed match ranges.
@@ -1207,16 +1212,8 @@ impl Editor {
             self.search = SearchState::new();
             return;
         }
-        let view_rect = ctx.view().view_rect();
-        self.update_layout(view_rect, self.gutter_width());
-        let top = match self.layout.total_lines() {
-            0 => 0,
-            lines => self
-                .layout
-                .line_for_display((view_rect.tl.y as usize).min(lines - 1)),
-        };
-        self.search
-            .set_matches(&self.buffer, matches, TextPosition::new(top, 0));
+        let top = self.view_top(ctx);
+        self.search.set_matches(&self.buffer, matches, top);
         self.reveal_search_match(ctx);
     }
 
