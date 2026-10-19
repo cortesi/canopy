@@ -112,7 +112,7 @@ impl Core {
 
     /// Replace all persistent parent constraints for a node.
     pub fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()> {
-        let current = self.nodes.get_mut(node).ok_or(Error::NodeNotFound(node))?;
+        let current = self.nodes.require_mut(node)?;
         overrides.apply(current.base_layout)?;
         let previous = mem::replace(&mut current.layout_override, overrides);
         let layout = current.effective_layout(current.base_layout)?;
@@ -126,7 +126,7 @@ impl Core {
     /// Bound the content of `node` from below by the top edge of `floor`
     /// while `floor` shows, or clear the bound with `None`.
     pub fn set_layout_floor(&mut self, node: NodeId, floor: Option<NodeId>) -> Result<()> {
-        let current = self.nodes.get_mut(node).ok_or(Error::NodeNotFound(node))?;
+        let current = self.nodes.require_mut(node)?;
         if current.floor != floor {
             current.floor = floor;
             self.invalidate(crate::Invalidation::Layout);
@@ -159,9 +159,7 @@ impl Core {
 
     /// Replace one subtree's widget inside an active tree edit.
     fn replace_subtree_inner(&mut self, node_id: NodeId, widget: Box<dyn Widget>) -> Result<()> {
-        if !self.nodes.contains_key(node_id) {
-            return Err(Error::NodeNotFound(node_id));
-        }
+        self.nodes.require(node_id)?;
         let name = widget.name();
         let layout = widget.layout();
         layout.validate()?;
@@ -197,11 +195,7 @@ impl Core {
 
     /// Run the mount hook for a node if it has not been mounted yet.
     pub(crate) fn mount_node(&mut self, node_id: NodeId) -> Result<()> {
-        let should_mount = self
-            .nodes
-            .get(node_id)
-            .map(|node| !node.mounted)
-            .ok_or(Error::NodeNotFound(node_id))?;
+        let should_mount = !self.nodes.require(node_id)?.mounted;
         if !should_mount {
             return Ok(());
         }
@@ -310,10 +304,7 @@ impl Core {
 
     /// Run an unmount hook once for a successfully mounted node.
     fn unmount_node(&mut self, node_id: NodeId) -> Result<()> {
-        let node = self
-            .nodes
-            .get(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
+        let node = self.nodes.require(node_id)?;
         if !node.mounted {
             return Ok(());
         }
@@ -680,9 +671,7 @@ impl Core {
 
     /// Update validated topology without running mount callbacks yet.
     fn attach_topology(&mut self, parent: NodeId, child: NodeId, key: Option<&str>) -> Result<()> {
-        if !self.nodes.contains_key(parent) {
-            return Err(Error::NodeNotFound(parent));
-        }
+        self.nodes.require(parent)?;
         if self
             .nodes
             .get(child)
@@ -716,9 +705,7 @@ impl Core {
         child: NodeId,
         operation: &'static str,
     ) -> Result<()> {
-        if !self.nodes.contains_key(child) {
-            return Err(Error::NodeNotFound(child));
-        }
+        self.nodes.require(child)?;
         if child == self.root {
             return Err(Error::Invalid("cannot attach root as a child".into()));
         }
@@ -751,7 +738,7 @@ impl Core {
     pub fn detach(&mut self, child: impl Into<NodeId>) -> Result<()> {
         let child = child.into();
         self.with_tree_edit("detach", |core| {
-            let node = core.nodes.get(child).ok_or(Error::NodeNotFound(child))?;
+            let node = core.nodes.require(child)?;
             if node.parent.is_none() {
                 return Ok(());
             }
@@ -798,9 +785,7 @@ impl Core {
 
     /// Replace a parent's children inside an active tree edit.
     fn set_children_inner(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()> {
-        if !self.nodes.contains_key(parent) {
-            return Err(Error::NodeNotFound(parent));
-        }
+        self.nodes.require(parent)?;
 
         let mut seen = HashSet::with_capacity(children.len());
         for child in &children {
@@ -864,9 +849,7 @@ impl Core {
         if root_id == self.root {
             return Err(Error::Invalid("cannot remove root".into()));
         }
-        if !self.nodes.contains_key(root_id) {
-            return Err(Error::NodeNotFound(root_id));
-        }
+        self.nodes.require(root_id)?;
         let lost = self.delete_subtree(root_id, "remove subtree", false)?;
         self.repair_focus_and_capture(lost)
     }
@@ -927,10 +910,7 @@ impl Core {
             .map(|node_id| {
                 self.ensure_widget_slot_available(node_id, operation)
                     .map_err(name_running_widget)?;
-                let node = self
-                    .nodes
-                    .get(node_id)
-                    .ok_or(Error::NodeNotFound(node_id))?;
+                let node = self.nodes.require(node_id)?;
                 Ok(RemovalEntry {
                     node_id,
                     widget: Rc::clone(&node.widget),
@@ -984,10 +964,7 @@ impl Core {
             ));
         }
         for entry in &plan.pre_order {
-            let node = self
-                .nodes
-                .get(entry.node_id)
-                .ok_or(Error::NodeNotFound(entry.node_id))?;
+            let node = self.nodes.require(entry.node_id)?;
             if !Rc::ptr_eq(&node.widget, &entry.widget) {
                 return Err(Error::Invalid(
                     "removal widget changed during lifecycle hooks".into(),
@@ -1064,10 +1041,7 @@ impl Core {
         hidden: bool,
     ) -> Result<ChangeOutcome> {
         let node_id = node_id.into();
-        let node = self
-            .nodes
-            .get_mut(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
+        let node = self.nodes.require_mut(node_id)?;
         let changed = node.hidden != hidden;
         node.hidden = hidden;
         if changed {

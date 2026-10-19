@@ -10,12 +10,8 @@ use crate::{
 impl Core {
     /// Assign an identity after validating its scope and uniqueness.
     pub(crate) fn set_identity(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()> {
-        if !self.nodes.contains_key(node) {
-            return Err(Error::NodeNotFound(node));
-        }
-        if !self.nodes.contains_key(scope) {
-            return Err(Error::NodeNotFound(scope));
-        }
+        self.nodes.require(node)?;
+        self.nodes.require(scope)?;
         if !self.is_ancestor_or_self(scope, node) {
             return Err(Error::Invalid(
                 "identity owner must belong to its scope subtree".into(),
@@ -46,7 +42,7 @@ impl Core {
 
     /// Clear one node's registration without changing its structural child key.
     pub(crate) fn clear_identity(&mut self, node: NodeId) -> Result<()> {
-        let entry = self.nodes.get_mut(node).ok_or(Error::NodeNotFound(node))?;
+        let entry = self.nodes.require_mut(node)?;
         if let Some(identity) = entry.identity.take() {
             self.semantic_keys.remove(&(identity.scope, identity.key));
             self.invalidate(Invalidation::Semantics);
@@ -56,9 +52,7 @@ impl Core {
 
     /// Find a registered key within an explicit live arena scope.
     pub(crate) fn find_identity(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>> {
-        if !self.nodes.contains_key(scope) {
-            return Err(Error::NodeNotFound(scope));
-        }
+        self.nodes.require(scope)?;
         Ok(self
             .semantic_keys
             .get(&(scope, key.into()))

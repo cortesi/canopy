@@ -144,7 +144,7 @@ impl Core {
         node: NodeId,
         lifetime: PollLifetime,
     ) -> Result<Option<PollOwner>> {
-        let entry = self.nodes.get(node).ok_or(Error::NodeNotFound(node))?;
+        let entry = self.nodes.require(node)?;
         let attachment = match (lifetime, entry.attachment_generation) {
             (PollLifetime::Node, _) => None,
             (PollLifetime::Attachment, Some(generation)) => Some(generation),

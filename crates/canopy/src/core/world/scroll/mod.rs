@@ -9,7 +9,7 @@ use super::{Core, WidgetOperation, layout_driver::clamp_scroll};
 use crate::{
     ChangeOutcome, NodeId,
     core::node::Node,
-    error::{Error, Result},
+    error::Result,
     geom::{Point, PointI32, Rect},
     input::NavIntent,
     layout::{RevealAlign, ScrollDirection, ScrollOp},
@@ -187,9 +187,7 @@ impl Core {
         node_id: NodeId,
         align: RevealAlign,
     ) -> Result<ChangeOutcome> {
-        if !self.nodes.contains_key(node_id) {
-            return Err(Error::NodeNotFound(node_id));
-        }
+        self.nodes.require(node_id)?;
         Ok(self.queue_node_reveal(node_id, align, None))
     }
 
@@ -201,9 +199,7 @@ impl Core {
         area: Rect,
         align: RevealAlign,
     ) -> Result<ChangeOutcome> {
-        if !self.nodes.contains_key(node_id) {
-            return Err(Error::NodeNotFound(node_id));
-        }
+        self.nodes.require(node_id)?;
         if area.is_empty() {
             return Ok(ChangeOutcome::Unchanged);
         }
@@ -302,10 +298,7 @@ impl Core {
                 |widget, _core| widget.reveal_anchor(view),
             )?,
         };
-        let node = self
-            .nodes
-            .get_mut(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
+        let node = self.nodes.require_mut(node_id)?;
         node.reveal = None;
         if let Some(area) = area.filter(|area| !area.is_empty()) {
             align_viewport(node, area, request.align, request.order);

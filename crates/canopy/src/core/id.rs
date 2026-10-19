@@ -7,6 +7,8 @@ use std::{
 
 use slotmap::{SlotMap, new_key_type};
 
+use crate::core::error::{Error, Result};
+
 new_key_type! {
     /// Arena key kept private so slotmap's sentinel-key API cannot leak.
     struct RawNodeId;
@@ -50,6 +52,17 @@ impl<T> NodeArena<T> {
     /// Mutably borrow the value for an identifier.
     pub fn get_mut(&mut self, id: NodeId) -> Option<&mut T> {
         self.0.get_mut(id.0)
+    }
+
+    /// Borrow the value for an identifier, or fail with `Error::NodeNotFound`.
+    pub fn require(&self, id: NodeId) -> Result<&T> {
+        self.get(id).ok_or(Error::NodeNotFound(id))
+    }
+
+    /// Mutably borrow the value for an identifier, or fail with
+    /// `Error::NodeNotFound`.
+    pub fn require_mut(&mut self, id: NodeId) -> Result<&mut T> {
+        self.get_mut(id).ok_or(Error::NodeNotFound(id))
     }
 
     /// Remove and return the value for an identifier.

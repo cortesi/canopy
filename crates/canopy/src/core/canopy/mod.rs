@@ -468,9 +468,7 @@ impl Canopy {
         f: impl FnOnce(&mut dyn crate::Context) -> Result<R>,
     ) -> Result<R> {
         let node = node.into();
-        if !self.core.nodes.contains_key(node) {
-            return Err(error::Error::NodeNotFound(node));
-        }
+        self.core.nodes.require(node)?;
         self.with_dispatch_boundary(|canopy| {
             canopy.core.invalidate(crate::Invalidation::Layout);
             let mut context = crate::core::context::CoreContext::new(&mut canopy.core, node);

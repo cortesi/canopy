@@ -84,10 +84,7 @@ pub struct WidgetCellGuard {
 impl WidgetCellGuard {
     /// Take a widget out of its node slot.
     pub(crate) fn take(core: &Core, node_id: NodeId) -> Result<Self> {
-        let node = core
-            .nodes
-            .get(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
+        let node = core.nodes.require(node_id)?;
         let slot = Rc::clone(&node.widget);
         let widget = {
             let mut widget = slot

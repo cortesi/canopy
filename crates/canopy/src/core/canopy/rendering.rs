@@ -15,7 +15,7 @@ use crate::{
         view::View,
         world::WidgetOperation,
     },
-    error::{Error, Result},
+    error::Result,
     geom::{Point, Rect, Size},
     render::{Render, RenderBackend},
     style::{
@@ -54,12 +54,7 @@ fn effect_color(effects: &[Effect], color: Color) -> Color {
 impl Canopy {
     /// Poll one node and schedule its next callback.
     pub(crate) fn poll_node(&mut self, node_id: NodeId) -> Result<()> {
-        let lifetime = self
-            .core
-            .nodes
-            .get(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?
-            .poll_lifetime;
+        let lifetime = self.core.nodes.require(node_id)?.poll_lifetime;
         let Some(stamp) = self.core.work_stamp(node_id, lifetime)? else {
             return Ok(());
         };

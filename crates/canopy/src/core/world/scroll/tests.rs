@@ -3,7 +3,7 @@
 use super::{super::test_support::*, *};
 use crate::{
     Context, ViewContext,
-    core::context::CoreContext,
+    core::{context::CoreContext, error::Error},
     geom::Size,
     input::{ModalBindings, ModalOptions},
     layout::{CanvasContext, Direction, Edges, Layout, Measurement},

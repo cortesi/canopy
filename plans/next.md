@@ -177,7 +177,7 @@ every renamed gym, the cursor, font, motion, and term gyms in particular.
 
 ### Stage 1: Runtime
 
-- [ ] Add `NodeArena::require` and `require_mut`, and use them at each
+- [x] Add `NodeArena::require` and `require_mut`, and use them at each
       lookup site that C1 names (C1).
 - [ ] Pass the route start through `Core::key_for`, with a test from the
       prediction path (C2).

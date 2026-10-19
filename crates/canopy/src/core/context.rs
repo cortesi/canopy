@@ -1282,22 +1282,14 @@ impl Context for NodeCtx<&mut Core> {
     }
 
     fn push_effect(&mut self, node: NodeId, effect: Effect) -> Result<()> {
-        let node = self
-            .core
-            .nodes
-            .get_mut(node)
-            .ok_or(Error::NodeNotFound(node))?;
+        let node = self.core.nodes.require_mut(node)?;
         node.effects.push(effect);
         self.core.invalidate(crate::Invalidation::Paint);
         Ok(())
     }
 
     fn clear_effects(&mut self, node: NodeId) -> Result<()> {
-        let node = self
-            .core
-            .nodes
-            .get_mut(node)
-            .ok_or(Error::NodeNotFound(node))?;
+        let node = self.core.nodes.require_mut(node)?;
         if !node.effects.is_empty() {
             node.effects.clear();
             self.core.invalidate(crate::Invalidation::Paint);

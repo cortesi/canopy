@@ -328,8 +328,7 @@ impl Core {
     ) -> Result<R> {
         let node = self
             .nodes
-            .get(node_id)
-            .ok_or(Error::NodeNotFound(node_id))
+            .require(node_id)
             .map_err(|error| self.widget_operation_error(operation, node_id, error))?;
         let guard = WidgetReadGuard::borrow(node_id, node)
             .map_err(|error| self.widget_operation_error(operation, node_id, error))?;
@@ -342,17 +341,9 @@ impl Core {
         node_id: NodeId,
         f: impl FnOnce(&mut dyn Widget, &Self) -> R,
     ) -> Result<R> {
-        let node = self
-            .nodes
-            .get(node_id)
-            .ok_or(Error::NodeNotFound(node_id))
-            .map_err(|error| {
-                self.widget_operation_error(
-                    WidgetOperation::render("render access"),
-                    node_id,
-                    error,
-                )
-            })?;
+        let node = self.nodes.require(node_id).map_err(|error| {
+            self.widget_operation_error(WidgetOperation::render("render access"), node_id, error)
+        })?;
         let mut guard = WidgetMutGuard::borrow(node_id, node).map_err(|error| {
             self.widget_operation_error(WidgetOperation::render("render access"), node_id, error)
         })?;

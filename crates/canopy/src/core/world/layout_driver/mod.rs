@@ -82,7 +82,7 @@ impl Core {
     /// Locate the deepest node under a screen-space point.
     pub fn locate_node(&self, root: impl Into<NodeId>, point: Point) -> Result<Option<NodeId>> {
         let root = root.into();
-        let root_view = self.nodes.get(root).ok_or(Error::NodeNotFound(root))?.view;
+        let root_view = self.nodes.require(root)?.view;
         let clip = root_view
             .outer
             .intersect_rect(Rect::new(0, 0, root_view.outer.w, root_view.outer.h))
@@ -195,11 +195,7 @@ impl<'a> LayoutPass<'a> {
         let content_size = Size::new(outer.w.saturating_sub(pad_x), outer.h.saturating_sub(pad_y));
 
         {
-            let node = self
-                .core
-                .nodes
-                .get_mut(node_id)
-                .ok_or(Error::NodeNotFound(node_id))?;
+            let node = self.core.nodes.require_mut(node_id)?;
             node.rect = Rect::new(0, 0, outer.w, outer.h);
             node.content_size = content_size;
         }
@@ -214,11 +210,7 @@ impl<'a> LayoutPass<'a> {
 
     /// Update view rectangles for a subtree based on parent view data.
     fn update_views(&mut self, node_id: NodeId, parent_view: View) -> Result<()> {
-        let node = self
-            .core
-            .nodes
-            .get_mut(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
+        let node = self.core.nodes.require_mut(node_id)?;
 
         if node.hidden {
             return self.clear_layout(node_id);
@@ -648,11 +640,7 @@ impl<'a> LayoutPass<'a> {
 
     /// Set a node's position within its parent's content area.
     fn set_node_position(&mut self, node_id: NodeId, position: Point) -> Result<()> {
-        let node = self
-            .core
-            .nodes
-            .get_mut(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
+        let node = self.core.nodes.require_mut(node_id)?;
         node.rect.tl = position;
         Ok(())
     }
@@ -665,18 +653,10 @@ impl<'a> LayoutPass<'a> {
         })?;
         let mut canvas_children = Vec::with_capacity(children.len());
         for child in children {
-            let node = self
-                .core
-                .nodes
-                .get(child)
-                .ok_or(Error::NodeNotFound(child))
-                .map_err(|error| {
-                    self.core.widget_operation_error(
-                        WidgetOperation::layout("canvas"),
-                        node_id,
-                        error,
-                    )
-                })?;
+            let node = self.core.nodes.require(child).map_err(|error| {
+                self.core
+                    .widget_operation_error(WidgetOperation::layout("canvas"), node_id, error)
+            })?;
             let child_canvas: Size = node.canvas;
             canvas_children.push(CanvasChild::new(node.rect, child_canvas));
         }
@@ -703,27 +683,16 @@ impl<'a> LayoutPass<'a> {
 
     /// Snapshot a node's layout and hidden state.
     fn node_layout_snapshot(&self, node_id: NodeId) -> Result<(Layout, bool)> {
-        self.core
-            .nodes
-            .get(node_id)
-            .map(|node| (node.layout, node.hidden))
-            .ok_or(Error::NodeNotFound(node_id))
+        let node = self.core.nodes.require(node_id)?;
+        Ok((node.layout, node.hidden))
     }
 
     /// Collect visible child nodes in tree order.
     fn visible_children(&self, node_id: NodeId) -> Result<Vec<NodeId>> {
-        let node = self
-            .core
-            .nodes
-            .get(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
+        let node = self.core.nodes.require(node_id)?;
         let mut visible = Vec::new();
         for child in &node.children {
-            let child_node = self
-                .core
-                .nodes
-                .get(*child)
-                .ok_or(Error::NodeNotFound(*child))?;
+            let child_node = self.core.nodes.require(*child)?;
             if !child_node.hidden {
                 visible.push(*child);
             }
@@ -755,11 +724,7 @@ impl<'a> LayoutPass<'a> {
 
     /// Reset layout data for a hidden subtree.
     fn clear_layout(&mut self, node_id: NodeId) -> Result<()> {
-        let node = self
-            .core
-            .nodes
-            .get_mut(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
+        let node = self.core.nodes.require_mut(node_id)?;
         node.rect = Rect::ZERO;
         node.content_size = Size::default();
         node.canvas = Size::default();
@@ -1001,10 +966,7 @@ fn locate_recursive(
     point: Point,
     parent_clip: Rect,
 ) -> Result<Option<NodeId>> {
-    let node = core
-        .nodes
-        .get(node_id)
-        .ok_or(Error::NodeNotFound(node_id))?;
+    let node = core.nodes.require(node_id)?;
 
     if node.hidden {
         return Ok(None);

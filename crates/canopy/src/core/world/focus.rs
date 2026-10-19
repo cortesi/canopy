@@ -76,9 +76,7 @@ impl Core {
 
     /// Validate that a node exists and belongs to the active tree.
     pub(crate) fn validate_attached_node(&self, node: NodeId) -> Result<()> {
-        if !self.nodes.contains_key(node) {
-            return Err(Error::NodeNotFound(node));
-        }
+        self.nodes.require(node)?;
         if !self.is_attached_to_root(node) {
             return Err(Error::NodeDetached(node));
         }
