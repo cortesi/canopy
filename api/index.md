@@ -65,7 +65,7 @@ A pull parser for [CommonMark](https://commonmark.org), with GitHub's and Obsidi
 - Declared features: default, html
 - Workspace dependencies: none
 - Workspace dependents: canopy-markdown, canopy-widgets
-- Items: 158
+- Items: 159
 - Exposes: InternalBitFlags, bitflags
 
 ## canopy-widgets

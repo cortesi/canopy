@@ -1326,6 +1326,13 @@ pub fn fence_language(info: &str) -> Option<&str>;
 #[must_use]
 pub fn fenced_code(text: &str) -> Vec<FencedCode<'_>>;
 
+/// Return the properties of simple YAML front matter, as notes tools show
+/// them: `key: value` lines, and lists written `[a, b]` or as `- item`
+/// lines, which read as `a, b`. Front matter with nested maps, or anything
+/// else, has none.
+#[must_use]
+pub fn front_matter_properties(yaml: &str) -> Option<Vec<(String, String)>>;
+
 /// Return the id GitHub gives a heading with `text`: lowercase, with letters,
 /// digits, `-`, and `_` kept, spaces as `-`, and everything else dropped.
 ///

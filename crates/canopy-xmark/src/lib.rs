@@ -118,6 +118,7 @@ mod comments;
 mod entities;
 mod files;
 mod firstpass;
+mod front_matter;
 mod linklabel;
 mod links;
 mod parse;
@@ -135,6 +136,7 @@ pub use crate::{
     code::{FencedCode, fence_language, fenced_code},
     comments::hide_comments,
     files::{MARKDOWN_EXTENSIONS, is_markdown},
+    front_matter::front_matter_properties,
     links::{
         Embed, EmbedKind, LinkTarget, percent_decode, split_destination, split_wikilink,
         wikilink_href, wikilink_label,

@@ -4,8 +4,8 @@ use std::{borrow::Borrow, collections::HashMap, iter, mem, ops::Range, slice, sy
 pub use canopy_xmark::Alignment;
 use canopy_xmark::{
     BlockQuoteKind, CodeBlockKind, DefaultParserCallbacks, EmbedKind, Event, Limits, LinkTarget,
-    LinkType, Options, Parser, Resume, Tag, TailMark, TailWatch, percent_decode, split_destination,
-    split_wikilink,
+    LinkType, Options, Parser, Resume, Tag, TailMark, TailWatch, front_matter_properties,
+    percent_decode, split_destination, split_wikilink,
 };
 
 use crate::source_store::SourceSnapshot;
@@ -1004,7 +1004,7 @@ impl Builder<'_> {
     }
     /// Interpret front matter of simple properties as a table of them.
     fn front_matter(&mut self, leaf: &Leaf) -> Option<Interpreted> {
-        let properties = properties(&raw_text(&leaf.node.children))?;
+        let properties = front_matter_properties(&raw_text(&leaf.node.children))?;
         let table = self.properties_table(&properties, &leaf.node.range, leaf.context.enclosing);
         let payload = table_text(&table);
         Some((BlockKind::Table(table), UnitKind::Table, payload, true))
@@ -1423,49 +1423,6 @@ fn source_leaf(raw: &str) -> Interpreted {
         raw.to_owned(),
         true,
     )
-}
-/// The properties of simple YAML front matter: `key: value` lines, and lists
-/// written `[a, b]` or as `- item` lines, which read as `a, b`. Front matter
-/// with nested maps, or anything else, has none, and shows as source.
-fn properties(yaml: &str) -> Option<Vec<(String, String)>> {
-    let unquote = |value: &str| {
-        let value = value.trim();
-        value
-            .strip_prefix('"')
-            .and_then(|v| v.strip_suffix('"'))
-            .or_else(|| value.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')))
-            .unwrap_or(value)
-            .to_owned()
-    };
-    let mut properties: Vec<(String, String)> = Vec::new();
-    for line in yaml.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed == "---" {
-            continue;
-        }
-        if let Some(item) = trimmed.strip_prefix("- ") {
-            let (_, value) = properties.last_mut()?;
-            if !value.is_empty() {
-                value.push_str(", ");
-            }
-            value.push_str(&unquote(item));
-            continue;
-        }
-        if line.starts_with(char::is_whitespace) {
-            return None;
-        }
-        let (key, value) = line.split_once(':')?;
-        let value = value.trim();
-        let value = value
-            .strip_prefix('[')
-            .and_then(|v| v.strip_suffix(']'))
-            .map_or_else(
-                || unquote(value),
-                |list| list.split(',').map(unquote).collect::<Vec<_>>().join(", "),
-            );
-        properties.push((key.trim().to_owned(), value));
-    }
-    (!properties.is_empty()).then_some(properties)
 }
 /// The unique GitHub id the parser gave a heading, or "" for a heading of no
 /// text.

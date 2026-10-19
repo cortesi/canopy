@@ -161,3 +161,5 @@ writes fenced code.
 - `fenced_code` and `fence_language`: fenced code blocks and their
   languages, for tools that read Markdown source line by line.
 - `is_markdown` and `MARKDOWN_EXTENSIONS`: the files that hold Markdown.
+- `front_matter_properties`: the properties of simple YAML front matter,
+  which the reader shows as a table, and the GitHub writer too.

@@ -255,6 +255,23 @@ impl Rewriter<'_> {
                         .into(),
                     ));
                 }
+                // Front matter of simple properties shows as a table of
+                // them, as on GitHub.
+                Event::Start(Tag::MetadataBlock(_)) => {
+                    let inner = take_until(&mut events, |event| {
+                        matches!(event, Event::End(TagEnd::MetadataBlock(_)))
+                    });
+                    let yaml: String = inner
+                        .iter()
+                        .filter_map(|event| match event {
+                            Event::Text(text) => Some(&**text),
+                            _ => None,
+                        })
+                        .collect();
+                    if let Some(properties) = crate::front_matter_properties(&yaml) {
+                        out.push(Event::Html(properties_table(&properties).into()));
+                    }
+                }
                 Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(info))) => {
                     let inner = take_until(&mut events, |event| {
                         matches!(event, Event::End(TagEnd::CodeBlock))
@@ -305,6 +322,27 @@ fn take_until<'a>(
         taken.push(event);
     }
     taken
+}
+
+/// Return front matter's `properties` as GitHub shows them: a table of one
+/// row, under a header of their keys.
+fn properties_table(properties: &[(String, String)]) -> String {
+    let cell = |tag: &str, text: &str| {
+        let mut html = format!("<{tag}>");
+        escape_html_body_text(&mut html, text).expect("writing to a string cannot fail");
+        html.push_str(&format!("</{tag}>\n"));
+        html
+    };
+    let mut html = String::from("<table>\n<thead>\n<tr>\n");
+    for (key, _) in properties {
+        html.push_str(&cell("th", key));
+    }
+    html.push_str("</tr>\n</thead>\n<tbody>\n<tr>\n");
+    for (_, value) in properties {
+        html.push_str(&cell("td", value));
+    }
+    html.push_str("</tr>\n</tbody>\n</table>\n");
+    html
 }
 
 /// Return the opening tag of a list that holds tasks.

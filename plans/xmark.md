@@ -391,7 +391,7 @@ them the same way.
 ### Stage 7: Gaps
 
 - [x] Inline footnotes (C9) and custom task states (C10).
-- [ ] The front matter properties helper, shared by both consumers (C21).
+- [x] The front matter properties helper, shared by both consumers (C21).
 - [ ] Emoji shortcodes (C14) and Logseq and Dendron syntax (C20), if still
       wanted.
 - [ ] Sweep again: no crate but `canopy-xmark` depends on pulldown-cmark or

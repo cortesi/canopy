@@ -63,3 +63,16 @@ fn inline_footnotes_number_with_the_rest() {
     assert!(html.contains("<a href=\"#fn-2\" id=\"fnref-2\""), "{html}");
     assert!(html.contains("<li id=\"fn-2\">\n<p>inline"), "{html}");
 }
+
+#[test]
+fn front_matter_shows_as_a_table_of_its_properties() {
+    let html = render("---\ntitle: Trip <one>\ntags: [a, b]\n---\n\n# Body\n");
+    assert!(
+        html.starts_with(
+            "<table>\n<thead>\n<tr>\n<th>title</th>\n<th>tags</th>\n</tr>\n</thead>\n\
+             <tbody>\n<tr>\n<td>Trip &lt;one&gt;</td>\n<td>a, b</td>\n</tr>\n</tbody>\n</table>\n"
+        ),
+        "{html}"
+    );
+    assert!(!render("---\nmap:\n  key: value\n---\n").contains("key"));
+}
