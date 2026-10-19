@@ -940,10 +940,10 @@ pub mod document {
             label: String,
         },
         /// An image alone in its paragraph, which a host may supply.
-        Image(ImageBlock),
+        Image(EmbedBlock),
         /// An Obsidian `![[note]]` embed alone in its paragraph, whose note or
         /// section a host may supply.
-        Embed(ImageBlock),
+        Embed(EmbedBlock),
     }
 
     /// Parser-normalized code payload and its original fence information.
@@ -1010,8 +1010,10 @@ pub mod document {
 
     /// An image or embed alone in its paragraph: `![alt](path)`, or Obsidian's
     /// `![[path]]` with an optional `|width` or `|widthxheight` size in pixels.
+    ///
+    /// The size applies to an image. A note embed ignores it.
     #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-    pub struct ImageBlock {
+    pub struct EmbedBlock {
         /// The image's destination, and its alt text as the label.
         pub link: Link,
         /// The width the source asks for, in pixels.

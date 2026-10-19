@@ -173,15 +173,17 @@ pub enum BlockKind {
         label: String,
     },
     /// An image alone in its paragraph, which a host may supply.
-    Image(ImageBlock),
+    Image(EmbedBlock),
     /// An Obsidian `![[note]]` embed alone in its paragraph, whose note or
     /// section a host may supply.
-    Embed(ImageBlock),
+    Embed(EmbedBlock),
 }
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// An image or embed alone in its paragraph: `![alt](path)`, or Obsidian's
 /// `![[path]]` with an optional `|width` or `|widthxheight` size in pixels.
-pub struct ImageBlock {
+///
+/// The size applies to an image. A note embed ignores it.
+pub struct EmbedBlock {
     /// The image's destination, and its alt text as the label.
     pub link: Link,
     /// The width the source asks for, in pixels.
@@ -1141,8 +1143,8 @@ impl Builder<'_> {
                 _ if matches!(leaf.node.event, Some(Event::Rule)) => {
                     (BlockKind::Rule, UnitKind::Separator, String::new(), false)
                 }
-                _ if lone_image(&leaf.node).is_some() => {
-                    let (image, note) = lone_image(&leaf.node).expect("checked");
+                _ if lone_embed(&leaf.node).is_some() => {
+                    let (image, note) = lone_embed(&leaf.node).expect("checked");
                     // It reads, and copies, as an inline image does.
                     let payload = image_text(&image.link.label, &image.link.destination);
                     let kind = if note {
@@ -1443,7 +1445,7 @@ fn image_text(label: &str, destination: &str) -> String {
 }
 /// The image or embed a paragraph holds alone, beside whitespace, and
 /// whether it embeds a note.
-fn lone_image(node: &Node) -> Option<(ImageBlock, bool)> {
+fn lone_embed(node: &Node) -> Option<(EmbedBlock, bool)> {
     if !matches!(node.tag, Some(Tag::Paragraph)) {
         return None;
     }
@@ -1460,7 +1462,7 @@ fn lone_image(node: &Node) -> Option<(ImageBlock, bool)> {
         Some(Tag::Image {
             dest_url, title, ..
         }) => Some((
-            ImageBlock {
+            EmbedBlock {
                 link: Link {
                     label,
                     destination: dest_url.to_string(),
@@ -1473,7 +1475,7 @@ fn lone_image(node: &Node) -> Option<(ImageBlock, bool)> {
             false,
         )),
         Some(Tag::Embed(embed)) => Some((
-            ImageBlock {
+            EmbedBlock {
                 link: Link {
                     label,
                     destination: embed.target.to_string(),

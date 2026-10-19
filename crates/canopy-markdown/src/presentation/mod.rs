@@ -38,7 +38,7 @@ use image::RgbaImage;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::document::{
-    AlertTone, Alignment, Block, BlockKind, CodeBlock, DocumentSnapshot, ImageBlock, InlineRole,
+    AlertTone, Alignment, Block, BlockKind, CodeBlock, DocumentSnapshot, EmbedBlock, InlineRole,
     ObjectKind, ReadingPosition, ReadingRange, ReadingUnit,
 };
 
@@ -1472,7 +1472,7 @@ fn prepare_block(
 fn prepare_image(
     rows: &mut Vec<PreparedRow>,
     make_row: impl Fn() -> PreparedRow,
-    image: &ImageBlock,
+    image: &EmbedBlock,
     info: Option<&EmbedInfo>,
     unit: &ReadingUnit,
     prefix: &mut Prefix,
@@ -1554,7 +1554,7 @@ fn prepare_unsupplied(
 fn prepare_embed(
     rows: &mut Vec<PreparedRow>,
     make_row: impl Fn() -> PreparedRow,
-    embed: &ImageBlock,
+    embed: &EmbedBlock,
     object: Option<u64>,
     info: Option<&EmbedInfo>,
     unit: &ReadingUnit,
@@ -1664,7 +1664,7 @@ fn wrap_words(text: &str, width: u32) -> Vec<String> {
 /// The cells an image of `pixels` takes: as large as `room` columns and
 /// [`IMAGE_ROWS`] rows allow, within the size the source asks for, at 8
 /// pixels to a column and 16 to a row, and never above the image's own size.
-fn image_box(pixels: Size, image: &ImageBlock, room: u32) -> Size {
+fn image_box(pixels: Size, image: &EmbedBlock, room: u32) -> Size {
     let (width, height) = (pixels.w.max(1), pixels.h.max(1));
     let cols = room
         .max(1)
