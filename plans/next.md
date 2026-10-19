@@ -186,7 +186,7 @@ every renamed gym, the cursor, font, motion, and term gyms in particular.
 
 ### Stage 2: Widget and reader surface
 
-- [ ] Paint the frame title through `roles::TITLE` (C3).
+- [x] Paint the frame title through `roles::TITLE` (C3).
 - [ ] Remove the four unused items (C4).
 - [ ] Narrow `row_at` and `row_lines` (C5).
 - [ ] Rename `ImageBlock` to `EmbedBlock` (C7).

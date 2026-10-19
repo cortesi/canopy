@@ -6,6 +6,7 @@ use canopy::{
     input::Event,
     layout::{Edges, Layout, ScrollAxis},
     render::Render,
+    style::roles,
     text,
 };
 
@@ -126,7 +127,11 @@ impl Widget for Frame {
             let title_line = f.top.line(0)?;
             let title_rect =
                 geom::Rect::new(title_line.tl.x, title_line.tl.y, title_len.min(f.top.w), 1);
-            rndr.text("frame/title", title_rect.line(0)?, &title_with_spaces)?;
+            rndr.text(
+                &format!("frame/{}", roles::TITLE),
+                title_rect.line(0)?,
+                &title_with_spaces,
+            )?;
         }
 
         let vertical = Self::track(ctx, ScrollAxis::Vertical)?;
