@@ -231,7 +231,7 @@ pub(super) fn render_line(
     let Some(key) = &line.key else {
         return render.text(line.style, Line::new(x, y, width), &line.text);
     };
-    let key_width = u32::try_from(text_width(key)).unwrap_or(u32::MAX);
+    let key_width = text::width(key);
     render_keys(render, key, x, y, width)?;
     let start = key_width.saturating_add(2).min(width);
     render.text(
@@ -247,7 +247,7 @@ fn render_keys(render: &mut Render, key: &str, x: u32, y: u32, width: u32) -> Re
     let mut cursor = x;
     for (index, piece) in key.split(KEY_SEPARATOR).enumerate() {
         if index > 0 {
-            let separator = u32::try_from(text_width(KEY_SEPARATOR)).unwrap_or(u32::MAX);
+            let separator = text::width(KEY_SEPARATOR);
             render.text(
                 "key/separator",
                 Line::new(cursor, y, separator.min(limit.saturating_sub(cursor))),
@@ -255,7 +255,7 @@ fn render_keys(render: &mut Render, key: &str, x: u32, y: u32, width: u32) -> Re
             )?;
             cursor = cursor.saturating_add(separator);
         }
-        let piece_width = u32::try_from(text_width(piece)).unwrap_or(u32::MAX);
+        let piece_width = text::width(piece);
         render.text(
             "key",
             Line::new(cursor, y, piece_width.min(limit.saturating_sub(cursor))),

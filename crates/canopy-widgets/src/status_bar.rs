@@ -190,11 +190,11 @@ impl KeyHint {
         if self.key.is_empty() {
             return 0;
         }
-        let mut width = text_width(&self.key);
+        let mut width = text::width(&self.key);
         if !self.label.is_empty() {
             width = width
-                .saturating_add(text_width(": "))
-                .saturating_add(text_width(&self.label));
+                .saturating_add(text::width(": "))
+                .saturating_add(text::width(&self.label));
         }
         width
     }
@@ -220,7 +220,7 @@ impl Widget for KeyHint {
             return Ok(());
         }
         let row = area.line(0)?;
-        let key_width = text_width(&self.key).min(row.w);
+        let key_width = text::width(&self.key).min(row.w);
         if key_width > 0 {
             rndr.text(
                 roles::KEY,
@@ -232,7 +232,7 @@ impl Widget for KeyHint {
             return Ok(());
         }
         let x = row.tl.x.saturating_add(key_width);
-        let width = text_width(": ").saturating_add(text_width(&self.label));
+        let width = text::width(": ").saturating_add(text::width(&self.label));
         let width = width.min(row.tl.x.saturating_add(row.w).saturating_sub(x));
         if width > 0 {
             rndr.text(
@@ -266,11 +266,6 @@ fn refresh_key_hints(ctx: &mut dyn Context) -> Result<()> {
         })?;
     }
     Ok(())
-}
-
-/// Return the columns `text` occupies, saturating on absurd lengths.
-fn text_width(text: &str) -> u32 {
-    text::width(text)
 }
 
 #[cfg(test)]
