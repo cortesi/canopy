@@ -744,6 +744,19 @@ pub trait Context: ViewContext + sealed::Context {
     /// Requests coalesce until the poll runs.
     fn request_poll(&mut self) -> Result<()>;
 
+    /// Poll this widget soon whenever the scroll offset of `node` changes.
+    ///
+    /// Any change counts: a wheel or key default action, a command, a call
+    /// such as [`Self::scroll_node`], a reveal, or a layout that clamps the
+    /// offset. A scroll that moves nothing does not poll. Polls coalesce as
+    /// for [`Self::request_poll`], and the poll reads the new offset from
+    /// [`ViewContext::view_of`].
+    ///
+    /// The observation ends when either node is removed, or when this
+    /// node's widget is replaced. Observing the same node again has no
+    /// effect. Fails when `node` does not exist.
+    fn observe_scroll(&mut self, node: NodeId) -> Result<()>;
+
     /// Replace the children list for a parent node.
     ///
     /// The list reorders the current children and may add new ones. Omitting
@@ -1253,6 +1266,10 @@ impl Context for NodeCtx<&mut Core> {
             .wake_handle(self.node_id, PollLifetime::Node)?
             .wake()?;
         Ok(())
+    }
+
+    fn observe_scroll(&mut self, node: NodeId) -> Result<()> {
+        self.core.observe_scroll(self.node_id, node)
     }
 
     fn remove_after_dispatch(&mut self, node: NodeId) -> Result<()> {

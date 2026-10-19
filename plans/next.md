@@ -181,8 +181,8 @@ every renamed gym, the cursor, font, motion, and term gyms in particular.
       lookup site that C1 names (C1).
 - [x] Pass the route start through `Core::key_for`, with a test from the
       prediction path (C2).
-- [ ] Let a node observe another node's scroll, with its tests (C9).
-- [ ] Run `ncode test -p canopy`.
+- [x] Let a node observe another node's scroll, with its tests (C9).
+- [x] Run `ncode test -p canopy`.
 
 ### Stage 2: Widget and reader surface
 

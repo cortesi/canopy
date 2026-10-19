@@ -13,6 +13,7 @@ use crate::{
     geom::{Point, PointI32, Rect},
     input::NavIntent,
     layout::{RevealAlign, ScrollDirection, ScrollOp},
+    runtime::PollLifetime,
 };
 
 /// Runtime behavior applied to a route node that no widget or binding handled.
@@ -142,8 +143,9 @@ impl Core {
         let before = node.scroll;
         let cancelled_reveal = node.reveal.take().is_some();
         node.scroll_order = order;
-        node.scroll = f(before);
-        clamp_scroll(&mut node.scroll, node.content_size, node.canvas);
+        let mut target = f(before);
+        clamp_scroll(&mut target, node.content_size, node.canvas);
+        node.set_scroll(target);
         node.view.scroll = node.scroll;
         if before == node.scroll && !cancelled_reveal {
             return ChangeOutcome::Unchanged;
@@ -224,6 +226,22 @@ impl Core {
         node.reveal_in_ancestors = Some(NodeReveal { align, order, area });
         self.invalidate(crate::Invalidation::Layout);
         outcome(changed)
+    }
+
+    /// Wake `observer` whenever the scroll offset of `observed` changes.
+    ///
+    /// The registration lives on the observed node, so it ends with that
+    /// node. It also ends when the observer's widget is removed or replaced,
+    /// because its wake handle then expires. A repeated registration has no
+    /// effect.
+    pub(crate) fn observe_scroll(&mut self, observer: NodeId, observed: NodeId) -> Result<()> {
+        self.nodes.require(observed)?;
+        let wake = self.wake_handle(observer, PollLifetime::Node)?;
+        let observers = &mut self.nodes.require_mut(observed)?.scroll_observers;
+        if !observers.iter().any(|known| known.owner() == wake.owner()) {
+            observers.push(wake);
+        }
+        Ok(())
     }
 
     /// Apply a default action to a node and report whether the node moved.
@@ -407,11 +425,12 @@ fn align_viewport(viewport: &mut Node, area: Rect, align: RevealAlign, order: u6
         RevealAlign::Top(_) => (RevealAlign::Nearest, align),
         align => (align, align),
     };
-    viewport.scroll = Point {
+    let mut target = Point {
         x: reveal_offset(viewport.scroll.x, size.w, area.tl.x, area.w, x_align),
         y: reveal_offset(viewport.scroll.y, size.h, area.tl.y, area.h, y_align),
     };
-    clamp_scroll(&mut viewport.scroll, size, viewport.canvas);
+    clamp_scroll(&mut target, size, viewport.canvas);
+    viewport.set_scroll(target);
 }
 
 /// Return the offset along one axis that shows `start..start + length` in a

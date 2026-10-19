@@ -30,6 +30,8 @@ mod leave_tests;
 #[cfg(test)]
 mod motion_tests;
 #[cfg(test)]
+mod observe_tests;
+#[cfg(test)]
 mod pointer_tests;
 mod rendering;
 #[cfg(test)]

@@ -9,7 +9,7 @@ use crate::{
     },
     geom::{Point, Rect, Size},
     layout::{Layout, LayoutOverride, LayoutValidationError},
-    runtime::PollLifetime,
+    runtime::{NodeWakeHandle, PollLifetime, WakeOutcome},
     widget::Widget,
 };
 
@@ -67,8 +67,11 @@ pub struct Node {
     pub(crate) content_size: Size,
     /// Canvas size in content coordinates.
     pub(crate) canvas: Size,
-    /// Scroll offset in content coordinates.
+    /// Scroll offset in content coordinates. Change it through
+    /// [`Node::set_scroll`], so the node's scroll observers hear of it.
     pub(crate) scroll: Point,
+    /// Wake handles of the widgets that observe this node's scroll.
+    pub(crate) scroll_observers: Vec<NodeWakeHandle>,
     /// Reveal pending in this node's own viewport.
     pub(crate) reveal: Option<LocalReveal>,
     /// Reveal of this node pending in its ancestor viewports.
@@ -105,6 +108,21 @@ impl Node {
         Ok(layout)
     }
 
+    /// Move the scroll offset, and wake each scroll observer when it changed.
+    ///
+    /// An observer whose widget is gone has an expired handle, and leaves
+    /// the list.
+    pub(crate) fn set_scroll(&mut self, scroll: Point) {
+        if self.scroll == scroll {
+            return;
+        }
+        self.scroll = scroll;
+        // Only a poisoned registry fails a wake, and the application that
+        // owns it has already panicked. Keep the handle in that case.
+        self.scroll_observers
+            .retain(|wake| !matches!(wake.wake(), Ok(WakeOutcome::Expired)));
+    }
+
     /// Construct a detached node for a boxed widget.
     ///
     /// The caller validates the widget's layout before insertion.
@@ -132,6 +150,7 @@ impl Node {
             content_size: Size::default(),
             canvas: Size::default(),
             scroll: Point::ZERO,
+            scroll_observers: Vec::new(),
             reveal: None,
             reveal_in_ancestors: None,
             scroll_order: 0,

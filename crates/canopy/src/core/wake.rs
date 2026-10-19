@@ -89,6 +89,11 @@ pub struct NodeWakeHandle {
 }
 
 impl NodeWakeHandle {
+    /// Return the widget work lifetime this handle wakes.
+    pub(crate) fn owner(&self) -> PollOwner {
+        self.stamp
+    }
+
     /// Queue one owner poll, coalesce with existing work, or report expiration.
     pub fn wake(&self) -> Result<WakeOutcome> {
         let Some(shared) = self.shared.upgrade() else {

@@ -155,6 +155,19 @@ pub trait Context: ViewContext + Context {
     /// `pre_remove` or `on_unmount` hook cannot post a notice.
     fn notify(&mut self, post: NoticePost) -> crate::error::Result<()>;
 
+    /// Poll this widget soon whenever the scroll offset of `node` changes.
+    ///
+    /// Any change counts: a wheel or key default action, a command, a call
+    /// such as [`Self::scroll_node`], a reveal, or a layout that clamps the
+    /// offset. A scroll that moves nothing does not poll. Polls coalesce as
+    /// for [`Self::request_poll`], and the poll reads the new offset from
+    /// [`ViewContext::view_of`].
+    ///
+    /// The observation ends when either node is removed, or when this
+    /// node's widget is replaced. Observing the same node again has no
+    /// effect. Fails when `node` does not exist.
+    fn observe_scroll(&mut self, node: NodeId) -> crate::error::Result<()>;
+
     /// Open a modal that owns focus, input admission, and visual effects.
     fn open_modal(&mut self, options: ModalOptions) -> crate::error::Result<ModalToken>;
 
@@ -487,10 +500,12 @@ pub trait ViewContext: ViewContext {
     /// Is the specified node on the focus path?
     fn is_on_focus_path(&self, node: NodeId) -> bool;
 
-    /// Return a key that reaches `target` from the current focus, if any.
+    /// Return a key that reaches `target` from the focus this context
+    /// reports, if any.
     ///
     /// Discovery follows the same route as key dispatch, so a key another
-    /// binding or a widget shadows is not offered.
+    /// binding or a widget shadows is not offered. During key prediction the
+    /// route starts at the predicted focus, as [`Self::focused_node`] reports.
     fn key_for(&self, target: &BindingTarget) -> Option<Key>;
 
     /// Layout configuration for a specific node.

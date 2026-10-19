@@ -676,7 +676,9 @@ impl<'a> LayoutPass<'a> {
     /// offset.
     fn update_canvas(&mut self, node_id: NodeId, view_size: Size, canvas: Size) {
         if let Some(node) = self.core.nodes.get_mut(node_id) {
-            clamp_scroll(&mut node.scroll, view_size, canvas);
+            let mut scroll = node.scroll;
+            clamp_scroll(&mut scroll, view_size, canvas);
+            node.set_scroll(scroll);
             node.canvas = canvas;
         }
     }
@@ -728,7 +730,7 @@ impl<'a> LayoutPass<'a> {
         node.rect = Rect::ZERO;
         node.content_size = Size::default();
         node.canvas = Size::default();
-        node.scroll = Point::ZERO;
+        node.set_scroll(Point::ZERO);
         node.view = View::default();
         let children = node.children.clone();
         for child in children {
