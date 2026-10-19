@@ -254,6 +254,11 @@ impl ColumnChart {
         self.hover
     }
 
+    /// Clears the hover.
+    pub fn clear_hover(&mut self) {
+        self.hover = None;
+    }
+
     /// Returns whether the cursor follows the newest column.
     pub fn following(&self) -> bool {
         self.following
