@@ -809,11 +809,6 @@ impl MarkdownSource {
             .saturating_mul(size_of::<TextRange>());
         Ok(())
     }
-    /// Install precomputed display ranges, for hosts with an existing matcher.
-    pub fn set_matches(&mut self, _ctx: &mut dyn Context, matches: Vec<TextRange>) {
-        self.search_bytes = matches.capacity().saturating_mul(size_of::<TextRange>());
-        self.editor.set_matches_preserving_position(matches);
-    }
     /// Navigate the current match window and reveal the activated result.
     pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32) {
         self.retained_selection = None;

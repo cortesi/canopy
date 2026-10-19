@@ -772,20 +772,10 @@ impl WorkHandle {
     /// Releases the result handshake after publication or rejection. Any queued
     /// request builds on this actually published semantic base.
     pub fn acknowledge(&self, previous: Option<Arc<PresentationSnapshot>>) {
-        self.acknowledge_with_source(previous, None);
-    }
-
-    /// Rebase both prepared surfaces before releasing queued work. `source`
-    /// must be the exact published Source bytes from the request's epoch.
-    pub fn acknowledge_with_source(
-        &self,
-        previous: Option<Arc<PresentationSnapshot>>,
-        source: Option<Arc<str>>,
-    ) {
         let document = previous
             .as_ref()
             .map(|presentation| presentation.document.clone());
-        self.acknowledge_document(previous, source, document);
+        self.acknowledge_document(previous, None, document);
     }
 
     /// Rebase queued work on the last published semantics even when its cached
@@ -863,26 +853,6 @@ impl WorkHandle {
         state.copy_jobs -= 1;
         state.copy_bytes -= completion.reserved;
         Some(completion.result)
-    }
-
-    /// Attach or refresh the owner wake; signal any already completed result.
-    pub fn set_wake(&self, wake: NodeWakeHandle) {
-        let to_wake = {
-            let mut state = self.shared.lock();
-            let stopped = state.stopped;
-            let Some(lane) = state.lanes.get_mut(&self.id) else {
-                return;
-            };
-            lane.wake = Some(wake);
-            if lane.completed.is_some() || !lane.copy_completed.is_empty() || stopped {
-                lane.wake.clone()
-            } else {
-                None
-            }
-        };
-        if let Some(wake) = to_wake {
-            drop(wake.wake());
-        }
     }
 
     /// Whether this lane retains work, results, or a publication handshake.
@@ -1536,7 +1506,7 @@ mod tests {
         held.finish();
         let published = handle.take_completed().unwrap().source.text();
         assert!(driver.start_next().is_none());
-        handle.acknowledge_with_source(None, Some(published.clone()));
+        handle.acknowledge_document(None, Some(published.clone()), None);
         let next = driver.start_next().unwrap();
         assert!(Arc::ptr_eq(
             next.request().unwrap().previous_source.as_ref().unwrap(),

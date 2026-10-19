@@ -8,6 +8,7 @@ use canopy::{
     style::PartialStyle,
     testing::harness::Harness,
 };
+use canopy_widgets::highlight::palette_style_rules;
 
 use super::*;
 use crate::{

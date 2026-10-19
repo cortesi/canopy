@@ -29,11 +29,11 @@ use canopy::{
     layout::ScrollOp,
     render::Render,
     runtime::NodeWakeHandle,
-    style::{StyleMap, StyleRules, themes::Palette},
+    style::{StyleRules, themes::Palette},
 };
 use canopy_widgets::{
     Tier,
-    editor::{LineNumbers, TextPosition, TextRange, WrapMode},
+    editor::{LineNumbers, TextPosition, WrapMode},
     table::PreparedTable,
 };
 use canopy_xmark::{Alignment, BlockQuoteKind};
@@ -756,9 +756,6 @@ impl MarkdownSource {
     /// Move the display cursor and reveal it without taking focus.
     pub fn set_cursor(&mut self, ctx: &mut dyn Context, position: TextPosition);
 
-    /// Install precomputed display ranges, for hosts with an existing matcher.
-    pub fn set_matches(&mut self, _ctx: &mut dyn Context, matches: Vec<TextRange>);
-
     /// Set byte-addressed selection endpoints without scrolling or taking
     /// focus.
     pub fn set_selection(
@@ -1469,19 +1466,8 @@ pub mod executor {
             document: Option<Arc<DocumentSnapshot>>,
         );
 
-        /// Rebase both prepared surfaces before releasing queued work. `source`
-        /// must be the exact published Source bytes from the request's epoch.
-        pub fn acknowledge_with_source(
-            &self,
-            previous: Option<Arc<PresentationSnapshot>>,
-            source: Option<Arc<str>>,
-        );
-
         /// Whether this lane retains work, results, or a publication handshake.
         pub fn is_pending(&self) -> bool;
-
-        /// Attach or refresh the owner wake; signal any already completed result.
-        pub fn set_wake(&self, wake: NodeWakeHandle);
 
         /// Replace the latest desired preparation without interrupting running
         /// work.
@@ -1913,9 +1899,6 @@ pub mod presentation {
         /// Local link destinations that name nothing.
         pub missing_links: HashSet<String>,
     }
-
-    /// Install palette roles once; all colors are resolved during painting.
-    pub fn register_styles(map: &mut StyleMap, palette: &Palette);
 
     /// Pass directly to `Setup::widget_styles` to retain roles through theme
     /// changes.

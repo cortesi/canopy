@@ -17,7 +17,7 @@ use canopy::{
     render::Render,
     rgb,
     style::{
-        Attr, AttrSet, Color, Mix, Paint, PartialStyle, ResolvedStyle, Style, StyleMap, StyleRules,
+        Attr, AttrSet, Color, Mix, Paint, PartialStyle, ResolvedStyle, Style, StyleRules,
         themes::Palette,
     },
     text,
@@ -26,7 +26,7 @@ use canopy::{
 use canopy_widgets::highlight::Grammar;
 use canopy_widgets::{
     BigFace, BigSize, BigText,
-    highlight::{SpanStyle, palette_style_rules},
+    highlight::SpanStyle,
     image_cells,
     mosaic::{Cell, Tier, tier_for},
     table::{
@@ -2387,12 +2387,6 @@ fn syntax_known(info: &str) -> bool {
 /// Whether the fence resolves to a bundled syntax grammar.
 fn syntax_known(_info: &str) -> bool {
     false
-}
-
-/// Install palette roles once; all colors are resolved during painting.
-pub fn register_styles(map: &mut StyleMap, palette: &Palette) {
-    palette_style_rules(palette, map.rules());
-    style_rules(palette, map.rules());
 }
 
 /// Pass directly to `Setup::widget_styles` to retain roles through theme
