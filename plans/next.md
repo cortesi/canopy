@@ -190,8 +190,8 @@ every renamed gym, the cursor, font, motion, and term gyms in particular.
 - [x] Remove the four unused items (C4).
 - [x] Narrow `row_at` and `row_lines` (C5).
 - [x] Rename `ImageBlock` to `EmbedBlock` (C7).
-- [ ] Add the recheck of named resources, with tests (C10).
-- [ ] Run `ncode test -p canopy-widgets` and `ncode test -p canopy-markdown`.
+- [x] Add the recheck of named resources, with tests (C10).
+- [x] Run `ncode test -p canopy-widgets` and `ncode test -p canopy-markdown`.
 
 ### Stage 3: Table fitting
 

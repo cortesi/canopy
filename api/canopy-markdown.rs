@@ -179,6 +179,17 @@ impl Markdown {
     /// geometry.
     pub fn ready(&self) -> bool;
 
+    /// Ask the host again for the displayed document's resources of `kind`
+    /// at `destinations`, as [`Self::recheck_resources`] does for every
+    /// resource of a kind. A destination names a resource as its
+    /// [`ResourceRequest::destination`] did. A destination the document does
+    /// not request is ignored.
+    pub fn recheck_destinations<S: AsRef<str>>(
+        &mut self,
+        kind: ResourceKind,
+        destinations: impl IntoIterator<Item = S>,
+    );
+
     /// Ask the host again for the displayed document's resources of `kinds`,
     /// as when the files they name may have appeared, gone, or changed. The
     /// next [`Self::take_resource_requests`] asks for them; what the reader
@@ -1662,6 +1673,9 @@ pub mod host {
         pub epoch: u64,
         /// The document of the host's own that holds it.
         pub target: LocalLink,
+        /// The link destination as the document writes it. A host names it to
+        /// [`Markdown::recheck_destinations`](crate::Markdown::recheck_destinations).
+        pub destination: String,
         /// What the reader asks for.
         pub kind: ResourceKind,
     }

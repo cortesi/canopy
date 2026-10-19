@@ -1329,6 +1329,131 @@ fn a_recheck_counts_only_what_was_asked_toward_the_bound() {
 }
 
 #[test]
+fn a_named_recheck_asks_again_only_for_its_destinations() {
+    let (mut harness, manual) = configured(
+        "![a](img/a.png)\n\n![b](img/b.png)\n\n![c](other/c.png)\n\n[[img/b.png]]\n",
+        ViewType::Rendered,
+        false,
+        |o| o.resources = true,
+    );
+    harness.canopy.set_screen_size(Size::new(60, 16)).unwrap();
+    settle(&mut harness, &manual);
+    let take = |harness: &mut Harness| {
+        harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests())
+    };
+    let first = take(&mut harness);
+    assert_eq!(first.len(), 4);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            for request in &first {
+                reader.supply_resource(ctx, request.id, Resource::Missing)?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    // One directory changed: only its images are asked again. The link to
+    // the same file and the names the document does not use stay as they are.
+    harness.with_root_widget(|reader: &mut Markdown| {
+        reader.recheck_destinations(ResourceKind::Image, ["img/a.png", "img/b.png", "nope.png"]);
+        reader.recheck_destinations(ResourceKind::Note, ["img/a.png"]);
+    });
+    let again = take(&mut harness);
+    let mut asked: Vec<_> = again
+        .iter()
+        .map(|request| (request.kind, request.destination.as_str()))
+        .collect();
+    asked.sort_unstable_by_key(|(_, destination)| *destination);
+    assert_eq!(
+        asked,
+        [
+            (ResourceKind::Image, "img/a.png"),
+            (ResourceKind::Image, "img/b.png")
+        ]
+    );
+    assert_eq!(take(&mut harness), [], "each is asked once");
+}
+
+#[test]
+fn a_named_recheck_during_a_request_asks_again_after_its_answer() {
+    let (mut harness, manual) = configured(
+        "[[Later]] and [[Other]]\n",
+        ViewType::Rendered,
+        false,
+        |o| o.resources = true,
+    );
+    settle(&mut harness, &manual);
+    let take = |harness: &mut Harness| {
+        harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests())
+    };
+    let first = take(&mut harness);
+    assert_eq!(first.len(), 2);
+    harness.with_root_widget(|reader: &mut Markdown| {
+        reader.recheck_destinations(ResourceKind::Link, ["Later"]);
+    });
+    assert_eq!(
+        take(&mut harness),
+        [],
+        "the check in flight is not asked twice"
+    );
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            for request in &first {
+                reader.supply_resource(ctx, request.id, Resource::Missing)?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    let again = take(&mut harness);
+    assert_eq!(
+        again
+            .iter()
+            .map(|request| request.destination.as_str())
+            .collect::<Vec<_>>(),
+        ["Later"],
+        "only the named answer is asked for again"
+    );
+}
+
+#[test]
+fn a_named_recheck_counts_again_toward_the_bound() {
+    let mut text = String::new();
+    for i in 0..RESOURCE_TOTAL {
+        text.push_str(&format!("[[n{i}]]\n\n"));
+    }
+    text.push_str("[[late]]\n");
+    let (mut harness, manual) = configured(&text, ViewType::Rendered, false, |o| {
+        o.resources = true;
+    });
+    settle(&mut harness, &manual);
+    let drain = |harness: &mut Harness| {
+        let mut asked = Vec::new();
+        loop {
+            let requests =
+                harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests());
+            if requests.is_empty() {
+                return asked;
+            }
+            harness
+                .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                    for request in &requests {
+                        reader.supply_resource(ctx, request.id, Resource::Found)?;
+                    }
+                    Ok(())
+                })
+                .unwrap();
+            asked.extend(requests.into_iter().map(|request| request.destination));
+        }
+    };
+    assert_eq!(drain(&mut harness).len(), RESOURCE_TOTAL);
+    // The link past the bound was never asked for, so naming it frees
+    // nothing. A named answered link frees its own place, and takes it again.
+    harness.with_root_widget(|reader: &mut Markdown| {
+        reader.recheck_destinations(ResourceKind::Link, ["late", "n7"]);
+    });
+    assert_eq!(drain(&mut harness), ["n7"]);
+}
+
+#[test]
 fn an_embedded_section_is_cut_by_its_anchor() {
     let note = "# Top\n\nIntro.\n\n## Plans\n\nShip it. ^ship\n\n### Detail\n\nMore.\n\n## Later\n\nNot now.\n";
     assert_eq!(

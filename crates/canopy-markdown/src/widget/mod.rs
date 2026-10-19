@@ -253,6 +253,22 @@ enum ResourceState {
     Skipped,
 }
 
+impl ResourceState {
+    /// Mark a recheck, and return whether the reader forgets the resource
+    /// so that it asks again. A request in flight asks again once its answer
+    /// arrives, and a skipped resource stays skipped.
+    fn recheck(&mut self) -> bool {
+        match self {
+            Self::Answered => true,
+            Self::Requested { again } => {
+                *again = true;
+                false
+            }
+            Self::Skipped => false,
+        }
+    }
+}
+
 /// What a document needs from its host: each link object's resource kind
 /// (an image block's image, an embed's note, or a link check) and its link.
 fn resource_wants(document: &DocumentSnapshot) -> impl Iterator<Item = (ResourceKind, &Link)> {
@@ -1465,6 +1481,7 @@ impl Markdown {
                 id: self.resource_id,
                 epoch: self.epoch(),
                 target,
+                destination: link.destination.clone(),
                 kind,
             });
         }
@@ -1563,21 +1580,37 @@ impl Markdown {
     pub fn recheck_resources(&mut self, kinds: &[ResourceKind]) {
         let mut forgotten = 0;
         self.resource_states.retain(|(kind, _), state| {
-            if !kinds.contains(kind) {
+            if !kinds.contains(kind) || !state.recheck() {
                 return true;
             }
-            match state {
-                ResourceState::Answered => {
-                    forgotten += 1;
-                    false
-                }
-                ResourceState::Requested { again } => {
-                    *again = true;
-                    true
-                }
-                ResourceState::Skipped => true,
-            }
+            forgotten += 1;
+            false
         });
+        // What is asked again counts toward the document's bound again.
+        self.resource_asked = self.resource_asked.saturating_sub(forgotten);
+    }
+    /// Ask the host again for the displayed document's resources of `kind`
+    /// at `destinations`, as [`Self::recheck_resources`] does for every
+    /// resource of a kind. A destination names a resource as its
+    /// [`ResourceRequest::destination`] did. A destination the document does
+    /// not request is ignored.
+    pub fn recheck_destinations<S: AsRef<str>>(
+        &mut self,
+        kind: ResourceKind,
+        destinations: impl IntoIterator<Item = S>,
+    ) {
+        let mut forgotten = 0;
+        for destination in destinations {
+            let key = (kind, destination.as_ref().to_owned());
+            if self
+                .resource_states
+                .get_mut(&key)
+                .is_some_and(ResourceState::recheck)
+            {
+                self.resource_states.remove(&key);
+                forgotten += 1;
+            }
+        }
         // What is asked again counts toward the document's bound again.
         self.resource_asked = self.resource_asked.saturating_sub(forgotten);
     }

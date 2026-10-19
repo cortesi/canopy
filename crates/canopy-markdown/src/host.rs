@@ -44,6 +44,9 @@ pub struct ResourceRequest {
     pub epoch: u64,
     /// The document of the host's own that holds it.
     pub target: LocalLink,
+    /// The link destination as the document writes it. A host names it to
+    /// [`Markdown::recheck_destinations`](crate::Markdown::recheck_destinations).
+    pub destination: String,
     /// What the reader asks for.
     pub kind: ResourceKind,
 }
