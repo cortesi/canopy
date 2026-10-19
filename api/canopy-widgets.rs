@@ -4811,13 +4811,6 @@ pub mod table {
             selection: &TableSelection,
         ) -> canopy::error::Result<TablePaintStats>;
 
-        /// Return the body row whose values reach canvas line `y`, if a row
-        /// does rather than a rule or nothing.
-        pub fn row_at(&self, y: u32) -> Option<usize>;
-
-        /// First canvas line and line count of a body row.
-        pub fn row_lines(&self, row: usize) -> Option<(u32, u32)>;
-
         /// Bytes inspected for automatic measurement.
         pub fn sampled_bytes(&self) -> usize;
 

@@ -188,7 +188,7 @@ every renamed gym, the cursor, font, motion, and term gyms in particular.
 
 - [x] Paint the frame title through `roles::TITLE` (C3).
 - [x] Remove the four unused items (C4).
-- [ ] Narrow `row_at` and `row_lines` (C5).
+- [x] Narrow `row_at` and `row_lines` (C5).
 - [ ] Rename `ImageBlock` to `EmbedBlock` (C7).
 - [ ] Add the recheck of named resources, with tests (C10).
 - [ ] Run `ncode test -p canopy-widgets` and `ncode test -p canopy-markdown`.

@@ -855,7 +855,7 @@ impl PreparedTable {
         self.rows.as_ref().map_or(1, |rows| rows.header)
     }
     /// First canvas line and line count of a body row.
-    pub fn row_lines(&self, row: usize) -> Option<(u32, u32)> {
+    pub(crate) fn row_lines(&self, row: usize) -> Option<(u32, u32)> {
         match &self.rows {
             None => {
                 (row < self.data.rows.len()).then(|| (u32::try_from(row).unwrap_or(u32::MAX), 1))
@@ -865,7 +865,7 @@ impl PreparedTable {
     }
     /// Return the body row whose values reach canvas line `y`, if a row
     /// does rather than a rule or nothing.
-    pub fn row_at(&self, y: u32) -> Option<usize> {
+    pub(crate) fn row_at(&self, y: u32) -> Option<usize> {
         match self.body_line(y)? {
             BodyLine::Row { row, .. } => Some(row),
             BodyLine::Rule => None,
