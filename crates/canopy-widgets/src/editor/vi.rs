@@ -821,6 +821,18 @@ impl Editor {
         }
     }
 
+    /// Yank the visual selection, whole lines in line mode, and return the
+    /// range it covers.
+    fn yank_selection(&mut self, mode: VisualMode) -> TextRange {
+        let linewise = matches!(mode, VisualMode::Line);
+        let mut range = self.buffer.selection().range();
+        if linewise {
+            range = self.linewise_range(range);
+        }
+        self.set_yank(range, linewise);
+        range
+    }
+
     /// Run one visual-mode command.
     fn execute_visual(&mut self, mode: VisualMode, command: VisualCommand, ctx: &mut dyn Context) {
         match command {
@@ -830,24 +842,14 @@ impl Editor {
                     self.exit_visual();
                     return;
                 }
-                let linewise = matches!(mode, VisualMode::Line);
-                let mut range = self.buffer.selection().range();
-                if linewise {
-                    range = self.linewise_range(range);
-                }
-                self.set_yank(range, linewise);
+                let range = self.yank_selection(mode);
                 self.replace_range(range, "");
                 self.update_preferred_column();
                 self.exit_visual();
                 self.vi.set_last_edit(RepeatableEdit::DeleteChar);
             }
             VisualCommand::Yank => {
-                let linewise = matches!(mode, VisualMode::Line);
-                let mut range = self.buffer.selection().range();
-                if linewise {
-                    range = self.linewise_range(range);
-                }
-                self.set_yank(range, linewise);
+                self.yank_selection(mode);
                 self.exit_visual();
             }
             VisualCommand::Change => {
@@ -855,12 +857,7 @@ impl Editor {
                     self.exit_visual();
                     return;
                 }
-                let linewise = matches!(mode, VisualMode::Line);
-                let mut range = self.buffer.selection().range();
-                if linewise {
-                    range = self.linewise_range(range);
-                }
-                self.set_yank(range, linewise);
+                let range = self.yank_selection(mode);
                 self.begin_text_entry_transaction();
                 self.replace_range(range, "");
                 self.exit_visual();
