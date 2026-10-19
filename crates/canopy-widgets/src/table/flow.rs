@@ -132,7 +132,7 @@ pub(super) struct Measure {
 }
 
 /// Display cells of one grapheme; a control takes one substitute cell.
-fn cells(g: &str) -> u32 {
+pub(super) fn cells(g: &str) -> u32 {
     if g.chars().any(display_control) {
         1
     } else {

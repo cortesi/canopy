@@ -673,11 +673,7 @@ pub(crate) fn display_control(c: char) -> bool {
 fn display_width(value: &str, cap: u32) -> u32 {
     let mut width = 0u32;
     for g in value.graphemes(true) {
-        width = width.saturating_add(if g.chars().any(display_control) {
-            1
-        } else {
-            u32::try_from(text::grapheme_width(g)).unwrap_or(u32::MAX)
-        });
+        width = width.saturating_add(flow::cells(g));
         if width >= cap {
             return cap;
         }
