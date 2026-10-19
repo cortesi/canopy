@@ -225,16 +225,10 @@ impl Poller {
 
     /// Cancel work whose lifetime is no longer valid after a structural commit.
     pub(crate) fn retain(&mut self, mut valid: impl FnMut(PollOwner) -> bool) {
-        let expired: Vec<_> = self
-            .pending
+        self.pending
             .deadlines
-            .values()
-            .filter(|pending| !valid(pending.stamp))
-            .map(|pending| (pending.stamp.node, pending.stamp.incarnation))
-            .collect();
-        for (node, incarnation) in expired {
-            self.cancel_owner(node, incarnation);
-        }
+            .retain(|_, pending| valid(pending.stamp));
+        self.pending.compact();
         self.intervals.retain(|_, (stamp, _)| valid(*stamp));
     }
 
