@@ -101,14 +101,7 @@ impl SearchState {
         self.direction = SearchDirection::Forward;
         self.ignore_case = !self.query.chars().any(char::is_uppercase);
         self.recompute(buffer);
-        self.current = (!self.matches.is_empty()).then(|| {
-            self.matches
-                .iter()
-                .position(|range| {
-                    (range.start.line, range.start.column) >= (from.line, from.column)
-                })
-                .unwrap_or(0)
-        });
+        self.current = self.first_at_or_after(from);
     }
 
     /// Install precomputed match ranges, making the first match at or after
@@ -127,10 +120,9 @@ impl SearchState {
         from: TextPosition,
     ) {
         debug_assert!(
-            matches.windows(2).all(|pair| {
-                (pair[0].start.line, pair[0].start.column)
-                    <= (pair[1].start.line, pair[1].start.column)
-            }),
+            matches
+                .windows(2)
+                .all(|pair| pair[0].start <= pair[1].start),
             "installed matches must arrive in ascending order"
         );
         self.query.clear();
@@ -138,14 +130,7 @@ impl SearchState {
         self.ignore_case = false;
         self.matches = matches;
         self.revision = buffer.revision();
-        self.current = (!self.matches.is_empty()).then(|| {
-            self.matches
-                .iter()
-                .position(|range| {
-                    (range.start.line, range.start.column) >= (from.line, from.column)
-                })
-                .unwrap_or(0)
-        });
+        self.current = self.first_at_or_after(from);
     }
 
     /// Return the number of matches.
@@ -238,6 +223,17 @@ impl SearchState {
         };
         self.current = Some(next);
         self.matches.get(next).map(|range| range.start)
+    }
+
+    /// Return the index of the first match at or after `from`, wrapping to
+    /// the first match when none follows.
+    fn first_at_or_after(&self, from: TextPosition) -> Option<usize> {
+        (!self.matches.is_empty()).then(|| {
+            self.matches
+                .iter()
+                .position(|range| range.start >= from)
+                .unwrap_or(0)
+        })
     }
 
     /// Recompute match cache for the current query.

@@ -1,7 +1,7 @@
-use std::cmp::Ordering;
-
 /// A position in the text buffer expressed as a logical line and a char index.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+///
+/// Positions order by line, then by column.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TextPosition {
     /// Logical line index (0-based).
     pub line: usize,
@@ -13,21 +13,6 @@ impl TextPosition {
     /// Create a new text position.
     pub fn new(line: usize, column: usize) -> Self {
         Self { line, column }
-    }
-}
-
-impl Ord for TextPosition {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match self.line.cmp(&other.line) {
-            Ordering::Equal => self.column.cmp(&other.column),
-            ordering => ordering,
-        }
-    }
-}
-
-impl PartialOrd for TextPosition {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
     }
 }
 

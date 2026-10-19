@@ -3938,6 +3938,8 @@ pub mod editor {
     }
 
     /// A position in the text buffer expressed as a logical line and a char index.
+    ///
+    /// Positions order by line, then by column.
     #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
     pub struct TextPosition {
         /// Logical line index (0-based).
