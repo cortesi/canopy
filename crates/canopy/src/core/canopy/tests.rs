@@ -2998,8 +2998,7 @@ fn an_unreadable_widget_declines_an_action() -> Result<()> {
         .core
         .with_widget_dyn_mut(leaf, |_, core| -> Result<()> {
             assert!(
-                core.select_key_binding(leaf, &path, key, leaf, &[])
-                    .is_none(),
+                core.select_key_binding(leaf, &path, key, leaf).is_none(),
                 "a borrowed widget declines the action"
             );
             let explanation = core.explain_key(Some(leaf), key)?;

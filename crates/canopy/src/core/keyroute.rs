@@ -163,7 +163,7 @@ impl Core {
         let mut outcome = RouteOutcome::Unhandled;
         for (node, path) in self.route(focus) {
             let widget = self.predict_key(node, key, focus);
-            let selected = self.select_key_binding(node, &path, key, focus, &[]);
+            let selected = self.select_key_binding(node, &path, key, focus);
             steps.push(KeyRouteStep {
                 node,
                 path: path.clone(),

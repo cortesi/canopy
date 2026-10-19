@@ -24,9 +24,8 @@ impl Core {
         path: &Path,
         key: Key,
         focus: NodeId,
-        excluded: &[BindingId],
     ) -> Option<&BindingRecord> {
-        self.select_binding(node, path, InputSpec::Key(key), focus, excluded)
+        self.select_binding(node, path, InputSpec::Key(key), focus, &[])
     }
 
     /// Select the first eligible binding for `input` at `node`.
@@ -88,7 +87,7 @@ impl Core {
         key: Key,
     ) -> Option<(NodeId, Path, &BindingRecord)> {
         self.route(start).find_map(|(node, path)| {
-            self.select_key_binding(node, &path, key, start, &[])
+            self.select_key_binding(node, &path, key, start)
                 .map(|binding| (node, path, binding))
         })
     }
