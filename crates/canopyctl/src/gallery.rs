@@ -201,9 +201,6 @@ pub async fn run(
     suite.scripts = scripts;
     suite.timeout_ms = settings.timeout_ms;
     let plan = plan_suite(&suite)?;
-    if plan.is_empty() {
-        bail!("no gallery scripts in {}", settings.suite.display());
-    }
     check_out(&settings.out)?;
     let staging = sibling(&settings.out, "staging")?;
     if staging.exists() {
