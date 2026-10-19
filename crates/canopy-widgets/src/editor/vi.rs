@@ -1158,10 +1158,12 @@ impl Editor {
         }
     }
 
-    /// Move to the end of the current word crossing line boundaries.
+    /// Move to the next word end after the cursor, crossing line boundaries.
     pub(super) fn move_word_end(&mut self) {
         let mut line = self.buffer.cursor().line;
-        let mut column = self.buffer.cursor().column;
+        // Start past the cursor, so that a cursor already at a word's end
+        // moves on to the next one.
+        let mut column = self.buffer.cursor().column.saturating_add(1);
         let line_count = self.buffer.line_count().max(1);
 
         loop {

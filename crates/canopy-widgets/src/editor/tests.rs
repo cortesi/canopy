@@ -755,6 +755,19 @@ fn vi_word_motions_cross_lines() {
 }
 
 #[test]
+fn vi_word_end_moves_past_current_word_end() {
+    let config = EditorConfig::new().with_mode(EditMode::Vi);
+    let mut harness = build_harness("one two\nthree", config, 10, 3);
+    harness.keys(['g', 'g']).unwrap();
+    harness.key('e').unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 2));
+    harness.key('e').unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 6));
+    harness.key('e').unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(1, 4));
+}
+
+#[test]
 fn vi_yank_put_linewise() {
     let config = EditorConfig::new().with_mode(EditMode::Vi);
     let mut harness = build_harness("one\ntwo", config, 10, 3);
