@@ -187,11 +187,6 @@ impl ScriptCheckResult {
         &self.diagnostics
     }
 
-    /// Consume the result and return its diagnostics.
-    pub fn into_diagnostics(self) -> Vec<ScriptCheckDiagnostic> {
-        self.diagnostics
-    }
-
     /// Return true when the result contains failing diagnostics.
     pub fn has_errors(&self) -> bool {
         self.diagnostics.iter().any(ScriptCheckDiagnostic::is_error)

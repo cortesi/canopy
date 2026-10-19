@@ -761,7 +761,6 @@ fn owners_draw_and_expose_their_configured_scrollbar_glyphs() -> Result<()> {
         thumb_vertical: 'T',
         thumb_horizontal: 't',
         track_vertical: '|',
-        track_horizontal: '-',
     };
     // Twenty content columns less one gap leave panes of ten and nine.
     let (harness, _) = scene(21, 6, move |c| {

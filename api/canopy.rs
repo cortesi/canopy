@@ -4731,9 +4731,6 @@ pub mod script {
 
         /// Return true when the result contains failing diagnostics.
         pub fn has_errors(&self) -> bool;
-
-        /// Consume the result and return its diagnostics.
-        pub fn into_diagnostics(self) -> Vec<ScriptCheckDiagnostic>;
     }
 
     /// Severity of a checked Luau source diagnostic.

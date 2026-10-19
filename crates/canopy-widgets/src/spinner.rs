@@ -47,12 +47,6 @@ impl Spinner {
     pub fn period(&self) -> Duration {
         self.period
     }
-
-    /// Return whether `glyph` is one of this spinner's frames.
-    #[must_use]
-    pub fn contains(&self, glyph: char) -> bool {
-        self.frames.contains(&glyph)
-    }
 }
 
 #[cfg(test)]

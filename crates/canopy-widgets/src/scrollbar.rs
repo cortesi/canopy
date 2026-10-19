@@ -19,9 +19,11 @@ use canopy::{
 /// The glyphs drawn on scrollbar tracks, following the
 /// [`BoxGlyphs`](crate::BoxGlyphs) pattern.
 ///
-/// Owners draw thumbs with the `thumb_*` glyphs and track backgrounds with
-/// the `track_*` glyphs. Marks that blend into the track reuse the track
-/// glyph of their axis and read through color alone.
+/// Owners draw thumbs with the `thumb_*` glyphs, and vertical track
+/// backgrounds with `track_vertical`. No widget draws a horizontal track
+/// glyph: a horizontal thumb rides a border, which draws its own line. Marks
+/// that blend into a vertical track reuse its glyph and read through color
+/// alone.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ScrollbarGlyphs {
     /// Thumb on a vertical track.
@@ -30,8 +32,6 @@ pub struct ScrollbarGlyphs {
     pub thumb_horizontal: char,
     /// Background line of a vertical track around the thumb.
     pub track_vertical: char,
-    /// Background line of a horizontal track around the thumb.
-    pub track_horizontal: char,
 }
 
 impl ScrollbarGlyphs {
@@ -40,7 +40,6 @@ impl ScrollbarGlyphs {
         thumb_vertical: '█',
         thumb_horizontal: '▄',
         track_vertical: '│',
-        track_horizontal: '─',
     };
 }
 

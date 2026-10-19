@@ -572,9 +572,6 @@ impl ColumnChart {
 }
 
 impl ColumnChart {
-    /// Clears the hover.
-    pub fn clear_hover(&mut self);
-
     /// Returns the columns.
     pub fn columns(&self) -> &[Column];
 
@@ -2755,10 +2752,6 @@ impl Spinner {
     pub const DOTS: Self = _;
     /// An ASCII line, for any terminal font.
     pub const LINE: Self = _;
-    /// Return whether `glyph` is one of this spinner's frames.
-    #[must_use]
-    pub fn contains(&self, glyph: char) -> bool;
-
     /// Return the frame to show after `elapsed`.
     #[must_use]
     pub fn frame(&self, elapsed: Duration) -> char;
@@ -4674,9 +4667,11 @@ pub mod scrollbar {
     /// The glyphs drawn on scrollbar tracks, following the
     /// [`BoxGlyphs`](crate::BoxGlyphs) pattern.
     ///
-    /// Owners draw thumbs with the `thumb_*` glyphs and track backgrounds with
-    /// the `track_*` glyphs. Marks that blend into the track reuse the track
-    /// glyph of their axis and read through color alone.
+    /// Owners draw thumbs with the `thumb_*` glyphs, and vertical track
+    /// backgrounds with `track_vertical`. No widget draws a horizontal track
+    /// glyph: a horizontal thumb rides a border, which draws its own line. Marks
+    /// that blend into a vertical track reuse its glyph and read through color
+    /// alone.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub struct ScrollbarGlyphs {
         /// Thumb on a vertical track.
@@ -4685,8 +4680,6 @@ pub mod scrollbar {
         pub thumb_horizontal: char,
         /// Background line of a vertical track around the thumb.
         pub track_vertical: char,
-        /// Background line of a horizontal track around the thumb.
-        pub track_horizontal: char,
     }
 
     impl ScrollbarGlyphs {
