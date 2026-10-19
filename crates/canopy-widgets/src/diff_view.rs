@@ -70,6 +70,16 @@ enum Side {
     New,
 }
 
+impl Side {
+    /// Return the text of zero-based `line` on this side of `diff`.
+    fn line(self, diff: &Diff, line: usize) -> &str {
+        match self {
+            Self::Old => diff.old_line(line),
+            Self::New => diff.new_line(line),
+        }
+    }
+}
+
 /// A display row in side-by-side layout.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum SideRow {
@@ -476,10 +486,7 @@ impl DiffView {
     /// Map a source match through the current wrapping, including after resize.
     fn match_area(&self, found: &SearchMatch, width: u32) -> Rect {
         let geometry = self.geometry(width);
-        let source = match found.side {
-            Side::Old => self.diff.old_line(found.line),
-            Side::New => self.diff.new_line(found.line),
-        };
+        let source = found.side.line(&self.diff, found.line);
         let prefix = source.chars().take(found.columns.start).collect::<String>();
         let start = text::width(&text::expand_tabs(&prefix, self.tab_stop));
         let through = source.chars().take(found.columns.end).collect::<String>();
@@ -809,7 +816,6 @@ impl DiffView {
         x: u32,
         width: u32,
         style: &str,
-        text: &str,
         side: Side,
         line: usize,
         y: u32,
@@ -817,6 +823,7 @@ impl DiffView {
     ) -> Result<()> {
         let scroll = view_rect.tl.x;
         let base = rndr.resolve_style(style);
+        let text = side.line(&self.diff, line);
         let spans = self.highlight(side, line, text);
         let matches = self.match_lines.get(&(side, line));
         let search_current = rndr.resolve_style("search/current");
@@ -914,7 +921,6 @@ impl DiffView {
                         origin.x + geom.gutter,
                         geom.width - geom.gutter,
                         "context",
-                        self.diff.old_line(*old),
                         Side::Old,
                         *old,
                         y,
@@ -939,7 +945,6 @@ impl DiffView {
                         origin.x + geom.gutter,
                         geom.width - geom.gutter,
                         "removed",
-                        self.diff.old_line(*old),
                         Side::Old,
                         *old,
                         y,
@@ -964,7 +969,6 @@ impl DiffView {
                         origin.x + geom.gutter,
                         geom.width - geom.gutter,
                         "added",
-                        self.diff.new_line(*new),
                         Side::New,
                         *new,
                         y,
@@ -1128,10 +1132,6 @@ impl DiffView {
             geom.digits,
             style,
         )?;
-        let text = match side {
-            Side::Old => self.diff.old_line(line),
-            Side::New => self.diff.new_line(line),
-        };
         self.draw_code(
             rndr,
             view_rect,
@@ -1139,7 +1139,6 @@ impl DiffView {
             x + geom.gutter,
             geom.half.saturating_sub(geom.gutter),
             style,
-            text,
             side,
             line,
             y,
@@ -1272,13 +1271,7 @@ fn widest_line(diff: &Diff, side: Side, tab_stop: usize) -> u32 {
         Side::New => diff.new_len(),
     };
     (0..len)
-        .map(|line| {
-            let text = match side {
-                Side::Old => diff.old_line(line),
-                Side::New => diff.new_line(line),
-            };
-            text::width(&text::expand_tabs(text, tab_stop))
-        })
+        .map(|line| text::width(&text::expand_tabs(side.line(diff, line), tab_stop)))
         .max()
         .unwrap_or(0)
 }
