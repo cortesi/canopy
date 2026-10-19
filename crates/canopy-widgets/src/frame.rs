@@ -26,8 +26,6 @@ pub struct Frame {
     box_glyphs: BoxGlyphs,
     /// Optional title string.
     title: Option<String>,
-    /// Glyph set the scrollbars below draw with.
-    scrollbar_glyphs: ScrollbarGlyphs,
     /// Scrollbar on the right border.
     vertical: Scrollbar,
     /// Scrollbar on the bottom border.
@@ -41,7 +39,6 @@ impl Frame {
         Self {
             box_glyphs: BoxGlyphs::ROUND,
             title: None,
-            scrollbar_glyphs: ScrollbarGlyphs::THIN,
             vertical,
             horizontal,
         }
@@ -53,7 +50,6 @@ impl Frame {
     /// before mounting.
     #[must_use]
     pub fn with_scrollbar_glyphs(mut self, glyphs: ScrollbarGlyphs) -> Self {
-        self.scrollbar_glyphs = glyphs;
         (self.vertical, self.horizontal) = Self::scrollbars(glyphs);
         self
     }
