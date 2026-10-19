@@ -16,6 +16,7 @@ use std::{fs, path::PathBuf};
 use canopy::style::{AttrSet, Color, Coverage, ResolvedStyle};
 use canopy_mosaic::{
     RasterView, SymbolSet, Tier, coverage_into, fixed_into,
+    geometry::MATRIX,
     raster::{Image, LinearRaster, Placement, composite, resample},
     rgb_into,
 };
@@ -24,9 +25,6 @@ use crate::{
     color,
     display::{CELL_H, CELL_W, Shown},
 };
-
-/// Matrix pixels across and down a cell.
-const MATRIX: usize = 8;
 
 /// The text of each text item: capitals, round and straight lowercase,
 /// ascenders, descenders, and digits.
