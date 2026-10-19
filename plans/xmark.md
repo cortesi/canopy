@@ -212,8 +212,8 @@ label. The label vocabulary and its tones live in the crate, so the
 terminal and the preview agree. Replaces `take_alert_marker`, the bare
 marker leaf in `collect`, and `AlertTone::of` (canopy), and
 `common_alerts`, `marker_label`, and `alert_kind` (fh). Settles the
-preview's alert vocabulary. Folding itself (`next.md` C8) stays a reader
-decision.
+preview's alert vocabulary. The reader ignores the fold sign, as
+`next.md` records.
 
 #### C9: Inline footnotes
 
