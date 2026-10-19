@@ -175,11 +175,11 @@ impl TermGym {
     }
 
     /// Execute a closure with the terminal list widget.
-    fn with_list<F, R>(&self, c: &mut dyn Context, mut f: F) -> Result<R>
+    fn with_list<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
     where
-        F: FnMut(&mut List<TermEntry>, &mut dyn Context) -> Result<R>,
+        F: FnOnce(&mut List<TermEntry>, &mut dyn Context) -> Result<R>,
     {
-        c.with_unique_descendant::<List<TermEntry>, _>(|list, ctx| f(list, ctx))
+        c.with_unique_descendant::<List<TermEntry>, _>(f)
     }
 
     /// Execute a closure with the terminal stack widget.

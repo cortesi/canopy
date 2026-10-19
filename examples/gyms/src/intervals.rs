@@ -185,11 +185,11 @@ impl Intervals {
     }
 
     /// Execute a closure with mutable access to the list widget.
-    fn with_list<F, R>(&self, c: &mut dyn Context, mut f: F) -> Result<R>
+    fn with_list<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
     where
-        F: FnMut(&mut List<CounterItem>, &mut dyn Context) -> Result<R>,
+        F: FnOnce(&mut List<CounterItem>, &mut dyn Context) -> Result<R>,
     {
-        c.with_unique_descendant::<List<CounterItem>, _>(|list, ctx| f(list, ctx))
+        c.with_unique_descendant::<List<CounterItem>, _>(f)
     }
 
     #[command]
