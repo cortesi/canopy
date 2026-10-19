@@ -10,6 +10,9 @@ Reader work lands in `crates/canopy-markdown`, table work in
 `crates/canopy-widgets`, and host work in fh (`../fh`), which migrates in
 the same change. The browser's own follow-ups are in `../fh/plans/next.md`.
 
+A code survey of the whole workspace left C14 to C17. C14 to C16 need a
+decision. C17 needs none, but it was too large for that pass.
+
 ## Changes
 
 ### C3: `%%` comments that end mid-block or span line breaks
@@ -65,3 +68,44 @@ Gym subcommands and files dropped the `gym` suffix. Script names
 (`"chargym"`, `"markdowngym"`, …), style paths (`termgym/*`, `fontgym/*`,
 `cursorgym/*`), and the `"tablegym"` dataset id keep it. Decide whether to
 rename them too. Widget types and node paths keep the suffix by design.
+
+### C14: The frame title role
+
+`roles::TITLE` (`crates/canopy/src/core/style/mod.rs`) has no users.
+`Frame` paints its title with the literal `"frame/title"`
+(`crates/canopy-widgets/src/frame.rs`). Decide whether `Frame` uses the role,
+or whether the constant goes.
+
+### C15: `key_for` under a focus override
+
+`NodeCtx::key_for` (`crates/canopy/src/core/context.rs`) asks
+`Core::key_for`, which explains each key from the real focus. A context with
+a `focus_override` answers `is_focused` and `focused_node` for the override.
+For that context, `key_for` can therefore name a key that its own route does
+not reach. Decide whether `key_for` follows the override.
+
+### C16: Unused public widget and script items
+
+Nothing in the workspace or fh reads these:
+
+- `ScrollbarGlyphs::track_horizontal`. Only a test sets it, and `Frame`
+  draws no horizontal track glyph.
+- `Spinner::contains` and `ColumnChart::clear_hover`.
+- `ScriptCheckResult::into_diagnostics`. `diagnostics()` covers the same
+  use.
+- `Border::with_border_style`, `FontBanner::set_renderer`, and
+  `ColumnChart::set_lower_rows`. Each is one half of a `with_` and `set_`
+  pair.
+
+Decide which to remove. For the glyph, decide whether to remove it or have
+`Frame` draw it.
+
+### C17: `NodeArena::require`
+
+29 sites in `crates/canopy/src/core` repeat
+`nodes.get(id).ok_or(Error::NodeNotFound(id))` or its `get_mut` twin, and
+about 12 more check `contains_key` before they return `NodeNotFound`. Most
+are in `world/layout_driver` and `tree.rs`. Proposal: `NodeArena`
+(`core/id.rs`) gets `require` and `require_mut`, which return
+`Error::NodeNotFound`, and each site calls one of them. `NodeArena` is
+crate-private, so the public API does not change.
