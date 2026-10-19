@@ -195,10 +195,10 @@ every renamed gym, the cursor, font, motion, and term gyms in particular.
 
 ### Stage 3: Table fitting
 
-- [ ] Floor each fitted column at its label's widest line, in every
+- [x] Floor each fitted column at its label's widest line, in every
       narrowing branch, with `fit` tests and a `TableView` mount and resize
       test (C6).
-- [ ] Run `ncode test -p canopy-widgets` and `ncode test -p canopy-markdown`.
+- [x] Run `ncode test -p canopy-widgets` and `ncode test -p canopy-markdown`.
 
 ### Stage 4: Gym names
 

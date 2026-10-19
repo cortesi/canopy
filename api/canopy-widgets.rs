@@ -4781,8 +4781,9 @@ pub mod table {
         /// widths, up to their natural widths, so their values wrap less. In a
         /// narrower view, wide columns give up room down to a readable floor, so
         /// their values wrap more; a view too narrow even for the floors keeps
-        /// them and scrolls. A layout that does not wrap returns its own
-        /// geometry.
+        /// them and scrolls. No column narrows below its label's widest line, so
+        /// the header takes the same lines at every width. A layout that does
+        /// not wrap returns its own geometry.
         pub fn fit(&self, room: u32) -> canopy::error::Result<Self>;
 
         /// Stable key for these layout options and measured widths.
@@ -5065,7 +5066,8 @@ pub mod table {
         ///
         /// A wrapping layout measures every value rather than a sample, so it
         /// suits bounded tables. Columns take their natural widths up to
-        /// `max_width`, and longer values wrap at word boundaries over as many
+        /// `max_width`, but never less than the widest line of their labels, so
+        /// a header never wraps. Longer values wrap at word boundaries over as many
         /// lines as they need. Each row is as tall as its tallest value, and
         /// rules separate the rows once any of them wraps. A value past 16 KiB
         /// ends in an ellipsis.

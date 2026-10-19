@@ -1,6 +1,7 @@
 use canopy::{
     geom::{PointI32, Size},
     input::key,
+    runtime::TurnInput,
     testing::harness::Harness,
 };
 
@@ -876,5 +877,49 @@ fn pages_in_a_wrapping_view_move_by_the_rows_that_fit_either_way() -> Result<()>
         7 - down,
         "a page up from the end moves as far"
     );
+    Ok(())
+}
+
+#[test]
+fn a_fitted_header_never_overlaps_the_body() -> Result<()> {
+    let notes = "one two three four five six seven eight nine ten eleven twelve";
+    let data = Arc::new(
+        TableData::builder("w", 1, ["Key", "Long column label"])
+            .row("a", ["k1", notes])
+            .build()
+            .unwrap(),
+    );
+    let prepared = Arc::new(prepare(
+        data,
+        TableLayoutOptions {
+            wrap: true,
+            ..Default::default()
+        },
+    )?);
+    // The first frame lays out the shell before the body refits the table.
+    // A header that grew in the refit would cover the body's first line, and
+    // the gutter would number a line below it.
+    let check = |h: &Harness, width: u32| {
+        let lines = h.tbuf().lines();
+        let screen = lines.join("\n");
+        assert!(
+            lines[0].contains("Long column"),
+            "the header shows at {width}:\n{screen}"
+        );
+        assert!(
+            lines[1].trim_start().starts_with("1 k1"),
+            "the gutter and body start below a one-line header at {width}:\n{screen}"
+        );
+    };
+    let mut h = Harness::builder(TableView::new(prepared, Default::default()))
+        .register::<TableView>()
+        .size(22, 8)
+        .build()?;
+    check(&h, 22);
+    for width in [40, 20, 26, 21] {
+        h.canopy.set_screen_size(Size::new(width, 8))?;
+        h.canopy.turn(TurnInput::Prepare)?;
+        check(&h, width);
+    }
     Ok(())
 }

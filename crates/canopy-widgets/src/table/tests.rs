@@ -314,3 +314,65 @@ fn fitting_narrows_wide_columns_into_a_narrow_view() {
         "below the floor the column keeps it, and the grid scrolls"
     );
 }
+/// A wrapping layout of a key column and a notes column whose label is
+/// wider than `max_width`, with explicit options.
+fn labelled(label: &str, max_width: u32) -> PreparedTable {
+    prepare(
+        Arc::new(
+            TableData::builder("l", 1, ["Key", label])
+                .row(
+                    "a",
+                    [
+                        "k1",
+                        "one two three four five six seven eight nine ten eleven twelve",
+                    ],
+                )
+                .build()
+                .unwrap(),
+        ),
+        TableLayoutOptions {
+            wrap: true,
+            max_width,
+            ..Default::default()
+        },
+    )
+    .unwrap()
+}
+#[test]
+fn preparing_never_cuts_a_column_below_its_label() {
+    let table = labelled("Long column label", 10);
+    assert_eq!(
+        table.widths(),
+        [3, 17],
+        "the label outweighs the width limit"
+    );
+    assert_eq!(table.header_lines(), 1);
+}
+#[test]
+fn fitting_never_narrows_a_column_below_its_label() {
+    let table = labelled("Long column label", 10);
+    // The prepared widths fit, and the spare room goes to the notes.
+    let roomy = table.fit(30).unwrap();
+    assert_eq!(roomy.widths(), [3, 26]);
+    // The prepared widths do not fit, and the notes narrow to the floor.
+    let wide = labelled("Long column label", 40);
+    assert_eq!(wide.widths(), [3, 40]);
+    assert_eq!(wide.fit(24).unwrap().widths(), [3, 20]);
+    for (table, room) in [(&table, 19), (&wide, 19), (&wide, 8)] {
+        let narrow = table.fit(room).unwrap();
+        assert_eq!(
+            narrow.widths(),
+            [3, 17],
+            "a view narrower than the label scrolls at {room}"
+        );
+        assert_eq!(narrow.header_lines(), 1);
+    }
+}
+#[test]
+fn a_label_with_line_breaks_keeps_its_lines_at_every_width() {
+    let table = labelled("Long\nheader", 40);
+    assert_eq!(table.header_lines(), 2);
+    for room in [4, 10, 24, 80] {
+        assert_eq!(table.fit(room).unwrap().header_lines(), 2, "at {room}");
+    }
+}

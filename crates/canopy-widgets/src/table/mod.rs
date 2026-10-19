@@ -512,7 +512,8 @@ pub struct TableLayoutOptions {
     ///
     /// A wrapping layout measures every value rather than a sample, so it
     /// suits bounded tables. Columns take their natural widths up to
-    /// `max_width`, and longer values wrap at word boundaries over as many
+    /// `max_width`, but never less than the widest line of their labels, so
+    /// a header never wraps. Longer values wrap at word boundaries over as many
     /// lines as they need. Each row is as tall as its tallest value, and
     /// rules separate the rows once any of them wraps. A value past 16 KiB
     /// ends in an ellipsis.
@@ -549,6 +550,9 @@ pub struct PreparedTable {
     width: u32,
     /// Natural width of each column, which a wrapping layout may widen to.
     natural: Vec<u32>,
+    /// Width of each column label's widest line, below which a wrapping
+    /// layout never narrows the column, so the header never wraps.
+    labels: Vec<u32>,
     /// Rows of a wrapping layout; `None` when every row takes one line.
     rows: Option<RowLines>,
     /// Hash of every prepared geometry input.
@@ -600,6 +604,7 @@ pub fn prepare(data: Arc<TableData>, options: TableLayoutOptions) -> Result<Prep
     let mut sampled_bytes = 0;
     let mut widths = vec![options.min_width; data.columns.len()];
     let mut natural = Vec::new();
+    let mut labels = Vec::new();
     if !options.widths.is_empty() {
         widths.clone_from(&options.widths);
     } else if options.wrap {
@@ -607,20 +612,19 @@ pub fn prepare(data: Arc<TableData>, options: TableLayoutOptions) -> Result<Prep
         natural = vec![options.min_width; data.columns.len()];
         let mut note = |cell: &TableCell, column: usize| {
             sampled_bytes += cell.text.len();
-            natural[column] = natural[column].max(flow::measure(&cell.text).natural);
+            let width = flow::measure(&cell.text).natural;
+            natural[column] = natural[column].max(width);
+            width
         };
         for (column, col) in data.columns.iter().enumerate() {
-            note(&col.label, column);
+            labels.push(note(&col.label, column));
         }
         for row in &data.rows {
             for (column, cell) in row.cells.iter().enumerate() {
                 note(cell, column);
             }
         }
-        widths = natural
-            .iter()
-            .map(|n| (*n).min(options.max_width))
-            .collect();
+        widths = wrap_base(&natural, &labels, options.max_width);
     } else {
         let mut measure = |cell: &TableCell, column: usize| {
             let remaining = options.sample_bytes.saturating_sub(sampled_bytes);
@@ -641,7 +645,16 @@ pub fn prepare(data: Arc<TableData>, options: TableLayoutOptions) -> Result<Prep
             }
         }
     }
-    PreparedTable::assemble(data, options, widths, natural, sampled_bytes)
+    PreparedTable::assemble(data, options, widths, natural, labels, sampled_bytes)
+}
+/// Return the widths a wrapping layout prepares: each column's natural width
+/// up to `max_width`, but never narrower than its label's widest line.
+fn wrap_base(natural: &[u32], labels: &[u32], max_width: u32) -> Vec<u32> {
+    natural
+        .iter()
+        .zip(labels)
+        .map(|(natural, label)| (*natural).min(max_width).max(*label))
+        .collect()
 }
 /// Return the lines a row of `cells` takes when each wraps to its width.
 fn wrapped_lines(cells: &[TableCell], widths: &[u32]) -> u32 {
@@ -734,6 +747,7 @@ impl PreparedTable {
         options: TableLayoutOptions,
         widths: Vec<u32>,
         natural: Vec<u32>,
+        labels: Vec<u32>,
         sampled_bytes: usize,
     ) -> Result<Self> {
         let mut starts = Vec::with_capacity(widths.len());
@@ -787,6 +801,7 @@ impl PreparedTable {
             .saturating_add(widths.capacity().saturating_mul(size_of::<u32>()))
             .saturating_add(starts.capacity().saturating_mul(size_of::<u32>()))
             .saturating_add(natural.capacity().saturating_mul(size_of::<u32>()))
+            .saturating_add(labels.capacity().saturating_mul(size_of::<u32>()))
             .saturating_add(row_bytes)
             .saturating_add(options.widths.capacity().saturating_mul(size_of::<u32>()));
         Ok(Self {
@@ -796,6 +811,7 @@ impl PreparedTable {
             starts,
             width,
             natural,
+            labels,
             rows,
             geometry_key: hash.finish(),
             sampled_bytes,
@@ -812,16 +828,14 @@ impl PreparedTable {
     /// widths, up to their natural widths, so their values wrap less. In a
     /// narrower view, wide columns give up room down to a readable floor, so
     /// their values wrap more; a view too narrow even for the floors keeps
-    /// them and scrolls. A layout that does not wrap returns its own
-    /// geometry.
+    /// them and scrolls. No column narrows below its label's widest line, so
+    /// the header takes the same lines at every width. A layout that does
+    /// not wrap returns its own geometry.
     pub fn fit(&self, room: u32) -> Result<Self> {
         let base: Vec<u32> = if self.natural.is_empty() {
             self.widths.clone()
         } else {
-            self.natural
-                .iter()
-                .map(|n| (*n).min(self.options.max_width))
-                .collect()
+            wrap_base(&self.natural, &self.labels, self.options.max_width)
         };
         let gaps = u32::try_from(base.len().saturating_sub(1)).unwrap_or(u32::MAX);
         let room = room.saturating_sub(gaps);
@@ -835,7 +849,11 @@ impl PreparedTable {
             flow::distribute(&self.natural, &base, room)
         } else {
             let floor_width = WRAP_FLOOR.max(self.options.min_width);
-            let floor: Vec<u32> = base.iter().map(|width| (*width).min(floor_width)).collect();
+            let floor: Vec<u32> = base
+                .iter()
+                .zip(&self.labels)
+                .map(|(width, label)| (*width).min(floor_width).max(*label))
+                .collect();
             if floor.iter().sum::<u32>() <= room {
                 flow::distribute(&base, &floor, room)
             } else {
@@ -847,6 +865,7 @@ impl PreparedTable {
             self.options.clone(),
             widths,
             self.natural.clone(),
+            self.labels.clone(),
             self.sampled_bytes,
         )
     }
