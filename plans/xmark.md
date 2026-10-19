@@ -394,6 +394,6 @@ them the same way.
 - [x] The front matter properties helper, shared by both consumers (C21).
 - [ ] Emoji shortcodes (C14) and Logseq and Dendron syntax (C20), if still
       wanted.
-- [ ] Sweep again: no crate but `canopy-xmark` depends on pulldown-cmark or
+- [x] Sweep again: no crate but `canopy-xmark` depends on pulldown-cmark or
       reads Markdown syntax, and each change is in the crate's README
       (C22).
