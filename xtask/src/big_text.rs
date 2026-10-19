@@ -46,28 +46,13 @@ const COMPACT_ROWS: usize = 5;
 /// Write the module, or with `check`, fail when the module on disk differs
 /// from what the sources give.
 pub fn run(workspace_root: &Path, check: bool) -> bool {
-    let result = generate(workspace_root).and_then(|module| {
-        let path = workspace_root.join(OUTPUT);
-        if check {
-            let current = fs::read_to_string(&path)
-                .map_err(|error| format!("cannot read {OUTPUT}: {error}"))?;
-            if current != module {
-                return Err(format!("{OUTPUT} is stale: run `cargo xtask big-text`"));
-            }
-            println!("{OUTPUT} is current");
-        } else {
-            fs::write(&path, module).map_err(|error| format!("cannot write {OUTPUT}: {error}"))?;
-            println!("wrote {OUTPUT}");
-        }
-        Ok(())
-    });
-    match result {
-        Ok(()) => true,
-        Err(error) => {
-            eprintln!("{error}");
-            false
-        }
-    }
+    crate::write_generated(
+        workspace_root,
+        OUTPUT,
+        generate(workspace_root),
+        check,
+        "cargo xtask big-text",
+    )
 }
 
 /// One glyph: a bitmap placed against the pen and the baseline.

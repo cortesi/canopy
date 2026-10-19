@@ -71,34 +71,16 @@ authorization of the copyright holder.";
 /// Write the fixture from `data`, a copy of `UnicodeData.txt`, or with
 /// `check`, fail when the fixture on disk differs from what it gives.
 pub fn run(workspace_root: &Path, data: &Path, check: bool) -> bool {
-    let result = fs::read_to_string(data)
+    let fixture = fs::read_to_string(data)
         .map_err(|error| format!("cannot read {}: {error}", data.display()))
-        .and_then(|source| fixture(&source))
-        .and_then(|fixture| {
-            let path = workspace_root.join(OUTPUT);
-            if check {
-                let current = fs::read_to_string(&path)
-                    .map_err(|error| format!("cannot read {OUTPUT}: {error}"))?;
-                if current != fixture {
-                    return Err(format!(
-                        "{OUTPUT} is stale: run `cargo xtask unicode-mosaics UnicodeData.txt`"
-                    ));
-                }
-                println!("{OUTPUT} is current");
-            } else {
-                fs::write(&path, fixture)
-                    .map_err(|error| format!("cannot write {OUTPUT}: {error}"))?;
-                println!("wrote {OUTPUT}");
-            }
-            Ok(())
-        });
-    match result {
-        Ok(()) => true,
-        Err(error) => {
-            eprintln!("{error}");
-            false
-        }
-    }
+        .and_then(|source| fixture(&source));
+    crate::write_generated(
+        workspace_root,
+        OUTPUT,
+        fixture,
+        check,
+        "cargo xtask unicode-mosaics UnicodeData.txt",
+    )
 }
 
 /// The fixture for a `UnicodeData.txt`: its header, and one `CODE;NAME` line

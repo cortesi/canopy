@@ -306,6 +306,41 @@ fn run_cargo_command(directory: &Path, args: &[&str]) -> bool {
     }
 }
 
+/// Write `generated` to `output` under the workspace root, or with `check`,
+/// fail when the file on disk differs from it. `regenerate` names the command
+/// that rewrites the file.
+fn write_generated(
+    workspace_root: &Path,
+    output: &str,
+    generated: Result<String, String>,
+    check: bool,
+    regenerate: &str,
+) -> bool {
+    let result = generated.and_then(|contents| {
+        let path = workspace_root.join(output);
+        if check {
+            let current = fs::read_to_string(&path)
+                .map_err(|error| format!("cannot read {output}: {error}"))?;
+            if current != contents {
+                return Err(format!("{output} is stale: run `{regenerate}`"));
+            }
+            println!("{output} is current");
+        } else {
+            fs::write(&path, contents)
+                .map_err(|error| format!("cannot write {output}: {error}"))?;
+            println!("wrote {output}");
+        }
+        Ok(())
+    });
+    match result {
+        Ok(()) => true,
+        Err(error) => {
+            eprintln!("{error}");
+            false
+        }
+    }
+}
+
 /// Convert a command result into an exit code.
 fn exit_code(success: bool) -> ExitCode {
     if success {
