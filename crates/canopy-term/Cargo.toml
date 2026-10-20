@@ -1,0 +1,22 @@
+[package]
+name = "canopy-term"
+version = "0.1.0"
+description = "Host an interactive Canopy app in a terminal and drive it as a person does."
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+canopy-mcp.workspace = true
+itty-headless.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tmcp.workspace = true
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "time"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "time"] }

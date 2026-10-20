@@ -392,6 +392,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "canopy-term"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "canopy-mcp",
+ "itty-headless",
+ "serde_json",
+ "tempfile",
+ "tmcp",
+ "tokio",
+]
+
+[[package]]
 name = "canopy-widgets"
 version = "0.0.1"
 dependencies = [
@@ -433,10 +446,10 @@ dependencies = [
  "anyhow",
  "canopy",
  "canopy-mcp",
+ "canopy-term",
  "canopy-widgets",
  "clap",
  "futures",
- "itty-headless",
  "ruau-script-api",
  "serde",
  "serde_json",
@@ -1282,13 +1295,17 @@ dependencies = [
 name = "gyms"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "canopy",
  "canopy-markdown",
  "canopy-mcp",
+ "canopy-term",
  "canopy-widgets",
  "clap",
  "image",
  "rand 0.10.3",
+ "serde_json",
+ "tokio",
  "unicode-width",
 ]
 

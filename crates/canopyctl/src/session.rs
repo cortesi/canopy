@@ -2,6 +2,7 @@
 
 use std::{
     path::{Path, PathBuf},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -10,6 +11,7 @@ use canopy_mcp::{
     ApplyFixtureRequest, ApplyFixtureResponse, BootstrapRequest, BootstrapResponse, EvalReport,
     ScreenSize, ScriptEvalRequest,
 };
+use canopy_term::TermHost;
 use ruau_script_api::ScriptApiQuery;
 use tmcp::{
     Client,
@@ -23,7 +25,7 @@ use tokio::{
 
 use crate::{
     config::{LoadedConfig, ResolvedCommand},
-    term::{TermHost, TermRequest, TermResponse},
+    term::{self, TermRequest, TermResponse},
 };
 
 /// MCP client name reported to spawned or connected servers.
@@ -33,8 +35,8 @@ const CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Active headless or live MCP client session.
 pub struct Session {
-    /// Connected MCP client.
-    client: Client<()>,
+    /// Connected MCP client, which a hosted app's terminal also uses.
+    client: Arc<Client<()>>,
     /// Managed headless child process, when applicable.
     child: Option<Child>,
     /// Session kind.
@@ -61,12 +63,18 @@ impl Session {
         let (reader, writer) = stream.into_split();
         let mut client = Client::new(CLIENT_NAME, CLIENT_VERSION);
         client.connect_stream(reader, writer).await?;
-        Ok(Self {
+        Ok(Self::share_live(Arc::new(client)))
+    }
+
+    /// Use a live client that another owner connected, such as the terminal
+    /// hosting an app.
+    pub fn share_live(client: Arc<Client<()>>) -> Self {
+        Self {
             client,
             child: None,
             kind: SessionKind::Live,
             default_fixture: None,
-        })
+        }
     }
 
     /// Spawn a headless stdio MCP server and connect to it.
@@ -74,7 +82,7 @@ impl Session {
         let mut client = Client::new(CLIENT_NAME, CLIENT_VERSION);
         let spawned = client.connect_process(command.to_command()).await?;
         Ok(Self {
-            client,
+            client: Arc::new(client),
             child: Some(spawned.process),
             kind: SessionKind::Headless,
             default_fixture: None,
@@ -150,8 +158,9 @@ impl Session {
 enum Current {
     /// A headless app, or a live app that canopyctl did not start.
     Session(Session),
-    /// An app canopyctl hosts in a terminal, with its live session.
-    Hosted(TermHost),
+    /// An app canopyctl hosts in a terminal, and a session that shares the
+    /// host's live client.
+    Hosted(TermHost, Session),
 }
 
 /// Shared session manager used by the CLI and proxy MCP server.
@@ -200,8 +209,9 @@ impl SessionManager {
         *self.last_activity.lock().await = Instant::now();
         let mut state = self.state.lock().await;
         self.release(&mut state).await?;
-        let host = TermHost::launch(command, socket, size, ready).await?;
-        *state = Some(Current::Hosted(host));
+        let host = TermHost::launch(command.to_term_command(), socket, size, ready).await?;
+        let session = Session::share_live(host.client());
+        *state = Some(Current::Hosted(host, session));
         Ok(())
     }
 
@@ -211,10 +221,10 @@ impl SessionManager {
         // The host acknowledges input through the app's session, which the
         // state lock also guards from script tools.
         let mut state = self.state.lock().await;
-        let Some(Current::Hosted(host)) = state.as_mut() else {
+        let Some(Current::Hosted(host, _)) = state.as_mut() else {
             bail!("no app is hosted in a terminal; launch one first");
         };
-        host.serve(request).await
+        term::serve(host, request).await
     }
 
     /// Drop and shut down the current session and any app canopyctl hosts.
@@ -230,7 +240,7 @@ impl SessionManager {
     async fn release(&self, state: &mut Option<Current>) -> Result<()> {
         match state.take() {
             Some(Current::Session(session)) => session.shutdown().await,
-            Some(Current::Hosted(host)) => host.stop().await?,
+            Some(Current::Hosted(host, _)) => host.stop().await?,
             None => {}
         }
         Ok(())
@@ -246,8 +256,7 @@ impl SessionManager {
         }
         Ok(MutexGuard::map(state, |state| {
             match state.as_mut().expect("session installed above") {
-                Current::Session(session) => session,
-                Current::Hosted(host) => host.session_mut(),
+                Current::Session(session) | Current::Hosted(_, session) => session,
             }
         }))
     }
@@ -328,7 +337,7 @@ pub mod tests {
         client.connect_stream(reader, writer).await?;
         Ok((
             Session {
-                client,
+                client: Arc::new(client),
                 child: None,
                 kind: SessionKind::Headless,
                 default_fixture: None,
@@ -426,7 +435,7 @@ pub mod tests {
         client.connect_stream(reader, writer).await?;
         Ok((
             Session {
-                client,
+                client: Arc::new(client),
                 child: None,
                 kind: SessionKind::Live,
                 default_fixture: None,

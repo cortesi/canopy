@@ -17,7 +17,8 @@
   `crates/canopy-mosaic` the block mosaic matcher, which depends on no other
   workspace crate; `crates/mosaic-score` the perceptual score of its drawing;
   `crates/canopy-mcp` the MCP launcher, config homes, and smoke suites;
-  `crates/canopyctl` the automation CLI; `crates/canopy-geom` and
+  `crates/canopy-term` the host that runs an app in a real terminal for tests
+  and tools; `crates/canopyctl` the automation CLI; `crates/canopy-geom` and
   `crates/canopy-derive` the geometry and command macros.
 - `examples/hello`, `examples/todo`, and `examples/gyms` are apps. Each
   launches through `canopy_mcp::launch` and has a `.canopyctl.toml` and a Luau
@@ -31,7 +32,9 @@
 - To check behavior in the interactive app, host it with the MCP `launch`
   tool, or `canopyctl run --pty WxH --detach`, and drive it with `keys`,
   `screen`, and script evals; see `docs/agent-loop.md`. `.mcp.json` registers
-  a server for each example.
+  a server for each example. A regression that only a real terminal shows,
+  such as terminal key parsing, gets a `canopy-term` test, as in
+  `examples/gyms/tests/terminal.rs`.
 - `cargo xtask score` scores the block mosaics on the standard suite against
   `crates/mosaic-score/baseline.txt`, by two metrics: difference, and stray
   marks such as spurs that hang off strokes. `--check` fails when a group or

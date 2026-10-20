@@ -43,8 +43,8 @@ MCP and smoke-test helpers for canopy applications.
 
 - Publish: crates.io
 - Workspace dependencies: canopy
-- Workspace dependents: canopyctl, gyms, hello, todo
-- Items: 53
+- Workspace dependents: canopy-term, canopyctl, gyms, hello, todo
+- Items: 54
 - Exposes: canopy, ruau-script-api, schemars, serde_core, serde_json, tmcp
 
 ## canopy-mosaic
@@ -56,6 +56,16 @@ Draw pictures and large text with block mosaic characters.
 - Workspace dependents: canopy-widgets, mosaic-score
 - Items: 58
 - Exposes: none
+
+## canopy-term
+
+Host an interactive Canopy app in a terminal and drive it as a person does.
+
+- Publish: crates.io
+- Workspace dependencies: canopy-mcp
+- Workspace dependents: canopyctl, gyms (dev)
+- Items: 21
+- Exposes: anyhow, canopy-mcp, serde_json, tmcp
 
 ## canopy-xmark
 
@@ -115,7 +125,7 @@ Todo application used as Canopy's end-to-end example and smoke-test target.
 
 ## Binary-only packages
 
-- canopyctl: workspace dependencies: canopy, canopy-mcp, canopy-widgets
+- canopyctl: workspace dependencies: canopy, canopy-mcp, canopy-term, canopy-widgets
 
 - gyms: workspace dependencies: canopy, canopy-markdown, canopy-mcp, canopy-widgets
 

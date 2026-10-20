@@ -222,6 +222,13 @@ a result that arrives later, such as a worker's. `eval`, `smoke`, and
 terminal, which ends the app.
 
 The host never judges from elapsed or quiet time whether the app is done.
+It starts once the app reports ready: it listens on a socket that it names in
+`CANOPY_READY_SOCKET`, and `canopy_mcp::launch` connects to it once the live
+automation socket accepts connections. `canopyctl run` waits on the same
+signal before it applies a fixture. Ready means the app takes input, not that
+it has prepared its content: an app that loads a document in the background
+may still be loading it. Wait for content with `screen --until TEXT`, or a
+script that waits on the app's own readiness, before keys that depend on it.
 After it sends keys, it waits on the live socket until `canopy.input_count()`
 has risen by the keys it sent. A bare escape goes alone, and the next key
 waits until the app has taken it, because a terminal reads an escape and the
@@ -230,6 +237,14 @@ calls `canopy.terminal_apc` with a marker payload, which the app writes to the
 terminal after its frame, and waits until the terminal has read the marker.
 Terminal output is ordered, so the terminal has then read the frame. Its
 timeouts only turn a hang into an error.
+
+Rust tests drive an app the same way through the `canopy-term` crate, which
+canopyctl uses. `TermHost::start` runs a command in a terminal, with
+`{socket}` in its arguments replaced by a live automation socket, and
+`keys`, `screen`, `screen_until`, and `eval` drive and read it. A package
+tests its own binary through `env!("CARGO_BIN_EXE_<name>")`; see
+`examples/gyms/tests/terminal.rs`. Use such a test for what headless input
+skips: terminal key parsing, input timing, and interactive services.
 
 `canopyctl mcp` has the same tools. `launch` hosts the app and connects the
 script tools to it; `keys` and `screen` drive and read its terminal; and

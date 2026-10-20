@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow, bail};
+use canopy_term::TermCommand;
 use serde::Deserialize;
 use tokio::process::Command;
 
@@ -288,19 +289,15 @@ impl ResolvedCommand {
         Ok(Self { argv, cwd, env })
     }
 
-    /// Return the program and its arguments.
-    pub fn argv(&self) -> &[String] {
-        &self.argv
-    }
-
-    /// Return the working directory.
-    pub fn cwd(&self) -> &Path {
-        &self.cwd
-    }
-
-    /// Return the environment variables the command adds.
-    pub fn env(&self) -> &HashMap<String, String> {
-        &self.env
+    /// Convert the resolved command into one for a hosted terminal.
+    pub fn to_term_command(&self) -> TermCommand {
+        let mut command = TermCommand::new(&self.argv[0])
+            .args(&self.argv[1..])
+            .cwd(&self.cwd);
+        for (key, value) in &self.env {
+            command = command.env(key, value);
+        }
+        command
     }
 
     /// Convert the resolved command into a `tokio::process::Command`.

@@ -28,19 +28,20 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use canopy_mcp::{
-    ApplyFixtureRequest, ApplyFixtureResponse, BootstrapRequest, EvalReport, ScreenSize,
-    ScriptEvalRequest, SuiteConfig, plan_suite,
+    ApplyFixtureRequest, ApplyFixtureResponse, BootstrapRequest, EvalReport, READY_SOCKET_ENV,
+    ScreenSize, ScriptEvalRequest, SuiteConfig, plan_suite,
 };
+use canopy_term::{ReadySignal, TermHost};
 use clap::{Args, Parser, Subcommand};
 use ruau_script_api::{ScriptApiQuery, ScriptApiResponse};
 use tmcp::{ToolError, ToolResult, mcp_server, schema::CallToolResult, tool_params};
-use tokio::{net::UnixStream, time::sleep};
+use tokio::time::sleep;
 
 use crate::{
     config::LoadedConfig,
     replay::{ReplayEnvelope, ReplayStep, load_replay, write_replay},
     session::{Session, SessionKind, SessionManager},
-    term::{TermHost, TermRequest},
+    term::TermRequest,
 };
 
 /// How long the `launch` tool waits for an app to serve automation, builds
@@ -483,9 +484,11 @@ async fn run_command(config: LoadedConfig, args: RunArgs) -> Result<()> {
         };
     }
     let socket_path = temp_socket_path(&config.config_dir)?;
+    let ready = ReadySignal::bind(socket_path.with_extension("ready"))?;
     let mut command = config
         .run_command(&args.command, &socket_path)?
         .to_command();
+    command.env(READY_SOCKET_ENV, ready.path());
     command.stdin(Stdio::inherit());
     command.stdout(Stdio::inherit());
     command.stderr(Stdio::inherit());
@@ -494,7 +497,11 @@ async fn run_command(config: LoadedConfig, args: RunArgs) -> Result<()> {
     let mut child = command.spawn().context("spawn interactive app")?;
 
     if let Some(fixture) = args.fixture {
-        wait_for_socket(&socket_path, Duration::from_secs(5)).await?;
+        // The app signals once its socket accepts connections.
+        tokio::select! {
+            ready = ready.wait(Duration::from_secs(args.ready_timeout)) => ready?,
+            status = child.wait() => bail!("the app exited before serving automation ({})", status?),
+        }
         let mut session = Session::connect_live(&socket_path).await?;
         session.apply_fixture(fixture).await?;
     }
@@ -515,21 +522,23 @@ async fn host_command(config: &LoadedConfig, args: RunArgs, size: ScreenSize) ->
         None => temp_socket_path(&config.config_dir)?,
     };
     let command = config.run_command(&args.command, &socket)?;
-    let mut host = TermHost::launch(
-        &command,
+    let host = TermHost::launch(
+        command.to_term_command(),
         socket.clone(),
         size,
         Duration::from_secs(args.ready_timeout),
     )
     .await?;
     if let Some(fixture) = args.fixture {
-        host.session_mut().apply_fixture(fixture).await?;
+        Session::share_live(host.client())
+            .apply_fixture(fixture)
+            .await?;
     }
-    let listener = host.bind_control()?;
+    let listener = term::bind_control(&host)?;
     // The socket is the readiness signal a detached launcher reads.
     println!("{}", socket.display());
     io::stdout().flush()?;
-    host.serve_control(listener).await?;
+    term::serve_control(host, listener).await?;
     // A detached host logs only what fails, so a clean exit leaves no log.
     if detached {
         drop(fs::remove_file(term::log_path(&socket)));
@@ -976,18 +985,6 @@ fn temp_socket_path(base_dir: &Path) -> Result<PathBuf> {
         .context("system clock before unix epoch")?
         .as_millis();
     Ok(tmp_dir.join(format!("cctl-{}-{stamp}.sock", id())))
-}
-
-/// Wait until a Unix-domain socket is ready to accept connections.
-async fn wait_for_socket(socket_path: &Path, timeout: Duration) -> Result<()> {
-    let started = Instant::now();
-    while started.elapsed() < timeout {
-        if socket_path.exists() && UnixStream::connect(socket_path).await.is_ok() {
-            return Ok(());
-        }
-        sleep(Duration::from_millis(50)).await;
-    }
-    bail!("timed out waiting for {}", socket_path.display());
 }
 
 /// Read an eval script from either a file or an inline string.
