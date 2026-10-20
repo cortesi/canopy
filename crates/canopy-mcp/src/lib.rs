@@ -23,7 +23,7 @@ mod smoke;
 
 pub use config::{ConfigHome, INIT_SCRIPT, UserConfig};
 pub use error::{Error, Result};
-pub use launch::{LaunchMode, launch};
+pub use launch::{LaunchMode, READY_SOCKET_ENV, launch};
 pub use metadata::{
     AppFactory, AppMetadata, ExecutionMetadata, ExecutionMode, ResetPolicy, ScreenSize,
 };

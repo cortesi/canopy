@@ -3,7 +3,7 @@
 // Package: canopy-mcp
 // Publish: crates.io
 // Workspace dependencies: canopy
-// Workspace dependents: canopyctl, gyms, hello, todo
+// Workspace dependents: canopy-term, canopyctl, gyms, hello, todo
 
 //! MCP and smoke-test helpers for canopy applications.
 
@@ -29,6 +29,12 @@ use tmcp::schema::CallToolResult;
 
 /// Startup file a configuration home must hold to be mounted.
 pub const INIT_SCRIPT: &str = "init.luau";
+
+/// Environment variable naming a Unix-domain socket that a host listens on.
+/// Once the live automation socket accepts connections, the launcher
+/// connects to it and writes one line, so the host waits on that signal
+/// rather than retrying the automation socket.
+pub const READY_SOCKET_ENV: &str = "CANOPY_READY_SOCKET";
 
 /// Mount a user configuration on a [`CanopyBuilder`].
 // Not dyn-compatible.
