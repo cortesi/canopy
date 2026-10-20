@@ -73,6 +73,7 @@ futures = "0.3.34"
 # The features match those that textwrap enables, so no other crates join the build.
 icu_segmenter = { version = "2.3.0", default-features = false, features = ["compiled_data"] }
 itty-core = { version = "0.1.0", path = "../itty/crates/itty-core" }
+itty-headless = { version = "0.1.0", path = "../itty/crates/itty-headless" }
 proptest = "1.11.0"
 rand = "0.10.3"
 ruau = { version = "0.1.0", path = "../../private/ruau/crates/ruau", default-features = false }

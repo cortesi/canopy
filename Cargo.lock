@@ -436,6 +436,7 @@ dependencies = [
  "canopy-widgets",
  "clap",
  "futures",
+ "itty-headless",
  "ruau-script-api",
  "serde",
  "serde_json",
@@ -1699,6 +1700,14 @@ dependencies = [
  "itty-recording-api",
  "rgb",
  "thiserror",
+]
+
+[[package]]
+name = "itty-headless"
+version = "0.1.0"
+dependencies = [
+ "itty-core",
+ "tokio",
 ]
 
 [[package]]

@@ -28,6 +28,10 @@
 - `../fh` is the main consumer. API changes migrate it in the same change;
   there are no compatibility shims.
 - `cargo xtask smoke` runs every tracked smoke suite through `canopyctl`.
+- To check behavior in the interactive app, host it with the MCP `launch`
+  tool, or `canopyctl run --pty WxH --detach`, and drive it with `keys`,
+  `screen`, and script evals; see `docs/agent-loop.md`. `.mcp.json` registers
+  a server for each example.
 - `cargo xtask score` scores the block mosaics on the standard suite against
   `crates/mosaic-score/baseline.txt`, by two metrics: difference, and stray
   marks such as spurs that hang off strokes. `--check` fails when a group or

@@ -94,7 +94,7 @@ pub struct GallerySettings {
 /// `[mcp]` section from `.canopyctl.toml`.
 #[derive(Debug, Default, Clone, Deserialize)]
 struct McpSection {
-    /// Idle timeout before `canopyctl mcp` exits.
+    /// Idle time after which `canopyctl mcp` shuts down its app.
     idle_shutdown_after_secs: Option<u64>,
 }
 
@@ -256,7 +256,7 @@ impl LoadedConfig {
         }
     }
 
-    /// Resolve the effective MCP idle timeout.
+    /// Resolve the idle time after which `canopyctl mcp` shuts down its app.
     pub fn idle_shutdown_after(&self) -> Duration {
         Duration::from_secs(
             self.file
@@ -286,6 +286,21 @@ impl ResolvedCommand {
             bail!("command is empty");
         }
         Ok(Self { argv, cwd, env })
+    }
+
+    /// Return the program and its arguments.
+    pub fn argv(&self) -> &[String] {
+        &self.argv
+    }
+
+    /// Return the working directory.
+    pub fn cwd(&self) -> &Path {
+        &self.cwd
+    }
+
+    /// Return the environment variables the command adds.
+    pub fn env(&self) -> &HashMap<String, String> {
+        &self.env
     }
 
     /// Convert the resolved command into a `tokio::process::Command`.

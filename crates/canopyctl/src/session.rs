@@ -1,11 +1,14 @@
 //! MCP client sessions and the manager shared by the CLI and the proxy server.
 
-use std::{path::Path, time::Instant};
+use std::{
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+};
 
 use anyhow::{Context, Result, bail};
 use canopy_mcp::{
     ApplyFixtureRequest, ApplyFixtureResponse, BootstrapRequest, BootstrapResponse, EvalReport,
-    ScriptEvalRequest,
+    ScreenSize, ScriptEvalRequest,
 };
 use ruau_script_api::ScriptApiQuery;
 use tmcp::{
@@ -18,7 +21,10 @@ use tokio::{
     sync::{MappedMutexGuard, Mutex, MutexGuard},
 };
 
-use crate::config::{LoadedConfig, ResolvedCommand};
+use crate::{
+    config::{LoadedConfig, ResolvedCommand},
+    term::{TermHost, TermRequest, TermResponse},
+};
 
 /// MCP client name reported to spawned or connected servers.
 const CLIENT_NAME: &str = "canopyctl";
@@ -146,6 +152,9 @@ pub struct SessionManager {
     config: LoadedConfig,
     /// Current session, if any.
     state: Mutex<Option<Session>>,
+    /// The terminal hosting the current session's app, if canopyctl launched
+    /// it.
+    host: Mutex<Option<TermHost>>,
     /// Last observed tool activity time.
     pub(crate) last_activity: Mutex<Instant>,
 }
@@ -156,29 +165,76 @@ impl SessionManager {
         Self {
             config,
             state: Mutex::new(None),
+            host: Mutex::new(None),
             last_activity: Mutex::new(Instant::now()),
         }
+    }
+
+    /// Return the loaded configuration.
+    pub fn config(&self) -> &LoadedConfig {
+        &self.config
     }
 
     /// Connect to a live UDS session, replacing any existing session.
     pub async fn connect_live(&self, socket: &Path) -> Result<()> {
         *self.last_activity.lock().await = Instant::now();
         let mut state = self.state.lock().await;
-        let previous = state.take();
-        if let Some(previous) = previous {
-            previous.shutdown().await;
-        }
-        let session = Session::connect_live(socket).await?;
+        self.release(&mut state).await?;
+        *state = Some(Session::connect_live(socket).await?);
+        Ok(())
+    }
+
+    /// Launch an app in a terminal that canopyctl owns, serving automation at
+    /// `socket`, and make it the current session, replacing any existing one.
+    pub async fn launch(
+        &self,
+        command: &ResolvedCommand,
+        socket: PathBuf,
+        size: ScreenSize,
+        ready: Duration,
+    ) -> Result<()> {
+        *self.last_activity.lock().await = Instant::now();
+        let mut state = self.state.lock().await;
+        self.release(&mut state).await?;
+        let host = TermHost::launch(command, socket.clone(), size, ready).await?;
+        let session = match Session::connect_live(&socket).await {
+            Ok(session) => session,
+            Err(error) => {
+                host.stop().await?;
+                return Err(error);
+            }
+        };
+        *self.host.lock().await = Some(host);
         *state = Some(session);
         Ok(())
     }
 
-    /// Drop and shut down the current session, if any.
+    /// Serve one request on the terminal hosting the current app.
+    pub async fn terminal(&self, request: &TermRequest) -> Result<TermResponse> {
+        *self.last_activity.lock().await = Instant::now();
+        let host = self.host.lock().await;
+        let host = host
+            .as_ref()
+            .context("no app is hosted in a terminal; launch one first")?;
+        host.serve(request).await
+    }
+
+    /// Drop and shut down the current session and any app canopyctl hosts.
     pub async fn disconnect(&self) -> Result<()> {
         *self.last_activity.lock().await = Instant::now();
         let mut state = self.state.lock().await;
+        self.release(&mut state).await
+    }
+
+    /// Shut down the session in `state` and any app canopyctl hosts. The
+    /// caller holds the state lock, so no operation sees a half-released
+    /// session.
+    async fn release(&self, state: &mut Option<Session>) -> Result<()> {
         if let Some(session) = state.take() {
             session.shutdown().await;
+        }
+        if let Some(host) = self.host.lock().await.take() {
+            host.stop().await?;
         }
         Ok(())
     }

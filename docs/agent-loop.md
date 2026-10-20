@@ -191,6 +191,42 @@ build pure locals; bindings, mode changes, and command calls belong inside
 roots keep the ordinary `.d.luau` conformance contract and do not need their
 own `setup`.
 
+## The interactive app
+
+A headless app is not the app a person runs. It has no terminal, so keys skip
+terminal input parsing, and an app can run headless services in place of its
+interactive ones. To check behavior as a person sees it, host the interactive
+app in a terminal that canopyctl owns:
+
+```sh
+SOCK=$(cargo run -p canopyctl -- run --pty 120x40 --detach)
+cargo run -p canopyctl -- keys --socket "$SOCK" ctrl+g --screen
+cargo run -p canopyctl -- keys --socket "$SOCK" esc :/needle enter
+cargo run -p canopyctl -- screen --socket "$SOCK"
+cargo run -p canopyctl -- eval --socket "$SOCK" 'return canopy.mode()'
+cargo run -p canopyctl -- stop --socket "$SOCK"
+```
+
+`run --pty WIDTHxHEIGHT` starts the configured `[app].run` command, or the
+command after `--`, in a pseudo-terminal behind an Itty terminal emulator.
+`--detach` returns once the app serves automation and prints its live socket.
+The host serves a control socket beside it, at the socket path plus `.term`.
+
+`keys` presses its input in order, through the terminal. Each entry is a key,
+such as `j`, `enter`, `esc`, `up`, or `ctrl+c`, or `:` and text to type as it
+stands, such as `:/needle`. A lone `:` presses the colon key. `--screen`
+prints the screen once the app settles, and `screen` prints it at any time.
+`eval`, `smoke`, and `replay` take `--socket` to run against the hosted app.
+`stop` hangs up the terminal, which ends the app.
+
+`canopyctl mcp` has the same tools. `launch` hosts the app and connects the
+script tools to it; `keys` and `screen` drive and read its terminal; and
+`disconnect` stops it. An idle server stops its app after the `[mcp]`
+`idle_shutdown_after_secs` setting, 1200 seconds by default, and keeps
+serving. The global `-C DIR` option runs canopyctl as if started in `DIR`, so
+an MCP configuration can select an app by its `.canopyctl.toml`. This
+repository's `.mcp.json` registers a server for each example.
+
 ## Replay
 
 Save an eval as a replay file when it captures a useful interaction:

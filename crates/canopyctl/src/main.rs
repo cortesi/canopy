@@ -11,13 +11,16 @@ mod gallery;
 mod replay;
 /// MCP client sessions and the manager shared by the CLI and the proxy server.
 mod session;
+/// Interactive apps hosted in a terminal that canopyctl owns.
+mod term;
 
 use std::{
+    env,
     fmt::Display,
     fs,
     io::{self, Write},
     path::{Path, PathBuf},
-    process::{Stdio, exit, id},
+    process::{self, Stdio, exit, id},
     result,
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -37,12 +40,21 @@ use crate::{
     config::LoadedConfig,
     replay::{ReplayEnvelope, ReplayStep, load_replay, write_replay},
     session::{Session, SessionKind, SessionManager},
+    term::{TermHost, TermRequest},
 };
+
+/// How long the `launch` tool waits for an app to serve automation, builds
+/// included.
+const LAUNCH_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// Top-level CLI arguments.
 #[derive(Parser)]
 #[command(author, version, about)]
 struct Cli {
+    /// Run as if started in this directory, which selects its
+    /// `.canopyctl.toml`.
+    #[arg(short = 'C', global = true, value_name = "DIR")]
+    dir: Option<PathBuf>,
     /// Selected subcommand.
     #[command(subcommand)]
     command: Commands,
@@ -70,6 +82,13 @@ enum Commands {
     Eval(EvalArgs),
     /// Discover the checked Luau API of a headless app instance.
     Api(ApiArgs),
+    /// Press keys in an app hosted with `run --pty`, through its terminal.
+    Keys(KeysArgs),
+    /// Print the screen of an app hosted with `run --pty`, as its terminal
+    /// shows it.
+    Screen(HostArgs),
+    /// Stop an app hosted with `run --pty`.
+    Stop(HostArgs),
 }
 
 /// Arguments for `canopyctl run`.
@@ -78,9 +97,48 @@ struct RunArgs {
     /// Optional fixture to apply after the live UDS server is ready.
     #[arg(long)]
     fixture: Option<String>,
+    /// Host the app in a terminal of this size, WIDTHxHEIGHT, that canopyctl
+    /// owns, instead of the current terminal. `keys`, `screen`, and `stop`
+    /// drive it, and the live socket serves scripts.
+    #[arg(long, value_parser = parse_screen)]
+    pty: Option<ScreenSize>,
+    /// With `--pty`, return once the app serves automation, leaving it
+    /// running in the background, and print its socket.
+    #[arg(long, requires = "pty")]
+    detach: bool,
+    /// Seconds to wait for a hosted app to serve automation, builds included.
+    #[arg(long, default_value_t = 600)]
+    ready_timeout: u64,
+    /// The socket a detached host serves at; set by `--detach` itself.
+    #[arg(long, hide = true)]
+    host_socket: Option<PathBuf>,
     /// Command override passed after `--`.
     #[arg(last = true)]
     command: Vec<String>,
+}
+
+/// Arguments for commands that drive an app hosted with `run --pty`.
+#[derive(Args)]
+struct HostArgs {
+    /// The hosted app's live socket, as `run --pty` printed it.
+    #[arg(long)]
+    socket: PathBuf,
+}
+
+/// Arguments for `canopyctl keys`.
+#[derive(Args)]
+struct KeysArgs {
+    /// The hosted app's live socket, as `run --pty` printed it.
+    #[arg(long)]
+    socket: PathBuf,
+    /// Print the screen once the keys settle.
+    #[arg(long)]
+    screen: bool,
+    /// Input in order: a key, as a character or a name such as `enter`,
+    /// `esc`, `tab`, or `up`, with optional modifiers such as `ctrl+c`; or
+    /// `:` and text to type as it stands, such as `:/links`.
+    #[arg(allow_hyphen_values = true)]
+    keys: Vec<String>,
 }
 
 /// Shared arguments for subcommands that only need an optional command
@@ -120,6 +178,9 @@ struct SmokeArgs {
     /// Optional per-script timeout override in milliseconds.
     #[arg(long)]
     timeout_ms: Option<u64>,
+    /// Run the suite against this live socket instead of a headless app.
+    #[arg(long, conflicts_with = "command")]
+    socket: Option<PathBuf>,
     /// Command override passed after `--`.
     #[arg(last = true)]
     command: Vec<String>,
@@ -192,6 +253,9 @@ struct EvalArgs {
     /// Write a versioned replay envelope containing this evaluation.
     #[arg(long)]
     replay_out: Option<PathBuf>,
+    /// Evaluate against this live socket instead of a headless app.
+    #[arg(long, conflicts_with_all = ["command", "screen"])]
+    socket: Option<PathBuf>,
     /// Command override passed after `--`.
     #[arg(last = true)]
     command: Vec<String>,
@@ -202,6 +266,32 @@ struct EvalArgs {
 struct CanopyctlMcpServer {
     /// Shared session manager for tool calls.
     sessions: Arc<SessionManager>,
+}
+
+/// Tool params for the `launch` tool.
+#[derive(Debug, Clone, PartialEq)]
+#[tool_params]
+struct LaunchRequest {
+    /// Command override for the configured `[app].run` command. The
+    /// automation socket arguments are appended.
+    #[serde(default)]
+    command: Vec<String>,
+    /// Terminal width in cells, 120 by default.
+    width: Option<u32>,
+    /// Terminal height in cells, 40 by default.
+    height: Option<u32>,
+    /// Fixture to apply once the app serves automation.
+    fixture: Option<String>,
+}
+
+/// Tool params for the `keys` tool.
+#[derive(Debug, Clone, PartialEq)]
+#[tool_params]
+struct KeysRequest {
+    /// Input in order. Each entry is a key with optional modifiers, such as
+    /// `i`, `enter`, `esc`, `up`, or `ctrl+c`, or `:` and text to type as it
+    /// stands, such as `:/links`. A lone `:` presses the colon key.
+    keys: Vec<String>,
 }
 
 /// Tool params for the `connect` tool.
@@ -225,7 +315,69 @@ impl CanopyctlMcpServer {
     }
 
     #[tool]
-    /// Disconnect the current session and shut down any managed child process.
+    /// Launch the app in a terminal that canopyctl owns, as a person runs it,
+    /// and connect to its live automation socket. Script tools then act on the
+    /// interactive app; `keys` and `screen` drive and read its terminal.
+    /// Returns the screen.
+    async fn launch(&self, params: LaunchRequest) -> ToolResult<CallToolResult> {
+        let config = self.sessions.config();
+        let socket = temp_socket_path(&config.config_dir).map_err(tool_error)?;
+        let command = config
+            .run_command(&params.command, &socket)
+            .map_err(tool_error)?;
+        let size = ScreenSize {
+            width: params.width.unwrap_or(120),
+            height: params.height.unwrap_or(40),
+        };
+        self.sessions
+            .launch(&command, socket, size, LAUNCH_TIMEOUT)
+            .await
+            .map_err(tool_error)?;
+        if let Some(fixture) = params.fixture {
+            let mut session = self.sessions.session().await.map_err(tool_error)?;
+            session.apply_fixture(fixture).await.map_err(tool_error)?;
+        }
+        terminal_tool(
+            &self.sessions,
+            TermRequest {
+                screen: true,
+                ..TermRequest::default()
+            },
+        )
+        .await
+    }
+
+    #[tool]
+    /// Press keys in the launched app's terminal, as a person types them, and
+    /// return the screen once it settles.
+    async fn keys(&self, params: KeysRequest) -> ToolResult<CallToolResult> {
+        terminal_tool(
+            &self.sessions,
+            TermRequest {
+                keys: params.keys,
+                screen: true,
+                stop: false,
+            },
+        )
+        .await
+    }
+
+    #[tool(read_only)]
+    /// Return the launched app's screen as its terminal shows it.
+    async fn screen(&self) -> ToolResult<CallToolResult> {
+        terminal_tool(
+            &self.sessions,
+            TermRequest {
+                screen: true,
+                ..TermRequest::default()
+            },
+        )
+        .await
+    }
+
+    #[tool]
+    /// Disconnect the current session and shut down any managed child process,
+    /// including an app started with `launch`.
     async fn disconnect(&self) -> ToolResult<CallToolResult> {
         self.sessions.disconnect().await.map_err(tool_error)?;
         Ok(CallToolResult::new().with_text_content("disconnected"))
@@ -271,6 +423,9 @@ impl CanopyctlMcpServer {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    if let Some(dir) = &cli.dir {
+        env::set_current_dir(dir).with_context(|| format!("enter {}", dir.display()))?;
+    }
     let config = LoadedConfig::load()?;
 
     match cli.command {
@@ -283,11 +438,21 @@ async fn main() -> Result<()> {
         Commands::Fixtures(args) => fixtures_command(config, args).await,
         Commands::Eval(args) => eval_command(config, args).await,
         Commands::Api(args) => api_command(config, args).await,
+        Commands::Keys(args) => keys_command(args).await,
+        Commands::Screen(args) => screen_command(args).await,
+        Commands::Stop(args) => stop_command(args).await,
     }
 }
 
 /// Execute `canopyctl run`.
 async fn run_command(config: LoadedConfig, args: RunArgs) -> Result<()> {
+    if let Some(size) = args.pty {
+        return if args.detach {
+            detach_host(&config, &args, size).await
+        } else {
+            host_command(&config, args, size).await
+        };
+    }
     let socket_path = temp_socket_path(&config.config_dir)?;
     let mut command = config
         .run_command(&args.command, &socket_path)?
@@ -312,10 +477,141 @@ async fn run_command(config: LoadedConfig, args: RunArgs) -> Result<()> {
     Ok(())
 }
 
+/// Host the app in a terminal that canopyctl owns and serve its control
+/// socket until the app exits or a request stops it.
+async fn host_command(config: &LoadedConfig, args: RunArgs, size: ScreenSize) -> Result<()> {
+    let detached = args.host_socket.is_some();
+    let socket = match args.host_socket {
+        Some(socket) => socket,
+        None => temp_socket_path(&config.config_dir)?,
+    };
+    let command = config.run_command(&args.command, &socket)?;
+    let host = TermHost::launch(
+        &command,
+        socket.clone(),
+        size,
+        Duration::from_secs(args.ready_timeout),
+    )
+    .await?;
+    if let Some(fixture) = args.fixture {
+        let mut session = Session::connect_live(&socket).await?;
+        session.apply_fixture(fixture).await?;
+    }
+    println!("{}", socket.display());
+    host.serve_control().await?;
+    // A detached host logs only what fails, so a clean exit leaves no log.
+    if detached {
+        drop(fs::remove_file(term::log_path(&socket)));
+    }
+    Ok(())
+}
+
+/// Start a host in the background, wait until it serves its control socket,
+/// and print the app's live socket.
+async fn detach_host(config: &LoadedConfig, args: &RunArgs, size: ScreenSize) -> Result<()> {
+    use std::os::unix::process::CommandExt as _;
+
+    let socket = temp_socket_path(&config.config_dir)?;
+    let log = term::log_path(&socket);
+    let mut command = process::Command::new(env::current_exe()?);
+    command
+        .arg("run")
+        .arg("--pty")
+        .arg(format!("{}x{}", size.width, size.height))
+        .arg("--ready-timeout")
+        .arg(args.ready_timeout.to_string())
+        .arg("--host-socket")
+        .arg(&socket);
+    if let Some(fixture) = &args.fixture {
+        command.arg("--fixture").arg(fixture);
+    }
+    if !args.command.is_empty() {
+        command.arg("--").args(&args.command);
+    }
+    // The host outlives this process and its terminal, and logs what fails.
+    let output = fs::File::create(&log).with_context(|| format!("create {}", log.display()))?;
+    command
+        .current_dir(&config.config_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(output)
+        .process_group(0);
+    let mut child = command.spawn().context("spawn the terminal host")?;
+    let control = term::control_path(&socket);
+    let started = Instant::now();
+    while !control.exists() {
+        if let Some(status) = child.try_wait()? {
+            let reason = fs::read_to_string(&log).unwrap_or_default();
+            bail!("the terminal host exited ({status}):\n{reason}");
+        }
+        if started.elapsed() >= Duration::from_secs(args.ready_timeout) {
+            bail!("timed out waiting for {}", control.display());
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+    println!("{}", socket.display());
+    Ok(())
+}
+
+/// Execute `canopyctl keys`.
+async fn keys_command(args: KeysArgs) -> Result<()> {
+    let response = term::send(
+        &args.socket,
+        &TermRequest {
+            keys: args.keys,
+            screen: args.screen,
+            stop: false,
+        },
+    )
+    .await?;
+    if let Some(screen) = response.screen {
+        println!("{}", screen.join("\n"));
+    }
+    Ok(())
+}
+
+/// Execute `canopyctl screen`.
+async fn screen_command(args: HostArgs) -> Result<()> {
+    let response = term::send(
+        &args.socket,
+        &TermRequest {
+            screen: true,
+            ..TermRequest::default()
+        },
+    )
+    .await?;
+    println!("{}", response.screen.unwrap_or_default().join("\n"));
+    Ok(())
+}
+
+/// Execute `canopyctl stop`.
+async fn stop_command(args: HostArgs) -> Result<()> {
+    term::send(
+        &args.socket,
+        &TermRequest {
+            stop: true,
+            ..TermRequest::default()
+        },
+    )
+    .await?;
+    Ok(())
+}
+
+/// Connect to a live socket, or start the configured headless app.
+async fn connect_or_spawn(
+    config: &LoadedConfig,
+    socket: Option<&Path>,
+    command: &[String],
+) -> Result<Session> {
+    match socket {
+        Some(socket) => Session::connect_live(socket).await,
+        None => Session::spawn_headless(&config.headless_command(command)?).await,
+    }
+}
+
 /// Execute `canopyctl smoke`.
 async fn smoke_command(config: LoadedConfig, args: SmokeArgs) -> Result<()> {
-    let command = config.headless_command(&args.command)?;
-    let session = Session::spawn_headless(&command).await?;
+    let session = connect_or_spawn(&config, args.socket.as_deref(), &args.command).await?;
     let suite_dir = config.smoke_suite_dir(args.suite.as_deref());
     let mut suite = SuiteConfig::new(&suite_dir);
     suite.scripts = args.scripts;
@@ -545,8 +841,7 @@ async fn fixtures_command(config: LoadedConfig, args: SpawnArgs) -> Result<()> {
 /// Execute `canopyctl eval`.
 async fn eval_command(config: LoadedConfig, args: EvalArgs) -> Result<()> {
     let script = read_eval_script(args.file.as_deref(), args.script.as_deref())?;
-    let command = config.headless_command(&args.command)?;
-    let session = Session::spawn_headless(&command).await?;
+    let session = connect_or_spawn(&config, args.socket.as_deref(), &args.command).await?;
     let outcome = session
         .eval(ScriptEvalRequest {
             fixture: args.fixture.clone(),
@@ -617,21 +912,24 @@ async fn mcp_command(config: LoadedConfig) -> Result<()> {
     let sessions = Arc::new(SessionManager::new(config.clone()));
     let idle_timeout = config.idle_shutdown_after();
     let watchdog_sessions = sessions.clone();
+    // An idle server releases its app but keeps serving its client.
     tokio::spawn(async move {
         loop {
             sleep(Duration::from_secs(1)).await;
             if watchdog_sessions.last_activity.lock().await.elapsed() >= idle_timeout {
-                exit(0);
+                drop(watchdog_sessions.disconnect().await);
             }
         }
     });
 
-    tmcp::Server::new(move || CanopyctlMcpServer {
-        sessions: sessions.clone(),
+    let server_sessions = sessions.clone();
+    let served = tmcp::Server::new(move || CanopyctlMcpServer {
+        sessions: server_sessions.clone(),
     })
     .serve_stdio()
-    .await?;
-    Ok(())
+    .await;
+    sessions.disconnect().await?;
+    Ok(served?)
 }
 
 /// Build a unique temporary Unix-domain socket path under `./tmp`.
@@ -671,6 +969,15 @@ fn read_eval_script(file: Option<&Path>, inline: Option<&str>) -> Result<String>
 /// Convert an arbitrary error into a tmcp tool error.
 fn tool_error(error: impl Display) -> ToolError {
     ToolError::internal(error.to_string())
+}
+
+/// Serve a request on the launched app's terminal and return its screen.
+async fn terminal_tool(
+    sessions: &SessionManager,
+    request: TermRequest,
+) -> ToolResult<CallToolResult> {
+    let response = sessions.terminal(&request).await.map_err(tool_error)?;
+    Ok(CallToolResult::new().with_text_content(response.screen.unwrap_or_default().join("\n")))
 }
 
 /// Encode a typed MCP response.

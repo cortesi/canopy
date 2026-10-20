@@ -11,11 +11,12 @@ canopy.workspace = true
 canopy-mcp.workspace = true
 canopy-widgets = { workspace = true, features = ["graphics"] }
 clap.workspace = true
+itty-headless.workspace = true
 ruau-script-api = { workspace = true, features = ["schema"] }
 serde.workspace = true
 serde_json.workspace = true
 tmcp.workspace = true
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process", "net", "time", "sync"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process", "net", "time", "sync", "io-util"] }
 toml = "1.1.6"
 
 [lints]

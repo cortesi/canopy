@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "gyms": {
+      "command": "cargo",
+      "args": ["run", "-q", "-p", "canopyctl", "--", "-C", "examples/gyms", "mcp"]
+    },
+    "todo": {
+      "command": "cargo",
+      "args": ["run", "-q", "-p", "canopyctl", "--", "-C", "examples/todo", "mcp"]
+    },
+    "hello": {
+      "command": "cargo",
+      "args": ["run", "-q", "-p", "canopyctl", "--", "-C", "examples/hello", "mcp"]
+    }
+  }
+}
