@@ -137,7 +137,6 @@ struct KeysArgs {
     /// Input in order: a key, as a character or a name such as `enter`,
     /// `esc`, `tab`, or `up`, with optional modifiers such as `ctrl+c`; or
     /// `:` and text to type as it stands, such as `:/links`.
-    #[arg(allow_hyphen_values = true)]
     keys: Vec<String>,
 }
 
