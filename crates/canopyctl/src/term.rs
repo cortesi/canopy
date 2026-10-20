@@ -21,7 +21,7 @@ use std::{
 use anyhow::{Context, Result, anyhow, bail};
 use canopy_mcp::ScreenSize;
 use itty_headless::{
-    DriverHandle, EnvironmentPolicy, HeadlessRequest, HeadlessTerminal, Key, Signal,
+    DriverHandle, EnvironmentPolicy, HeadlessRequest, HeadlessTerminal, Key, KeyCode, Signal,
 };
 use serde::{Deserialize, Serialize};
 use tokio::{
@@ -40,6 +40,8 @@ const STOP_GRACE: Duration = Duration::from_secs(2);
 const SETTLE: Duration = Duration::from_millis(100);
 /// Longest wait for the screen to settle after input.
 const SETTLE_LIMIT: Duration = Duration::from_secs(2);
+/// Quiet time after a bare escape, so the app reads it alone.
+const ESCAPE_SETTLE: Duration = Duration::from_millis(50);
 
 /// Return the control socket path beside an app's automation socket.
 pub fn control_path(socket: &Path) -> PathBuf {
@@ -134,11 +136,19 @@ impl TermHost {
     pub async fn serve(&self, request: &TermRequest) -> Result<TermResponse> {
         let keys = parse_input(&request.keys)?;
         let handle = self.handle();
-        if !keys.is_empty() {
+        // A terminal reads an escape and the key after it in one read as
+        // that key with Alt, so a bare escape goes alone, and the app reads
+        // it before the next key arrives.
+        for batch in split_after_escapes(keys) {
+            let escape = batch.last().is_some_and(is_bare_escape);
             handle
-                .keys(keys)
+                .keys(batch)
                 .await
                 .map_err(|error| anyhow!("{error}"))?;
+            if escape {
+                // An app that draws nothing in reply still had the time.
+                let _settled = handle.wait_idle(ESCAPE_SETTLE, SETTLE_LIMIT).await;
+            }
         }
         let screen = if request.screen {
             Some(self.screen().await?)
@@ -245,6 +255,25 @@ impl TermHost {
     }
 }
 
+/// Return whether `key` is escape with no modifier.
+fn is_bare_escape(key: &Key) -> bool {
+    key.code == KeyCode::Escape && key.modifiers.is_empty()
+}
+
+/// Split `keys` into batches that each end at a bare escape, or at the end.
+fn split_after_escapes(keys: Vec<Key>) -> Vec<Vec<Key>> {
+    let mut batches = vec![Vec::new()];
+    for key in keys {
+        let escape = is_bare_escape(&key);
+        batches.last_mut().expect("one batch").push(key);
+        if escape {
+            batches.push(Vec::new());
+        }
+    }
+    batches.retain(|batch| !batch.is_empty());
+    batches
+}
+
 /// Parse request input into the keys it presses.
 fn parse_input(input: &[String]) -> Result<Vec<Key>> {
     let mut keys = Vec::new();
@@ -330,5 +359,17 @@ mod tests {
         .map(|key| key.parse::<Key>().expect("key"));
         assert_eq!(parse_input(&input).expect("input"), expected);
         assert!(parse_input(&["nokey".to_owned()]).is_err());
+    }
+
+    #[test]
+    fn a_bare_escape_ends_its_batch() {
+        let keys =
+            ["esc", "tab", "alt+esc", "j", "esc"].map(|key| key.parse::<Key>().expect("key"));
+        let batches = split_after_escapes(keys.to_vec());
+        assert_eq!(
+            batches,
+            [keys[..1].to_vec(), keys[1..].to_vec()],
+            "alt+esc stays with its batch, and a final escape ends one"
+        );
     }
 }
