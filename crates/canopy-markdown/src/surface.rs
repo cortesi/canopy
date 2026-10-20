@@ -65,6 +65,14 @@ impl SurfaceState {
         Ok(())
     }
 
+    /// Return to scrolling. The object cursor belongs to Interact, so it
+    /// goes too: nothing stays marked, and no action reads an object the
+    /// reader no longer shows.
+    pub fn leave_interact(&mut self) {
+        self.mode = Mode::Scroll;
+        self.overlays.active_object = None;
+    }
+
     /// Supersede any queued reveal after explicit reader navigation.
     fn navigated(&mut self) {
         self.navigation = self.navigation.wrapping_add(1);
@@ -282,12 +290,15 @@ impl RenderedSurface {
     pub fn escape(&self, ctx: &mut dyn Context) -> Result<bool> {
         let mut state = self.state.borrow_mut();
         let selected = state.overlays.selection.take().is_some();
-        let handled = selected || state.mode == Mode::Interact || state.drag_anchor.is_some();
+        let handled = selected
+            || state.mode == Mode::Interact
+            || state.drag_anchor.is_some()
+            || state.overlays.active_object.is_some();
         if !handled {
             return Ok(false);
         }
         if !selected {
-            state.mode = Mode::Scroll;
+            state.leave_interact();
         }
         state.dragging = false;
         state.drag_anchor = None;
@@ -1010,6 +1021,12 @@ mod tests {
             assert_eq!(state.borrow().overlays.active_object, object);
             assert!(surface.escape(ctx)?);
             assert_eq!(state.borrow().mode, Mode::Scroll);
+            assert_eq!(
+                state.borrow().overlays.active_object,
+                None,
+                "leaving Interact drops the object cursor, so nothing stays marked"
+            );
+            assert!(!surface.escape(ctx)?, "a second escape has nothing to end");
             Ok(())
         })
     }

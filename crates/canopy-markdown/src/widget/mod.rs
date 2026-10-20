@@ -724,7 +724,7 @@ impl Markdown {
                 })?;
             }
         } else {
-            self.shared.borrow_mut().mode = mode;
+            self.shared.borrow_mut().leave_interact();
         }
         self.update_chrome(ctx)
     }
