@@ -1092,8 +1092,10 @@ impl Widget for Inspector {
         true
     }
     fn render(&mut self, render: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        // The reader's ground, so a host's rules for the reader reach the
-        // inspector in its place.
+        // The layer lets the reader's rules style what the inspector holds,
+        // such as a table's header. The reader's ground lets a host's rules
+        // for the reader reach the inspector in its place.
+        render.push_layer("markdown_inspector");
         render.fill("markdown", ctx.view().outer_rect_local(), ' ')
     }
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {

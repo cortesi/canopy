@@ -77,6 +77,9 @@ const HEADING_CONTRAST: f32 = 4.5;
 const HEADING_STEP: f32 = 0.06;
 /// How much further a heading's markers and underline mix toward the ground.
 const HEADING_QUIET: f32 = 0.3;
+/// How far an inspected table's header band leans from the ground toward the
+/// heading hue, so it reads apart from the neutral grey of a selected cell.
+const TABLE_HEADER_TINT: f32 = 0.34;
 
 /// Inline span roles under one base role, in [`InlineRole`] order.
 macro_rules! inline_roles {
@@ -2506,7 +2509,16 @@ fn heading_rules<'a>(palette: &Palette, mut rules: StyleRules<'a>) -> StyleRules
             rules = rules.style(rule, quiet());
         }
     }
-    rules
+    // An inspected table's header reads as a heading: the heading hue on a
+    // band tinted toward it.
+    let band = palette.bg.mix(HEADING_HUE, TABLE_HEADER_TINT, Mix::Oklab);
+    rules.style(
+        "markdown_inspector/table/header",
+        PartialStyle::new()
+            .fg(HEADING_HUE.with_contrast(&[band], HEADING_CONTRAST))
+            .bg(band)
+            .attr(Attr::Bold),
+    )
 }
 
 #[cfg(test)]
