@@ -22,6 +22,7 @@ use crate::{
     input::{BindingTarget, Event, ModalOptions, ModalToken, key::Key, mouse::MouseEvent},
     layout::{Layout, LayoutOverride},
     path::{Path, PathFilter},
+    render::Glyphs,
     runtime::{NodeWakeHandle, NoticeId, NoticeLog, NoticePost, PollLifetime},
     style::{StyleChange, StyleMap, themes::Palette},
     tree::NodeIdentity,
@@ -784,6 +785,10 @@ pub trait Context: ViewContext + sealed::Context {
     /// Switch to the theme `palette` before the next render, reapplying every
     /// widget style rule set.
     fn set_theme(&mut self, palette: Palette);
+
+    /// Set the block mosaic characters that the terminal draws well. Sizes
+    /// can depend on them, so a change lays the frame out again.
+    fn set_glyphs(&mut self, glyphs: Glyphs);
 }
 
 /// Typed mutation and composition helpers for contexts.
@@ -1329,6 +1334,13 @@ impl Context for NodeCtx<&mut Core> {
     fn set_theme(&mut self, palette: Palette) {
         self.core.pending_style = Some(StyleChange::Theme(palette));
         self.core.invalidate(crate::Invalidation::Paint);
+    }
+
+    fn set_glyphs(&mut self, glyphs: Glyphs) {
+        if self.core.glyphs != glyphs {
+            self.core.glyphs = glyphs;
+            self.core.invalidate(crate::Invalidation::Layout);
+        }
     }
 }
 

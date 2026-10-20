@@ -861,6 +861,22 @@ fn a_change_of_glyphs_lays_the_text_out_again() -> Result<()> {
 }
 
 #[test]
+fn a_widget_changes_the_glyphs_through_its_context() -> Result<()> {
+    let text = BigText::new("12").with_size(BigSize::MaxRows(2));
+    let mut harness = Harness::builder(Holder(Some(text))).size(40, 10).build()?;
+    harness.render()?;
+    harness.with_unique(|_: &mut BigText, ctx| {
+        ctx.set_glyphs(Glyphs::Blocks);
+        Ok(())
+    })?;
+    harness.render()?;
+    assert_eq!(harness.canopy.glyphs(), Glyphs::Blocks);
+    let height = harness.with_unique(|_: &mut BigText, ctx| Ok(ctx.view().content_size().h))?;
+    assert_eq!(height, 3, "the change lays the text out again");
+    Ok(())
+}
+
+#[test]
 fn runs_that_meet_in_a_cell_give_it_to_the_one_with_more_ink() {
     // Two runs side by side on the octant grid, at scale 1: the gap
     // between the digits can share a cell between them.

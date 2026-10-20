@@ -282,6 +282,10 @@ pub trait Context: ViewContext + Context {
     /// Focus an attached node.
     fn set_focus(&mut self, node: NodeId) -> crate::error::Result<ChangeOutcome>;
 
+    /// Set the block mosaic characters that the terminal draws well. Sizes
+    /// can depend on them, so a change lays the frame out again.
+    fn set_glyphs(&mut self, glyphs: Glyphs);
+
     /// Set a node's visibility.
     fn set_hidden(&mut self, node: NodeId, hidden: bool) -> crate::error::Result<ChangeOutcome>;
 
