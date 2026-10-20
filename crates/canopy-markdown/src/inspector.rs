@@ -354,11 +354,17 @@ impl InspectorHandle {
             inspector.set_row_numbers(ctx, show)
         })
     }
-    /// Copy the complete inspected content: the table, the code block, or the
-    /// link's destination.
-    pub fn copy_all(&self, ctx: &mut dyn Context) -> Result<()> {
+    /// Return whether the inspector can copy what it selects.
+    pub fn can_copy(&self, ctx: &dyn ViewContext) -> Result<bool> {
+        ctx.with_widget(self.node, |inspector: &Inspector| {
+            Ok(inspector.copy_status(ctx)? == CommandStatus::Enabled)
+        })
+    }
+    /// Copy what the inspector selects: the selected text or cells, the cell
+    /// under the cursor, or the whole content.
+    pub fn copy_selection(&self, ctx: &mut dyn Context) -> Result<()> {
         ctx.with_widget_mut(self.node, |inspector: &mut Inspector, ctx| {
-            inspector.copy_all(ctx)
+            inspector.copy_selection(ctx)
         })
     }
     /// Defer modal closure and subtree reclamation until the dispatch finishes.
@@ -1010,12 +1016,6 @@ impl Register for Inspector {
                 BindingPhase::AfterWidget,
             ),
             (
-                "y",
-                "Copy selection",
-                Self::call_copy_selection(),
-                BindingPhase::AfterWidget,
-            ),
-            (
                 "Esc",
                 "Close detail or inspector",
                 Self::call_dismiss(),
@@ -1077,6 +1077,20 @@ impl Register for Inspector {
                 BindingAction::Command(call),
             )?;
         }
+        // y is an application binding, which the inspector's scoped modal
+        // admits, so a host can give the key to its own copy action.
+        setup.bind(
+            InputSpec::Key(Key::parse_spec("y")?),
+            BindingOptions {
+                tier: BindingTier::Default,
+                description: "Copy selection".into(),
+                path: Some("**/markdown_inspector/**/".parse()?),
+                phase: Some(BindingPhase::AfterWidget),
+                show_in_help: true,
+                source: None,
+            },
+            BindingAction::Command(Self::call_copy_selection()),
+        )?;
         Ok(())
     }
 }

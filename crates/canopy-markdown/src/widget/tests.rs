@@ -2468,3 +2468,85 @@ fn a_reader_without_its_status_row_gives_the_document_the_row() {
     };
     assert_eq!(body_height(false), body_height(true) + 1);
 }
+
+#[test]
+fn an_item_is_what_interact_or_a_selection_chose() {
+    let (executor, manual) = MarkdownExecutor::manual(ExecutorOptions::default());
+    let reader = Markdown::new(
+        "[next](other.md)\n".into(),
+        MarkdownOptions {
+            executor,
+            clipboard: true,
+            coalesce: Duration::ZERO,
+            ..MarkdownOptions::default()
+        },
+    )
+    .unwrap();
+    let mut harness = Harness::builder(PublicationHost {
+        reader: Some(reader),
+        polls: Rc::new(Cell::new(0)),
+    })
+    .register::<Markdown>()
+    .size(40, 8)
+    .build()
+    .unwrap();
+    next_child_work(&mut harness, &manual).finish();
+    for _ in 0..2 {
+        harness.canopy.turn(TurnInput::Wake).unwrap();
+    }
+    let has_item = |harness: &mut Harness| {
+        harness
+            .with_unique(|reader: &mut Markdown, ctx| reader.has_item(ctx))
+            .unwrap()
+    };
+    assert!(!has_item(&mut harness), "scrolling selects nothing");
+    harness
+        .with_unique(|reader: &mut Markdown, ctx| reader.interact(ctx))
+        .unwrap();
+    assert!(has_item(&mut harness), "Interact selects the link");
+    harness
+        .with_unique(|reader: &mut Markdown, ctx| reader.copy_item(ctx))
+        .unwrap();
+    next_child_work(&mut harness, &manual).finish();
+    harness.canopy.turn(TurnInput::Wake).unwrap();
+    let requests = harness
+        .with_unique(|reader: &mut Markdown, _| Ok(reader.take_requests(8)))
+        .unwrap();
+    let [request] = &requests[..] else {
+        panic!("one copy request: {requests:?}");
+    };
+    assert!(matches!(&request.action, HostAction::CopyText(text) if text == "other.md"));
+    let id = request.id;
+    let actions = |harness: &mut Harness| {
+        harness
+            .with_unique(|reader: &mut Markdown, _| {
+                Ok(reader
+                    .status_items()
+                    .into_iter()
+                    .filter(|item| item.id == "markdown.action")
+                    .count())
+            })
+            .unwrap()
+    };
+    assert_eq!(actions(&mut harness), 1, "a copy shows its progress");
+    harness
+        .with_unique(|reader: &mut Markdown, ctx| {
+            reader.complete_request(
+                ctx,
+                HostReply {
+                    id,
+                    outcome: HostOutcome::Success,
+                },
+            )
+        })
+        .unwrap();
+    assert_eq!(
+        actions(&mut harness),
+        0,
+        "the host reports a success itself"
+    );
+    harness
+        .with_unique(|reader: &mut Markdown, ctx| reader.escape(ctx))
+        .unwrap();
+    assert!(!has_item(&mut harness), "leaving Interact drops the link");
+}

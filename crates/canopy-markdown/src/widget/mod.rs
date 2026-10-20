@@ -1717,14 +1717,39 @@ impl Markdown {
         }
         Ok(())
     }
-    /// Copy what the reader shows: the inspected table, code block, or link
-    /// while an inspector is open, and the exact displayed source otherwise.
-    #[command(enabled = "copy_status")]
-    pub fn copy_view(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if let Some(open) = &self.inspector {
-            return open.handle.copy_all(ctx);
+    /// Return whether the reader has an item to copy: a text selection, the
+    /// object Interact selected, or what an open inspector selects.
+    pub fn has_item(&self, ctx: &dyn ViewContext) -> Result<bool> {
+        if !self.options.clipboard || self.displayed.is_none() {
+            return Ok(false);
         }
-        self.copy_source(ctx)
+        if let Some(open) = &self.inspector {
+            return open.handle.can_copy(ctx);
+        }
+        if self.active == ViewType::Source {
+            return match self.navigation_node() {
+                Some(node) => ctx.with_widget(node, |source: &MarkdownSource| {
+                    Ok(!source.selection_range().is_empty())
+                }),
+                None => Ok(false),
+            };
+        }
+        // A search match can mark an object while scrolling, but only
+        // Interact selects one.
+        let shared = self.shared.borrow();
+        Ok(shared.presentation.is_some()
+            && (shared.overlays.selection.is_some()
+                || (shared.mode == Mode::Interact && shared.overlays.active_object.is_some())))
+    }
+    /// Copy the item [`Self::has_item`] finds. With none, copy nothing.
+    pub fn copy_item(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        if !self.has_item(ctx)? {
+            return Ok(());
+        }
+        match &self.inspector {
+            Some(open) => open.handle.copy_selection(ctx),
+            None => self.copy(ctx),
+        }
     }
     /// Copy the exact displayed source, including its final newline.
     #[command(enabled = "copy_status")]
@@ -1807,7 +1832,7 @@ impl Markdown {
             && context.epoch == self.epoch()
         {
             self.action_status = match reply.outcome {
-                HostOutcome::Success => "Done".into(),
+                HostOutcome::Success => ACTION_DONE.into(),
                 HostOutcome::Rejected(reason) => format!("Rejected: {reason}"),
                 HostOutcome::Failed(reason) => format!("Failed: {reason}"),
             };
@@ -2286,7 +2311,9 @@ impl Markdown {
         if let Some(status) = &self.options.status {
             items.push(item("markdown.host", 20, "label", status.clone()));
         }
-        if !self.action_status.is_empty() {
+        // The host performed a successful action and reports it in its own
+        // way, so only progress and failures show.
+        if !self.action_status.is_empty() && self.action_status != ACTION_DONE {
             items.push(item(
                 "markdown.action",
                 35,
@@ -2805,6 +2832,9 @@ fn outline_entries(document: &DocumentSnapshot) -> Vec<OutlineEntry> {
         })
         .collect()
 }
+
+/// The action status after the host performs an action.
+const ACTION_DONE: &str = "Done";
 
 /// Where the reader's own bindings apply: the reader itself, which a host may
 /// focus, and its reading column. An open inspector lies beside the column,

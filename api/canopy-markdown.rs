@@ -108,12 +108,11 @@ impl Markdown {
     /// Copy the active selection or selected object's default payload.
     pub fn copy(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Copy the item [`Self::has_item`] finds. With none, copy nothing.
+    pub fn copy_item(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
     /// Copy the exact displayed source, including its final newline.
     pub fn copy_source(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
-
-    /// Copy what the reader shows: the inspected table, code block, or link
-    /// while an inspector is open, and the exact displayed source otherwise.
-    pub fn copy_view(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Close the active inspector and restore the document's focus.
     pub fn dismiss_inspector(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
@@ -139,6 +138,10 @@ impl Markdown {
 
     /// Current follow policy.
     pub fn follow_state(&self) -> Follow;
+
+    /// Return whether the reader has an item to copy: a text selection, the
+    /// object Interact selected, or what an open inspector selects.
+    pub fn has_item(&self, ctx: &dyn ViewContext) -> canopy::error::Result<bool>;
 
     /// Inspect a pinned snapshot of the displayed source.
     pub fn inspect_source(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
@@ -378,9 +381,6 @@ impl Markdown {
     pub fn call_copy_source() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
-    pub fn call_copy_view() -> CommandCall;
-
-    /// Build a positional call with typed user arguments.
     pub fn call_dismiss_inspector() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
@@ -487,9 +487,6 @@ impl Markdown {
 
     /// Return the command spec for this command.
     pub fn spec_copy_source() -> &'static CommandSpec;
-
-    /// Return the command spec for this command.
-    pub fn spec_copy_view() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_dismiss_inspector() -> &'static CommandSpec;

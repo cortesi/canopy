@@ -34,9 +34,10 @@ A status row below the document holds the Rendered / Source control, the
 navigation mode, the lifecycle, and the outcome of the last action. A host that
 sets `MarkdownOptions::status_row` to false hides it, and shows what matters of
 the same state from the reader's `Widget::status` items: a partial render, a
-failure, an aborted or receiving stream, new bytes past a paused view, the
-outcome of an action, and where a selected link leads. A whole, current document
-reports nothing.
+failure, an aborted or receiving stream, new bytes past a paused view, an
+action in progress or one that failed, and where a selected link leads. The
+host reports an action it performed itself. A whole, current document reports
+nothing.
 
 ## Reading and actions
 
@@ -75,9 +76,14 @@ hides otherwise. The inspector takes focus until it closes, and the document's
 scrollbars hide while it covers the document. Its modal admits the host's
 bindings scoped to the reader, and the keys of a menu they open, so a host's
 menus still reach it; bindings with no path stay out, so a table keeps its own
-keys. A table numbers its rows while source shows line numbers, so one
-preference toggles both. `Markdown::copy_view` copies what the reader shows:
-the inspected table, code block, or link, or the displayed source.
+keys. Its `y`, which copies its selection, is an application binding scoped
+to it, so a host can take the key; its other keys belong to its framework
+group. A menu the host opens over it shows its keys as it does over the
+reader. A table numbers its rows while source shows line numbers, so one
+preference toggles both. `Markdown::has_item` reports whether the reader has
+an item to copy: its text selection, the object Interact selected, or what an
+open inspector selects, such as a table's cells. `Markdown::copy_item` copies
+it.
 
 Source preserves Markdown syntax, tabs, CRLF, and final-newline bytes. Its display
 substitutes unsafe terminal controls, but exact copy uses accepted source ranges.
