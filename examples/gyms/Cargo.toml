@@ -18,7 +18,11 @@ rand.workspace = true
 unicode-width.workspace = true
 
 [dev-dependencies]
+anyhow.workspace = true
 canopy = { workspace = true, features = ["testing"] }
+canopy-term.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]
 workspace = true

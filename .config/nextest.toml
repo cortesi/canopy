@@ -2,3 +2,14 @@
 [[profile.default.overrides]]
 filter = 'package(canopy-derive) & binary(compile)'
 slow-timeout = { period = "60s", terminate-after = 3 }
+
+# Tests that drive an app through a real terminal open a pseudo-terminal
+# each. On macOS, a terminal's child can die just after it starts while
+# another test process opens a pseudo-terminal at the same moment, so these
+# tests run one at a time; see fh's commit 148c41a.
+[test-groups]
+pty = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'binary_id(gyms::terminal)'
+test-group = 'pty'
