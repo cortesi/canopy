@@ -2160,6 +2160,53 @@ fn next_child_work(harness: &mut Harness, manual: &ManualExecutor) -> HeldWork {
 }
 
 #[test]
+fn a_followed_link_wakes_the_host_to_take_its_request() {
+    let (executor, manual) = MarkdownExecutor::manual(ExecutorOptions::default());
+    let reader = Markdown::new(
+        "[next](other.md)\n".into(),
+        MarkdownOptions {
+            executor,
+            external_search: true,
+            local_links: true,
+            follow_links: true,
+            coalesce: Duration::ZERO,
+            ..MarkdownOptions::default()
+        },
+    )
+    .unwrap();
+    let polls = Rc::new(Cell::new(0));
+    let mut harness = Harness::builder(PublicationHost {
+        reader: Some(reader),
+        polls: polls.clone(),
+    })
+    .register::<Markdown>()
+    .size(40, 8)
+    .build()
+    .unwrap();
+    next_child_work(&mut harness, &manual).finish();
+    for _ in 0..2 {
+        harness.canopy.turn(TurnInput::Wake).unwrap();
+    }
+    polls.set(0);
+    harness
+        .with_unique(|reader: &mut Markdown, ctx| reader.activate(ctx))
+        .unwrap();
+    harness.canopy.turn(TurnInput::Wake).unwrap();
+    assert_eq!(
+        polls.get(),
+        1,
+        "a host that polls only when woken takes the request at once"
+    );
+    let requests = harness
+        .with_unique(|reader: &mut Markdown, _| Ok(reader.take_requests(8)))
+        .unwrap();
+    assert!(
+        matches!(&requests[..], [request] if matches!(&request.action, HostAction::OpenLocal(link) if link.path == "other.md")),
+        "{requests:?}"
+    );
+}
+
+#[test]
 fn accepted_publication_wakes_host_but_stale_results_and_queries_do_not() {
     let (executor, manual) = MarkdownExecutor::manual(ExecutorOptions::default());
     let reader = Markdown::new(
@@ -2372,13 +2419,52 @@ fn a_partly_rendered_document_says_so_in_its_status() {
     let status = |harness: &mut Harness| {
         harness.with_root_widget(|reader: &mut Markdown| reader.chrome.borrow().text.clone())
     };
+    let items = |harness: &mut Harness| {
+        harness.with_root_widget(|reader: &mut Markdown| {
+            reader
+                .status_items()
+                .into_iter()
+                .map(|item| item.id.into_owned())
+                .collect::<Vec<_>>()
+        })
+    };
     let shown = status(&mut harness);
     assert!(
         shown.contains("Complete · Partial: table cell limit"),
         "{shown}"
     );
+    assert_eq!(
+        items(&mut harness),
+        ["markdown.partial"],
+        "the status items say so too"
+    );
     let (mut harness, manual) = fixture(text, ViewType::Rendered, false, false, false);
     settle(&mut harness, &manual);
     let shown = status(&mut harness);
     assert!(!shown.contains("Partial"), "{shown}");
+    assert!(
+        items(&mut harness).is_empty(),
+        "a whole, current document says nothing"
+    );
+}
+
+#[test]
+fn a_reader_without_its_status_row_gives_the_document_the_row() {
+    let text = "# Title\n\nbody\n";
+    let body_height = |status_row: bool| {
+        let (mut harness, manual) = configured(text, ViewType::Rendered, false, |options| {
+            options.status_row = status_row;
+        });
+        settle(&mut harness, &manual);
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                Ok(ctx
+                    .view_of(reader.nodes.as_ref().unwrap().body)
+                    .unwrap()
+                    .outer
+                    .h)
+            })
+            .unwrap()
+    };
+    assert_eq!(body_height(false), body_height(true) + 1);
 }

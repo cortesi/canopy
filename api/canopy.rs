@@ -772,6 +772,13 @@ pub trait Widget: Any {
     /// access. Sensitive values must be omitted; this hook does not
     /// serialize widget state.
     fn semantics(&self, _ctx: &dyn ViewContext) -> crate::error::Result<WidgetSemantics> {}
+
+    /// Status items this widget shows in a status line that takes it as a
+    /// source.
+    ///
+    /// The line asks as it renders, so the items follow the widget's state
+    /// with no update calls. The default shows nothing.
+    fn status(&self, _ctx: &dyn ViewContext) -> Vec<StatusItem> {}
 }
 
 /// Application runtime state and renderer coordination.
@@ -4800,6 +4807,100 @@ pub mod script {
         /// Execute local scripts with the application's full native authority.
         TrustedLocal,
     }
+}
+
+pub mod status {
+    //! Status items a widget exposes for a status line.
+    //! Status items: the styled runs a widget exposes for a status line.
+    //!
+    //! A widget describes its status with
+    //! [`Widget::status`](crate::Widget::status), and a status line asks its
+    //! sources for their items as it renders, so the line follows their state with
+    //! no update calls. Each run names a style path, which resolves under the layer
+    //! of the line that draws it, so a host styles status through its ordinary
+    //! rules.
+
+    /// One unit of status: a group of runs that shows, shortens, or hides as a
+    /// whole.
+    ///
+    /// When a line cannot fit every item, it shortens the item of lowest priority
+    /// that has a compact form, and otherwise hides it, until the rest fit.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct StatusItem {
+        /// Stable identity, for scripts and tests.
+        pub id: Cow<'static, str>,
+        /// The end of the line the item gathers at.
+        pub side: StatusSide,
+        /// How long the item keeps its place: a line short of room shortens and
+        /// hides items of lower priority first.
+        pub priority: i32,
+        /// The runs the item shows.
+        pub spans: Vec<StatusSpan>,
+        /// Shorter runs the item shows before it hides, when the full ones do not
+        /// fit.
+        pub compact: Option<Vec<StatusSpan>>,
+    }
+
+    impl StatusItem {
+        /// Gather the item at the end of the line.
+        #[must_use]
+        pub fn at_end(self) -> Self;
+
+        /// Set the shorter runs the item shows before it hides.
+        #[must_use]
+        pub fn compact(self, spans: impl IntoIterator<Item = StatusSpan>) -> Self;
+
+        /// Return whether the item shows nothing.
+        pub fn is_empty(&self) -> bool;
+
+        /// An empty item at the start of the line, of priority zero.
+        pub fn new(id: impl Into<Cow<'static, str>>) -> Self;
+
+        /// Set the item's priority.
+        #[must_use]
+        pub fn priority(self, priority: i32) -> Self;
+
+        /// Append a run that resolves `style`.
+        #[must_use]
+        pub fn span(self, style: impl Into<Cow<'static, str>>, text: impl Into<String>) -> Self;
+
+        /// Append runs.
+        #[must_use]
+        pub fn spans(self, spans: impl IntoIterator<Item = StatusSpan>) -> Self;
+    }
+
+    /// The end of a status line an item gathers at.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub enum StatusSide {
+        /// The start of the line, after the items before it.
+        #[default]
+        Start,
+        /// The end of the line, before the items after it.
+        End,
+    }
+
+    /// One styled run of status text.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct StatusSpan {
+        /// Style path the run resolves, under the drawing line's layer.
+        pub style: Cow<'static, str>,
+        /// Text the run shows.
+        pub text: String,
+    }
+
+    impl StatusSpan {
+        /// A run that resolves `style`.
+        pub fn new(style: impl Into<Cow<'static, str>>, text: impl Into<String>) -> Self;
+
+        /// A run in the line's own text style.
+        pub fn plain(text: impl Into<String>) -> Self;
+
+        /// Return the columns the run takes.
+        pub fn width(&self) -> u32;
+    }
+
+    /// Return the columns `spans` take.
+    pub fn spans_width(spans: &[StatusSpan]) -> u32;
 }
 
 pub mod style {

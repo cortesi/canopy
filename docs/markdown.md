@@ -30,6 +30,14 @@ Inspectors and active pointer drags temporarily disable switching. A paused roun
 trip restores the original position unless navigation supersedes it. Following
 reveals the new view's tail. A parse failure still permits an explicit Source view.
 
+A status row below the document holds the Rendered / Source control, the
+navigation mode, the lifecycle, and the outcome of the last action. A host that
+sets `MarkdownOptions::status_row` to false hides it, and shows what matters of
+the same state from the reader's `Widget::status` items: a partial render, a
+failure, an aborted or receiving stream, new bytes past a paused view, the
+outcome of an action, and where a selected link leads. A whole, current document
+reports nothing.
+
 ## Reading and actions
 
 Scroll mode moves the document. Interact mode adds an object cursor and readable

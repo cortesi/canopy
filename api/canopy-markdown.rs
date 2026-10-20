@@ -597,7 +597,8 @@ pub struct MarkdownOptions {
     /// Shared preparation service. Clone this option across readers.
     pub executor: MarkdownExecutor,
     /// Optional host wake after an accepted publication changes displayed
-    /// content, search, view, or preparation failure. Queries never wake it.
+    /// content, search, view, or preparation failure, and whenever a host
+    /// request is ready to take. Queries never wake it.
     pub publication_wake: Option<NodeWakeHandle>,
     /// Initial representation of a new document.
     pub initial_view: ViewType,
@@ -653,6 +654,11 @@ pub struct MarkdownOptions {
     /// Base URL for resolving relative destinations. With one, relative links
     /// resolve to URLs rather than to host documents.
     pub base_url: Option<String>,
+    /// Show the reader's status row below the document: the Rendered /
+    /// Source control, the navigation mode, the lifecycle, and the outcome of
+    /// the last action. A host without it can show what matters of the same
+    /// state from the reader's status items.
+    pub status_row: bool,
 }
 
 /// Composable read-only Markdown source widget with exact-byte copying.

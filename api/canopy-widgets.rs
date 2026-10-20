@@ -30,6 +30,7 @@ use canopy::{
     layout::{Align, Edges, Layout, ScrollAxis, ScrollDirection},
     render::{Glyphs, Render, ScreenCapture},
     runtime::NodeWakeHandle,
+    status::{StatusItem, StatusSpan},
     style::{Style, StyleRules, themes::Palette},
     text::Truncate,
     tree::FocusDirection,
@@ -2827,6 +2828,44 @@ impl Widget for StatusBar {}
 
 impl !Send for StatusBar {}
 impl !Sync for StatusBar {}
+
+/// A line of the status items its source widgets expose.
+///
+/// The line asks each source for its [`Widget::status`] items as it renders,
+/// so it follows their state with no update calls. Start items run from the
+/// left edge and end items end at the right edge, each group in the order the
+/// sources give, with the separator between neighbours. When the items do not
+/// fit, the line shortens the item of lowest priority that has a compact form,
+/// and otherwise hides it, until the rest fit.
+///
+/// Each run resolves its own style path under the layer that holds the line,
+/// so inside a [`StatusBar`](crate::StatusBar) a run named `value` resolves
+/// `status_bar/value`.
+#[derive(Default)]
+pub struct StatusLine {/* private fields */}
+
+impl StatusLine {
+    /// Return the items the sources expose, in order, leaving out empty ones.
+    pub fn items(&self, ctx: &dyn ViewContext) -> canopy::error::Result<Vec<StatusItem>>;
+
+    /// Construct a line with no sources, whose items stand two columns apart.
+    pub fn new() -> Self;
+
+    /// Keep `margin` columns clear at the right end while end items show, so
+    /// they stand apart from what follows the line, such as a key hint.
+    #[must_use]
+    pub fn with_margin(self, margin: u32) -> Self;
+
+    /// Draw `separator` between two neighbouring items on one side.
+    #[must_use]
+    pub fn with_separator(self, separator: impl IntoIterator<Item = StatusSpan>) -> Self;
+
+    /// Add a source widget after the sources already added.
+    #[must_use]
+    pub fn with_source(self, node: impl Into<NodeId>) -> Self;
+}
+
+impl Widget for StatusLine {}
 
 /// A row of tabs with no pages of its own.
 ///

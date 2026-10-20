@@ -14,6 +14,7 @@ use crate::{
     layout::{CanvasContext, Layout, MeasureConstraints, Measurement},
     render::Render,
     runtime::{PollLifetime, WidgetSemantics},
+    status::StatusItem,
 };
 
 /// The result of an event handler.
@@ -189,6 +190,15 @@ pub trait Widget: Any {
     /// the view width, such as soft-wrapped text. The default reports no
     /// marks.
     fn scroll_marks(&self, _axis: ScrollAxis, _content: Size) -> Vec<ScrollMark> {
+        Vec::new()
+    }
+
+    /// Status items this widget shows in a status line that takes it as a
+    /// source.
+    ///
+    /// The line asks as it renders, so the items follow the widget's state
+    /// with no update calls. The default shows nothing.
+    fn status(&self, _ctx: &dyn ViewContext) -> Vec<StatusItem> {
         Vec::new()
     }
 

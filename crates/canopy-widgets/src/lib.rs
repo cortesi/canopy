@@ -97,6 +97,7 @@ mod sparkline;
 mod spinner;
 /// Single-line status bar.
 mod status_bar;
+mod status_line;
 /// Immutable keyed tables, grid preparation, and viewer events.
 pub mod table;
 /// Interactive spreadsheet-style table surface.
@@ -142,6 +143,7 @@ pub use selector::Selector;
 pub use sparkline::Sparkline;
 pub use spinner::Spinner;
 pub use status_bar::{KeyHint, StatusBar};
+pub use status_line::StatusLine;
 pub use table_view::TableView;
 pub use tabs::{TabBar, Tabs, TabsLook};
 pub use text::{CanvasWidth, Text};

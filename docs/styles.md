@@ -236,6 +236,17 @@ rebind updates the hint. `Root::register` installs that resync; an app without
 `Root` calls `KeyHint::register`. A hint whose action no key reaches draws
 nothing.
 
+A widget exposes status through `Widget::status`, which returns
+`canopy::status::StatusItem`s. An item is a group of `StatusSpan` runs, each a
+style path and its text, that gathers at the start or the end of a line, keeps
+its place by its priority, and may give a compact form. A `StatusLine` asks its
+source widgets for their items as it renders, so it follows their state with no
+update calls. When the items do not fit, it shortens the item of lowest priority
+that has a compact form, and otherwise hides it. Each run resolves its style
+path under the line's layer, so inside a `StatusBar` a run named `value`
+resolves `status_bar/value`. The built-in themes style the roles `label`,
+`value`, `unit`, `separator`, `warning`, and `badge`.
+
 ## Selectors and dropdowns
 
 `Selector` and `Dropdown` push their node names. The cursor row paints

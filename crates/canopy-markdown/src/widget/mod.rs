@@ -24,6 +24,7 @@ use canopy::{
     layout::{Direction, Edges, Layout, RevealAlign, ScrollOp},
     render::Render,
     runtime::{NodeWakeHandle, NoticePost, PollLifetime, WidgetSemantics},
+    status::StatusItem,
 };
 use canopy_widgets::{
     Container, SearchBar, TableView,
@@ -1421,6 +1422,7 @@ impl Markdown {
             .ok_or_else(|| invalid("The host request queue is full"))?;
         self.requests.publish(reserved.id, action);
         self.action_status = status.into();
+        self.wake_publication_host()?;
         Ok(true)
     }
     /// Reveal what a link's `#` anchor names: a block by its `^id`, or a
@@ -2106,8 +2108,9 @@ impl Markdown {
         self.update_chrome(ctx)?;
         self.wake_publication_host()
     }
-    /// Signal a host-owned search/status surface only after publication has
-    /// accepted a result or changed the displayed view or failure state.
+    /// Signal the host after publication has accepted a result or changed the
+    /// displayed view or failure state, and when a host request is ready, so
+    /// a host that polls only when woken takes it at once.
     fn wake_publication_host(&self) -> Result<()> {
         if let Some(wake) = &self.options.publication_wake {
             wake.wake()?;
@@ -2221,6 +2224,84 @@ impl Markdown {
             accepted.lifecycle,
             Lifecycle::Complete(FinishOutcome::Completed)
         ) && self.displayed_revision() < accepted.revision
+    }
+    /// Return the reader's status items, which a host shows in place of its
+    /// status row: what keeps the document from showing whole or current, a
+    /// failure, the outcome of the last action, and where a selected link
+    /// leads. A reader that shows its document whole and current says
+    /// nothing.
+    fn status_items(&self) -> Vec<StatusItem> {
+        let item = |id: &'static str, priority: i32, style: &'static str, text: String| {
+            StatusItem::new(id)
+                .at_end()
+                .priority(priority)
+                .span(style, text)
+        };
+        let snapshot = self.store.snapshot();
+        let mut items = Vec::new();
+        if let Some(failure) = &self.failure {
+            items.push(item("markdown.failure", 58, "warning", failure.clone()));
+        }
+        match &snapshot.lifecycle {
+            Lifecycle::Receiving => {
+                items.push(item("markdown.receiving", 20, "label", "receiving".into()));
+            }
+            Lifecycle::Complete(FinishOutcome::Aborted(reason)) => {
+                items.push(item(
+                    "markdown.aborted",
+                    57,
+                    "warning",
+                    format!("aborted: {reason}"),
+                ));
+            }
+            Lifecycle::Complete(FinishOutcome::Completed) => {}
+        }
+        let partial = (self.active == ViewType::Rendered)
+            .then(|| self.shared.borrow().presentation.clone())
+            .flatten()
+            .and_then(|shown| {
+                shown
+                    .document
+                    .degraded
+                    .clone()
+                    .or_else(|| shown.truncated.then(|| "layout limit".to_owned()))
+            });
+        if let Some(reason) = partial {
+            items.push(item(
+                "markdown.partial",
+                55,
+                "warning",
+                format!("partial: {reason}"),
+            ));
+        }
+        let new_bytes = snapshot.len().saturating_sub(self.acknowledged);
+        if new_bytes > 0 && self.shared.borrow().follow == Follow::Paused {
+            items.push(item(
+                "markdown.new",
+                20,
+                "label",
+                format!("{new_bytes} new bytes"),
+            ));
+        }
+        if let Some(status) = &self.options.status {
+            items.push(item("markdown.host", 20, "label", status.clone()));
+        }
+        if !self.action_status.is_empty() {
+            items.push(item(
+                "markdown.action",
+                35,
+                "text",
+                self.action_status.clone(),
+            ));
+        } else if let Some(destination) = self.selected_destination() {
+            items.push(item(
+                "markdown.link",
+                15,
+                "label",
+                format!("→ {destination}"),
+            ));
+        }
+        items
     }
     /// Refresh fixed status and query chrome without changing document state.
     fn update_chrome(&self, ctx: &mut dyn Context) -> Result<()> {
@@ -2355,6 +2436,9 @@ fn full_table(preview: &PreparedTable) -> Option<Arc<PreparedTable>> {
 }
 
 impl Widget for Markdown {
+    fn status(&self, _ctx: &dyn ViewContext) -> Vec<StatusItem> {
+        self.status_items()
+    }
     fn layout(&self) -> Layout {
         Layout::fill().direction(Direction::Column)
     }
@@ -2419,6 +2503,7 @@ impl Widget for Markdown {
                 owner,
             },
         )?;
+        ctx.set_hidden(chrome.into(), !self.options.status_row)?;
         self.nodes = Some(Nodes {
             layers: layers.into(),
             body: body.into(),
@@ -2540,6 +2625,7 @@ impl Widget for Markdown {
                 Ok(text) => {
                     if self.requests.publish(copy.id, HostAction::CopyText(text)) {
                         self.action_status = "Copy ready".into();
+                        self.wake_publication_host()?;
                     }
                 }
                 Err(error) => {

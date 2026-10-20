@@ -41,7 +41,7 @@ pub use core::{
     ViewContext, ViewContextExt, path::NodeName,
 };
 // App-author modules used by widget implementations and derive output.
-pub use core::{commands, error, path, script, style, text};
+pub use core::{commands, error, path, script, status, style, text};
 
 // Internal module paths used across the crate.
 pub(crate) use crate::core::change::{ChangeSet, Invalidation};

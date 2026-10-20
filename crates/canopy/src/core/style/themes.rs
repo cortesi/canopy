@@ -299,6 +299,21 @@ impl Palette {
                     .fg(p.key)
                     .attrs(AttrSet::new(Attr::Bold)),
             )
+            // Status items colour their parts by role: a quiet label, a value
+            // that reads apart from its unit, a structural separator, a
+            // warning, and a badge raised off the bar.
+            .fg("/status_bar/label", p.faint_fg)
+            .fg("/status_bar/value", p.cyan)
+            .fg("/status_bar/unit", p.muted_fg)
+            .fg("/status_bar/separator", p.selection_bg)
+            .fg("/status_bar/warning", p.yellow)
+            .style(
+                "/status_bar/badge",
+                PartialStyle::new()
+                    .fg(p.fg)
+                    .bg(p.element_bg)
+                    .attrs(AttrSet::new(Attr::Bold)),
+            )
             .style(
                 "/help/key",
                 PartialStyle::new()
