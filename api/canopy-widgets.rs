@@ -2898,6 +2898,9 @@ impl TableView {
     pub fn call_copy_selection(include_header: bool) -> CommandCall;
 
     /// Build a positional call with typed user arguments.
+    pub fn call_cursor_position() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
     pub fn call_goto(row: usize, column: usize) -> CommandCall;
 
     /// Build a positional call with typed user arguments.
@@ -2932,6 +2935,9 @@ impl TableView {
 
     /// Return the command spec for this command.
     pub fn spec_copy_selection() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_cursor_position() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_goto() -> &'static CommandSpec;
@@ -2985,6 +2991,11 @@ impl TableView {
     /// Indexed cursor position, useful for bounded status reporting.
     pub fn cursor_index(&self) -> Option<(usize, usize)>;
 
+    /// Return the cursor's one-based coordinates, for automation.
+    /// @return "row,column", or "" when the table is empty.
+    #[must_use]
+    pub fn cursor_position(&self) -> String;
+
     /// Jump to one-based coordinates. Coordinates beyond the data clamp.
     pub fn goto(
         &mut self,
@@ -3024,6 +3035,9 @@ impl TableView {
         table: Arc<PreparedTable>,
     ) -> canopy::error::Result<()>;
 
+    /// Return whether the row-number gutter shows.
+    pub fn row_numbers(&self) -> bool;
+
     /// Select all axis keys without allocating a record for each cell.
     pub fn select_all(&mut self, _ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
@@ -3051,6 +3065,9 @@ impl TableView {
 
     /// Wake an owner whenever a complete host event enters the queue.
     pub fn set_event_wake(&mut self, wake: NodeWakeHandle);
+
+    /// Show or hide the fixed row-number gutter.
+    pub fn set_row_numbers(&mut self, show: bool);
 
     /// Displayed geometry and data.
     pub fn table(&self) -> &Arc<PreparedTable>;

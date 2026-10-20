@@ -111,6 +111,10 @@ impl Markdown {
     /// Copy the exact displayed source, including its final newline.
     pub fn copy_source(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Copy what the reader shows: the inspected table, code block, or link
+    /// while an inspector is open, and the exact displayed source otherwise.
+    pub fn copy_view(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
     /// Close the active inspector and restore the document's focus.
     pub fn dismiss_inspector(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
@@ -374,6 +378,9 @@ impl Markdown {
     pub fn call_copy_source() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
+    pub fn call_copy_view() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
     pub fn call_dismiss_inspector() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
@@ -480,6 +487,9 @@ impl Markdown {
 
     /// Return the command spec for this command.
     pub fn spec_copy_source() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_copy_view() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_dismiss_inspector() -> &'static CommandSpec;

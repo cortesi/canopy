@@ -21,7 +21,7 @@ mod flow;
 pub use flow::{FlowOptions, FlowTable};
 
 /// How far the header band leans from the ground toward the foreground.
-const HEADER_LIFT: f32 = 0.18;
+const HEADER_LIFT: f32 = 0.26;
 /// The narrowest a wrapping column narrows to fit a view. A narrower column
 /// keeps its width, and a view too narrow for every floor scrolls instead.
 const WRAP_FLOOR: u32 = 12;
@@ -1052,6 +1052,14 @@ impl PreparedTable {
             0
         };
         let body = Rect::new(area.tl.x + gutter, area.tl.y, area.w - gutter, area.h);
+        // The header band runs across the whole area, past the last column.
+        if header > 0 {
+            render.fill(
+                "table/header",
+                Rect::new(area.tl.x, area.tl.y, area.w, header),
+                ' ',
+            )?;
+        }
         // A gutter-only paint has no body columns to visit.
         let columns = if body.w == 0 {
             0..0
@@ -1139,10 +1147,13 @@ impl PreparedTable {
                     break;
                 };
                 if let BodyLine::Row { row, line: 0 } = placed {
+                    // Numbers align right against the cells, as an editor's
+                    // line numbers do.
+                    let digits = gutter.saturating_sub(1) as usize;
                     render.text(
                         "table/gutter",
                         Line::new(area.tl.x, area.tl.y + y, gutter),
-                        &format!("{} ", row + 1),
+                        &format!("{:>digits$} ", row + 1),
                     )?;
                 }
             }
@@ -1444,7 +1455,9 @@ pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
         .fg("table/flow/header", palette.accent)
         .attr("table/flow/header", Attr::Bold)
         .fg("table/more", palette.faint_fg)
-        .fg("table/gutter", palette.muted_fg)
+        // Row numbers take the editor's line-number colour, a step below the
+        // cells, so they read as an index rather than as data.
+        .fg("table/gutter", palette.line_number)
         .fg("table/separator", palette.frame)
         .bg("table/selection", palette.selection_bg)
         .bg("table/cursor", palette.selection_bg)

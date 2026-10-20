@@ -2321,7 +2321,7 @@ fn space_pages_down_like_page_down_in_both_views() {
 }
 
 #[test]
-fn an_inspector_covers_the_reader_body_and_nothing_beyond_it() {
+fn an_inspector_takes_the_whole_reader() {
     let (mut harness, manual) =
         fixture("# Title\n\nbody\n", ViewType::Rendered, false, false, false);
     settle(&mut harness, &manual);
@@ -2331,22 +2331,25 @@ fn an_inspector_covers_the_reader_body_and_nothing_beyond_it() {
     manual.run_until_idle();
     harness.canopy.turn(TurnInput::Prepare).unwrap();
     harness.render().unwrap();
-    let (body, inspector) = harness
+    let (reader, inspector) = harness
         .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            let body = reader.nodes.as_ref().unwrap().body;
+            let owner = ctx.node_id();
             let inspector: NodeId = reader.inspector.as_ref().unwrap().handle.node.into();
             assert_eq!(
                 ctx.parent_of(inspector),
-                Some(body),
-                "the inspector mounts in the reader's body"
+                Some(reader.nodes.as_ref().unwrap().layers),
+                "the inspector mounts over the reader"
             );
             Ok((
-                ctx.view_of(body).unwrap().content,
+                ctx.view_of(owner).unwrap().outer,
                 ctx.view_of(inspector).unwrap().outer,
             ))
         })
         .unwrap();
-    assert_eq!(inspector, body, "the inspector fills the body");
+    assert_eq!(
+        inspector, reader,
+        "the inspector covers the reader, its status row included"
+    );
     harness
         .with_root_widget_context(|reader: &mut Markdown, ctx| {
             assert_eq!(

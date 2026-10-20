@@ -8,7 +8,7 @@ use std::{
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
     ViewContextExt, Widget,
-    commands::{CommandStatus, CommandTarget},
+    commands::CommandStatus,
     derive_commands,
     error::{Error, Result},
     geom::{Line, Rect, Size},
@@ -20,10 +20,9 @@ use canopy::{
     layout::{CanvasContext, Direction, Layout, RevealAlign},
     render::Render,
     runtime::{NodeWakeHandle, PollLifetime, WakeOutcome},
-    tree::{FocusDirection, FocusScope},
 };
 use canopy_widgets::{
-    Button, Container, Frame, TableView, Text,
+    Container, TableView, Text,
     editor::{LineNumbers, WrapMode},
     table::{CellKey, PreparedTable, TableEvent, TableViewOptions},
 };
@@ -349,6 +348,19 @@ impl InspectorHandle {
             Ok(())
         })
     }
+    /// Show or hide a table's row-number gutter.
+    pub fn set_row_numbers(&self, ctx: &mut dyn Context, show: bool) -> Result<()> {
+        ctx.with_widget_mut(self.node, |inspector: &mut Inspector, ctx| {
+            inspector.set_row_numbers(ctx, show)
+        })
+    }
+    /// Copy the complete inspected content: the table, the code block, or the
+    /// link's destination.
+    pub fn copy_all(&self, ctx: &mut dyn Context) -> Result<()> {
+        ctx.with_widget_mut(self.node, |inspector: &mut Inspector, ctx| {
+            inspector.copy_all(ctx)
+        })
+    }
     /// Defer modal closure and subtree reclamation until the dispatch finishes.
     pub fn close(&self, ctx: &mut dyn Context) -> Result<()> {
         ctx.close_modal(self.token)?;
@@ -445,6 +457,21 @@ pub struct MarkdownInspector {
     pending_copy: Option<String>,
     /// Source location retained until its asynchronous reader is ready.
     reveal: Option<InspectorReveal>,
+    /// Whether a table shows its row-number gutter.
+    row_numbers: bool,
+}
+
+/// Host capabilities and preparation bounds for one inspector.
+#[derive(Clone, Copy, Debug)]
+pub struct InspectorOptions {
+    /// Whether the host admits clipboard actions.
+    pub allow_copy: bool,
+    /// Maximum bytes in one accepted complete copy payload.
+    pub copy_limit: usize,
+    /// Largest source the inspector highlights.
+    pub syntax_limit: usize,
+    /// Whether a table shows its row-number gutter.
+    pub row_numbers: bool,
 }
 
 #[derive_commands]
@@ -464,33 +491,38 @@ impl MarkdownInspector {
             parent,
             executor,
             content,
-            true,
-            DEFAULT_COPY_BYTES,
-            256 * 1024,
+            InspectorOptions {
+                allow_copy: true,
+                copy_limit: DEFAULT_COPY_BYTES,
+                syntax_limit: 256 * 1024,
+                row_numbers: true,
+            },
         )
     }
     /// Mount and open a modal with its host capabilities and preparation
     /// bounds.
     ///
     /// The inspector mounts in `parent`, a stack inside the calling owner,
-    /// and fills it, so it covers the reader it inspects and nothing else.
-    /// The modal still takes focus and the keys while it is open.
+    /// and fills it, so it takes the place of the reader it inspects. It has
+    /// no frame or buttons of its own. The modal takes focus while it is
+    /// open. It admits the host's bindings that name a path, and the keys of
+    /// a menu they open, so a host's menus still reach it, while bindings
+    /// with no path stay out.
     pub fn open_configured(
         ctx: &mut dyn Context,
         parent: NodeId,
         executor: MarkdownExecutor,
         content: InspectorContent,
-        allow_copy: bool,
-        copy_limit: usize,
-        syntax_limit: usize,
+        options: InspectorOptions,
     ) -> Result<InspectorHandle> {
         let owner_id = ctx.node_id();
         let owner = ctx.wake_handle(PollLifetime::Node)?;
         let mailbox = Rc::new(RefCell::new(Mailbox::default()));
         let mut inspector = Self::new(executor, owner, mailbox.clone(), content);
-        inspector.allow_copy = allow_copy;
-        inspector.copy_limit = copy_limit.min(EVENT_BYTES);
-        inspector.source_options.syntax_limit = syntax_limit;
+        inspector.allow_copy = options.allow_copy;
+        inspector.copy_limit = options.copy_limit.min(EVENT_BYTES);
+        inspector.source_options.syntax_limit = options.syntax_limit;
+        inspector.row_numbers = options.row_numbers;
         let node = ctx.add_child(parent, inspector)?;
         let view: &dyn ViewContext = ctx;
         let (focus, wake) = view.with_widget(node, |widget: &Self| {
@@ -503,11 +535,11 @@ impl MarkdownInspector {
             owner: owner_id,
             modal: node.into(),
             initial_focus: focus.unwrap_or(node.into()),
-            // The inspector covers the reader, so nothing beside it dims.
+            // The inspector takes the reader's place, so nothing beside it
+            // dims.
             dim_target: None,
-            bindings: ModalBindings::Framework {
+            bindings: ModalBindings::Scoped {
                 groups: &[Self::BINDINGS],
-                intents: &[],
             },
         }) {
             Ok(token) => token,
@@ -557,6 +589,7 @@ impl MarkdownInspector {
             copy_limit: DEFAULT_COPY_BYTES,
             pending_copy: None,
             reveal: None,
+            row_numbers: true,
         }
     }
     /// Apply a queued source location once the source reader has mounted.
@@ -620,12 +653,25 @@ impl MarkdownInspector {
         self.emit(InspectorEvent::CopyText(text))?;
         Ok(true)
     }
-    /// Replace the fixed status row without rebuilding the content subtree.
+    /// Replace the status row without rebuilding the content subtree. The row
+    /// shows only while it has something to say.
     fn show_status(&self, ctx: &mut dyn Context, value: impl Into<String>) -> Result<()> {
         if let Some(status) = self.status {
             let value = value.into();
+            ctx.set_hidden(status.into(), value.is_empty())?;
             ctx.with_widget_mut(status, |text: &mut Text, _| {
                 text.set_text(value);
+                Ok(())
+            })?;
+        }
+        Ok(())
+    }
+    /// Show or hide a table's row-number gutter.
+    fn set_row_numbers(&mut self, ctx: &mut dyn Context, show: bool) -> Result<()> {
+        self.row_numbers = show;
+        if let Some(Reader::Table(table)) = self.reader {
+            ctx.with_widget_mut(table, |table: &mut TableView, _| {
+                table.set_row_numbers(show);
                 Ok(())
             })?;
         }
@@ -838,12 +884,6 @@ impl MarkdownInspector {
         }
         Ok(())
     }
-    /// Move between controls within this inspector subtree alone.
-    #[command]
-    pub fn focus(&self, ctx: &mut dyn Context, direction: FocusDirection) -> Result<()> {
-        ctx.focus_move(FocusScope::Node(ctx.node_id()), direction)?;
-        Ok(())
-    }
     /// Republish a matching table identity while retaining the modal and keyed
     /// selection.
     pub fn publish_table(&self, ctx: &mut dyn Context, prepared: Arc<PreparedTable>) -> Result<()> {
@@ -942,7 +982,6 @@ impl MarkdownInspector {
 impl Register for Inspector {
     fn register(setup: &mut Setup) -> Result<()> {
         MarkdownSource::register(setup)?;
-        Button::register(setup)?;
         TableView::register(setup)?;
         setup.add_commands::<Self>()?;
         for (key, description, call, phase) in [
@@ -1024,24 +1063,6 @@ impl Register for Inspector {
                 Self::call_next_match(-1),
                 BindingPhase::BeforeWidget,
             ),
-            (
-                "Tab",
-                "Next control",
-                Self::call_focus(FocusDirection::Next),
-                BindingPhase::AfterWidget,
-            ),
-            (
-                "BackTab",
-                "Previous control",
-                Self::call_focus(FocusDirection::Prev),
-                BindingPhase::AfterWidget,
-            ),
-            (
-                "Enter",
-                "Activate button",
-                Button::call_press(),
-                BindingPhase::AfterWidget,
-            ),
         ] {
             setup.bind(
                 InputSpec::Key(Key::parse_spec(key)?),
@@ -1070,6 +1091,11 @@ impl Widget for Inspector {
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
+    fn render(&mut self, render: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        // The reader's ground, so a host's rules for the reader reach the
+        // inspector in its place.
+        render.fill("markdown", ctx.view().outer_rect_local(), ' ')
+    }
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
         self.wake = Some(ctx.wake_handle(PollLifetime::Node)?);
         self.lane = Some(
@@ -1081,32 +1107,10 @@ impl Widget for Inspector {
             .content
             .take()
             .ok_or_else(|| Error::Invalid("inspector already mounted".into()))?;
-        let copy_label = match &content {
-            InspectorContent::Code { .. } => "Copy Block",
-            InspectorContent::Source { .. } => "Copy Source",
-            InspectorContent::Table { .. } => "Copy Table",
-            InspectorContent::Link { .. } => "Copy URL",
-            InspectorContent::Outline { .. } => "Copy",
-        };
-        let title = match &content {
-            InspectorContent::Code { info, .. } => format!(
-                "Code · {}",
-                info.chars()
-                    .take(160)
-                    .map(|ch| if ch.is_control() { ' ' } else { ch })
-                    .collect::<String>()
-            ),
-            InspectorContent::Source { snapshot } => {
-                format!("Source · revision {} (pinned)", snapshot.revision)
-            }
-            InspectorContent::Table { .. } => "Table".into(),
-            InspectorContent::Link { .. } => "Link".into(),
-            InspectorContent::Outline { .. } => "Outline".into(),
-        };
-        let frame = ctx.add_child(ctx.node_id(), Frame::new().with_title(title))?;
+        // The inspector takes the reader's place with no frame of its own.
         let body = ctx.add_child(
-            frame,
-            Container::new(Layout::fill().direction(Direction::Column)).with_fill(),
+            ctx.node_id(),
+            Container::new(Layout::fill().direction(Direction::Column)),
         )?;
         let reader_parent = ctx.add_child(body, Container::new(Layout::fill()))?;
         self.reader_parent = Some(reader_parent.into());
@@ -1144,6 +1148,7 @@ impl Widget for Inspector {
                 ctx.with_widget_mut(table, |table: &mut TableView, _| {
                     table.set_event_wake(self.wake.clone().expect("mounted wake"));
                     table.set_copy_enabled(self.allow_copy);
+                    table.set_row_numbers(self.row_numbers);
                     Ok(())
                 })?;
                 self.reader = Some(Reader::Table(table));
@@ -1187,31 +1192,15 @@ impl Widget for Inspector {
             ));
             self.submit(ctx)?;
         }
+        // The status row shows a prompt or the outcome of an action, and
+        // hides otherwise.
         let status = ctx.add_child(body, Text::new(""))?;
         ctx.set_layout_override(
             status.into(),
             Layout::column().flex_horizontal(1).fixed_height(1).into(),
         )?;
+        ctx.set_hidden(status.into(), true)?;
         self.status = Some(status);
-        let buttons = ctx.add_child(
-            body,
-            Container::new(Layout::row().flex_horizontal(1).fixed_height(1).gap(1)),
-        )?;
-        let target = CommandTarget::Exact(ctx.node_id());
-        ctx.add_child(
-            buttons,
-            Button::new(copy_label).with_command(Self::call_copy_all().with_target(target)),
-        )?;
-        if self.open_url.is_some() {
-            ctx.add_child(
-                buttons,
-                Button::new("Open").with_command(Self::call_open_url().with_target(target)),
-            )?;
-        }
-        ctx.add_child(
-            buttons,
-            Button::new("Close").with_command(Self::call_dismiss().with_target(target)),
-        )?;
         Ok(())
     }
     fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
@@ -1861,9 +1850,12 @@ mod tests {
                     info: String::new(),
                     text: Arc::from(""),
                 },
-                true,
-                usize::MAX,
-                0,
+                InspectorOptions {
+                    allow_copy: true,
+                    copy_limit: usize::MAX,
+                    syntax_limit: 0,
+                    row_numbers: true,
+                },
             )
         })?;
         harness.canopy.turn(TurnInput::Prepare)?;
@@ -1941,7 +1933,7 @@ mod tests {
 mod interaction_tests {
     #[cfg(feature = "syntax")]
     use canopy::testing::harness::Harness;
-    use canopy::{input::key, runtime::TurnInput};
+    use canopy::{commands::CommandTarget, input::key, runtime::TurnInput};
 
     use super::{
         tests::{fixture, outline},
@@ -2312,7 +2304,7 @@ mod interaction_tests {
 
 #[cfg(test)]
 mod table_tests {
-    use canopy::{input::key::KeyCode, runtime::TurnInput};
+    use canopy::{input::key::KeyCode, runtime::TurnInput, testing::harness::Harness};
     use canopy_widgets::table::{
         self, TableCell, TableColumn, TableData, TableLayoutOptions, TableRow,
     };
@@ -2330,38 +2322,44 @@ mod table_tests {
         Arc::new(table::prepare(Arc::new(data), TableLayoutOptions::default()).unwrap())
     }
     #[test]
-    fn modal_reader_uses_remaining_height_and_chrome_stays_at_bottom() -> Result<()> {
+    fn the_reader_fills_the_inspector_until_a_status_takes_the_last_row() -> Result<()> {
         let (mut harness, _, handle, _) = fixture(InspectorContent::Table {
             table: prepared("table", 1, "cell"),
         })?;
+        harness.render()?;
+        let rows = |harness: &mut Harness| {
+            harness.canopy.with_root_context(|ctx| {
+                let (reader, status) = ctx.with_widget(handle.node, |inspector: &Inspector| {
+                    Ok((
+                        inspector.reader_parent.unwrap(),
+                        NodeId::from(inspector.status.unwrap()),
+                    ))
+                })?;
+                let inspector = ctx.view_of(handle.node.into()).unwrap().outer;
+                let reader = ctx.view_of(reader).unwrap().outer;
+                let status = ctx.view_of(status).map(|view| view.outer);
+                Ok((inspector, reader, status))
+            })
+        };
+        let (inspector, reader, status) = rows(&mut harness)?;
+        assert_eq!(reader, inspector, "no frame or buttons surround the table");
+        assert!(status.is_none_or(|status| status.h == 0), "{status:?}");
+
         harness.canopy.with_root_context(|ctx| {
-            let (reader, status) = ctx.with_widget(handle.node, |inspector: &Inspector| {
-                Ok((
-                    inspector.reader_parent.unwrap(),
-                    NodeId::from(inspector.status.unwrap()),
-                ))
-            })?;
-            let body = ctx.parent_of(reader).unwrap();
-            let buttons = *ctx.children_of(body).last().unwrap();
-            let body = ctx.view_of(body).unwrap().content;
-            let reader = ctx.view_of(reader).unwrap().outer;
-            let status = ctx.view_of(status).unwrap().outer;
-            let buttons = ctx.view_of(buttons).unwrap().outer;
-            assert_eq!(status.h, 1);
-            assert_eq!(buttons.h, 1);
-            assert_eq!(reader.h, body.h - 2);
-            assert_eq!(reader.tl.y, body.tl.y);
-            assert_eq!(
-                i64::from(status.tl.y),
-                i64::from(reader.tl.y) + i64::from(reader.h)
-            );
-            assert_eq!(buttons.tl.y, status.tl.y + 1);
-            assert_eq!(
-                i64::from(buttons.tl.y) + i64::from(buttons.h),
-                i64::from(body.tl.y) + i64::from(body.h)
-            );
-            Ok(())
+            ctx.with_widget_mut(handle.node, |inspector: &mut Inspector, ctx| {
+                inspector.show_status(ctx, "Copied")
+            })
         })?;
+        harness.render()?;
+        let (inspector, reader, status) = rows(&mut harness)?;
+        let status = status.expect("the status shows");
+        assert_eq!(status.h, 1);
+        assert_eq!(reader.h, inspector.h - 1);
+        assert_eq!(
+            i64::from(status.tl.y),
+            i64::from(inspector.tl.y) + i64::from(inspector.h) - 1,
+            "the status takes the last row"
+        );
         Ok(())
     }
 

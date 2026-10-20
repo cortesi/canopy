@@ -489,6 +489,9 @@ pub struct InputMap {
     binding_generation: u64,
     /// Admission imposed by the active modal.
     modal_bindings: Option<ModalBindings>,
+    /// Path enclosing the top modal's owner, which a scoped modal reads to
+    /// keep out bindings scoped to a region around the owner.
+    modal_enclosing: Option<Path>,
     /// Next binding identifier.
     next_id: u64,
     /// Next insertion-order identifier.
@@ -511,6 +514,7 @@ impl InputMap {
             mode_generation: 0,
             binding_generation: 0,
             modal_bindings: None,
+            modal_enclosing: None,
             next_id: 1,
             next_insertion_id: 1,
         }
@@ -731,6 +735,20 @@ impl InputMap {
                     self.extend_application_tiers(&mut out, path, input, false);
                 }
             }
+            Some(ModalBindings::Scoped { groups }) => {
+                // A menu opened inside the modal takes its keys first, since
+                // the user opened it to choose from it.
+                let menu = self.mode_stack.last().is_some_and(|mode| mode.transient);
+                if menu {
+                    self.extend_application_tiers(&mut out, path, input, true);
+                }
+                for group in *groups {
+                    self.extend_framework_group(&mut out, path, input, *group);
+                }
+                if !menu {
+                    self.extend_application_tiers(&mut out, path, input, true);
+                }
+            }
             Some(ModalBindings::Application) | None => {
                 self.extend_application_tiers(&mut out, path, input, true);
             }
@@ -807,10 +825,12 @@ impl InputMap {
     /// Return whether the active modal admission admits one record.
     ///
     /// A framework modal admits its groups, every global binding, and
-    /// application bindings to its listed intents. Global bindings reach
-    /// every modal, as they reach past a transient mode, so a key such as
-    /// help works everywhere. Admission ignores route position and widget
-    /// state. Route selection and
+    /// application bindings to its listed intents. A scoped modal admits its
+    /// groups, every global binding, the application bindings scoped to its
+    /// owner's subtree, and the bindings of a transient mode. Global bindings
+    /// reach every modal, as they reach past a transient mode, so a key
+    /// such as help works everywhere. Admission ignores route position and
+    /// widget state. Route selection and
     /// `candidate_keys` share this predicate.
     pub(crate) fn admits_record(&self, record: &BindingRecord) -> bool {
         match &self.modal_bindings {
@@ -821,6 +841,24 @@ impl InputMap {
                     .action
                     .intent()
                     .is_some_and(|name| intents.contains(&name.as_str())),
+            },
+            Some(ModalBindings::Scoped { groups }) => match &record.tier {
+                BindingTier::Framework(record_group) => groups.contains(record_group),
+                BindingTier::Global => true,
+                BindingTier::Mode(mode)
+                    if self
+                        .mode_stack
+                        .iter()
+                        .any(|active| active.transient && active.name == *mode) =>
+                {
+                    true
+                }
+                BindingTier::Mode(_) | BindingTier::Default => {
+                    !record.path_matcher.as_str().is_empty()
+                        && !self.modal_enclosing.as_ref().is_some_and(|enclosing| {
+                            record.path_matcher.check_match(enclosing).is_some()
+                        })
+                }
             },
             Some(ModalBindings::Application) | None => !record.tier.is_framework(),
         }
@@ -936,11 +974,18 @@ impl InputMap {
         self.modal_bindings = bindings;
     }
 
+    /// Set the path enclosing the top modal's owner.
+    pub(crate) fn set_modal_enclosing(&mut self, enclosing: Option<Path>) {
+        self.modal_enclosing = enclosing;
+    }
+
     /// Return the first framework group the top modal admits, which names
     /// the modal.
     pub fn active_framework_group(&self) -> Option<FrameworkBindingGroup> {
         match self.modal_bindings {
-            Some(ModalBindings::Framework { groups, .. }) => groups.first().copied(),
+            Some(ModalBindings::Framework { groups, .. } | ModalBindings::Scoped { groups }) => {
+                groups.first().copied()
+            }
             Some(ModalBindings::Application) | None => None,
         }
     }

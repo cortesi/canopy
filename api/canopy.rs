@@ -2624,6 +2624,20 @@ pub mod input {
             /// Exact intent names the modal admits from application bindings.
             intents: &'static [&'static str],
         },
+        /// Admit these framework groups first, then every global binding, the
+        /// application bindings scoped to the owner's subtree, and the bindings
+        /// of a transient mode, on the bounded modal route.
+        ///
+        /// A binding is scoped to the owner's subtree when it names a path that
+        /// does not also match the path enclosing the owner. A host's menu keys
+        /// scoped to the owner reach the modal, and so do the keys of a menu they
+        /// open, while bindings with no path, or with a path that names a region
+        /// around the owner, stay out. A modal that takes ordinary keys, such as
+        /// a table's arrows and letters, uses this to keep a host's menus.
+        Scoped {
+            /// Framework groups the modal admits, the owner's first.
+            groups: &'static [FrameworkBindingGroup],
+        },
         /// Admit ordinary application bindings on the bounded modal route.
         Application,
     }

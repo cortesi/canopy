@@ -290,6 +290,82 @@ fn modal_bindings_block_all_application_tiers() -> Result<()> {
 }
 
 #[test]
+fn a_scoped_modal_admits_bindings_scoped_to_its_owner_and_an_open_menu() -> Result<()> {
+    let mut map = InputMap::new();
+    let owner = "/root/view/reader";
+    let inside = "/root/view/reader/inspector/table";
+    bind(&mut map, BindingTier::Default, 'j', "", "Unscoped", 1)?;
+    bind(
+        &mut map,
+        BindingTier::Default,
+        'k',
+        "view",
+        "Around the owner",
+        2,
+    )?;
+    bind(
+        &mut map,
+        BindingTier::Default,
+        'v',
+        "**/reader/**/",
+        "Menu",
+        3,
+    )?;
+    bind(
+        &mut map,
+        BindingTier::Mode("menu".into()),
+        'n',
+        "",
+        "Menu item",
+        4,
+    )?;
+    bind_framework(
+        &mut map,
+        HELP,
+        InputSpec::Key('n'.into()),
+        "**/inspector/**/",
+        "Next match",
+        command("inspector::next_match"),
+    )?;
+    map.set_modal_bindings(Some(ModalBindings::Scoped { groups: &[HELP] }));
+    map.set_modal_enclosing(Some(Path::from("/root/view")));
+
+    assert_eq!(
+        target(&map, inside, 'j'),
+        None,
+        "an unscoped binding stays out"
+    );
+    assert_eq!(
+        target(&map, inside, 'k'),
+        None,
+        "a binding scoped to a region around the owner stays out"
+    );
+    assert_eq!(
+        target(&map, inside, 'v'),
+        Some(BindingAction::Script(script(3))),
+        "a binding scoped to the owner reaches the modal"
+    );
+    assert_eq!(
+        target(&map, owner, 'v'),
+        Some(BindingAction::Script(script(3)))
+    );
+    assert_eq!(
+        target(&map, inside, 'n'),
+        Some(BindingAction::Command(command("inspector::next_match"))),
+        "the modal's group takes its keys"
+    );
+
+    map.open_menu("menu")?;
+    assert_eq!(
+        target(&map, inside, 'n'),
+        Some(BindingAction::Script(script(4))),
+        "a menu opened inside the modal takes its keys first"
+    );
+    map.close_menu();
+    Ok(())
+}
+
+#[test]
 fn a_transient_mode_hides_older_modes_and_the_default_tier() -> Result<()> {
     let mut map = InputMap::new();
     let default = bind(&mut map, BindingTier::Default, 'a', "", "Default", 1)?;

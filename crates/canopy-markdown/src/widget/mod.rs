@@ -47,7 +47,10 @@ use crate::{
         HostAction, HostOutcome, HostReply, HostRequest, Requests, Resource, ResourceKind,
         ResourceRequest,
     },
-    inspector::{Inspector, InspectorContent, InspectorEvent, InspectorHandle, OutlineEntry},
+    inspector::{
+        Inspector, InspectorContent, InspectorEvent, InspectorHandle, InspectorOptions,
+        OutlineEntry,
+    },
     presentation::{EmbedInfo, GeometryKey, Supplied, style_rules},
     search::{SearchAddress, SearchCase, SearchLimits, SearchMode, SearchQuery, SearchResults},
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
@@ -74,6 +77,8 @@ pub struct ReaderPosition {
 
 /// Nodes mounted under one persistent reader root.
 struct Nodes {
+    /// Stack that holds the reader column and, over it, an open inspector.
+    layers: NodeId,
     /// Common allocation that hosts exactly one visible reading surface.
     body: NodeId,
     /// Persistent rendered surface, with optional cached prepared geometry.
@@ -710,6 +715,12 @@ impl Markdown {
     ) -> Result<()> {
         self.options.source_wrap = wrap;
         self.options.line_numbers = numbers;
+        // An open table shows row numbers whenever source shows line
+        // numbers, so one preference numbers both.
+        if let Some(open) = &self.inspector {
+            open.handle
+                .set_row_numbers(ctx, numbers != LineNumbers::None)?;
+        }
         self.generation += 1;
         self.last_submitted = None;
         self.schedule(ctx, true)
@@ -717,6 +728,9 @@ impl Markdown {
     /// Enter or leave the rendered object-navigation mode.
     #[command]
     pub fn set_mode(&mut self, ctx: &mut dyn Context, mode: Mode) -> Result<()> {
+        if mode == Mode::Interact && self.inspector.is_some() {
+            return Ok(());
+        }
         if mode == Mode::Interact {
             if let Some(nodes) = &self.nodes {
                 ctx.with_widget_mut(nodes.rendered, |surface: &mut RenderedSurface, ctx| {
@@ -736,6 +750,9 @@ impl Markdown {
     /// Extend or start rendered text selection at the reading position.
     #[command]
     pub fn select_text(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        if self.inspector.is_some() {
+            return Ok(());
+        }
         if self.active != ViewType::Rendered {
             return Err(invalid("Text selection command belongs to Rendered"));
         }
@@ -783,6 +800,9 @@ impl Markdown {
     /// Resume tail following explicitly.
     #[command]
     pub fn follow(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        if self.inspector.is_some() {
+            return Ok(());
+        }
         self.shared.borrow_mut().follow = Follow::Following;
         self.reveal_tail(ctx)?;
         self.update_chrome(ctx)
@@ -1243,6 +1263,9 @@ impl Markdown {
     /// Inspect a pinned snapshot of the displayed source.
     #[command]
     pub fn inspect_source(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        if self.inspector.is_some() {
+            return Ok(());
+        }
         let Some(snapshot) = self.displayed.clone() else {
             return Ok(());
         };
@@ -1252,6 +1275,9 @@ impl Markdown {
     /// Open the current rendered heading outline.
     #[command]
     pub fn outline(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        if self.inspector.is_some() {
+            return Ok(());
+        }
         let Some(p) = self.shared.borrow().presentation.clone() else {
             return Ok(());
         };
@@ -1277,19 +1303,23 @@ impl Markdown {
             return Err(invalid("Close the current inspector first"));
         }
         self.shared.borrow_mut().follow = Follow::Paused;
-        let body = self
+        // The inspector lies over the whole reader, its status row included.
+        let layers = self
             .nodes
             .as_ref()
-            .map(|nodes| nodes.body)
+            .map(|nodes| nodes.layers)
             .ok_or_else(|| invalid("The reader is not mounted"))?;
         let handle = Inspector::open_configured(
             ctx,
-            body,
+            layers,
             self.options.executor.clone(),
             content,
-            self.options.clipboard,
-            self.options.copy_limit,
-            self.options.syntax_limit,
+            InspectorOptions {
+                allow_copy: self.options.clipboard,
+                copy_limit: self.options.copy_limit,
+                syntax_limit: self.options.syntax_limit,
+                row_numbers: self.options.line_numbers != LineNumbers::None,
+            },
         )?;
         self.inspector = Some(OpenInspector {
             handle,
@@ -1684,6 +1714,15 @@ impl Markdown {
             )?;
         }
         Ok(())
+    }
+    /// Copy what the reader shows: the inspected table, code block, or link
+    /// while an inspector is open, and the exact displayed source otherwise.
+    #[command(enabled = "copy_status")]
+    pub fn copy_view(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        if let Some(open) = &self.inspector {
+            return open.handle.copy_all(ctx);
+        }
+        self.copy_source(ctx)
     }
     /// Copy the exact displayed source, including its final newline.
     #[command(enabled = "copy_status")]
@@ -2337,17 +2376,29 @@ impl Widget for Markdown {
                 .map_err(invalid)?,
         );
         let target = CommandTarget::Exact(owner);
-        let search = ctx.add_child(
+        // The reader column, and over it an open inspector. The stack is a
+        // child of its own, so a host's layout override on the reader leaves
+        // it whole.
+        let layers = ctx.add_child(
             owner,
+            Container::new(Layout::fill().direction(Direction::Stack)).with_name("markdown_layers"),
+        )?;
+        let reader = ctx.add_child(
+            layers,
+            Container::new(Layout::fill().direction(Direction::Column))
+                .with_name("markdown_reader"),
+        )?;
+        let search = ctx.add_child(
+            reader,
             SearchBar::new()
                 .with_on_change(Self::spec_search_changed().call().with_target(target))
                 .with_on_submit(Self::call_submit_search().with_target(target))
                 .with_on_cancel(Self::call_clear_search().with_target(target)),
         )?;
         ctx.set_hidden(search.into(), true)?;
-        let body = ctx.add_child(owner, Container::stack().with_name("markdown_body"))?;
+        let body = ctx.add_child(reader, Container::stack().with_name("markdown_body"))?;
         // The override replaces the container's own layout, so it names the
-        // stack again: an open inspector lies over the reading surface.
+        // stack again: the source surface lies over the rendered one.
         ctx.set_layout_override(
             body.into(),
             Layout::fill()
@@ -2362,13 +2413,14 @@ impl Widget for Markdown {
         )?;
         let rendered = ctx.add_child(body, RenderedSurface::new(self.shared.clone()))?;
         let chrome = ctx.add_child(
-            owner,
+            reader,
             Chrome {
                 state: self.chrome.clone(),
                 owner,
             },
         )?;
         self.nodes = Some(Nodes {
+            layers: layers.into(),
             body: body.into(),
             rendered: rendered.into(),
             source: None,
@@ -2668,6 +2720,13 @@ fn outline_entries(document: &DocumentSnapshot) -> Vec<OutlineEntry> {
         .collect()
 }
 
+/// Where the reader's own bindings apply: the reader itself, which a host may
+/// focus, and its reading column. An open inspector lies beside the column,
+/// so the reader's keys never reach into it. A key the inspector leaves
+/// unhandled still bubbles to the reader, so the reader's commands do nothing
+/// while an inspector covers it.
+const READER_PATHS: [&str; 2] = ["**/markdown/", "**/markdown_layers/markdown_reader/**/"];
+
 impl Register for Markdown {
     fn register(setup: &mut Setup) -> Result<()> {
         setup.add_commands::<Self>()?;
@@ -2699,20 +2758,22 @@ impl Register for Markdown {
             ("n", "Next match", Self::call_search_next(1i32)),
             ("N", "Previous match", Self::call_search_next(-1i32)),
         ] {
-            setup.bind(
-                Key::parse_spec(key)?,
-                BindingOptions {
-                    show_in_help: true,
-                    path: Some("**/markdown/**/".parse()?),
-                    tier: BindingTier::Default,
-                    description: description.into(),
-                    source: None,
-                    phase: key
-                        .starts_with("ctrl-")
-                        .then_some(BindingPhase::BeforeWidget),
-                },
-                BindingAction::Command(call),
-            )?;
+            for path in READER_PATHS {
+                setup.bind(
+                    Key::parse_spec(key)?,
+                    BindingOptions {
+                        show_in_help: true,
+                        path: Some(path.parse()?),
+                        tier: BindingTier::Default,
+                        description: description.into(),
+                        source: None,
+                        phase: key
+                            .starts_with("ctrl-")
+                            .then_some(BindingPhase::BeforeWidget),
+                    },
+                    BindingAction::Command(call.clone()),
+                )?;
+            }
         }
         // Dormant intents allow Source to retain normal host focus traversal.
         // Disabled command bindings would consume Tab even when ineligible.
@@ -2734,18 +2795,20 @@ impl Register for Markdown {
             ),
         ] {
             setup.register_intent(IntentSpec::new(name, description)?)?;
-            setup.bind(
-                Key::parse_spec(key)?,
-                BindingOptions {
-                    show_in_help: true,
-                    path: Some("**/markdown/**/".parse()?),
-                    tier: BindingTier::Default,
-                    description: description.into(),
-                    source: None,
-                    phase: None,
-                },
-                BindingAction::Intent(IntentName::new(name)?),
-            )?;
+            for path in READER_PATHS {
+                setup.bind(
+                    Key::parse_spec(key)?,
+                    BindingOptions {
+                        show_in_help: true,
+                        path: Some(path.parse()?),
+                        tier: BindingTier::Default,
+                        description: description.into(),
+                        source: None,
+                        phase: None,
+                    },
+                    BindingAction::Intent(IntentName::new(name)?),
+                )?;
+            }
         }
         for (key, nav) in [
             ("Up", NavIntent::Up),

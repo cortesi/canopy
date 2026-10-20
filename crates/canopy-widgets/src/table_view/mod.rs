@@ -256,6 +256,14 @@ impl TableView {
     pub fn set_copy_limit(&mut self, bytes: usize) {
         self.options.copy_bytes = bytes;
     }
+    /// Show or hide the fixed row-number gutter.
+    pub fn set_row_numbers(&mut self, show: bool) {
+        self.options.row_numbers = show;
+    }
+    /// Return whether the row-number gutter shows.
+    pub fn row_numbers(&self) -> bool {
+        self.options.row_numbers
+    }
     /// Displayed geometry and data.
     pub fn table(&self) -> &Arc<PreparedTable> {
         &self.table
@@ -307,6 +315,14 @@ impl TableView {
     /// Pending host event count and aggregate text/key bytes.
     pub fn pending_events(&self) -> (usize, usize) {
         (self.events.len(), self.event_bytes)
+    }
+    /// Return the cursor's one-based coordinates, for automation.
+    /// @return "row,column", or "" when the table is empty.
+    #[command]
+    #[must_use]
+    pub fn cursor_position(&self) -> String {
+        self.cursor
+            .map_or_else(String::new, |(r, c)| format!("{},{}", r + 1, c + 1))
     }
     /// Move by cells, clamping at every edge. Empty data consumes a no-op.
     #[command]
@@ -917,6 +933,9 @@ impl Widget for TableView {
                 row_numbers: false,
             };
             if self.options.header {
+                // The band runs across the whole view, over the gutter and
+                // the scrollbar column too, so it reads as one bar.
+                render.fill("table/header", Rect::new(0, 0, outer.w, header), ' ')?;
                 geometry.paint(
                     render,
                     Rect::new(self.gutter(), 0, body.content.w, header),

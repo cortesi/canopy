@@ -60,9 +60,16 @@ kinds set the tones, and the common labels of other tools, such as Obsidian's
 kind. `AlertTone::of` lists them. A marker must stand alone on the quote's
 first line, as GitHub requires; an unknown label stays quote text.
 
-An inspector opens over the reader itself, so it fills the reader's area and
-leaves the rest of the host visible. It takes focus and the keys until it
-closes, and the document's scrollbars hide while it covers the document.
+An inspector takes the reader's place: it covers the whole reader, its status
+row included, with no frame or buttons of its own, and leaves the rest of the
+host visible. A status row shows a prompt or the outcome of an action, and
+hides otherwise. The inspector takes focus until it closes, and the document's
+scrollbars hide while it covers the document. Its modal admits the host's
+bindings scoped to the reader, and the keys of a menu they open, so a host's
+menus still reach it; bindings with no path stay out, so a table keeps its own
+keys. A table numbers its rows while source shows line numbers, so one
+preference toggles both. `Markdown::copy_view` copies what the reader shows:
+the inspected table, code block, or link, or the displayed source.
 
 Source preserves Markdown syntax, tabs, CRLF, and final-newline bytes. Its display
 substitutes unsafe terminal controls, but exact copy uses accepted source ranges.
