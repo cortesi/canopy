@@ -213,6 +213,12 @@ impl Key {
             }
         }
 
+        // A terminal reports Shift+Tab as BackTab, so both name one key.
+        if normalized.key == KeyCode::BackTab {
+            normalized.key = KeyCode::Tab;
+            normalized.mods.shift = true;
+        }
+
         // Shift is folded into the character it produced, except for space,
         // which keeps it.
         if normalized.mods.shift
@@ -469,6 +475,15 @@ impl fmt::Display for Key {
 #[cfg(test)]
 mod tests {
     use crate::{error::Result, input::key::*};
+
+    #[test]
+    fn a_back_tab_normalizes_to_shift_tab() {
+        assert_eq!(
+            Key::from(KeyCode::BackTab).normalize(),
+            Shift + KeyCode::Tab
+        );
+        assert_eq!((Shift + KeyCode::BackTab).normalize(), Shift + KeyCode::Tab);
+    }
 
     #[test]
     fn normalize() -> Result<()> {

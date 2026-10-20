@@ -242,7 +242,12 @@ fn caps_locked(c: char, state: cevent::KeyEventState) -> char {
 fn translate_event(e: cevent::Event) -> Event {
     match e {
         cevent::Event::Key(k) => Event::Key(key::Key {
-            mods: translate_key_modifiers(k.modifiers),
+            // A terminal reports Shift+Tab as BackTab, often without Shift.
+            mods: key::Mods {
+                shift: k.code == cevent::KeyCode::BackTab
+                    || k.modifiers.contains(cevent::KeyModifiers::SHIFT),
+                ..translate_key_modifiers(k.modifiers)
+            },
             key: match k.code {
                 cevent::KeyCode::Backspace => key::KeyCode::Backspace,
                 cevent::KeyCode::Enter => key::KeyCode::Enter,
@@ -255,7 +260,7 @@ fn translate_event(e: cevent::Event) -> Event {
                 cevent::KeyCode::PageUp => key::KeyCode::PageUp,
                 cevent::KeyCode::PageDown => key::KeyCode::PageDown,
                 cevent::KeyCode::Tab => key::KeyCode::Tab,
-                cevent::KeyCode::BackTab => key::KeyCode::BackTab,
+                cevent::KeyCode::BackTab => key::KeyCode::Tab,
                 cevent::KeyCode::Delete => key::KeyCode::Delete,
                 cevent::KeyCode::Insert => key::KeyCode::Insert,
                 cevent::KeyCode::F(x) => key::KeyCode::F(x),
@@ -346,6 +351,20 @@ mod tests {
     impl Drop for DropReader {
         fn drop(&mut self) {
             self.dropped.store(true, Ordering::Relaxed);
+        }
+    }
+
+    #[test]
+    fn a_terminal_back_tab_is_shift_tab() {
+        for modifiers in [cevent::KeyModifiers::NONE, cevent::KeyModifiers::SHIFT] {
+            let event = translate_event(cevent::Event::Key(cevent::KeyEvent::new(
+                cevent::KeyCode::BackTab,
+                modifiers,
+            )));
+            assert!(
+                matches!(event, Event::Key(key) if key == key::Shift + key::KeyCode::Tab),
+                "{modifiers:?}"
+            );
         }
     }
 
