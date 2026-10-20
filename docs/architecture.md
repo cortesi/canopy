@@ -630,7 +630,10 @@ through their `EvalTicket`. Crossterm, headless evaluation, and the test harness
 this driver.
 
 `TurnInput::Events` carries the input events that arrived together. The turn dispatches
-them in order and prepares one frame, so a burst of input costs one render. Layout
+them in order and prepares one frame, so a burst of input costs one render.
+Before each event after the first, the turn polls the nodes that earlier events
+woke, so work an input leaves for a poll, such as closing an inspector, lands
+before the next input, as it would had the inputs arrived apart. Layout
 settles before each mouse event that follows another event, so hit testing sees
 current geometry. The terminal adapter drains waiting input into a bounded batch
 and collapses consecutive pointer moves, and drags with the same button, to the

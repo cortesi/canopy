@@ -428,11 +428,28 @@ impl Canopy {
                 if self.core.exit_requested.is_some() {
                     break;
                 }
+                // Work an earlier input woke, such as closing an inspector
+                // that escape asked to close, lands before the next input,
+                // as it would had the inputs arrived apart.
+                self.poll_woken()?;
                 if matches!(event, Event::Mouse(_)) {
                     self.settle_layout()?;
                 }
             }
             self.event(event)?;
+        }
+        Ok(())
+    }
+
+    /// Poll each live node whose wake is pending, once.
+    fn poll_woken(&mut self) -> Result<()> {
+        let mut woken = self.core.wake_registry.drain()?;
+        woken.sort_unstable();
+        woken.dedup_by_key(|stamp| (stamp.node, stamp.incarnation));
+        for stamp in woken {
+            if self.core.work_stamp_valid(stamp) {
+                self.poll_node(stamp.node)?;
+            }
         }
         Ok(())
     }

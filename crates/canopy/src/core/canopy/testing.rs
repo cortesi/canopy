@@ -116,9 +116,10 @@ mod tests {
 
     use super::*;
     use crate::{
-        Context, Widget,
+        Context, EventOutcome, ViewContext, Widget,
         error::ScriptErrorKind,
         geom::Size,
+        input::{Event, key::Key},
         runtime::{NodeWakeHandle, NoticeSource, PollLifetime, TurnInput, wake_channel},
     };
 
@@ -209,6 +210,72 @@ mod tests {
         canopy.turn(TurnInput::Wake)?;
         assert_eq!(counter.count.get(), 3, "the send polled the owner");
         assert_eq!(receiver.try_recv().ok(), Some(7));
+        Ok(())
+    }
+
+    /// A widget whose `a` key leaves work for its poll, and whose `b` key
+    /// records whether that work was done.
+    #[derive(Clone, Default)]
+    struct DeferredKeys {
+        wake: Rc<RefCell<Option<NodeWakeHandle>>>,
+        pending: Rc<Cell<bool>>,
+        seen_pending: Rc<RefCell<Vec<bool>>>,
+    }
+
+    impl Widget for DeferredKeys {
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+            true
+        }
+
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            *self.wake.borrow_mut() = Some(ctx.wake_handle(PollLifetime::Node)?);
+            ctx.set_focus(ctx.node_id())?;
+            Ok(())
+        }
+
+        fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+            let Event::Key(key) = event else {
+                return Ok(EventOutcome::Ignore);
+            };
+            if *key == 'a' {
+                self.pending.set(true);
+                self.wake.borrow().as_ref().expect("mounted wake").wake()?;
+            } else if *key == 'b' {
+                self.seen_pending.borrow_mut().push(self.pending.get());
+            }
+            Ok(EventOutcome::Handle)
+        }
+
+        fn key_outcome(&self, key: Key, _ctx: &dyn ViewContext) -> EventOutcome {
+            if key == 'a' || key == 'b' {
+                EventOutcome::Handle
+            } else {
+                EventOutcome::Ignore
+            }
+        }
+
+        fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {
+            self.pending.set(false);
+            Ok(None)
+        }
+    }
+
+    #[test]
+    fn a_key_sees_the_work_an_earlier_key_in_its_batch_woke() -> Result<()> {
+        let widget = DeferredKeys::default();
+        let mut canopy = crate::CanopyBuilder::new().build()?;
+        canopy.replace_root(widget.clone())?;
+        canopy.set_screen_size(Size::new(10, 2))?;
+        canopy.turn(TurnInput::Prepare)?;
+        canopy.turn(TurnInput::Events(vec![
+            Event::Key(Key::from('a')),
+            Event::Key(Key::from('b')),
+        ]))?;
+        assert_eq!(
+            *widget.seen_pending.borrow(),
+            [false],
+            "the poll the first key woke runs before the second key"
+        );
         Ok(())
     }
 
