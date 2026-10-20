@@ -2550,3 +2550,26 @@ fn an_item_is_what_interact_or_a_selection_chose() {
         .unwrap();
     assert!(!has_item(&mut harness), "leaving Interact drops the link");
 }
+
+#[test]
+fn an_html_card_opens_its_own_source_rather_than_the_document() {
+    let block = "<div>\n  <p>inside</p>\n</div>\n";
+    let text = format!("# Title\n\n{block}\nAfter the block.\n");
+    let (mut harness, manual) = fixture(&text, ViewType::Rendered, false, true, false);
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.activate(ctx))
+        .unwrap();
+    manual.run_until_idle();
+    harness.canopy.turn(TurnInput::Prepare).unwrap();
+    harness
+        .with_unique(|inspector: &mut Inspector, ctx| inspector.copy_all(ctx))
+        .unwrap();
+    service(&mut harness);
+    settle(&mut harness, &manual);
+    harness.with_root_widget(|reader: &mut Markdown| {
+        let requests = reader.take_requests(10);
+        assert_eq!(requests.len(), 1, "{requests:?}");
+        assert_eq!(requests[0].action, HostAction::CopyText(block.into()));
+    });
+}

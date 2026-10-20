@@ -1179,9 +1179,23 @@ impl Markdown {
                 };
                 InspectorContent::Table { table }
             }
-            ObjectKind::Source => InspectorContent::Source {
-                snapshot: p.document.source.clone(),
-            },
+            // The fallback for a document past a bound covers the whole
+            // source, which the source inspector shows exactly.
+            ObjectKind::Source if object.source == (0..p.document.source.len()) => {
+                InspectorContent::Source {
+                    snapshot: p.document.source.clone(),
+                }
+            }
+            // A source card, such as an HTML block, shows its own bytes.
+            ObjectKind::Source => {
+                let Some(text) = p.document.source.slice(object.source.clone()) else {
+                    return Ok(());
+                };
+                InspectorContent::Code {
+                    info: String::new(),
+                    text: Arc::from(text),
+                }
+            }
             ObjectKind::Footnote { label } => {
                 let byte = p.document.blocks.iter().find_map(|b| {
                     if let BlockKind::Footnote { label: other } = &b.kind {
