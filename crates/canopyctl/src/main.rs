@@ -18,7 +18,7 @@ use std::{
     env,
     fmt::Display,
     fs,
-    io::{self, Write},
+    io::{self, BufRead, Write},
     path::{Path, PathBuf},
     process::{self, Stdio, exit, id},
     result,
@@ -86,7 +86,7 @@ enum Commands {
     Keys(KeysArgs),
     /// Print the screen of an app hosted with `run --pty`, as its terminal
     /// shows it.
-    Screen(HostArgs),
+    Screen(ScreenArgs),
     /// Stop an app hosted with `run --pty`.
     Stop(HostArgs),
 }
@@ -125,15 +125,30 @@ struct HostArgs {
     socket: PathBuf,
 }
 
+/// Arguments for `canopyctl screen`.
+#[derive(Args)]
+struct ScreenArgs {
+    /// The hosted app's live socket, as `run --pty` printed it.
+    #[arg(long)]
+    socket: PathBuf,
+    /// Wait until the screen shows this text, for a result that arrives
+    /// later, such as a worker's.
+    #[arg(long)]
+    until: Option<String>,
+}
+
 /// Arguments for `canopyctl keys`.
 #[derive(Args)]
 struct KeysArgs {
     /// The hosted app's live socket, as `run --pty` printed it.
     #[arg(long)]
     socket: PathBuf,
-    /// Print the screen once the keys settle.
+    /// Print the screen once the app has drawn the keys.
     #[arg(long)]
     screen: bool,
+    /// Wait until the screen shows this text, then print it.
+    #[arg(long)]
+    until: Option<String>,
     /// Input in order: a key, as a character or a name such as `enter`,
     /// `esc`, `tab`, or `up`, with optional modifiers such as `ctrl+c`; or
     /// `:` and text to type as it stands, such as `:/links`.
@@ -291,6 +306,18 @@ struct KeysRequest {
     /// `i`, `enter`, `esc`, `up`, or `ctrl+c`, or `:` and text to type as it
     /// stands, such as `:/links`. A lone `:` presses the colon key.
     keys: Vec<String>,
+    /// Wait until the screen shows this text, for a result that arrives
+    /// after the keys, such as a worker's.
+    until: Option<String>,
+}
+
+/// Tool params for the `screen` tool.
+#[derive(Debug, Clone, PartialEq)]
+#[tool_params]
+struct ScreenRequest {
+    /// Wait until the screen shows this text, for a result that arrives
+    /// later, such as a worker's.
+    until: Option<String>,
 }
 
 /// Tool params for the `connect` tool.
@@ -348,13 +375,14 @@ impl CanopyctlMcpServer {
 
     #[tool]
     /// Press keys in the launched app's terminal, as a person types them, and
-    /// return the screen once it settles.
+    /// return the screen once the app has drawn them.
     async fn keys(&self, params: KeysRequest) -> ToolResult<CallToolResult> {
         terminal_tool(
             &self.sessions,
             TermRequest {
                 keys: params.keys,
                 screen: true,
+                until: params.until,
                 stop: false,
             },
         )
@@ -362,12 +390,14 @@ impl CanopyctlMcpServer {
     }
 
     #[tool(read_only)]
-    /// Return the launched app's screen as its terminal shows it.
-    async fn screen(&self) -> ToolResult<CallToolResult> {
+    /// Return the launched app's screen as its terminal shows it, once the
+    /// terminal has read the app's latest frame.
+    async fn screen(&self, params: ScreenRequest) -> ToolResult<CallToolResult> {
         terminal_tool(
             &self.sessions,
             TermRequest {
                 screen: true,
+                until: params.until,
                 ..TermRequest::default()
             },
         )
@@ -485,7 +515,7 @@ async fn host_command(config: &LoadedConfig, args: RunArgs, size: ScreenSize) ->
         None => temp_socket_path(&config.config_dir)?,
     };
     let command = config.run_command(&args.command, &socket)?;
-    let host = TermHost::launch(
+    let mut host = TermHost::launch(
         &command,
         socket.clone(),
         size,
@@ -493,11 +523,13 @@ async fn host_command(config: &LoadedConfig, args: RunArgs, size: ScreenSize) ->
     )
     .await?;
     if let Some(fixture) = args.fixture {
-        let mut session = Session::connect_live(&socket).await?;
-        session.apply_fixture(fixture).await?;
+        host.session_mut().apply_fixture(fixture).await?;
     }
+    let listener = host.bind_control()?;
+    // The socket is the readiness signal a detached launcher reads.
     println!("{}", socket.display());
-    host.serve_control().await?;
+    io::stdout().flush()?;
+    host.serve_control(listener).await?;
     // A detached host logs only what fails, so a clean exit leaves no log.
     if detached {
         drop(fs::remove_file(term::log_path(&socket)));
@@ -532,23 +564,25 @@ async fn detach_host(config: &LoadedConfig, args: &RunArgs, size: ScreenSize) ->
     command
         .current_dir(&config.config_dir)
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(output)
         .process_group(0);
     let mut child = command.spawn().context("spawn the terminal host")?;
-    let control = term::control_path(&socket);
-    let started = Instant::now();
-    while !control.exists() {
-        if let Some(status) = child.try_wait()? {
-            let reason = fs::read_to_string(&log).unwrap_or_default();
-            bail!("the terminal host exited ({status}):\n{reason}");
-        }
-        if started.elapsed() >= Duration::from_secs(args.ready_timeout) {
-            bail!("timed out waiting for {}", control.display());
-        }
-        sleep(Duration::from_millis(100)).await;
+    // The host prints its socket once it serves control requests, and a host
+    // that fails exits, which ends the read. Its own ready timeout bounds both.
+    let stdout = child.stdout.take().context("the host's output")?;
+    let mut ready = String::new();
+    io::BufReader::new(stdout).read_line(&mut ready)?;
+    if ready.trim().is_empty() {
+        let status = child.wait()?;
+        let reason = fs::read_to_string(&log).unwrap_or_default();
+        drop(fs::remove_file(&log));
+        bail!(
+            "the terminal host exited ({status}):\n{}",
+            reason.trim_end()
+        );
     }
-    println!("{}", socket.display());
+    println!("{}", ready.trim());
     Ok(())
 }
 
@@ -559,6 +593,7 @@ async fn keys_command(args: KeysArgs) -> Result<()> {
         &TermRequest {
             keys: args.keys,
             screen: args.screen,
+            until: args.until,
             stop: false,
         },
     )
@@ -570,11 +605,12 @@ async fn keys_command(args: KeysArgs) -> Result<()> {
 }
 
 /// Execute `canopyctl screen`.
-async fn screen_command(args: HostArgs) -> Result<()> {
+async fn screen_command(args: ScreenArgs) -> Result<()> {
     let response = term::send(
         &args.socket,
         &TermRequest {
             screen: true,
+            until: args.until,
             ..TermRequest::default()
         },
     )

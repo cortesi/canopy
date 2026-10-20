@@ -215,9 +215,21 @@ The host serves a control socket beside it, at the socket path plus `.term`.
 `keys` presses its input in order, through the terminal. Each entry is a key,
 such as `j`, `enter`, `esc`, `up`, or `ctrl+c`, or `:` and text to type as it
 stands, such as `:/needle`. A lone `:` presses the colon key. `--screen`
-prints the screen once the app settles, and `screen` prints it at any time.
-`eval`, `smoke`, and `replay` take `--socket` to run against the hosted app.
-`stop` hangs up the terminal, which ends the app.
+prints the screen once the app has drawn the keys, and `screen` prints it at
+any time. `--until TEXT` on either waits until the screen shows the text, for
+a result that arrives later, such as a worker's. `eval`, `smoke`, and
+`replay` take `--socket` to run against the hosted app. `stop` hangs up the
+terminal, which ends the app.
+
+The host never judges from elapsed or quiet time whether the app is done.
+After it sends keys, it waits on the live socket until `canopy.input_count()`
+has risen by the keys it sent. A bare escape goes alone, and the next key
+waits until the app has taken it, because a terminal reads an escape and the
+key after it in one read as that key with Alt. To read the screen, the host
+calls `canopy.terminal_apc` with a marker payload, which the app writes to the
+terminal after its frame, and waits until the terminal has read the marker.
+Terminal output is ordered, so the terminal has then read the frame. Its
+timeouts only turn a hang into an error.
 
 `canopyctl mcp` has the same tools. `launch` hosts the app and connects the
 script tools to it; `keys` and `screen` drive and read its terminal; and

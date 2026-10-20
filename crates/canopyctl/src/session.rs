@@ -146,15 +146,20 @@ impl Session {
     }
 }
 
+/// The connection a session manager holds.
+enum Current {
+    /// A headless app, or a live app that canopyctl did not start.
+    Session(Session),
+    /// An app canopyctl hosts in a terminal, with its live session.
+    Hosted(TermHost),
+}
+
 /// Shared session manager used by the CLI and proxy MCP server.
 pub struct SessionManager {
     /// Loaded CLI configuration.
     config: LoadedConfig,
-    /// Current session, if any.
-    state: Mutex<Option<Session>>,
-    /// The terminal hosting the current session's app, if canopyctl launched
-    /// it.
-    host: Mutex<Option<TermHost>>,
+    /// Current connection, if any.
+    state: Mutex<Option<Current>>,
     /// Last observed tool activity time.
     pub(crate) last_activity: Mutex<Instant>,
 }
@@ -165,7 +170,6 @@ impl SessionManager {
         Self {
             config,
             state: Mutex::new(None),
-            host: Mutex::new(None),
             last_activity: Mutex::new(Instant::now()),
         }
     }
@@ -180,7 +184,7 @@ impl SessionManager {
         *self.last_activity.lock().await = Instant::now();
         let mut state = self.state.lock().await;
         self.release(&mut state).await?;
-        *state = Some(Session::connect_live(socket).await?);
+        *state = Some(Current::Session(Session::connect_live(socket).await?));
         Ok(())
     }
 
@@ -196,26 +200,20 @@ impl SessionManager {
         *self.last_activity.lock().await = Instant::now();
         let mut state = self.state.lock().await;
         self.release(&mut state).await?;
-        let host = TermHost::launch(command, socket.clone(), size, ready).await?;
-        let session = match Session::connect_live(&socket).await {
-            Ok(session) => session,
-            Err(error) => {
-                host.stop().await?;
-                return Err(error);
-            }
-        };
-        *self.host.lock().await = Some(host);
-        *state = Some(session);
+        let host = TermHost::launch(command, socket, size, ready).await?;
+        *state = Some(Current::Hosted(host));
         Ok(())
     }
 
     /// Serve one request on the terminal hosting the current app.
     pub async fn terminal(&self, request: &TermRequest) -> Result<TermResponse> {
         *self.last_activity.lock().await = Instant::now();
-        let host = self.host.lock().await;
-        let host = host
-            .as_ref()
-            .context("no app is hosted in a terminal; launch one first")?;
+        // The host acknowledges input through the app's session, which the
+        // state lock also guards from script tools.
+        let mut state = self.state.lock().await;
+        let Some(Current::Hosted(host)) = state.as_mut() else {
+            bail!("no app is hosted in a terminal; launch one first");
+        };
         host.serve(request).await
     }
 
@@ -226,15 +224,14 @@ impl SessionManager {
         self.release(&mut state).await
     }
 
-    /// Shut down the session in `state` and any app canopyctl hosts. The
-    /// caller holds the state lock, so no operation sees a half-released
-    /// session.
-    async fn release(&self, state: &mut Option<Session>) -> Result<()> {
-        if let Some(session) = state.take() {
-            session.shutdown().await;
-        }
-        if let Some(host) = self.host.lock().await.take() {
-            host.stop().await?;
+    /// Shut down the connection in `state`, and the app if canopyctl hosts
+    /// it. The caller holds the state lock, so no operation sees a
+    /// half-released connection.
+    async fn release(&self, state: &mut Option<Current>) -> Result<()> {
+        match state.take() {
+            Some(Current::Session(session)) => session.shutdown().await,
+            Some(Current::Hosted(host)) => host.stop().await?,
+            None => {}
         }
         Ok(())
     }
@@ -245,10 +242,13 @@ impl SessionManager {
         let mut state = self.state.lock().await;
         if state.is_none() {
             let command = self.config.headless_command(&[])?;
-            *state = Some(Session::spawn_headless(&command).await?);
+            *state = Some(Current::Session(Session::spawn_headless(&command).await?));
         }
         Ok(MutexGuard::map(state, |state| {
-            state.as_mut().expect("session installed above")
+            match state.as_mut().expect("session installed above") {
+                Current::Session(session) => session,
+                Current::Hosted(host) => host.session_mut(),
+            }
         }))
     }
 }
@@ -442,7 +442,7 @@ pub mod tests {
 
     pub async fn manager_with_session(session: Session) -> Result<Arc<SessionManager>> {
         let manager = Arc::new(SessionManager::new(LoadedConfig::load()?));
-        *manager.state.lock().await = Some(session);
+        *manager.state.lock().await = Some(Current::Session(session));
         Ok(manager)
     }
 
