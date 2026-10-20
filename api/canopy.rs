@@ -4567,10 +4567,6 @@ pub mod runtime {
     ) -> (WakeSender<T>, std::sync::mpsc::Receiver<T>);
 }
 
-#[expect(
-    clippy::multiple_inherent_impl,
-    reason = "LuauHost methods are split by compilation and detached invocation concerns."
-)]
 pub mod script {
     //! Scripting support.
 
@@ -5509,6 +5505,10 @@ pub mod style {
             pub frame_title: Color,
             /// Primary accent: focus and selection.
             pub accent: Color,
+            /// The box around the pane with focus among panes side by side, whose
+            /// ground leans toward it. It stays apart from the accent, which marks
+            /// selections inside the pane.
+            pub focus: Color,
             /// Foreground on panel backgrounds, one step away from `fg`.
             pub muted_fg: Color,
             /// Quiet foreground a step below `muted_fg`: placeholders, gutters, and
@@ -5544,8 +5544,8 @@ pub mod style {
 
         impl Palette {
             /// Return the ground of a pane that holds focus: the background tinted
-            /// toward the accent, so the pane that takes keys stands out among panes
-            /// side by side without a border.
+            /// faintly toward the focus colour, so the pane that takes keys stands
+            /// out among panes side by side.
             pub fn focus_bg(&self) -> Color;
 
             /// Build the shared rule set for this palette.

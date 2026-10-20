@@ -1,4 +1,5 @@
-//! Panes side by side, with dividers that show their scroll positions.
+//! Panes side by side, with dividers that show their scroll positions, and
+//! an optional frame that marks the pane with focus.
 
 use canopy::{
     Context, EventOutcome, NodeId, NodeName, ViewContext, Widget, derive_commands,
@@ -10,7 +11,10 @@ use canopy::{
     tree::FocusScope,
 };
 
-use crate::scrollbar::{Scrollbar, ScrollbarGlyphs, edge_track, pane_target};
+use crate::{
+    border::BoxGlyphs,
+    scrollbar::{Scrollbar, ScrollbarGlyphs, edge_track, pane_target},
+};
 
 /// Panes side by side, each followed by a divider.
 ///
@@ -23,6 +27,11 @@ use crate::scrollbar::{Scrollbar, ScrollbarGlyphs, edge_track, pane_target};
 /// trailing column stays blank while the last pane fits. Horizontal overflow
 /// scrolls through wheel input without a track.
 ///
+/// A framed row also draws a rule above and below the panes and a border
+/// left of the first, so each pane sits in a box that shares its sides with
+/// its neighbours. The box of the pane that holds focus draws with its own
+/// glyphs and `columns/divider/focused`, whatever the pane paints inside it.
+///
 /// `Columns` owns the scrollbars of its panes, so an enclosing frame draws none
 /// for them. Dividers use `columns/divider`, thumbs `columns/thumb`, and a
 /// thumb a drag holds `columns/thumb/active`.
@@ -31,6 +40,11 @@ pub struct Columns {
     glyphs: ScrollbarGlyphs,
     /// Thumbs drawn in the dividers.
     scrollbar: Scrollbar,
+    /// Glyphs of the frame around each pane, and of the box around the pane
+    /// with focus, or `None` for a row without a frame.
+    frame: Option<(BoxGlyphs, BoxGlyphs)>,
+    /// Panes that stand for focus held by the columns or an ancestor.
+    home: Vec<NodeId>,
 }
 
 #[derive_commands]
@@ -39,8 +53,35 @@ impl Columns {
     pub fn new() -> Self {
         Self {
             glyphs: ScrollbarGlyphs::THIN,
-            scrollbar: Self::scrollbar(ScrollbarGlyphs::THIN),
+            scrollbar: Self::scrollbar(ScrollbarGlyphs::THIN, false),
+            frame: None,
+            home: Vec::new(),
         }
+    }
+
+    /// Build columns that box each pane in `light` and the pane with focus
+    /// in `focused`.
+    ///
+    /// The frame takes a row above and below the panes and a column left of
+    /// the first. The dividers become the boxes' shared sides, and the
+    /// trailing column the last box's right side. Where two light boxes meet,
+    /// the rules join in a tee; beside the focused box, the junction takes
+    /// that box's corner.
+    #[must_use]
+    pub fn with_frame(mut self, light: BoxGlyphs, focused: BoxGlyphs) -> Self {
+        self.frame = Some((light, focused));
+        self.scrollbar = Self::scrollbar(self.glyphs, true);
+        self
+    }
+
+    /// Set the panes that stand for focus held by the columns or an
+    /// ancestor.
+    ///
+    /// A host that keeps focus above its panes while one of them takes its
+    /// keys names that pane here. While focus is on this widget or an
+    /// ancestor, the frame marks the first displayed pane of `panes`.
+    pub fn set_home(&mut self, panes: Vec<NodeId>) {
+        self.home = panes;
     }
 
     /// Build columns with replaced scrollbar glyphs.
@@ -50,15 +91,20 @@ impl Columns {
     #[must_use]
     pub fn with_scrollbar_glyphs(mut self, glyphs: ScrollbarGlyphs) -> Self {
         self.glyphs = glyphs;
-        self.scrollbar = Self::scrollbar(glyphs);
+        self.scrollbar = Self::scrollbar(glyphs, self.frame.is_some());
         self
     }
 
-    /// Build the divider thumb for a glyph set.
-    fn scrollbar(glyphs: ScrollbarGlyphs) -> Scrollbar {
-        Scrollbar::vertical("columns/thumb", glyphs.thumb_vertical)
-            .with_active("columns/thumb/active")
-            .with_track("columns/divider", glyphs.track_vertical)
+    /// Build the divider thumb for a glyph set. A frame draws every divider
+    /// itself, so the thumb draws no track over the focused box's sides.
+    fn scrollbar(glyphs: ScrollbarGlyphs, framed: bool) -> Scrollbar {
+        let scrollbar = Scrollbar::vertical("columns/thumb", glyphs.thumb_vertical)
+            .with_active("columns/thumb/active");
+        if framed {
+            scrollbar
+        } else {
+            scrollbar.with_track("columns/divider", glyphs.track_vertical)
+        }
     }
 
     /// Move focus to another displayed pane by a signed offset, wrapping
@@ -103,6 +149,89 @@ impl Columns {
         (x < own.w && y < own.h).then(|| Rect::new(x, y, 1, pane.h.min(own.h - y)))
     }
 
+    /// Return the displayed pane the frame marks: the pane on the focus path,
+    /// or the first displayed home pane while focus is on this widget or an
+    /// ancestor.
+    fn focused_pane(&self, ctx: &dyn ViewContext, panes: &[NodeId]) -> Option<NodeId> {
+        if let Some(pane) = panes.iter().find(|pane| ctx.is_on_focus_path(**pane)) {
+            return Some(*pane);
+        }
+        let focused = ctx.focused_node()?;
+        let mut node = Some(ctx.node_id());
+        while let Some(current) = node {
+            if current == focused {
+                return self.home.iter().find(|pane| panes.contains(pane)).copied();
+            }
+            node = ctx.parent_of(current);
+        }
+        None
+    }
+
+    /// Draw the boxes around `panes` in `light`, and around the pane with
+    /// focus in `focused`.
+    fn render_frame(
+        &self,
+        rndr: &mut Render,
+        ctx: &dyn ViewContext,
+        panes: &[NodeId],
+        (light, focused): (BoxGlyphs, BoxGlyphs),
+    ) -> Result<()> {
+        let own = ctx.view().outer;
+        if own.h < 2 {
+            return Ok(());
+        }
+        let focus = self.focused_pane(ctx, panes);
+        // Each displayed pane's columns, in this widget's outer coordinates,
+        // and whether it holds focus.
+        let spans: Vec<(u32, u32, bool)> = panes
+            .iter()
+            .filter_map(|pane| {
+                let outer = ctx.view_of(*pane)?.outer;
+                let x = u32::try_from(i64::from(outer.tl.x) - i64::from(own.tl.x)).ok()?;
+                Some((x, outer.w, focus == Some(*pane)))
+            })
+            .collect();
+        let Some(&(last_x, last_w, _)) = spans.last() else {
+            return Ok(());
+        };
+        let look = |lit: bool| {
+            if lit {
+                ("columns/divider/focused", focused)
+            } else {
+                ("columns/divider", light)
+            }
+        };
+        let bottom = own.h - 1;
+        for &(x, w, lit) in &spans {
+            let (style, glyphs) = look(lit);
+            rndr.fill(style, Rect::new(x, 0, w, 1), glyphs.horizontal)?;
+            rndr.fill(style, Rect::new(x, bottom, w, 1), glyphs.horizontal)?;
+        }
+        // A side lies left of each pane and right of the last, between the
+        // panes on either side of it.
+        for side in 0..=spans.len() {
+            let left = side.checked_sub(1).map(|pane| spans[pane].2);
+            let right = spans.get(side).map(|span| span.2);
+            let x = match spans.get(side) {
+                Some(&(x, _, _)) => x.saturating_sub(1),
+                None => last_x + last_w,
+            };
+            if x >= own.w {
+                continue;
+            }
+            let (style, glyphs) = look(left == Some(true) || right == Some(true));
+            rndr.fill(
+                style,
+                Rect::new(x, 1, 1, bottom.saturating_sub(1)),
+                glyphs.vertical,
+            )?;
+            let (top, low) = junctions(glyphs, left, right);
+            rndr.fill(style, Rect::new(x, 0, 1, 1), top)?;
+            rndr.fill(style, Rect::new(x, bottom, 1, 1), low)?;
+        }
+        Ok(())
+    }
+
     /// Return each divider track paired with the node it scrolls.
     fn tracks(ctx: &dyn ViewContext) -> Result<Vec<(NodeId, Rect)>> {
         let owner = ctx.node_id();
@@ -122,6 +251,20 @@ impl Columns {
     }
 }
 
+/// Return the glyphs where a side meets the top and bottom rules. `glyphs`
+/// draw the side, and `left` and `right` give whether the box on that side
+/// has focus, or `None` where no pane lies.
+///
+/// Beside the focused box the junction takes that box's corner and drops
+/// the light rule's arm, which would draw in the box's colour.
+fn junctions(glyphs: BoxGlyphs, left: Option<bool>, right: Option<bool>) -> (char, char) {
+    match (left, right) {
+        (Some(true), Some(true)) | (Some(false), Some(false)) => ('┬', '┴'),
+        (_, Some(true)) | (None, _) => (glyphs.topleft, glyphs.bottomleft),
+        (Some(true) | Some(false), _) => (glyphs.topright, glyphs.bottomright),
+    }
+}
+
 impl Default for Columns {
     fn default() -> Self {
         Self::new()
@@ -130,19 +273,28 @@ impl Default for Columns {
 
 impl Widget for Columns {
     fn layout(&self) -> Layout {
+        let padding = if self.frame.is_some() {
+            Edges::all(1)
+        } else {
+            Edges::new(0, 1, 0, 0)
+        };
         Layout::fill()
             .direction(Direction::Row)
             .gap(1)
-            .padding(Edges::new(0, 1, 0, 0))
+            .padding(padding)
     }
 
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let panes = Self::panes(ctx);
-        // The last pane's divider is the trailing column, which shows only a
-        // track.
-        for pane in panes.iter().take(panes.len().saturating_sub(1)) {
-            if let Some(divider) = Self::divider(ctx, *pane) {
-                rndr.fill("columns/divider", divider, self.glyphs.track_vertical)?;
+        if let Some(frame) = self.frame {
+            self.render_frame(rndr, ctx, &panes, frame)?;
+        } else {
+            // The last pane's divider is the trailing column, which shows
+            // only a track.
+            for pane in panes.iter().take(panes.len().saturating_sub(1)) {
+                if let Some(divider) = Self::divider(ctx, *pane) {
+                    rndr.fill("columns/divider", divider, self.glyphs.track_vertical)?;
+                }
             }
         }
         let tracks = Self::tracks(ctx)?;

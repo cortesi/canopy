@@ -1106,7 +1106,7 @@ mod tests {
     }
 
     #[test]
-    fn the_focus_ground_leans_from_the_background_toward_the_accent() {
+    fn the_focus_ground_leans_from_the_background_toward_the_focus_colour() {
         for palette in [
             themes::default_dark(),
             themes::solarized_dark(),
@@ -1116,8 +1116,8 @@ mod tests {
         ] {
             let focus = palette.focus_bg();
             assert_ne!(focus, palette.bg, "the focus ground stands out");
-            assert_ne!(focus, palette.accent, "the focus ground stays a ground");
-            assert_eq!(focus, palette.bg.mix(palette.accent, 0.13, Mix::Rgb));
+            assert_ne!(focus, palette.focus, "the focus ground stays a ground");
+            assert_eq!(focus, palette.bg.mix(palette.focus, 0.07, Mix::Rgb));
         }
     }
 

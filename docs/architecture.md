@@ -454,7 +454,9 @@ cells. Each divider displays the vertical target in the pane on its left: the
 pane itself when it overflows, or the node that target resolution finds within
 the pane. The adjacency and projection rules above apply to the divider, so a
 pane's header and footer rows keep plain divider lines. `Columns` draws no
-horizontal tracks; horizontal overflow scrolls through wheel input.
+horizontal tracks; horizontal overflow scrolls through wheel input. A framed
+row also takes a row above and below the panes and a column left of the first,
+and the trailing column becomes the last box's right side.
 
 Layout-only grouping uses `Container`, which supplies a row, column, stack, or
 any other layout and has no other behavior. A parent sets each child's sizing

@@ -431,6 +431,12 @@ drag holds it. Thumbs follow the same tint-toward-accent rule as frame thumbs.
 The trailing column after the last pane shows only a track. The built-in themes
 define all three paths.
 
+A framed row, built with `Columns::with_frame`, boxes each pane, and the
+dividers become the boxes' shared sides. The box of the pane that holds focus
+uses `columns/divider/focused`. The built-in themes draw it in the palette's
+`focus` colour on `Palette::focus_bg`, the ground a host gives the focused pane,
+so the box and the pane read as one.
+
 ## States and fallback
 
 `canopy::style::WidgetState::layer()` maps states to ordinary layer strings:

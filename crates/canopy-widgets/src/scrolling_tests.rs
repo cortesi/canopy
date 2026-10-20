@@ -19,7 +19,7 @@ use canopy::{
 };
 
 use crate::{
-    Columns, Frame, List, Scroll, Selectable, Tabs,
+    BoxGlyphs, Columns, Container, Frame, List, Scroll, Selectable, Tabs,
     scrollbar::{ScrollTarget, ScrollbarGlyphs, scroll_target},
 };
 
@@ -922,6 +922,71 @@ fn focus_column_wraps_through_displayed_panes() -> Result<()> {
             columns.focus_column(c, 1)
         })
     })?;
+    Ok(())
+}
+
+#[test]
+fn a_framed_row_boxes_its_panes_and_marks_the_focused_one() -> Result<()> {
+    // Thirteen columns less the frame's two sides and two shared sides
+    // leave three panes of three.
+    let (mut harness, nodes) = scene(13, 4, |c| {
+        let root = c.node_id();
+        let holder: NodeId = c.add_child(root, Container::column().focusable())?.into();
+        let columns: NodeId = c
+            .add_child(
+                holder,
+                Columns::new().with_frame(BoxGlyphs::SINGLE, BoxGlyphs::SINGLE_THICK),
+            )?
+            .into();
+        let mut nodes = vec![holder, columns];
+        for _ in 0..3 {
+            let pane = boxed(c, columns, Layout::fill())?;
+            let leaf = c.add_child(pane, Tall(Rc::new(Cell::new(1))))?;
+            nodes.extend([pane, leaf.into()]);
+        }
+        Ok(nodes)
+    })?;
+    let (holder, columns) = (nodes[0], nodes[1]);
+    let (first, middle_leaf) = (nodes[2], nodes[5]);
+    let frame = |harness: &mut Harness, focus: NodeId| -> Result<[String; 3]> {
+        harness
+            .canopy
+            .with_root_context(|c| c.set_focus(focus).map(|_| ()))?;
+        harness.render()?;
+        let lines = harness.tbuf().lines();
+        Ok([
+            lines[0].clone(),
+            column_text(harness, 4, 4),
+            lines[3].clone(),
+        ])
+    };
+
+    assert_eq!(
+        frame(&mut harness, middle_leaf)?,
+        [
+            "┌───┏━━━┓───┐".to_string(),
+            "┏┃┃┗".to_string(),
+            "└───┗━━━┛───┘".to_string(),
+        ],
+        "the pane on the focus path draws heavy"
+    );
+
+    assert_eq!(
+        frame(&mut harness, holder)?[0],
+        "┌───┬───┬───┐",
+        "focus above the row marks no pane without a home"
+    );
+    harness.canopy.with_root_context(|c| {
+        c.with_widget_mut(columns, |columns: &mut Columns, _| {
+            columns.set_home(vec![first]);
+            Ok(())
+        })
+    })?;
+    assert_eq!(
+        frame(&mut harness, holder)?[0],
+        "┏━━━┓───┬───┐",
+        "focus above the row marks the home pane"
+    );
     Ok(())
 }
 

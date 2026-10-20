@@ -572,6 +572,9 @@ impl ColumnChart {
 }
 
 impl ColumnChart {
+    /// Clears the hover.
+    pub fn clear_hover(&mut self);
+
     /// Returns the columns.
     pub fn columns(&self) -> &[Column];
 
@@ -680,6 +683,11 @@ impl !Sync for ColumnChart {}
 /// trailing column stays blank while the last pane fits. Horizontal overflow
 /// scrolls through wheel input without a track.
 ///
+/// A framed row also draws a rule above and below the panes and a border
+/// left of the first, so each pane sits in a box that shares its sides with
+/// its neighbours. The box of the pane that holds focus draws with its own
+/// glyphs and `columns/divider/focused`, whatever the pane paints inside it.
+///
 /// `Columns` owns the scrollbars of its panes, so an enclosing frame draws none
 /// for them. Dividers use `columns/divider`, thumbs `columns/thumb`, and a
 /// thumb a drag holds `columns/thumb/active`.
@@ -706,6 +714,25 @@ impl Columns {
 
     /// Construct columns with no panes.
     pub fn new() -> Self;
+
+    /// Set the panes that stand for focus held by the columns or an
+    /// ancestor.
+    ///
+    /// A host that keeps focus above its panes while one of them takes its
+    /// keys names that pane here. While focus is on this widget or an
+    /// ancestor, the frame marks the first displayed pane of `panes`.
+    pub fn set_home(&mut self, panes: Vec<NodeId>);
+
+    /// Build columns that box each pane in `light` and the pane with focus
+    /// in `focused`.
+    ///
+    /// The frame takes a row above and below the panes and a column left of
+    /// the first. The dividers become the boxes' shared sides, and the
+    /// trailing column the last box's right side. Where two light boxes meet,
+    /// the rules join in a tee; beside the focused box, the junction takes
+    /// that box's corner.
+    #[must_use]
+    pub fn with_frame(self, light: BoxGlyphs, focused: BoxGlyphs) -> Self;
 
     /// Build columns with replaced scrollbar glyphs.
     ///
@@ -3545,10 +3572,6 @@ pub mod diff {
     }
 }
 
-#[expect(
-    clippy::multiple_inherent_impl,
-    reason = "Editor methods are split by rendering, vi, and prompt concerns."
-)]
 pub mod editor {
     //! Multiline text editor.
     //! Editor widget and supporting types.

@@ -11,8 +11,8 @@ use crate::rgb;
 /// How far a scrollbar thumb leans from the theme's base toward the accent.
 const THUMB_ACCENT: f32 = 0.4;
 /// How far the ground of a focused pane leans from the background toward the
-/// accent.
-const FOCUS_TINT: f32 = 0.13;
+/// focus colour.
+const FOCUS_TINT: f32 = 0.07;
 /// How far a search match that is not current fades from yellow toward the
 /// ground, so the current match stands out in the same hue.
 const MATCH_FADE: f32 = 0.5;
@@ -52,6 +52,10 @@ pub struct Palette {
     pub frame_title: Color,
     /// Primary accent: focus and selection.
     pub accent: Color,
+    /// The box around the pane with focus among panes side by side, whose
+    /// ground leans toward it. It stays apart from the accent, which marks
+    /// selections inside the pane.
+    pub focus: Color,
     /// Foreground on panel backgrounds, one step away from `fg`.
     pub muted_fg: Color,
     /// Quiet foreground a step below `muted_fg`: placeholders, gutters, and
@@ -87,10 +91,10 @@ pub struct Palette {
 
 impl Palette {
     /// Return the ground of a pane that holds focus: the background tinted
-    /// toward the accent, so the pane that takes keys stands out among panes
-    /// side by side without a border.
+    /// faintly toward the focus colour, so the pane that takes keys stands
+    /// out among panes side by side.
     pub fn focus_bg(&self) -> Color {
-        self.bg.mix(self.accent, FOCUS_TINT, Mix::Rgb)
+        self.bg.mix(self.focus, FOCUS_TINT, Mix::Rgb)
     }
 
     /// Build the shared rule set for this palette.
@@ -115,6 +119,12 @@ impl Palette {
             .fg("/frame/thumb/active", p.accent)
             .fg("/frame/title", p.frame_title)
             .fg("/columns/divider", p.frame)
+            // A framed row boxes the pane with focus in the focus colour, on
+            // the pane's focus ground, so the box and the ground read as one.
+            .style(
+                "/columns/divider/focused",
+                PartialStyle::new().fg(p.focus).bg(p.focus_bg()),
+            )
             .fg("/columns/thumb", thumb)
             .fg("/columns/thumb/active", p.accent)
             // A diff reads changed rows by their colour, and its chrome stays
@@ -563,6 +573,8 @@ mod default {
     pub(super) const MAGENTA: Color = rgb!("#e58fd6");
     /// Cyan.
     pub(super) const CYAN: Color = rgb!("#56b6c2");
+    /// Teal: the box and ground of the pane with focus.
+    pub(super) const TEAL: Color = rgb!("#6cbcb4");
     /// Green.
     pub(super) const GREEN: Color = rgb!("#7fd88f");
     /// Yellow.
@@ -588,6 +600,7 @@ pub fn default_dark() -> Palette {
         frame_thumb: default::BORDER_ACTIVE,
         frame_title: default::TEXT,
         accent: default::ACCENT,
+        focus: default::TEAL,
         muted_fg: default::SUBTEXT,
         faint_fg: default::MUTED,
         panel_bg: default::PANEL,
@@ -646,6 +659,7 @@ pub fn dracula() -> Palette {
         frame_thumb: dracula::CYAN,
         frame_title: dracula::FOREGROUND,
         accent: dracula::PURPLE,
+        focus: dracula::CYAN,
         muted_fg: dracula::FOREGROUND,
         faint_fg: dracula::COMMENT,
         panel_bg: dracula::CURRENT_LINE,
@@ -710,6 +724,7 @@ pub fn gruvbox_dark() -> Palette {
         frame_thumb: gruvbox::LIGHT3,
         frame_title: gruvbox::LIGHT0,
         accent: gruvbox::BLUE,
+        focus: gruvbox::AQUA,
         muted_fg: gruvbox::LIGHT3,
         faint_fg: gruvbox::GRAY,
         panel_bg: gruvbox::DARK1,
@@ -776,6 +791,7 @@ pub fn solarized_dark() -> Palette {
         frame_thumb: solarized::BASE1,
         frame_title: solarized::BASE3,
         accent: solarized::BLUE,
+        focus: solarized::CYAN,
         muted_fg: solarized::BASE1,
         faint_fg: solarized::BASE01,
         panel_bg: solarized::BASE02,
@@ -804,6 +820,7 @@ pub fn solarized_light() -> Palette {
         frame_thumb: solarized::BASE01,
         frame_title: solarized::BASE03,
         accent: solarized::BLUE,
+        focus: solarized::CYAN,
         muted_fg: solarized::BASE01,
         faint_fg: solarized::BASE1,
         panel_bg: solarized::BASE2,
