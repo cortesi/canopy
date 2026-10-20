@@ -83,6 +83,8 @@ fn intercept_interrupt(
             let interrupt =
                 options.interrupt_policy == InterruptPolicy::Exit130 && is_control_c(pressed);
             if interrupt && !emergency && canopy.take_interrupt() {
+                // The hook took the key, so a host that sent it sees it taken.
+                canopy.count_input();
                 continue;
             }
             if emergency || interrupt {
@@ -143,6 +145,7 @@ pub fn runloop(mut cnpy: Canopy, options: RunOptions) -> Result<i32> {
     let size = translate_result(terminal::size())?;
     cnpy.set_screen_size(Size::new(size.0.into(), size.1.into()))?;
     cnpy.set_motion_live(true);
+    cnpy.attach_terminal();
 
     let runtime = Builder::new_current_thread()
         .enable_time()
@@ -174,6 +177,12 @@ pub fn runloop(mut cnpy: Canopy, options: RunOptions) -> Result<i32> {
         if outcome.frame.is_some() || outcome.motion {
             cnpy.emit_frame(&mut be)
                 .map_err(|error| handle_render_error(error, &cnpy.core, &mut session))?;
+        }
+        // An APC string follows the frame of its turn, so a terminal that
+        // reads it has read that frame.
+        let apcs = cnpy.take_terminal_apcs();
+        if !apcs.is_empty() {
+            be.write_apcs(&apcs).map_err(error::Error::TerminalIo)?;
         }
         work = runtime.block_on(selector.next(&mut cnpy, events.next_input()))?;
     }
@@ -368,6 +377,7 @@ mod tests {
         assert_eq!(exit, None);
         assert!(matches!(&rest, TurnInput::Events(events) if events.len() == 1));
         canopy.turn(rest)?;
+        assert_eq!(canopy.input_count(), 2, "the taken Ctrl+C counts as input");
         assert_eq!(
             received.load(Ordering::SeqCst),
             1,

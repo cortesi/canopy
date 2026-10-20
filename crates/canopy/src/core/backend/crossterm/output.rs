@@ -60,6 +60,14 @@ pub struct CrosstermRender {
 }
 
 impl CrosstermRender {
+    /// Write APC strings, `ESC _ payload ESC \`, after the emitted frame.
+    pub(super) fn write_apcs(&mut self, payloads: &[String]) -> io::Result<()> {
+        for payload in payloads {
+            encode_apc(&mut self.pending, payload);
+        }
+        self.flush()
+    }
+
     /// Flush pending output.
     fn flush(&mut self) -> io::Result<()> {
         flush_frame(&mut self.fp.lock(), &mut self.pending)
@@ -115,6 +123,13 @@ impl CrosstermRender {
         }
         Ok(())
     }
+}
+
+/// Append the APC string `ESC _ payload ESC \` to `out`.
+fn encode_apc(out: &mut Vec<u8>, payload: &str) {
+    out.extend_from_slice(b"\x1b_");
+    out.extend_from_slice(payload.as_bytes());
+    out.extend_from_slice(b"\x1b\\");
 }
 
 /// Write one frame and discard its bytes even on a partial write or flush
@@ -247,6 +262,13 @@ impl RenderBackend for CrosstermRender {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_apc_string_wraps_its_payload() {
+        let mut out = Vec::new();
+        encode_apc(&mut out, "itty:mark:7");
+        assert_eq!(out, b"\x1b_itty:mark:7\x1b\\");
+    }
 
     #[derive(Default)]
     struct FrameCapture {

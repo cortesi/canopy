@@ -47,6 +47,7 @@ pub use setup::{Register, Setup};
 mod post_tests;
 #[cfg(test)]
 mod snapshot_tests;
+mod sync;
 #[cfg(any(test, feature = "testing"))]
 mod testing;
 #[cfg(test)]
@@ -178,6 +179,8 @@ pub struct Canopy {
     motion: motion::MotionState,
     /// Hook that takes Ctrl+C before the terminal adapter exits on it.
     interrupt_hook: Option<InterruptHook>,
+    /// Progress that automation observes through a terminal.
+    terminal_sync: sync::TerminalSync,
 }
 
 /// Frame geometry and the buffers the frame pipeline owns.
@@ -290,6 +293,7 @@ impl Canopy {
             cursor_patches: Vec::new(),
             motion: motion::MotionState::default(),
             interrupt_hook: None,
+            terminal_sync: sync::TerminalSync::default(),
             core,
         }
     }

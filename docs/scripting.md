@@ -527,10 +527,18 @@ MCP evaluation returns:
 
 Use `canopy.wait_for(predicate, timeout_ms?)` for asynchronous state changes.
 The predicate reads whatever the change shows, such as `canopy.target(owner)`
-or `canopy.screen_text()`. The wait subscribes to snapshot publication and
-optional deadlines. It rechecks before parking to avoid a lost publication wake. The runtime services
+or `canopy.screen_text()`. The wait subscribes to snapshot publication, to
+turns that dispatch input, and to optional deadlines. It rechecks before
+parking to avoid a lost wake. The runtime services
 input and automation between resumed segments. A wait does not run its own
 event loop or recursively service automation.
+
+A host that drives the app through a terminal synchronizes with two calls.
+`canopy.input_count()` returns how many input events turns have dispatched
+from their input, such as a terminal's; keys a script sends do not count.
+`canopy.terminal_apc(payload)` queues an APC string, `ESC _ payload ESC \`,
+to follow this turn's frame on the terminal, and returns whether a terminal
+will receive it. Headless, it queues nothing and returns false.
 
 Screen observation reads published cells. Refreshing a snapshot does not advance
 the backend's output baseline. A later visible frame still includes those changes.

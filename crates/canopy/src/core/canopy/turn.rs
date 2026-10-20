@@ -26,6 +26,7 @@ use tokio::{task::yield_now, time::sleep};
 use super::{AdapterEvent, Canopy};
 use crate::{
     commands::ArgValue,
+    core::wake::PollOwner,
     error::{Error, Result},
     input::Event,
     script,
@@ -149,6 +150,9 @@ pub struct TurnOutcome {
 struct PublicationState {
     /// Last published generation.
     generation: u64,
+    /// Count of observable changes: publications, and turns that dispatched
+    /// input, which changes the input count even when no frame changes.
+    changes: u64,
     /// Driver time, including deterministic test advances.
     now: Option<Instant>,
     /// Pending subscriber wakers and deadlines.
@@ -162,7 +166,12 @@ impl PublicationWatch {
     pub(crate) fn generation(&self) -> u64 {
         self.0.lock().expect("publication lock poisoned").generation
     }
-    /// Register and recheck atomically before parking.
+    /// Read the count of observable changes.
+    pub(crate) fn changes(&self) -> u64 {
+        self.0.lock().expect("publication lock poisoned").changes
+    }
+    /// Register and recheck atomically before parking, until the count of
+    /// observable changes moves from `since` or the deadline passes.
     pub(crate) fn poll_changed(
         &self,
         since: u64,
@@ -170,10 +179,9 @@ impl PublicationWatch {
         cx: &Context<'_>,
     ) -> Poll<u64> {
         let mut state = self.0.lock().expect("publication lock poisoned");
-        if state.generation != since
-            || deadline.is_some_and(|d| state.now.is_some_and(|now| now >= d))
+        if state.changes != since || deadline.is_some_and(|d| state.now.is_some_and(|now| now >= d))
         {
-            return Poll::Ready(state.generation);
+            return Poll::Ready(state.changes);
         }
         if let Some(waiter) = state
             .waiters
@@ -188,9 +196,22 @@ impl PublicationWatch {
     }
     /// Publish after all frame construction succeeds.
     pub(super) fn publish(&self) {
+        self.change(true);
+    }
+    /// Wake subscribers after a turn took input, which changes what they
+    /// observe even when no frame follows.
+    fn took_input(&self) {
+        self.change(false);
+    }
+    /// Count one observable change, and a new frame when `frame` is set, then
+    /// wake every subscriber.
+    fn change(&self, frame: bool) {
         let waiters = {
             let mut state = self.0.lock().expect("publication lock poisoned");
-            state.generation += 1;
+            if frame {
+                state.generation += 1;
+            }
+            state.changes += 1;
             mem::take(&mut state.waiters)
         };
         for (waker, _) in waiters {
@@ -436,6 +457,7 @@ impl Canopy {
                     self.settle_layout()?;
                 }
             }
+            self.count_input();
             self.event(event)?;
         }
         Ok(())
@@ -443,10 +465,15 @@ impl Canopy {
 
     /// Poll each live node whose wake is pending, once.
     fn poll_woken(&mut self) -> Result<()> {
-        let mut woken = self.core.wake_registry.drain()?;
-        woken.sort_unstable();
-        woken.dedup_by_key(|stamp| (stamp.node, stamp.incarnation));
-        for stamp in woken {
+        let woken = self.core.wake_registry.drain()?;
+        self.poll_owners(woken)
+    }
+
+    /// Poll each live owner in `owners` once.
+    fn poll_owners(&mut self, mut owners: Vec<PollOwner>) -> Result<()> {
+        owners.sort_unstable();
+        owners.dedup_by_key(|stamp| (stamp.node, stamp.incarnation));
+        for stamp in owners {
             if self.core.work_stamp_valid(stamp) {
                 self.poll_node(stamp.node)?;
             }
@@ -474,6 +501,7 @@ impl Canopy {
         match work {
             TurnInput::Events(events) => {
                 dispatch_error = self.dispatch_batch(&events).err();
+                self.driver.publication.took_input();
             }
             TurnInput::StartEval(request) => {
                 let id = EvalId::next();
@@ -496,13 +524,7 @@ impl Canopy {
             .retain(|stamp| self.core.work_stamp_valid(stamp));
         let mut due = self.poller.collect_due();
         due.extend(self.core.wake_registry.drain()?);
-        due.sort_unstable();
-        due.dedup_by_key(|stamp| (stamp.node, stamp.incarnation));
-        for stamp in due {
-            if self.core.work_stamp_valid(stamp) {
-                self.poll_node(stamp.node)?;
-            }
-        }
+        self.poll_owners(due)?;
         if let Some(mut active) = self.driver.active.take() {
             let now = self.now();
             // Clear before registering cancellation: a concurrent receiver

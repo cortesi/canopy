@@ -272,6 +272,31 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         handler: Handler::Sync(host_commands),
     },
     BaseFunction {
+        name: "input_count",
+        docs: Some(
+            "Return how many input events turns have dispatched from their input, such as a \
+             terminal's. A host that sends keys through a terminal waits for the count to rise \
+             by the keys it sent. Keys a script sends do not count.",
+        ),
+        signature: || FunctionSignature::new().ret(Type::Number),
+        handler: Handler::Sync(host_input_count),
+    },
+    BaseFunction {
+        name: "terminal_apc",
+        docs: Some(
+            "Queue an APC string, ESC _ payload ESC \\, to follow this turn's frame on the \
+             terminal, and return whether a terminal will receive it. The payload is 1 to 256 \
+             bytes of printable ASCII. A terminal that recognizes the string has read every \
+             frame before it.",
+        ),
+        signature: || {
+            FunctionSignature::new()
+                .param(("payload", Type::String))
+                .ret(Type::Boolean)
+        },
+        handler: Handler::Sync(host_terminal_apc),
+    },
+    BaseFunction {
         name: "mode",
         docs: Some("Return the newest active mode. The default mode is the empty string."),
         signature: || FunctionSignature::new().ret(Type::String),
@@ -990,7 +1015,7 @@ where
     loop {
         // Capture before checking the predicate; poll_changed rechecks before
         // parking.
-        let generation = watch.generation();
+        let changes = watch.changes();
         if ready(ctx.clone()).await? {
             return Ok(host_return(true));
         }
@@ -1005,7 +1030,7 @@ where
                 return Err(wait_timeout(timeout_ms));
             }
         }
-        poll_fn(|cx| watch.poll_changed(generation, deadline, cx)).await;
+        poll_fn(|cx| watch.poll_changed(changes, deadline, cx)).await;
     }
 }
 
@@ -1616,6 +1641,26 @@ fn host_mode<'s>(
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mode = with_current_canopy(scope, |canopy, _| Ok(canopy.mode().to_string()))?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&mode)?)))
+}
+
+/// `canopy.input_count`: return how many input events turns have dispatched.
+fn host_input_count<'s>(
+    scope: &Scope<'s>,
+    _args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let count = with_current_canopy(scope, |canopy, _| Ok(canopy.input_count()))?;
+    Ok(ret_one(ScopedValue::Number(count as f64)))
+}
+
+/// `canopy.terminal_apc`: queue an APC string to follow this turn's frame.
+fn host_terminal_apc<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = HostArgCursor::new(scope, args);
+    let payload = args.required::<String>("payload")?;
+    let queued = with_current_canopy(scope, |canopy, _| canopy.queue_terminal_apc(&payload))?;
+    Ok(ret_one(ScopedValue::Boolean(queued)))
 }
 
 /// `canopy.enter_mode`: make a mode the newest active mode.

@@ -844,6 +844,24 @@ impl Canopy {
 }
 
 impl Canopy {
+    /// Return how many input events the runtime has taken from its input,
+    /// such as a terminal's, a count that only rises. A host that sends input
+    /// through a terminal waits for the count to rise by the events it sent.
+    /// An event counts whether a widget, a binding, or the interrupt hook
+    /// takes it. Consecutive pointer moves that arrive together count once,
+    /// and keys a script sends do not count.
+    pub fn input_count(&self) -> u64;
+
+    /// Queue an APC string, `ESC _ payload ESC \`, to follow the frame of
+    /// this turn on the terminal, and return whether a terminal adapter will
+    /// write it. Without one, as in headless automation, nothing is queued.
+    ///
+    /// The payload is 1 to 256 bytes of printable ASCII, so it cannot end the
+    /// string early or reach the terminal as a control.
+    pub fn queue_terminal_apc(&mut self, payload: &str) -> crate::error::Result<bool>;
+}
+
+impl Canopy {
     /// Return the active modes, newest first. The default mode is not listed.
     pub fn active_modes(&self) -> Vec<&str>;
 
