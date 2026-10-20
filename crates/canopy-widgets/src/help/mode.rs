@@ -7,6 +7,7 @@
 
 use canopy::{
     Context, ContextExt, NodeId, NodeName, ViewContext, ViewContextExt, Widget,
+    commands::CommandStatus,
     error::{Error, Result},
     geom::Size,
     layout::{Constraint, Layout, MeasureConstraints, Measurement},
@@ -26,7 +27,8 @@ const MARGIN: u32 = 1;
 
 /// Bindings of one transient mode, measured to fit them.
 ///
-/// A transient mode takes the next key, so the panel lists keys alone.
+/// A transient mode takes the next key, so the panel lists keys alone, and
+/// leaves out a key whose command is disabled.
 pub struct ModeBindings {
     /// Rows for the keys in the mode's own tier.
     bindings: Vec<BindingRow>,
@@ -106,10 +108,20 @@ impl ModeHelp {
             context.set_hidden(overlay, true)?;
             return Ok(Shown::Hidden);
         };
+        // A menu lists only what its keys can do now.
         let bindings = snapshot
             .bindings
             .into_iter()
             .filter(|binding| binding.tier.mode() == Some(mode.as_str()))
+            .filter(|binding| {
+                !binding
+                    .command
+                    .as_ref()
+                    .and_then(|command| command.availability.as_ref())
+                    .is_some_and(|availability| {
+                        matches!(availability.status, Some(CommandStatus::Disabled(_)))
+                    })
+            })
             .collect::<Vec<_>>();
         let bindings = key_rows_of(&bindings);
 

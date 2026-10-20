@@ -355,6 +355,7 @@ fn a_scoped_modal_admits_bindings_scoped_to_its_owner_and_an_open_menu() -> Resu
         "the modal's group takes its keys"
     );
 
+    assert!(!map.modal_suspends_menus(), "the modal keeps its menus");
     map.open_menu("menu")?;
     assert_eq!(
         target(&map, inside, 'n'),
@@ -362,6 +363,14 @@ fn a_scoped_modal_admits_bindings_scoped_to_its_owner_and_an_open_menu() -> Resu
         "a menu opened inside the modal takes its keys first"
     );
     map.close_menu();
+    map.set_modal_bindings(Some(ModalBindings::Framework {
+        groups: &[HELP],
+        intents: &[],
+    }));
+    assert!(
+        map.modal_suspends_menus(),
+        "a framework modal suspends menus"
+    );
     Ok(())
 }
 

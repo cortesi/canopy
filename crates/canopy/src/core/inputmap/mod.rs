@@ -990,6 +990,13 @@ impl InputMap {
         }
     }
 
+    /// Whether the open modal suspends transient modes. A framework-group
+    /// modal admits no menu's keys, while a scoped or application modal
+    /// admits the keys of a menu opened inside it.
+    pub(crate) fn modal_suspends_menus(&self) -> bool {
+        matches!(self.modal_bindings, Some(ModalBindings::Framework { .. }))
+    }
+
     /// Make `mode` the newest active mode. A mode that is already active
     /// moves to the top.
     ///

@@ -861,8 +861,10 @@ Key routing gives a transient mode the next key before any widget sees it. It
 pops the mode, then runs the binding that the key resolved to, if there is one.
 `Setup::register_mode_hook` registers a function that runs against the root
 context before a frame whenever the mode stack has changed. Root uses one to
-list the keys of a transient mode in a panel that overlays the main pane. The
-help modal covers that panel, and hides it while help is open.
+list the keys of a transient mode in a panel that overlays the main pane,
+leaving out a key whose command is disabled. The help modal covers that
+panel, and hides it while help is open. A framework-group modal suspends
+transient modes; a scoped or application modal keeps a menu opened inside it.
 `Setup::register_notice_hook` does the same for the shown notice. Root uses
 one to show the newest notice as one row at the bottom of the main pane.
 

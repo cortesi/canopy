@@ -210,9 +210,10 @@ impl Core {
     /// Return the transient mode that takes the next key.
     ///
     /// A framework-group modal suspends transient modes, so none is in effect
-    /// while one is open. An application modal leaves the mode in effect.
+    /// while one is open. A scoped or application modal leaves the mode in
+    /// effect.
     pub(crate) fn effective_transient_mode(&self) -> Option<&str> {
-        if self.input_map.active_framework_group().is_some() {
+        if self.input_map.modal_suspends_menus() {
             return None;
         }
         self.input_map.transient_mode()

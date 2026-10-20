@@ -643,7 +643,7 @@ mod tests {
 
     use canopy::{
         CanopyBuilder, Context, EventOutcome, NodeName, ViewContext, Widget,
-        commands::{CommandNode, CommandSpec},
+        commands::{CommandNode, CommandSpec, CommandStatus},
         error::Result,
         geom::{Line, Point, PointI32, Size},
         input::{BindingSnapshot, BindingTier, Event, key, mouse},
@@ -735,6 +735,63 @@ mod tests {
         fn name(&self) -> NodeName {
             NodeName::convert("failing_app")
         }
+    }
+
+    /// App with one command that is always disabled and one that is not.
+    struct GatedApp;
+
+    #[derive_commands]
+    impl GatedApp {
+        /// Never runs.
+        #[command(enabled = "never")]
+        fn gated(&self) -> Result<()> {
+            Ok(())
+        }
+
+        /// Always runs.
+        #[command]
+        fn free(&self) -> Result<()> {
+            Ok(())
+        }
+
+        /// Disable a command.
+        fn never(&self, _ctx: &dyn ViewContext) -> Result<CommandStatus> {
+            Ok(CommandStatus::Disabled("never".into()))
+        }
+    }
+
+    impl Widget for GatedApp {
+        fn name(&self) -> NodeName {
+            NodeName::convert("gated_app")
+        }
+    }
+
+    #[test]
+    fn a_menu_leaves_out_keys_whose_commands_are_disabled() -> Result<()> {
+        let mut canopy = CanopyBuilder::new()
+            .configure(|setup| {
+                Root::register(setup)?;
+                setup.add_commands::<GatedApp>()
+            })
+            .build()?;
+        Root::new().install(&mut canopy, GatedApp)?;
+        let mut harness = Harness::from_canopy(canopy, Size::new(60, 14))?;
+        harness.script(
+            r#"
+            canopy.bind("m", { description = "Menu" }, canopy.menu("things"))
+            canopy.keymap({
+                mode = "things",
+                { key = "g", description = "Gated thing", action = command.gated_app.gated() },
+                { key = "f", description = "Free thing", action = command.gated_app.free() },
+            })
+            "#,
+        )?;
+        harness.render()?;
+        harness.key('m')?;
+        let screen = harness.tbuf().lines().join("\n");
+        assert!(screen.contains("Free thing"), "{screen}");
+        assert!(!screen.contains("Gated thing"), "{screen}");
+        Ok(())
     }
 
     #[test]
