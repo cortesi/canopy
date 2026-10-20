@@ -1426,8 +1426,9 @@ impl Default for TableViewOptions {
 pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
     use canopy::style::Attr;
     rules
+        // A table sets no ground of its own, so it sits on whatever ground
+        // holds it, such as a reader's focus tint.
         .fg("table", palette.fg)
-        .bg("table", palette.bg)
         // The header is one band of accent labels. The band is lifted well
         // clear of the ground and of panels such as code cards, and stays
         // darker than the separators, so column lines run on through it.
