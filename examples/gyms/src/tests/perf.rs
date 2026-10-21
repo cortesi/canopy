@@ -8,6 +8,7 @@
 use std::{
     env, iter,
     path::PathBuf,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -18,6 +19,7 @@ use canopy::{
     render::RenderBackend,
     runtime::TurnInput,
     style::ResolvedStyle,
+    testing::ManualClock,
 };
 
 use crate::Demo;
@@ -25,23 +27,43 @@ use crate::Demo;
 /// Screen of a large terminal window.
 const SCREEN: Size = Size { w: 200, h: 60 };
 
-/// Backend that counts the bytes a terminal would read.
+/// Backend that estimates the bytes a terminal would read, and shifts as
+/// the Crossterm backend does.
 #[derive(Default)]
 struct Counting {
-    /// Text bytes written.
-    text: usize,
-    /// Style changes written.
-    styles: usize,
+    /// Estimated bytes written: text, and the escapes that position, style,
+    /// and shift it.
+    bytes: usize,
 }
 
 impl RenderBackend for Counting {
     fn style(&mut self, _style: &ResolvedStyle) -> Result<()> {
-        self.styles += 1;
+        // A reset, and two true colors.
+        self.bytes += 42;
         Ok(())
     }
 
     fn text(&mut self, _loc: Point, text: &str) -> Result<()> {
-        self.text += text.len();
+        // A cursor move, and the text.
+        self.bytes += 8 + text.len();
+        Ok(())
+    }
+
+    fn supports_char_shift(&self) -> bool {
+        true
+    }
+
+    fn shift_chars(&mut self, _loc: Point, _count: i32) -> Result<()> {
+        self.bytes += 8;
+        Ok(())
+    }
+
+    fn supports_line_shift(&self) -> bool {
+        true
+    }
+
+    fn shift_lines(&mut self, _top: u32, _bottom: u32, _count: i32) -> Result<()> {
+        self.bytes += 16;
         Ok(())
     }
 
@@ -136,15 +158,15 @@ fn input_latency() -> Result<()> {
             continue;
         }
         let mut canopy = demo.build(false)?;
+        // A still clock keeps timed work out of the frames, so they repeat.
+        canopy.set_clock_for_testing(Arc::new(ManualClock::new()))?;
         canopy.set_screen_size(SCREEN)?;
         canopy.turn(TurnInput::Prepare)?;
+        canopy.emit_for_testing(&mut Counting::default())?;
         let mut backend = Counting::default();
-        canopy.emit_for_testing(&mut backend)?;
         let mut totals = Vec::new();
         let mut emits = Duration::ZERO;
         let mut frames = 0;
-        let start = Counting::default();
-        backend = start;
         for _ in 0..rounds {
             for key in &script {
                 let began = Instant::now();
@@ -164,7 +186,7 @@ fn input_latency() -> Result<()> {
         println!(
             "{name:<10} {presses:>6} {mean:>9.1} {p50:>9.1} {p95:>9.1} {max:>9.1} {:>9.1} {frames:>9} {:>8}",
             emits.as_secs_f64() * 1e6 / presses as f64,
-            backend.text / frames.max(1),
+            backend.bytes / frames.max(1),
         );
     }
     Ok(())
