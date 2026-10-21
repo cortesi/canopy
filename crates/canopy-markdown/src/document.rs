@@ -1143,34 +1143,35 @@ impl Builder<'_> {
                 _ if matches!(leaf.node.event, Some(Event::Rule)) => {
                     (BlockKind::Rule, UnitKind::Separator, String::new(), false)
                 }
-                _ if lone_embed(&leaf.node).is_some() => {
-                    let (image, note) = lone_embed(&leaf.node).expect("checked");
-                    // It reads, and copies, as an inline image does.
-                    let payload = image_text(&image.link.label, &image.link.destination);
-                    let kind = if note {
-                        BlockKind::Embed(image)
-                    } else {
-                        BlockKind::Image(image)
-                    };
-                    // The block is one whole payload, its alt text.
-                    (kind, UnitKind::Prose, payload, true)
-                }
-                _ => {
-                    let payload = inline(
-                        &leaf.node.children,
-                        &mut spans,
-                        &mut links,
-                        &mut soft_breaks,
-                    );
-                    self.trailing_id(&leaf.node.children, &range);
-                    let kind = match leaf.node.tag.as_ref() {
-                        Some(Tag::Heading { level, .. }) => BlockKind::Heading {
-                            level: *level as u8,
-                        },
-                        _ => BlockKind::Paragraph,
-                    };
-                    (kind, UnitKind::Prose, payload, false)
-                }
+                _ => match lone_embed(&leaf.node) {
+                    Some((image, note)) => {
+                        // It reads, and copies, as an inline image does.
+                        let payload = image_text(&image.link.label, &image.link.destination);
+                        let kind = if note {
+                            BlockKind::Embed(image)
+                        } else {
+                            BlockKind::Image(image)
+                        };
+                        // The block is one whole payload, its alt text.
+                        (kind, UnitKind::Prose, payload, true)
+                    }
+                    None => {
+                        let payload = inline(
+                            &leaf.node.children,
+                            &mut spans,
+                            &mut links,
+                            &mut soft_breaks,
+                        );
+                        self.trailing_id(&leaf.node.children, &range);
+                        let kind = match leaf.node.tag.as_ref() {
+                            Some(Tag::Heading { level, .. }) => BlockKind::Heading {
+                                level: *level as u8,
+                            },
+                            _ => BlockKind::Paragraph,
+                        };
+                        (kind, UnitKind::Prose, payload, false)
+                    }
+                },
             }
         };
         if matches!(kind, BlockKind::Paragraph)
