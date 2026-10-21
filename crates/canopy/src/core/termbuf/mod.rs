@@ -166,6 +166,9 @@ impl Cell {
             return 1;
         }
         if self.suffix.is_empty() {
+            if self.ch.is_ascii_graphic() || self.ch == ' ' {
+                return 1;
+            }
             let mut encoded = [0; 4];
             return text::grapheme_width(self.ch.encode_utf8(&mut encoded));
         }
@@ -237,6 +240,27 @@ impl TermBuf {
             cells,
             motion: BTreeMap::new(),
         })
+    }
+
+    /// Construct a buffer as `new_with_limits` does, painting over `spare`
+    /// when it has the same size, to save its allocation.
+    pub(crate) fn reuse_with_limits(
+        spare: Option<Self>,
+        size: Size,
+        ch: char,
+        style: ResolvedStyle,
+        limits: RenderLimits,
+    ) -> Result<Self> {
+        match spare {
+            Some(mut buf) if buf.size == size => {
+                validate_cell_character(ch)?;
+                limits.cell_count(size)?;
+                buf.cells.fill(Cell::new(ch, style));
+                buf.motion.clear();
+                Ok(buf)
+            }
+            _ => Self::new_with_limits(size, ch, style, limits),
+        }
     }
 
     /// Return the buffer size.
@@ -542,8 +566,18 @@ impl TermBuf {
     /// Diff this terminal buffer against a previous state, emitting changes
     /// to the provided render backend. The caller flushes the backend.
     pub fn emit_diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {
-        self.validate_canonical()?;
         prev.validate_canonical()?;
+        self.emit_diff_after(prev, backend)
+    }
+
+    /// Diff this buffer against `prev`, a buffer that an earlier emission
+    /// validated, so only this buffer needs validation.
+    pub(crate) fn emit_diff_after<R: RenderBackend>(
+        &self,
+        prev: &Self,
+        backend: &mut R,
+    ) -> Result<()> {
+        self.validate_canonical()?;
         if self.size != prev.size {
             return self.emit(backend);
         }

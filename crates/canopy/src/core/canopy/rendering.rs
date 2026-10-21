@@ -246,6 +246,7 @@ impl Canopy {
         &self,
         screen_size: Size,
         clocks: MotionClocks,
+        spare: Option<TermBuf>,
     ) -> Result<(TermBuf, Vec<CursorSnapshot>)> {
         let mut styl = StyleManager::default();
 
@@ -253,8 +254,13 @@ impl Canopy {
             .get(&self.style, "")
             .resolve_solid()
             .expect("default style resolves to solid colors");
-        let mut next =
-            TermBuf::new_with_limits(screen_size, ' ', def_style, self.frame.render_limits)?;
+        let mut next = TermBuf::reuse_with_limits(
+            spare,
+            screen_size,
+            ' ',
+            def_style,
+            self.frame.render_limits,
+        )?;
 
         let screen_clip = Rect::new(0, 0, screen_size.w, screen_size.h);
         let mut effect_stack: Vec<Effect> = Vec::new();
@@ -371,7 +377,8 @@ impl Canopy {
             self.core.update_layout(screen_size)?;
         }
         let clocks = self.motion_clocks();
-        let (next, cursors) = self.render_pass(screen_size, clocks)?;
+        let spare = self.frame.spare_buf.take();
+        let (next, cursors) = self.render_pass(screen_size, clocks, spare)?;
         let frame_id = FrameId(self.driver.publication.generation() + 1);
         let primary = cursors
             .first()
@@ -382,7 +389,11 @@ impl Canopy {
                 role: cursor.role.clone(),
             });
         let snapshot = snapshot::capture(&self.core, frame_id, Arc::new(next), cursors)?;
-        self.frame.snapshot = Some(Arc::new(snapshot));
+        if let Some(old) = self.frame.snapshot.replace(Arc::new(snapshot))
+            && let Ok(old) = Arc::try_unwrap(old)
+        {
+            self.frame.retire(old.buffer);
+        }
         self.motion.primary(primary, clocks.now);
         self.core.changes = crate::ChangeSet::default();
         self.driver.publication.publish();
@@ -410,8 +421,8 @@ impl Canopy {
         };
         let previous = self.frame.emitted_buf.take();
         be.reset()?;
-        if let Some(previous) = previous {
-            next.emit_diff(&previous, be)?;
+        if let Some(previous) = &previous {
+            next.emit_diff_after(previous, be)?;
         } else {
             next.emit(be)?;
         }
@@ -423,6 +434,9 @@ impl Canopy {
         be.park_cursor(parked)?;
         be.flush()?;
         self.frame.emitted_buf = Some(next);
+        if let Some(previous) = previous {
+            self.frame.retire(previous);
+        }
         self.schedule_motion(now);
         Ok(())
     }

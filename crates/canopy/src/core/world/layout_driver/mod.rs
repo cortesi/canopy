@@ -40,6 +40,9 @@ impl Core {
         if self.apply_reveals()? {
             LayoutPass::new(self).update_views(root, screen_view)?;
         }
+        // The full check walks every node's ancestors, so release builds
+        // leave it to the tests.
+        #[cfg(debug_assertions)]
         self.validate_invariants()?;
 
         Ok(())

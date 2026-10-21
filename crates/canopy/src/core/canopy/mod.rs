@@ -194,6 +194,18 @@ struct FrameState {
     snapshot: Option<Arc<FrameSnapshot>>,
     /// Last successfully emitted terminal frame, invalidated by output failure.
     emitted_buf: Option<Arc<TermBuf>>,
+    /// A retired frame buffer that no one shares, which the next render
+    /// paints over instead of allocating.
+    spare_buf: Option<TermBuf>,
+}
+
+impl FrameState {
+    /// Keep `buffer` for the next render, if nothing else holds it.
+    fn retire(&mut self, buffer: Arc<TermBuf>) {
+        if let Ok(buffer) = Arc::try_unwrap(buffer) {
+            self.spare_buf = Some(buffer);
+        }
+    }
 }
 
 /// Callback marshalled onto the UI thread for live automation.

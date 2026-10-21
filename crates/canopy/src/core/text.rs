@@ -51,12 +51,19 @@ pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {
 
 /// Return the display width of a grapheme cluster, capped at terminal cell
 /// widths.
+#[inline]
 pub fn grapheme_width(grapheme: &str) -> usize {
     if let [byte] = grapheme.as_bytes()
         && (byte.is_ascii_graphic() || *byte == b' ')
     {
         return 1;
     }
+    unicode_grapheme_width(grapheme)
+}
+
+/// Return the display width of a grapheme that is not one printable ASCII
+/// character.
+fn unicode_grapheme_width(grapheme: &str) -> usize {
     if grapheme.is_empty() {
         return 0;
     }
