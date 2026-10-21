@@ -902,79 +902,10 @@ impl DiffView {
             .min(self.rows.len());
         for index in first..last {
             let y = origin.y + column(index - first);
-            match &self.rows[index] {
-                DiffRow::Unchanged { old, .. } => {
-                    Self::draw_number(
-                        rndr,
-                        origin.x,
-                        y,
-                        geom.gutter,
-                        ' ',
-                        Some(*old),
-                        geom.digits,
-                        "context",
-                    )?;
-                    self.draw_code(
-                        rndr,
-                        view_rect,
-                        origin,
-                        origin.x + geom.gutter,
-                        geom.width - geom.gutter,
-                        "context",
-                        Side::Old,
-                        *old,
-                        y,
-                        None,
-                    )?;
-                }
-                DiffRow::Removed { old } => {
-                    Self::draw_number(
-                        rndr,
-                        origin.x,
-                        y,
-                        geom.gutter,
-                        '-',
-                        Some(*old),
-                        geom.digits,
-                        "removed",
-                    )?;
-                    self.draw_code(
-                        rndr,
-                        view_rect,
-                        origin,
-                        origin.x + geom.gutter,
-                        geom.width - geom.gutter,
-                        "removed",
-                        Side::Old,
-                        *old,
-                        y,
-                        None,
-                    )?;
-                }
-                DiffRow::Added { new } => {
-                    Self::draw_number(
-                        rndr,
-                        origin.x,
-                        y,
-                        geom.gutter,
-                        '+',
-                        Some(*new),
-                        geom.digits,
-                        "added",
-                    )?;
-                    self.draw_code(
-                        rndr,
-                        view_rect,
-                        origin,
-                        origin.x + geom.gutter,
-                        geom.width - geom.gutter,
-                        "added",
-                        Side::New,
-                        *new,
-                        y,
-                        None,
-                    )?;
-                }
+            let (marker, style, side, line) = match &self.rows[index] {
+                DiffRow::Unchanged { old, .. } => (' ', "context", Side::Old, *old),
+                DiffRow::Removed { old } => ('-', "removed", Side::Old, *old),
+                DiffRow::Added { new } => ('+', "added", Side::New, *new),
                 DiffRow::Gap { .. } => {
                     rndr.fill("gap", Rect::new(origin.x, y, geom.width, 1), ' ')?;
                     Self::draw_number(
@@ -987,6 +918,7 @@ impl DiffView {
                         geom.digits,
                         "gap",
                     )?;
+                    continue;
                 }
                 DiffRow::Header { old, new } => {
                     rndr.fill("header", Rect::new(origin.x, y, geom.width, 1), ' ')?;
@@ -995,8 +927,31 @@ impl DiffView {
                         Line::new(origin.x + geom.gutter, y, geom.width - geom.gutter),
                         &header_text(old, new),
                     )?;
+                    continue;
                 }
-            }
+            };
+            Self::draw_number(
+                rndr,
+                origin.x,
+                y,
+                geom.gutter,
+                marker,
+                Some(line),
+                geom.digits,
+                style,
+            )?;
+            self.draw_code(
+                rndr,
+                view_rect,
+                origin,
+                origin.x + geom.gutter,
+                geom.width - geom.gutter,
+                style,
+                side,
+                line,
+                y,
+                None,
+            )?;
         }
         Ok(())
     }
