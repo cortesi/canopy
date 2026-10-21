@@ -122,14 +122,10 @@ impl Widget for Frame {
             && f.top.h > 0
         {
             let title_with_spaces = format!(" {title} ");
-            let title_len = text::width(&title_with_spaces);
-
-            let title_line = f.top.line(0)?;
-            let title_rect =
-                geom::Rect::new(title_line.tl.x, title_line.tl.y, title_len.min(f.top.w), 1);
+            let title_len = text::width(&title_with_spaces).min(f.top.w);
             rndr.text(
                 &format!("frame/{}", roles::TITLE),
-                title_rect.line(0)?,
+                geom::Line::new(f.top.tl.x, f.top.tl.y, title_len),
                 &title_with_spaces,
             )?;
         }
