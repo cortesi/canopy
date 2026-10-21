@@ -589,8 +589,7 @@ impl Widget for Input {
         let key = match event {
             Event::Key(key) => *key,
             Event::Paste(text) => {
-                let text = text.clone();
-                self.edit(ctx, |buffer| buffer.insert(&text))?;
+                self.edit(ctx, |buffer| buffer.insert(text))?;
                 return Ok(EventOutcome::Handle);
             }
             _ => return Ok(EventOutcome::Ignore),
