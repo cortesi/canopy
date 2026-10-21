@@ -394,7 +394,7 @@ impl<'a> LayoutPass<'a> {
 
         let budget = measured_width_budget(layout, constraints, children.len());
         let mut fixed_main_total = 0u32;
-        let mut flex_children: Vec<(usize, u32)> = Vec::new();
+        let mut flex_children: Vec<(usize, u32, Layout)> = Vec::new();
         let mut child_sizes = vec![Size::ZERO; children.len()];
 
         for (i, child) in children.iter().enumerate() {
@@ -415,7 +415,7 @@ impl<'a> LayoutPass<'a> {
 
             let eff_main = main_sizing(effective, layout.direction);
             if let Sizing::Flex(w) = eff_main {
-                flex_children.push((i, w));
+                flex_children.push((i, w, effective));
                 continue;
             }
 
@@ -430,22 +430,15 @@ impl<'a> LayoutPass<'a> {
         let remaining = avail_main.saturating_sub(fixed_main_total.saturating_add(gap_total));
 
         if main_fixed && !flex_children.is_empty() {
-            let weights: Vec<u32> = flex_children.iter().map(|(_, w)| *w).collect();
+            let weights: Vec<u32> = flex_children.iter().map(|(_, w, _)| *w).collect();
             let shares = allocate_flex_shares(remaining, &weights);
-            for (idx, (child_index, _)) in flex_children.iter().enumerate() {
-                let child_layout = self.node_layout_snapshot(children[*child_index])?.0;
-                let mut effective = bound_width(child_layout, budget);
-                let child_cross = cross_sizing(child_layout, layout.direction);
-                if !cross_fixed && matches!(child_cross, Sizing::Flex(_)) {
-                    set_cross_sizing(&mut effective, layout.direction, Sizing::Measure);
-                }
-                effective.inherit_overflow(layout.overflow_x, layout.overflow_y);
+            for (idx, (child_index, _, effective)) in flex_children.iter().enumerate() {
                 let child_available = layout
                     .direction
                     .size_from_main_cross(shares[idx], avail_cross);
                 let size = self.resolve_outer_size_with_layout(
                     children[*child_index],
-                    effective,
+                    *effective,
                     child_available,
                 )?;
                 child_sizes[*child_index] = size;
