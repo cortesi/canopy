@@ -26,7 +26,6 @@ pub(super) fn compile_error_to_canopy(err: &CompileError) -> error::Error {
     ))
 }
 
-/// Convert preparation failures into Canopy's existing public error categories.
 /// Return the structured diagnostics a graph preparation failure carries.
 pub(super) fn prepare_graph_diagnostics(error: &PrepareGraphError) -> Vec<ScriptCheckDiagnostic> {
     error
@@ -45,12 +44,7 @@ pub(super) fn prepare_graph_error_to_canopy(error: &PrepareGraphError) -> error:
     if let Some(diagnostics) = error.diagnostics()
         && diagnostics.has_errors()
     {
-        let result = ScriptCheckResult {
-            diagnostics: diagnostics
-                .records()
-                .map(module_diagnostic_to_script)
-                .collect(),
-        };
+        let result = ScriptCheckResult::from_diagnostics(prepare_graph_diagnostics(error));
         return error::Error::Parse(error::ParseError::new(result.format_diagnostics()));
     }
     if let Some(error) = error.compile_error() {
