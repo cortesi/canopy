@@ -2047,15 +2047,10 @@ impl Markdown {
             || tags.source_options != self.source_options()
             || tags.generation != self.generation
             || tags.revision < self.displayed_revision()
-        {
-            self.dirty = true;
-            self.last_submitted = None;
-            return Ok(());
-        }
-        if self
-            .switching
-            .as_ref()
-            .is_some_and(|s| tags.revision < s.minimum_revision)
+            || self
+                .switching
+                .as_ref()
+                .is_some_and(|s| tags.revision < s.minimum_revision)
         {
             self.dirty = true;
             self.last_submitted = None;
