@@ -992,7 +992,6 @@ mod tests {
         map.rules()
             .fg("button/active/text", Color::Red)
             .fg("button/active/border", Color::Blue)
-            .fg("input/text", Color::Green)
             .apply();
         let mut manager = StyleManager::new();
         manager.push_layer("button");
@@ -1003,9 +1002,6 @@ mod tests {
         manager.push();
         assert_eq!(manager.get(&map, roles::TEXT), label);
         assert_eq!(manager.get(&map, roles::BORDER), border);
-        let mut input = StyleManager::new();
-        input.push_layer("input");
-        input.push_layer(WidgetState::Focused.layer());
     }
 
     #[test]
