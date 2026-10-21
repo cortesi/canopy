@@ -4206,10 +4206,13 @@ pub mod highlight {
         /// Return highlight spans for a line of text.
         fn highlight_line(&self, line: usize, text: &str) -> Vec<HighlightSpan>;
 
-        /// Adopt `text` as the source being highlighted, discarding earlier state.
+        /// Adopt `text` as the source being highlighted, replacing the previous
+        /// source.
         ///
         /// Highlighters that carry parser state between lines need the whole
-        /// source. The default implementation ignores it.
+        /// source. They can keep the state of the lines that did not change, so
+        /// an edit costs the lines after it. The default implementation ignores
+        /// the source.
         /// The editor calls this during rendering, before requesting spans, when
         /// its source or highlighter has changed.
         fn prepare(&self, text: &str) {}
@@ -4220,7 +4223,7 @@ pub mod highlight {
     /// A syntax parses only against its own set, so the two travel together.
     /// Most syntaxes come from the extended set of about 220 languages, and
     /// Luau from a set of its own.
-    #[derive(Clone, Copy, Debug)]
+    #[derive(Clone, Copy, Debug, PartialEq)]
     pub struct Grammar {/* private fields */}
 
     impl Grammar {
