@@ -38,24 +38,21 @@ impl ClickTracker {
     /// Return the click count for `location`, saturating at 3.
     pub(crate) fn count(&mut self, location: Point) -> u8 {
         let now = Instant::now();
-        if let Some(state) = self.last.as_mut() {
-            if state.location == location && now.duration_since(state.last_click) <= self.threshold
+        let count = match &self.last {
+            Some(last)
+                if last.location == location
+                    && now.duration_since(last.last_click) <= self.threshold =>
             {
-                state.count = state.count.saturating_add(1).min(3);
-                state.last_click = now;
-                return state.count;
+                (last.count + 1).min(3)
             }
-            state.location = location;
-            state.count = 1;
-            state.last_click = now;
-            return 1;
-        }
+            _ => 1,
+        };
         self.last = Some(ClickRecord {
             location,
             last_click: now,
-            count: 1,
+            count,
         });
-        1
+        count
     }
 }
 
