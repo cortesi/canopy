@@ -79,6 +79,7 @@ use base_api::{build_base_module, build_command_module, build_owner_modules};
 use bridge::*;
 pub(crate) use bridge::{in_live_scope, validate_node_handle};
 use dispatch::*;
+pub(crate) use errors::script_timeout;
 use errors::*;
 pub(crate) use invocation::{SCRIPT_GAS_LIMIT, ScriptInvocation};
 pub(crate) use modules::{ScriptModuleRoots, ScriptModuleSource};

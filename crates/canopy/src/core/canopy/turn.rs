@@ -542,11 +542,8 @@ impl Canopy {
                 completed = Some((active, Err(Error::ScriptCancelled)));
             } else if active.deadline.is_some_and(|d| now >= d) {
                 self.script.host.abort_invocation(&mut active.invocation)?;
-                let timeout_ms = active
-                    .request
-                    .timeout
-                    .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
-                completed = Some((active, Err(Error::ScriptTimeout { timeout_ms })));
+                let error = script::script_timeout(active.request.timeout);
+                completed = Some((active, Err(error)));
             } else if vm_ready {
                 let host = self.script.host.clone();
                 let step = host.poll_invocation(
