@@ -11,7 +11,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use super::{Cell, TermBuf};
+use super::TermBuf;
 use crate::{
     core::cursor::{CursorMotion, CursorShape},
     geom::{Point, Rect},
@@ -267,7 +267,8 @@ impl TermBuf {
     ) -> Option<CursorPaint> {
         let index = self.idx(location)?;
         if self.cells[index].is_empty() {
-            self.cells[index] = Cell::new(' ', self.cells[index].style);
+            let style = self.cells[index].style;
+            self.cells[index].set(' ', style);
         }
         let range = self.grapheme_span(index)?;
         let off = self.cells[range.start].style;

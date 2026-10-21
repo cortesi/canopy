@@ -118,6 +118,23 @@ impl PartialEq for Cell {
 }
 
 impl Cell {
+    /// Make this cell a single glyph, in place, so a write neither drops
+    /// nor allocates a suffix.
+    #[inline]
+    fn set(&mut self, ch: char, style: ResolvedStyle) {
+        self.ch = ch;
+        self.suffix.clear();
+        self.style = style;
+        self.continuation = false;
+    }
+
+    /// Make this cell continue a wide glyph, in place.
+    #[inline]
+    fn set_continuation(&mut self, style: ResolvedStyle) {
+        self.set(NULL, style);
+        self.continuation = true;
+    }
+
     /// Construct a cell containing a single glyph.
     fn new(ch: char, style: ResolvedStyle) -> Self {
         Self {
@@ -125,16 +142,6 @@ impl Cell {
             suffix: String::new(),
             style,
             continuation: false,
-        }
-    }
-
-    /// Construct a continuation cell for a wide glyph.
-    fn continuation(style: ResolvedStyle) -> Self {
-        Self {
-            ch: NULL,
-            suffix: String::new(),
-            style,
-            continuation: true,
         }
     }
 
@@ -264,7 +271,9 @@ impl TermBuf {
             Some(mut buf) if buf.size == size => {
                 validate_cell_character(ch)?;
                 limits.cell_count(size)?;
-                buf.cells.fill(Cell::new(ch, style));
+                for cell in &mut buf.cells {
+                    cell.set(ch, style);
+                }
                 buf.motion.clear();
                 Ok(buf)
             }
@@ -326,7 +335,9 @@ impl TermBuf {
         }
         if let Some(range) = self.grapheme_span(index) {
             self.clear_motion(range.start);
-            self.cells[range].fill(Cell::new(NULL, style));
+            for cell in &mut self.cells[range] {
+                cell.set(NULL, style);
+            }
         }
     }
 
@@ -345,7 +356,7 @@ impl TermBuf {
             return Ok(());
         };
         self.clear_for_write(index, style);
-        self.cells[index] = Cell::new(ch, style);
+        self.cells[index].set(ch, style);
         Ok(())
     }
 
@@ -377,16 +388,11 @@ impl TermBuf {
         }
         self.clear_graphemes(index, width, style);
         let mut chars = grapheme.chars();
-        let ch = chars.next().unwrap_or(' ');
-        let suffix: String = chars.collect();
-        self.cells[index] = Cell {
-            ch,
-            suffix,
-            style,
-            continuation: false,
-        };
+        let cell = &mut self.cells[index];
+        cell.set(chars.next().unwrap_or(' '), style);
+        cell.suffix.push_str(chars.as_str());
         for offset in 1..width {
-            self.cells[index + offset] = Cell::continuation(style);
+            self.cells[index + offset].set_continuation(style);
         }
         Ok(width)
     }
@@ -398,7 +404,6 @@ impl TermBuf {
             return Ok(());
         };
         let width = self.size.w as usize;
-        let cell = Cell::new(ch, *style);
         for y in isec.tl.y..isec.tl.y.saturating_add(isec.h) {
             let start = y as usize * width + isec.tl.x as usize;
             let end = start + isec.w as usize;
@@ -407,7 +412,9 @@ impl TermBuf {
             self.clear_for_write(start, *style);
             self.clear_for_write(end - 1, *style);
             self.clear_motion_range(start..end);
-            self.cells[start..end].fill(cell.clone());
+            for cell in &mut self.cells[start..end] {
+                cell.set(ch, *style);
+            }
         }
         Ok(())
     }
@@ -430,7 +437,7 @@ impl TermBuf {
                     let style = style_at(point);
                     let index = row_start + x as usize;
                     self.clear_for_write(index, style);
-                    self.cells[index] = Cell::new(ch, style);
+                    self.cells[index].set(ch, style);
                 }
             }
         }

@@ -195,7 +195,7 @@ fn cursor_overlay_styles_complete_graphemes() -> Result<()> {
 #[test]
 fn rendering_rejects_noncanonical_buffers() -> Result<()> {
     let mut buf = TermBuf::new(Size::new(1, 1), '\0', def_style())?;
-    buf.cells[0] = Cell::continuation(def_style());
+    buf.cells[0].set_continuation(def_style());
     let mut backend = RecBackend::new();
     assert!(matches!(buf.emit(&mut backend), Err(Error::Internal(_))));
 
@@ -1164,7 +1164,7 @@ fn identical_multirow_buffers_emit_no_operations() -> Result<()> {
         assert_eq!(backend.flush_ops, 0);
     }
     let mut invalid = buf_from_rows(&["abc", "abc", "abc"]);
-    invalid.cells[0] = Cell::continuation(def_style());
+    invalid.cells[0].set_continuation(def_style());
     assert!(
         invalid
             .emit_diff(&invalid, &mut RegionShiftBackend::default())
