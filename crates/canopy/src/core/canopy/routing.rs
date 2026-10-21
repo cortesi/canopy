@@ -470,9 +470,6 @@ impl Canopy {
                     if modal_owner == Some(id) {
                         if let Some(guard) = guard.as_deref_mut() {
                             guard.observe_end();
-                            if guard.tripped() {
-                                return Ok(true);
-                            }
                         }
                         return Ok(true);
                     }
