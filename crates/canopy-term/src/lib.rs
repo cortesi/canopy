@@ -138,7 +138,6 @@ impl TermHost {
     pub async fn start(command: TermCommand, size: ScreenSize) -> Result<Self> {
         let sockets = tempfile::Builder::new().prefix("canopy-term").tempdir()?;
         let socket = sockets.path().join("app.sock");
-        let placeholder = OsString::from(SOCKET_PLACEHOLDER);
         let args = command
             .args
             .iter()
@@ -146,7 +145,6 @@ impl TermHost {
                 Some(text) if text.contains(SOCKET_PLACEHOLDER) => {
                     OsString::from(text.replace(SOCKET_PLACEHOLDER, &socket.display().to_string()))
                 }
-                _ if *arg == placeholder => socket.clone().into_os_string(),
                 _ => arg.clone(),
             })
             .collect();
