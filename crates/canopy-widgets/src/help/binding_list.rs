@@ -88,7 +88,7 @@ impl Widget for BindingList {
             Constraint::AtMost(width) => natural.min(width),
             Constraint::Unbounded => natural,
         };
-        let lines = self.display_lines(width).len();
+        let lines = display_lines(&rows, width).len();
         constraints.clamp(Size::new(width, u32::try_from(lines).unwrap_or(u32::MAX)))
     }
 
