@@ -596,7 +596,10 @@ impl InputMap {
         } else {
             validate_application_binding(&options, target.intent())?;
         }
-        let path_matcher = options.path.clone().unwrap_or(PathFilter::new("")?);
+        let path_matcher = match options.path {
+            Some(path) => path,
+            None => PathFilter::new("")?,
+        };
         // Identifiers are allocated before anything is replaced, so exhaustion
         // leaves the registry as it was.
         let id = self.allocate_binding_id()?;
