@@ -1136,6 +1136,15 @@ impl LuauHost {
         self.state.borrow_mut().closures.remove(id);
     }
 
+    /// Return the target of a stored function.
+    fn function_target(&self, id: LuauFunctionId) -> Result<StoredFunctionTarget> {
+        self.state
+            .borrow()
+            .closures
+            .target(id)
+            .ok_or_else(|| error::Error::script(format!("Luau function {id:?} not found")))
+    }
+
     /// Execute a stored Luau closure in the current script context.
     pub fn call_function(
         &self,
@@ -1143,12 +1152,7 @@ impl LuauHost {
         node_id: NodeId,
         id: LuauFunctionId,
     ) -> Result<()> {
-        let target = self
-            .state
-            .borrow()
-            .closures
-            .target(id)
-            .ok_or_else(|| error::Error::script(format!("Luau function {id:?} not found")))?;
+        let target = self.function_target(id)?;
         let label = format!("Luau binding on node {node_id:?}");
         self.run_target(canopy, node_id, target, &label, None)
             .map(|_| ())
@@ -1161,12 +1165,7 @@ impl LuauHost {
         node_id: NodeId,
         id: LuauFunctionId,
     ) -> Result<()> {
-        let target = self
-            .state
-            .borrow()
-            .closures
-            .target(id)
-            .ok_or_else(|| error::Error::script(format!("Luau function {id:?} not found")))?;
+        let target = self.function_target(id)?;
         let label = format!("Luau binding on node {node_id:?}");
         self.run_target_in_scope(scope, node_id, &CallTarget::Stored(target), &label, None)
             .map(|_| ())
