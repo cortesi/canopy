@@ -112,8 +112,7 @@ impl LoadedConfig {
     /// Load `.canopyctl.toml` by walking upward from the current directory.
     pub fn load() -> Result<Self> {
         let cwd = env::current_dir().context("read current directory")?;
-        let config_path = discover_config_path(&cwd)?;
-        if let Some(config_path) = config_path {
+        if let Some(config_path) = discover_config_path(&cwd) {
             let contents = fs::read_to_string(&config_path)
                 .with_context(|| format!("read {}", config_path.display()))?;
             let file =
@@ -320,18 +319,18 @@ impl ResolvedCommand {
 }
 
 /// Discover `.canopyctl.toml` by walking upward until the repository root.
-fn discover_config_path(start: &Path) -> Result<Option<PathBuf>> {
+fn discover_config_path(start: &Path) -> Option<PathBuf> {
     let repo_root = find_repo_root(start);
     for ancestor in start.ancestors() {
         let candidate = ancestor.join(".canopyctl.toml");
         if candidate.is_file() {
-            return Ok(Some(candidate));
+            return Some(candidate);
         }
         if Some(ancestor) == repo_root.as_deref() {
             break;
         }
     }
-    Ok(None)
+    None
 }
 
 /// Find the nearest repository root containing a `.git` directory.
