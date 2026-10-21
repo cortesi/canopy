@@ -7,7 +7,7 @@
 use std::{collections::HashSet, hash::Hash};
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, Setup, TypedId, ViewContext, Widget,
+    Context, ContextExt, EventOutcome, NodeName, Setup, TypedId, ViewContext, Widget,
     commands::{ArgValue, CommandCall, CommandStatus, ToArgValue},
     derive_commands,
     error::{Error, Result},
@@ -511,14 +511,11 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     /// Select the item at `index`, which is in bounds, managing item
     /// selection states.
     fn update_selection(&mut self, ctx: &mut dyn Context, index: usize) -> Result<()> {
-        let old_id = self.selection_id(
-            self.selected_index(),
-            "list selection points at a missing item",
-        )?;
+        let old_id = self.selected_item();
         let new_id = self
             .item(index)
             .ok_or_else(|| Error::Internal("new list selection points at a missing item".into()))?;
-        if old_id.map(NodeId::from) != Some(NodeId::from(new_id)) {
+        if old_id != Some(new_id) {
             if let Some(old_id) = old_id {
                 ctx.with_widget_mut(old_id, |w: &mut W, _| {
                     w.set_selected(false);
@@ -534,17 +531,6 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         self.selected = Some(self.items.keys()[index].clone());
         debug_assert!(self.selection_invariant_holds());
         Ok(())
-    }
-
-    /// Return a selected item ID or an error when the list invariants are
-    /// broken.
-    fn selection_id(&self, index: Option<usize>, message: &str) -> Result<Option<TypedId<W>>> {
-        let Some(index) = index else {
-            return Ok(None);
-        };
-        self.item(index)
-            .map(Some)
-            .ok_or_else(|| Error::Internal(message.into()))
     }
 
     /// Return whether the stored selection points at a live list item.
