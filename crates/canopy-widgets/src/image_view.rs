@@ -565,10 +565,7 @@ impl ImageView {
             ZoomDirection::Out => 1.0 / ZOOM_STEP,
         };
         let scroll = self.zoom_by(view_size, view.scroll, factor);
-        ctx.scroll(ScrollOp::To(Point {
-            x: scroll.x,
-            y: scroll.y,
-        }));
+        ctx.scroll(ScrollOp::To(scroll));
         Ok(())
     }
 
