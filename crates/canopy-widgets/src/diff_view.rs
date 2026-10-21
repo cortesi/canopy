@@ -708,11 +708,9 @@ impl DiffView {
             Side::Old => &self.old_highlighter,
             Side::New => &self.new_highlighter,
         };
-        if let Some(highlighter) = highlighter {
-            return highlighter.highlight_line(line, text);
-        }
-        let _ = (line, text);
-        Vec::new()
+        highlighter.as_ref().map_or_else(Vec::new, |highlighter| {
+            highlighter.highlight_line(line, text)
+        })
     }
 
     /// Return the column layout for a view of `view_w` columns.
