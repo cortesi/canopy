@@ -95,6 +95,17 @@ impl TableCell {
             .first()
             .filter(|span| span.range.contains(&byte))
     }
+    /// The style of the byte at `byte` over `base`: the colour and attributes
+    /// of the span that covers it, if any.
+    fn style_at(&self, render: &Render, base: &Style, byte: usize) -> Style {
+        let mut style = base.clone();
+        if let Some(span) = self.span_at(byte) {
+            let overlay = render.apply_effects(span.style.clone());
+            style.fg = overlay.fg;
+            style.attrs = overlay.attrs;
+        }
+        style
+    }
 }
 impl From<String> for TableCell {
     fn from(value: String) -> Self {
@@ -117,6 +128,18 @@ pub enum TableAlignment {
     Center,
     /// Align at the end.
     Right,
+}
+
+impl TableAlignment {
+    /// The blank columns before a value `used` columns wide in a column
+    /// `width` wide.
+    fn padding(self, width: u32, used: u32) -> u32 {
+        match self {
+            Self::Left => 0,
+            Self::Center => (width - used) / 2,
+            Self::Right => width - used,
+        }
+    }
 }
 
 /// One ordered column. Duplicate labels are permitted.
@@ -1251,11 +1274,7 @@ impl PreparedTable {
             .width
             .saturating_add(u32::from(fragment.cut))
             .min(width);
-        let padding = match self.data.columns[column].alignment {
-            TableAlignment::Left => 0,
-            TableAlignment::Center => (width - measured) / 2,
-            TableAlignment::Right => width - measured,
-        };
+        let padding = self.data.columns[column].alignment.padding(width, measured);
         let base = render.resolve_style(path);
         let mut x = start + padding;
         let value = &cell.text[fragment.bytes.clone()];
@@ -1281,12 +1300,7 @@ impl PreparedTable {
                     x: area.tl.x + (x - offset),
                     y,
                 };
-                let mut style = base.clone();
-                if let Some(span) = cell.span_at(byte) {
-                    let overlay = render.apply_effects(span.style.clone());
-                    style.fg = overlay.fg;
-                    style.attrs = overlay.attrs;
-                }
+                let style = cell.style_at(render, &base, byte);
                 render.put_grapheme(style.resolve_at(line, point), point, g)?;
             }
             x = x.saturating_add(cells);

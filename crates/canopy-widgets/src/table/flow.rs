@@ -18,7 +18,7 @@ use canopy::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::{TableAlignment, TableCell, TableData, TableGlyphs, display_control};
+use super::{TableCell, TableData, TableGlyphs, display_control};
 
 /// The widest word kept whole when columns are short of room; a longer word
 /// breaks between graphemes.
@@ -610,23 +610,14 @@ impl FlowTable {
                     Some(row) => &self.data.rows[*row].cells[column],
                 };
                 let used = fragment.width + u32::from(fragment.cut);
-                let padding = match self.data.columns[column].alignment {
-                    TableAlignment::Left => 0,
-                    TableAlignment::Center => (width - used) / 2,
-                    TableAlignment::Right => width - used,
-                };
+                let padding = self.data.columns[column].alignment.padding(width, used);
                 let base = render.resolve_style(path);
                 let mut x = start + padding;
                 for (i, g) in cell.text[fragment.bytes.clone()].grapheme_indices(true) {
                     let byte = fragment.bytes.start + i;
                     let w = cells(g);
                     if visible(x, w) {
-                        let mut style = base.clone();
-                        if let Some(span) = cell.span_at(byte) {
-                            let overlay = render.apply_effects(span.style.clone());
-                            style.fg = overlay.fg;
-                            style.attrs = overlay.attrs;
-                        }
+                        let style = cell.style_at(render, &base, byte);
                         let point = at(x, y);
                         let mut buf = [0; 4];
                         let g = self.glyphs.display(g, &mut buf);
