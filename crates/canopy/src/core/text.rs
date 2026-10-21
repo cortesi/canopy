@@ -3,10 +3,78 @@ use std::{borrow::Cow, iter::repeat_n};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
+/// Return whether `s` is printable ASCII, which is one grapheme and one
+/// column per byte. The check is a byte scan, so the common case avoids
+/// grapheme segmentation.
+#[inline]
+pub(crate) fn printable_ascii(s: &str) -> bool {
+    s.bytes()
+        .all(|byte| byte.is_ascii_graphic() || byte == b' ')
+}
+
+/// Return whether a grapheme boundary falls between bytes `a` and `b`
+/// whatever surrounds them: both are ASCII, and they are not CR LF.
+fn ascii_boundary(a: u8, b: u8) -> bool {
+    a.is_ascii() && b.is_ascii() && !(a == b'\r' && b == b'\n')
+}
+
+/// The extended grapheme clusters of a string.
+///
+/// An ASCII byte before another ASCII byte is a cluster of its own, so only
+/// the stretches around other characters go through Unicode segmentation.
+pub(crate) struct Graphemes<'a> {
+    /// Text after the current stretch.
+    rest: &'a str,
+    /// Clusters of the current stretch, which ends at a boundary.
+    stretch: unicode_segmentation::Graphemes<'a>,
+}
+
+impl<'a> Iterator for Graphemes<'a> {
+    type Item = &'a str;
+
+    #[inline]
+    fn next(&mut self) -> Option<&'a str> {
+        if let Some(grapheme) = self.stretch.next() {
+            return Some(grapheme);
+        }
+        let bytes = self.rest.as_bytes();
+        let first = *bytes.first()?;
+        let end = if bytes.get(1).is_none_or(|&next| ascii_boundary(first, next)) {
+            1
+        } else {
+            (2..bytes.len())
+                .find(|&at| ascii_boundary(bytes[at - 1], bytes[at]))
+                .unwrap_or(bytes.len())
+        };
+        let (head, tail) = self.rest.split_at(end);
+        self.rest = tail;
+        if end == 1 {
+            return Some(head);
+        }
+        self.stretch = head.graphemes(true);
+        self.stretch.next()
+    }
+}
+
+/// Split `s` into extended grapheme clusters, as
+/// `UnicodeSegmentation::graphemes(s, true)` does, but faster for text that
+/// is mostly ASCII.
+pub(crate) fn graphemes(s: &str) -> Graphemes<'_> {
+    Graphemes {
+        rest: s,
+        stretch: "".graphemes(true),
+    }
+}
+
 /// Slice a string by display columns, returning the substring and its width.
 pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {
     if max == 0 || s.is_empty() {
         return ("", 0);
+    }
+    if printable_ascii(s) {
+        let start = start.min(s.len());
+        let end = start.saturating_add(max).min(s.len());
+        return (&s[start..end], end - start);
     }
 
     let mut col = 0usize;
@@ -15,7 +83,8 @@ pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {
     let mut start_byte = 0usize;
     let mut end_byte = 0usize;
 
-    for (idx, grapheme) in s.grapheme_indices(true) {
+    for grapheme in graphemes(s) {
+        let idx = grapheme.as_ptr() as usize - s.as_ptr() as usize;
         let g_width = grapheme_width(grapheme);
 
         if !started {
@@ -125,16 +194,11 @@ pub fn cell_width(grapheme: &str, column: usize, tab_stop: usize) -> usize {
 }
 
 /// Return the terminal cells `s` occupies.
-///
-/// Printable ASCII is one column per byte, and the check for it costs a byte
-/// scan, so the common case avoids grapheme segmentation.
 fn cells(s: &str) -> usize {
-    if s.bytes()
-        .all(|byte| byte.is_ascii_graphic() || byte == b' ')
-    {
+    if printable_ascii(s) {
         return s.len();
     }
-    s.graphemes(true).map(grapheme_width).sum()
+    graphemes(s).map(grapheme_width).sum()
 }
 
 /// Which end of a string a truncation drops when it does not fit.
@@ -253,6 +317,39 @@ mod tests {
         }
         for text in ["", "ab", "界", "e\u{301}", "\u{301}", "👩‍💻", "\r\n"] {
             assert_eq!(grapheme_width(text), UnicodeWidthStr::width(text).min(2));
+        }
+    }
+
+    #[test]
+    fn graphemes_split_as_unicode_segmentation_does() {
+        let pieces = [
+            "a",
+            " ",
+            "\r",
+            "\n",
+            "\t",
+            "e\u{301}",
+            "\u{301}",
+            "界",
+            "👩\u{200d}💻",
+            "🇦🇺",
+            "🇳🇿",
+            "\u{600}",
+            "\u{1100}\u{1161}",
+            "\u{200d}",
+            "#\u{fe0f}\u{20e3}",
+            "\u{903}",
+        ];
+        // Every string of up to three pieces, so each pair meets at each side.
+        for a in pieces {
+            for b in pieces {
+                for c in pieces {
+                    let text = format!("x{a}{b}{c}y{a}");
+                    let fast: Vec<_> = graphemes(&text).collect();
+                    let slow: Vec<_> = text.graphemes(true).collect();
+                    assert_eq!(fast, slow, "{text:?}");
+                }
+            }
         }
     }
 

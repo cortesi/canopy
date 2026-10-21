@@ -412,6 +412,7 @@ impl Paint {
     }
 
     /// Resolve the paint at a location, at rest.
+    #[inline]
     pub fn resolve(&self, rect: geom::Rect, point: geom::Point) -> Color {
         match self {
             Self::Solid(color) => *color,
@@ -552,6 +553,7 @@ pub struct Style {
 
 impl Style {
     /// Resolve the style at a location within a rectangle.
+    #[inline]
     pub fn resolve_at(&self, rect: geom::Rect, point: geom::Point) -> ResolvedStyle {
         ResolvedStyle::new(
             self.fg.resolve(rect, point),

@@ -7,6 +7,7 @@
 
 use std::{
     mem,
+    ops::Range,
     time::{Duration, Instant},
 };
 
@@ -191,6 +192,16 @@ impl TermBuf {
                         style: style_at(point),
                     },
                 );
+            }
+        }
+    }
+
+    /// Clear the motion records of the graphemes based in `range`.
+    pub(super) fn clear_motion_range(&mut self, range: Range<usize>) {
+        if !self.motion.is_empty() {
+            let moving: Vec<_> = self.motion.range(range).map(|(&index, _)| index).collect();
+            for index in moving {
+                self.motion.remove(&index);
             }
         }
     }

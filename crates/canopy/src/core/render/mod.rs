@@ -1,5 +1,3 @@
-use unicode_segmentation::UnicodeSegmentation;
-
 use super::termbuf::{MotionStyle, TermBuf};
 use crate::{
     NodeId,
@@ -353,6 +351,9 @@ impl<'a> Render<'a> {
         };
         let style = self.resolve_style(style);
         let adjusted = self.translate_rect(intersection);
+        if let Some(solid) = style.resolve_solid() {
+            return self.buf.fill(&solid, adjusted, c);
+        }
         let origin = self.origin;
         self.buf
             .fill_with(adjusted, c, |p| style.resolve_at(r, untranslate(origin, p)))?;
@@ -401,7 +402,7 @@ impl<'a> Render<'a> {
         'runs: for (style, run) in runs {
             let mut merged = base.clone();
             merged.fg = self.resolve_style(style).fg;
-            for grapheme in run.graphemes(true) {
+            for grapheme in text::graphemes(run) {
                 let width = u32::try_from(text::grapheme_width(grapheme)).unwrap_or(u32::MAX);
                 if x.saturating_add(width) > end {
                     break 'runs;

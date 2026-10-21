@@ -6,7 +6,6 @@ use std::{
 };
 
 use crossterm::{QueueableCommand, cursor as ccursor, style};
-use unicode_segmentation::UnicodeSegmentation;
 
 use super::translate_result;
 use crate::{
@@ -153,7 +152,9 @@ struct PositionedTextRun<'a> {
 /// Borrow absolute-positioned runs, isolating wide graphemes and omitting
 /// zero-width graphemes without allocating intermediate strings.
 fn positioned_text_runs(loc: Point, txt: &str) -> impl Iterator<Item = PositionedTextRun<'_>> {
-    let mut graphemes = txt.grapheme_indices(true).peekable();
+    let mut graphemes = text::graphemes(txt)
+        .map(|grapheme| (grapheme.as_ptr() as usize - txt.as_ptr() as usize, grapheme))
+        .peekable();
     let mut x = loc.x;
 
     iter::from_fn(move || {

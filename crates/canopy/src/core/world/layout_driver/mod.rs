@@ -42,8 +42,9 @@ impl Core {
         }
         // The full check walks every node's ancestors, so release builds
         // leave it to the tests.
-        #[cfg(debug_assertions)]
-        self.validate_invariants()?;
+        if cfg!(debug_assertions) {
+            self.validate_invariants()?;
+        }
 
         Ok(())
     }

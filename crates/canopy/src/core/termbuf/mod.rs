@@ -5,8 +5,6 @@
 
 use std::{collections::BTreeMap, ops::Range};
 
-use unicode_segmentation::UnicodeSegmentation;
-
 use crate::{
     core::text,
     error::{Error, Result},
@@ -96,7 +94,7 @@ impl Default for RenderLimits {
 }
 
 /// A terminal cell with glyph and style.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Cell {
     /// Base glyph character.
     pub ch: char,
@@ -106,6 +104,17 @@ pub struct Cell {
     pub style: ResolvedStyle,
     /// True when this cell continues a wide glyph from the previous column.
     pub continuation: bool,
+}
+
+impl PartialEq for Cell {
+    /// Compare the cheap fields first, since a frame diff compares every cell.
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.ch == other.ch
+            && self.continuation == other.continuation
+            && self.style == other.style
+            && (self.suffix.is_empty() && other.suffix.is_empty() || self.suffix == other.suffix)
+    }
 }
 
 impl Cell {
@@ -378,7 +387,23 @@ impl TermBuf {
 
     /// Fill a rectangle with a glyph and style.
     pub fn fill(&mut self, style: &ResolvedStyle, r: Rect, ch: char) -> Result<()> {
-        self.fill_with(r, ch, |_| *style)
+        validate_cell_character(ch)?;
+        let Some(isec) = self.rect().intersect(r) else {
+            return Ok(());
+        };
+        let width = self.size.w as usize;
+        let cell = Cell::new(ch, *style);
+        for y in isec.tl.y..isec.tl.y.saturating_add(isec.h) {
+            let start = y as usize * width + isec.tl.x as usize;
+            let end = start + isec.w as usize;
+            // Only a wide glyph across an edge reaches outside the row, and
+            // the fill overwrites the rest.
+            self.clear_for_write(start, *style);
+            self.clear_for_write(end - 1, *style);
+            self.clear_motion_range(start..end);
+            self.cells[start..end].fill(cell.clone());
+        }
+        Ok(())
     }
 
     /// Fill a rectangle, resolving the style separately for each cell.
@@ -444,7 +469,7 @@ impl TermBuf {
         let mut col = 0usize;
         let mut x = isec.tl.x;
 
-        for grapheme in out.graphemes(true) {
+        for grapheme in text::graphemes(out) {
             let width = text::grapheme_width(grapheme);
             if width == 0 {
                 continue;
