@@ -167,10 +167,8 @@ impl Confirm {
     /// Ask `message` under `title`.
     pub fn ask(&mut self, context: &mut dyn Context, title: &str, message: &str) -> Result<()> {
         let body = self.body()?;
-        let title = title.to_owned();
-        let message = message.to_owned();
         context.with_widget_mut(body, |body: &mut ConfirmBody, _context| {
-            body.show(&message);
+            body.show(message);
             Ok(())
         })?;
         let frame = context
