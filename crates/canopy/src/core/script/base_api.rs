@@ -436,8 +436,8 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     BaseFunction {
         name: "notify",
         docs: Some(
-            "Post a notice. An info or warning notice shows as a toast for its duration, \
-             two seconds by default, and an error shows until the next input event.",
+            "Post a notice, which shows as a toast for its duration: two seconds for info, \
+             four for a warning, and six for an error, unless the options name another.",
         ),
         signature: || {
             FunctionSignature::new()
@@ -2200,17 +2200,17 @@ fn host_notify<'s>(
     const OWNER: &str = "notify options";
     let mut args = HostArgCursor::new(scope, args);
     let message = args.required::<String>("message")?;
-    let mut post = NoticePost::info(message.clone());
+    let mut level = NoticeLevel::Info;
+    let mut duration = None;
     if let Some(options) = args.optional::<Table<'_>>("options")? {
         for (name, value) in option_fields(scope, &options, OWNER, &["level", "duration"])? {
             if name == "level" {
                 let label = option_string(scope, value, OWNER, &name)?;
-                let level = NoticeLevel::from_label(&label).ok_or_else(|| {
+                level = NoticeLevel::from_label(&label).ok_or_else(|| {
                     RuntimeError::runtime(format!(
                         "{OWNER} field `level` must be info, warning, or error, got `{label}`"
                     ))
                 })?;
-                post = NoticePost::new(level, message.clone()).with_duration(post.duration());
             } else {
                 let seconds = match value {
                     ScopedValue::Integer(_) | ScopedValue::Number(_) => {
@@ -2223,14 +2223,18 @@ fn host_notify<'s>(
                         )));
                     }
                 };
-                let duration = Duration::try_from_secs_f64(seconds).map_err(|_| {
+                duration = Some(Duration::try_from_secs_f64(seconds).map_err(|_| {
                     RuntimeError::runtime(format!(
                         "{OWNER} field `duration` must be a number of seconds, got {seconds}"
                     ))
-                })?;
-                post = post.with_duration(duration);
+                })?);
             }
         }
+    }
+    // Without a duration of its own, the notice takes its level's.
+    let mut post = NoticePost::new(level, message);
+    if let Some(duration) = duration {
+        post = post.with_duration(duration);
     }
     with_current_canopy(scope, |canopy, _| {
         canopy.notify(post);

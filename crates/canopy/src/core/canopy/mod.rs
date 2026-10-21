@@ -622,8 +622,8 @@ impl Canopy {
     /// input binding, a widget handler, or a poll that
     /// [`Error::is_notice`](crate::error::Error::is_notice) classifies as a
     /// notice is recorded here as an error while the application keeps
-    /// running, and shows until the next input event. A widget posts other
-    /// notices with [`Context::notify`](crate::Context::notify).
+    /// running, and shows as a toast. A widget posts other notices with
+    /// [`Context::notify`](crate::Context::notify).
     pub fn notices(&self) -> &[Notice] {
         self.core.notices.entries()
     }
@@ -651,18 +651,6 @@ impl Canopy {
         }
         let now = self.core.clock.now();
         self.core.notices.record_failure(&error, source, node, now);
-        Ok(())
-    }
-
-    /// Stop showing the shown error because input arrived, and sync its
-    /// hooks at once, so an overlay that showed it hides before hit testing.
-    fn dismiss_notice(&mut self) -> Result<()> {
-        if !self.core.notices.dismiss_error() {
-            return Ok(());
-        }
-        for hook in self.notice_hooks.take_due(self.core.notices.generation()) {
-            self.with_root_context(hook)?;
-        }
         Ok(())
     }
 

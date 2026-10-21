@@ -78,8 +78,8 @@ pub mod runtime {
     pub use crate::core::{
         canopy::{FrameId, TurnInput, TurnOutcome},
         notice::{
-            DEFAULT_TOAST_DURATION, Failure, Notice, NoticeId, NoticeLevel, NoticeLog, NoticePost,
-            NoticeSource, TOAST_LIMIT,
+            Failure, Notice, NoticeId, NoticeLevel, NoticeLog, NoticePost, NoticeSource,
+            TOAST_LIMIT,
         },
         snapshot::{FrameSnapshot, NodeSnapshot, WidgetSemantics},
         wake::{NodeWakeHandle, PollLifetime, WakeOutcome, WakeSender, wake_channel},

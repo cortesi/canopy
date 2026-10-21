@@ -205,8 +205,8 @@ pub trait ViewContext: sealed::ViewContext {
     /// a new modal. Every node is admitted while no modal is open.
     fn modal_admits(&self, node: NodeId) -> bool;
 
-    /// Return the notice log, which also answers which notices show: the
-    /// error until the next input event, and the toasts in their time.
+    /// Return the notice log, which also answers which notices show: each as
+    /// a toast in its time.
     fn notice_log(&self) -> &NoticeLog;
 
     /// Return the path for a node relative to a root.
@@ -723,9 +723,9 @@ pub trait Context: ViewContext + sealed::Context {
     /// closes, so a dispatch that fails drops the notices it queued. The queue
     /// drains in order and does not roll back: a notice that it applied stays
     /// when a later posted call fails, so queue an outcome after the work it
-    /// reports. Outside a dispatch the notice posts at once. An error shows
-    /// until the next input event, and an info or warning notice shows as a
-    /// toast for its duration.
+    /// reports. Outside a dispatch the notice posts at once. Every notice
+    /// shows as a toast for its duration, which its level sets unless the
+    /// post names another.
     ///
     /// # Errors
     ///

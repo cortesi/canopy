@@ -1,28 +1,37 @@
 //! The toast stack that `Root` draws over the application.
 //!
-//! An info or warning notice shows as a toast: a one-row box at the right edge
-//! of the window, just above the bottom row, for the notice's duration. With
-//! a toast floor, which [`Root::set_toast_floor`](crate::Root::set_toast_floor)
-//! sets, the stack rests just above the floor instead. The
-//! toasts stack, newest at the bottom, and each goes when its own time ends.
-//! The notice log in the core decides which toasts are live, so this module
-//! only shows them.
+//! Each notice shows as a toast: a card at the right edge of the window, just
+//! above the bottom row, for the notice's duration. A card has an edge in the
+//! colour of its level, and its message wraps on at most three lines. With a
+//! toast floor, which [`Root::set_toast_floor`](crate::Root::set_toast_floor)
+//! sets, the stack rests just above the floor instead. The cards stack,
+//! newest at the bottom, and each goes when its own time ends. The notice log
+//! in the core decides which toasts are live, so this module only shows them.
 
-use std::time::Duration;
+use std::{mem, time::Duration};
 
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, TypedId, ViewContext, Widget,
     error::Result,
-    geom::{Line, Size},
+    geom::{Line, Rect, Size},
     input::{Event, mouse},
     layout::{Align, Direction, Edges, Layout, MeasureConstraints, Measurement},
     render::Render,
     runtime::{NoticeId, NoticeLevel, TOAST_LIMIT},
-    text::{self, Truncate},
+    text,
 };
 
 /// Blank columns on each side of a toast's message.
 const TOAST_PADDING: u32 = 1;
+
+/// Columns of the coloured edge at a card's left.
+const EDGE: u32 = 1;
+
+/// The widest a card's message wraps to.
+const MAX_TEXT_WIDTH: u32 = 48;
+
+/// The most lines a card's message takes.
+const MAX_LINES: usize = 3;
 
 /// A full-size layer that stacks the live toasts at its bottom right.
 ///
@@ -105,6 +114,7 @@ impl Widget for ToastLayer {
             .direction(Direction::Column)
             .align_horizontal(Align::End)
             .align_vertical(Align::End)
+            .gap(1)
             .padding(Edges::new(0, 1, 1, 0))
     }
 
@@ -142,55 +152,147 @@ impl Shown {
             .as_deref()
             .map_or(0, |count| text::width(count).saturating_add(1))
     }
+
+    /// Return the lines of the message wrapped at `width` columns, with room
+    /// for the count on the last line. A message too long for
+    /// [`MAX_LINES`] lines ends with a marker.
+    fn lines(&self, width: u32) -> Vec<String> {
+        let width = width.max(1) as usize;
+        let mut lines = wrap(&self.message, width);
+        if lines.len() > MAX_LINES {
+            let rest = lines.split_off(MAX_LINES - 1).join(" ");
+            lines.push(text::truncate_end(&rest, width).into_owned());
+        }
+        if let Some(last) = lines.last_mut() {
+            let room = width.saturating_sub(self.count_width() as usize);
+            *last = text::truncate_end(last, room).into_owned();
+        }
+        lines
+    }
 }
 
-/// One toast: a one-row box as wide as its message.
+/// One toast: a card as wide as its message, which wraps on at most
+/// [`MAX_LINES`] lines.
 #[derive(Default)]
 pub struct ToastBox {
     /// The toast this box shows, while it shows one.
     shown: Option<Shown>,
 }
 
+impl ToastBox {
+    /// Return the columns around the message: the edge and the padding.
+    const fn frame() -> u32 {
+        EDGE + 2 * TOAST_PADDING
+    }
+}
+
+/// Wrap `message` at `width` columns, at word boundaries, keeping its line
+/// breaks. A word wider than a line breaks across lines.
+fn wrap(message: &str, width: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    for paragraph in message.lines() {
+        let mut line = String::new();
+        for word in paragraph.split_whitespace() {
+            let mut word = word;
+            while text::width(word) as usize > width {
+                if !line.is_empty() {
+                    lines.push(mem::take(&mut line));
+                }
+                let (head, _) = text::slice_by_columns(word, 0, width);
+                // A grapheme wider than the line takes a line of its own.
+                let head = if head.is_empty() {
+                    word.chars().next().map_or("", |c| &word[..c.len_utf8()])
+                } else {
+                    head
+                };
+                lines.push(head.to_owned());
+                word = &word[head.len()..];
+            }
+            if word.is_empty() {
+                continue;
+            }
+            let needed = text::width(&line) as usize
+                + usize::from(!line.is_empty())
+                + text::width(word) as usize;
+            if !line.is_empty() && needed > width {
+                lines.push(mem::take(&mut line));
+            }
+            if !line.is_empty() {
+                line.push(' ');
+            }
+            line.push_str(word);
+        }
+        if !line.is_empty() || lines.is_empty() {
+            lines.push(line);
+        }
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
+}
+
 impl Widget for ToastBox {
     fn measure(&self, constraints: MeasureConstraints) -> Measurement {
-        let width = self
-            .shown
-            .as_ref()
-            .map_or(0, |shown| {
-                text::width(&shown.message).saturating_add(shown.count_width())
+        let Some(shown) = &self.shown else {
+            return constraints.clamp(Size::new(0, 0));
+        };
+        let natural = text::width(&shown.message)
+            .saturating_add(shown.count_width())
+            .min(MAX_TEXT_WIDTH)
+            .saturating_add(Self::frame());
+        // The message wraps at the width the card gets, which a narrow
+        // window can make less than the width it wants.
+        let granted = constraints.clamp_size(Size::new(natural, 0)).w;
+        let text_width = granted.saturating_sub(Self::frame());
+        let lines = shown.lines(text_width);
+        let widest = lines
+            .iter()
+            .enumerate()
+            .map(|(index, line)| {
+                let count = if index + 1 == lines.len() {
+                    shown.count_width()
+                } else {
+                    0
+                };
+                text::width(line).saturating_add(count)
             })
-            .saturating_add(2 * TOAST_PADDING);
-        constraints.clamp(Size::new(width, 1))
+            .max()
+            .unwrap_or_default();
+        let height = u32::try_from(lines.len()).unwrap_or(u32::MAX);
+        constraints.clamp(Size::new(widest.saturating_add(Self::frame()), height))
     }
 
     fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
         let Some(shown) = &self.shown else {
             return Ok(());
         };
-        let style = match shown.level {
-            NoticeLevel::Warning => "root/toast/warning",
-            NoticeLevel::Info | NoticeLevel::Error => "root/toast/info",
+        let (style, edge) = match shown.level {
+            NoticeLevel::Info => ("root/toast/info", "root/toast/info/edge"),
+            NoticeLevel::Warning => ("root/toast/warning", "root/toast/warning/edge"),
+            NoticeLevel::Error => ("root/toast/error", "root/toast/error/edge"),
         };
         let rect = context.view().outer_rect_local();
         render.fill(style, rect, ' ')?;
-        // A narrow box cuts the message and keeps the count whole.
-        let budget = rect.w.saturating_sub(2 * TOAST_PADDING);
-        let count_width = shown.count_width().min(budget);
-        let message =
-            Truncate::End.apply(&shown.message, budget.saturating_sub(count_width) as usize);
-        let x = rect.tl.x.saturating_add(TOAST_PADDING);
-        render.text(
-            style,
-            Line::new(x, rect.tl.y, budget.saturating_sub(count_width)),
-            &message,
+        render.fill(
+            edge,
+            Rect::new(rect.tl.x, rect.tl.y, EDGE.min(rect.w), rect.h),
+            ' ',
         )?;
-        if let Some(count) = &shown.count {
-            let x = x.saturating_add(text::width(&message)).saturating_add(1);
-            render.text(
-                "root/toast/count",
-                Line::new(x, rect.tl.y, count_width.saturating_sub(1)),
-                count,
-            )?;
+        let text_width = rect.w.saturating_sub(Self::frame());
+        let x = rect.tl.x.saturating_add(EDGE + TOAST_PADDING);
+        let lines = shown.lines(text_width);
+        let last = lines.len().saturating_sub(1);
+        for (index, line) in lines.iter().enumerate().take(rect.h as usize) {
+            let y = rect.tl.y + u32::try_from(index).unwrap_or(u32::MAX);
+            render.text(style, Line::new(x, y, text_width), line)?;
+            if index == last
+                && let Some(count) = &shown.count
+            {
+                let x = x.saturating_add(text::width(line)).saturating_add(1);
+                let width = shown.count_width().saturating_sub(1);
+                render.text("root/toast/count", Line::new(x, y, width), count)?;
+            }
         }
         Ok(())
     }
@@ -234,17 +336,18 @@ mod tests {
         notify(&mut harness, NoticePost::info("first"))?;
         notify(&mut harness, NoticePost::warning("second"))?;
         let rows = rows(&harness);
-        // The box is the message and a blank column each side, and it ends one
-        // column in from the right edge.
+        // The card is its edge, then the message with a blank column each
+        // side, and it ends one column in from the right edge.
         assert_eq!(
-            &rows[4][21..29],
-            " second ",
+            &rows[4][20..29],
+            "  second ",
             "the newest sits lowest: {rows:?}"
         );
-        assert_eq!(&rows[3][22..29], " first ", "the older one sits above it");
+        assert!(rows[3].trim().is_empty(), "a blank row parts the cards");
+        assert_eq!(&rows[2][21..29], "  first ", "the older one sits above it");
         assert!(rows[5].trim().is_empty(), "the bottom row stays clear");
         assert!(
-            rows[4][..21].trim().is_empty(),
+            rows[4][..20].trim().is_empty(),
             "nothing else draws on the row"
         );
 
@@ -265,6 +368,11 @@ mod tests {
         };
         assert_eq!(cell(22).fg, style("root/toast/warning").fg);
         assert_eq!(cell(21).bg, style("root/toast/warning").bg);
+        assert_eq!(
+            cell(20).bg,
+            style("root/toast/warning/edge").bg,
+            "the edge takes the level's colour"
+        );
         assert_ne!(
             style("root/toast/warning").fg,
             style("root/toast/info").fg,
@@ -301,7 +409,7 @@ mod tests {
         assert_eq!(row_of(&harness, "first"), 6, "the stack rests on the band");
         notify(&mut harness, NoticePost::info("second"))?;
         assert_eq!(row_of(&harness, "second"), 6, "the newest sits lowest");
-        assert_eq!(row_of(&harness, "first"), 5);
+        assert_eq!(row_of(&harness, "first"), 4);
 
         // The band grows, and the stack follows it at the next frame.
         harness.with_unique(|_: &mut BandApp, ctx| {
@@ -323,6 +431,55 @@ mod tests {
             row_of(&harness, "second"),
             8,
             "clearing the floor restores the place"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_long_message_wraps_on_at_most_three_lines() -> Result<()> {
+        let (mut harness, _clock) = app(Size::new(80, 10))?;
+        let words = "word ".repeat(40);
+        notify(&mut harness, NoticePost::error(words.trim()))?;
+        let screen = rows(&harness);
+        let lines = screen
+            .iter()
+            .filter(|row| row.contains("word"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            lines.len(),
+            3,
+            "the message wraps on three lines: {screen:?}"
+        );
+        assert!(
+            lines[2].trim_end().ends_with('…'),
+            "the cut shows: {screen:?}"
+        );
+        let widest = lines
+            .iter()
+            .map(|row| row.trim().chars().count())
+            .max()
+            .unwrap_or_default();
+        assert!(widest <= 48, "the text wraps at 48 columns: {widest}");
+
+        // A repeat keeps its count whole after the cut.
+        notify(&mut harness, NoticePost::error(words.trim()))?;
+        let screen = rows(&harness);
+        assert!(
+            screen.iter().any(|row| row.contains("… ×2")),
+            "the count follows the cut: {screen:?}"
+        );
+
+        // A short message gives a narrow card on one line.
+        let (mut harness, _clock) = app(Size::new(80, 6))?;
+        notify(&mut harness, NoticePost::error("no vault here"))?;
+        let screen = rows(&harness);
+        assert_eq!(screen[4].trim(), "no vault here", "{screen:?}");
+        // The card is the text and its frame of 3 columns, one column in from
+        // the right, and its text starts after the edge and the padding.
+        let card = 13 + 3;
+        assert_eq!(
+            screen[4].len() - screen[4].trim_start().len(),
+            80 - 1 - card + 2
         );
         Ok(())
     }

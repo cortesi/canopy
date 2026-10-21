@@ -1,9 +1,9 @@
 //! Notices: the messages the application shows the user, kept in one log.
 //!
-//! Every notice has a level. An error reports a failure, and shows until the
-//! next input event. An info or warning notice shows as a toast for its
-//! duration, and then goes. The log keeps the newest notices of every level,
-//! so a user can read them again after they have gone.
+//! Every notice has a level, and shows as a toast for its duration, and then
+//! goes. A worse level shows longer: an error reports a failure. The log
+//! keeps the newest notices of every level, so a user can read them again
+//! after they have gone.
 //!
 //! The runtime records a failure from an input binding, a widget handler, or
 //! a poll as an error when [`Error::is_notice`] says so. A widget posts any
@@ -25,9 +25,6 @@ const NOTICE_LIMIT: usize = 100;
 
 /// Maximum toasts that show at once. A newer toast ends the oldest early.
 pub const TOAST_LIMIT: usize = 4;
-
-/// How long a toast shows unless its post names another duration.
-pub const DEFAULT_TOAST_DURATION: Duration = Duration::from_secs(2);
 
 /// Where a failure arose.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,12 +54,11 @@ impl NoticeSource {
 /// How a notice reads, and how it shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NoticeLevel {
-    /// An outcome, such as an entry moved to the trash. It shows as a toast.
+    /// An outcome, such as an entry moved to the trash.
     Info,
     /// A refusal that needs no action, such as a key with nothing to act on.
-    /// It shows as a toast.
     Warning,
-    /// A failure. It shows until the next input event.
+    /// A failure.
     Error,
 }
 
@@ -84,9 +80,14 @@ impl NoticeLevel {
         Self::ALL.into_iter().find(|level| level.label() == label)
     }
 
-    /// Return whether a notice of this level shows as a toast.
-    pub fn is_toast(self) -> bool {
-        self != Self::Error
+    /// Return how long a toast of this level shows unless its post names
+    /// another duration: longer for worse news.
+    pub const fn default_duration(self) -> Duration {
+        match self {
+            Self::Info => Duration::from_secs(2),
+            Self::Warning => Duration::from_secs(4),
+            Self::Error => Duration::from_secs(6),
+        }
     }
 }
 
@@ -168,7 +169,7 @@ impl NoticePost {
         Self::new(NoticeLevel::Warning, message)
     }
 
-    /// Post a failure, which shows until the next input event.
+    /// Post a failure.
     pub fn error(message: impl Into<String>) -> Self {
         Self::new(NoticeLevel::Error, message)
     }
@@ -178,11 +179,11 @@ impl NoticePost {
         Self {
             message: message.into(),
             level,
-            duration: DEFAULT_TOAST_DURATION,
+            duration: level.default_duration(),
         }
     }
 
-    /// Show the toast for `duration` in place of the default two seconds.
+    /// Show the toast for `duration` in place of its level's default.
     #[must_use]
     pub fn with_duration(mut self, duration: Duration) -> Self {
         self.duration = duration;
@@ -212,8 +213,6 @@ pub struct NoticeLog {
     entries: Vec<Notice>,
     /// Identity the next new entry takes.
     next_id: u64,
-    /// The error that shows until the next input event.
-    shown_error: Option<NoticeId>,
     /// Toasts that a click or the toast limit ended before their time.
     ended: HashSet<NoticeId>,
     /// Number of changes to the log or to what shows, so hooks know when to
@@ -255,9 +254,6 @@ impl NoticeLog {
                 if self.entries.len() == NOTICE_LIMIT {
                     let evicted = self.entries.remove(0);
                     self.ended.remove(&evicted.id);
-                    if self.shown_error == Some(evicted.id) {
-                        self.shown_error = None;
-                    }
                 }
                 self.entries.push(Notice {
                     id,
@@ -271,11 +267,7 @@ impl NoticeLog {
                 id
             }
         };
-        if level.is_toast() {
-            self.limit_toasts(now);
-        } else {
-            self.shown_error = Some(id);
-        }
+        self.limit_toasts(now);
         self.generation = self.generation.wrapping_add(1);
         id
     }
@@ -314,15 +306,6 @@ impl NoticeLog {
         self.ended.extend(ended);
     }
 
-    /// Stop showing the shown error. Returns whether one was shown.
-    pub(crate) fn dismiss_error(&mut self) -> bool {
-        if self.shown_error.take().is_none() {
-            return false;
-        }
-        self.generation = self.generation.wrapping_add(1);
-        true
-    }
-
     /// End the toast of `id` before its time. Returns whether it was live.
     pub(crate) fn end_toast(&mut self, id: NoticeId, now: Instant) -> bool {
         let live = self
@@ -342,12 +325,6 @@ impl NoticeLog {
         &self.entries
     }
 
-    /// Return the error that shows until the next input event, if one does.
-    pub fn shown_error(&self) -> Option<&Notice> {
-        let id = self.shown_error?;
-        self.entries.iter().rev().find(|notice| notice.id == id)
-    }
-
     /// Return the toasts that show at `now`, oldest first.
     pub fn live_toasts(&self, now: Instant) -> Vec<&Notice> {
         self.entries
@@ -356,14 +333,9 @@ impl NoticeLog {
             .collect()
     }
 
-    /// Return whether `notice` shows at `now`: as a toast in its time, or as
-    /// the shown error.
+    /// Return whether `notice` shows at `now`, as a toast in its time.
     pub fn is_live(&self, notice: &Notice, now: Instant) -> bool {
-        if notice.level.is_toast() {
-            self.toast_live(notice, now)
-        } else {
-            self.shown_error == Some(notice.id)
-        }
+        self.toast_live(notice, now)
     }
 
     /// Return when the next live toast ends, if one shows at `now`.
@@ -381,10 +353,7 @@ impl NoticeLog {
 
     /// Return whether `notice` is a toast that shows at `now`.
     fn toast_live(&self, notice: &Notice, now: Instant) -> bool {
-        notice.level.is_toast()
-            && !self.ended.contains(&notice.id)
-            && notice.at <= now
-            && now < notice.ends()
+        !self.ended.contains(&notice.id) && notice.at <= now && now < notice.ends()
     }
 }
 
@@ -406,17 +375,6 @@ mod tests {
         }
         assert_eq!(log.entries().len(), NOTICE_LIMIT);
         assert_eq!(log.entries()[0].message, "3", "the oldest drop first");
-    }
-
-    #[test]
-    fn an_evicted_shown_error_stops_showing() {
-        let (mut log, now) = log();
-        log.post(NoticePost::error("broken"), None, now);
-        assert!(log.shown_error().is_some());
-        for index in 0..NOTICE_LIMIT {
-            log.post(NoticePost::info(index.to_string()), None, now);
-        }
-        assert!(log.shown_error().is_none(), "the evicted error hides");
     }
 
     #[test]
@@ -455,24 +413,30 @@ mod tests {
     }
 
     #[test]
-    fn an_error_shows_until_dismissed_and_a_toast_until_its_time() {
+    fn every_level_is_a_toast_and_worse_news_shows_longer() {
         let (mut log, now) = log();
-        let error = log.post(NoticePost::error("broken"), None, now);
+        log.post(NoticePost::error("broken"), None, now);
+        log.post(NoticePost::warning("refused"), None, now);
         log.post(NoticePost::info("saved"), None, now);
-        assert_eq!(
-            log.shown_error().map(|notice| notice.id),
-            Some(error),
-            "a later toast leaves the error shown"
+        let live = |log: &NoticeLog, at: Duration| {
+            log.live_toasts(now + at)
+                .into_iter()
+                .map(|notice| notice.message.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(live(&log, Duration::ZERO), ["broken", "refused", "saved"]);
+        assert_eq!(live(&log, Duration::from_secs(2)), ["broken", "refused"]);
+        assert_eq!(live(&log, Duration::from_secs(4)), ["broken"]);
+        assert!(
+            live(&log, Duration::from_secs(6)).is_empty(),
+            "an error ends too"
         );
-        let generation = log.generation();
-        assert!(log.dismiss_error());
-        assert!(!log.dismiss_error(), "a second dismissal changes nothing");
-        assert_eq!(log.generation(), generation + 1);
-        assert_eq!(log.live_toasts(now + Duration::from_millis(1999)).len(), 1);
-        assert!(log.live_toasts(now + DEFAULT_TOAST_DURATION).is_empty());
-        let saved = &log.entries()[1];
-        assert!(log.is_live(saved, now));
-        assert!(!log.is_live(&log.entries()[0], now), "the dismissed error");
+        let error = NoticePost::error("slow").with_duration(Duration::from_secs(1));
+        assert_eq!(
+            error.duration(),
+            Duration::from_secs(1),
+            "a post names its own"
+        );
     }
 
     #[test]
@@ -488,7 +452,10 @@ mod tests {
             .map(|notice| notice.message.as_str())
             .collect::<Vec<_>>();
         assert_eq!(live, ["long"], "each toast keeps its own time");
-        assert_eq!(log.next_toast_end(now), Some(now + DEFAULT_TOAST_DURATION));
+        assert_eq!(
+            log.next_toast_end(now),
+            Some(now + NoticeLevel::Info.default_duration())
+        );
 
         for index in 0..TOAST_LIMIT {
             log.post(NoticePost::info(index.to_string()), None, later);

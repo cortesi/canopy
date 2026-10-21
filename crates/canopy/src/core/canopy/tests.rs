@@ -1121,13 +1121,14 @@ fn binding_failures_become_notices_and_still_restore_the_event_scope() -> Result
         Some(RouteTraceKind::Notice),
         "the route trace records the notice"
     );
-    assert!(
-        canopy.core.notices.shown_error().is_some(),
-        "the notice is shown"
+    let now = canopy.core.clock.now();
+    assert_eq!(
+        canopy.core.notices.live_toasts(now).len(),
+        1,
+        "the notice shows as a toast"
     );
 
-    // An opaque script callback's failure becomes a notice the same way, and
-    // the key dismisses the one shown before it.
+    // An opaque script callback's failure becomes a notice the same way.
     canopy.eval_script(
         r#"canopy.bind("s", { description = "Fail" }, function() error("script failed") end)"#,
     )?;
@@ -1144,9 +1145,10 @@ fn binding_failures_become_notices_and_still_restore_the_event_scope() -> Result
         notice.message
     );
 
-    // Input with no failure dismisses the shown notice and keeps the record.
+    // Input leaves the toasts to their time, and keeps the record.
     canopy.key(None, 'z')?;
-    assert!(canopy.core.notices.shown_error().is_none());
+    let now = canopy.core.clock.now();
+    assert_eq!(canopy.core.notices.live_toasts(now).len(), 2);
     assert_eq!(canopy.notices().len(), 2);
     Ok(())
 }
@@ -1216,8 +1218,8 @@ fn notify_reads_its_level_and_duration_and_scripts_read_the_log() -> Result<()> 
     let notices = canopy.notices();
     assert_eq!(
         notices[1].duration,
-        Duration::from_secs(2),
-        "the repeat's own time"
+        Duration::from_secs(4),
+        "the repeat's own time: a warning's default"
     );
     let failed = canopy.eval_script(r#"canopy.notify("x", { level = "loud" })"#);
     assert!(failed.is_err(), "an unknown level fails");

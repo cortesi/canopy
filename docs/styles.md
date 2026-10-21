@@ -262,15 +262,14 @@ rows green, removed rows red, headers with the accent, and gaps muted.
 
 ## Notices
 
-`Root` shows the shown error in one row at the bottom of the main pane,
-painted with `root/notice`. The built-in themes give it the red role on the
-panel ground, so a failure the application survived reads as an error without
-hiding what the row covers for long: the row goes at the next input.
-
-A toast paints `root/toast/info` or `root/toast/warning`. The built-in themes
-give both the raised element ground, so a toast reads as floating over the
-application. Info text takes the foreground, and warning text the yellow role
-in bold. A repeated notice's count, such as `×3`, paints `root/toast/count`,
+Every notice shows as a toast: a card that paints `root/toast/info`,
+`root/toast/warning`, or `root/toast/error`, and its edge at the left with
+the same path and `edge`, such as `root/toast/error/edge`. The built-in themes
+give the card the raised element ground, so it reads as floating over the
+application. The edge takes the level's color as its ground: the accent for
+info, the yellow role for a warning, and the red role for an error. Info text
+takes the foreground, warning text the yellow role, and error text the red
+role. A repeated notice's count, such as `×3`, paints `root/toast/count`,
 which the built-in themes give the accent so it reads apart from the message.
 
 The notice log panel pushes `notice_log` and paints `panel`, `age`,

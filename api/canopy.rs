@@ -145,9 +145,9 @@ pub trait Context: ViewContext + Context {
     /// closes, so a dispatch that fails drops the notices it queued. The queue
     /// drains in order and does not roll back: a notice that it applied stays
     /// when a later posted call fails, so queue an outcome after the work it
-    /// reports. Outside a dispatch the notice posts at once. An error shows
-    /// until the next input event, and an info or warning notice shows as a
-    /// toast for its duration.
+    /// reports. Outside a dispatch the notice posts at once. Every notice
+    /// shows as a toast for its duration, which its level sets unless the
+    /// post names another.
     ///
     /// # Errors
     ///
@@ -532,8 +532,8 @@ pub trait ViewContext: ViewContext {
     /// The node currently being rendered.
     fn node_id(&self) -> NodeId;
 
-    /// Return the notice log, which also answers which notices show: the
-    /// error until the next input event, and the toasts in their time.
+    /// Return the notice log, which also answers which notices show: each as
+    /// a toast in its time.
     fn notice_log(&self) -> &NoticeLog;
 
     /// Return the time of the driver clock. A test that installs a
@@ -932,8 +932,8 @@ impl Canopy {
     /// input binding, a widget handler, or a poll that
     /// [`Error::is_notice`](crate::error::Error::is_notice) classifies as a
     /// notice is recorded here as an error while the application keeps
-    /// running, and shows until the next input event. A widget posts other
-    /// notices with [`Context::notify`](crate::Context::notify).
+    /// running, and shows as a toast. A widget posts other notices with
+    /// [`Context::notify`](crate::Context::notify).
     pub fn notices(&self) -> &[Notice];
 
     /// Post a notice now, as a script does.
@@ -4295,9 +4295,6 @@ pub mod render {
 pub mod runtime {
     //! The runtime: turns, published frames, polls and wakes, and notices.
 
-    /// How long a toast shows unless its post names another duration.
-    pub const DEFAULT_TOAST_DURATION: Duration = _;
-
     /// Maximum toasts that show at once. A newer toast ends the oldest early.
     pub const TOAST_LIMIT: usize = 4;
 
@@ -4417,21 +4414,21 @@ pub mod runtime {
     /// How a notice reads, and how it shows.
     #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
     pub enum NoticeLevel {
-        /// An outcome, such as an entry moved to the trash. It shows as a toast.
+        /// An outcome, such as an entry moved to the trash.
         Info,
         /// A refusal that needs no action, such as a key with nothing to act on.
-        /// It shows as a toast.
         Warning,
-        /// A failure. It shows until the next input event.
+        /// A failure.
         Error,
     }
 
     impl NoticeLevel {
+        /// Return how long a toast of this level shows unless its post names
+        /// another duration: longer for worse news.
+        pub const fn default_duration(self) -> Duration;
+
         /// Return the level a scripting label names.
         pub fn from_label(label: &str) -> Option<Self>;
-
-        /// Return whether a notice of this level shows as a toast.
-        pub fn is_toast(self) -> bool;
 
         /// Return a stable scripting label.
         pub fn label(self) -> &'static str;
@@ -4445,8 +4442,7 @@ pub mod runtime {
         /// Return the retained notices, oldest first.
         pub fn entries(&self) -> &[Notice];
 
-        /// Return whether `notice` shows at `now`: as a toast in its time, or as
-        /// the shown error.
+        /// Return whether `notice` shows at `now`, as a toast in its time.
         pub fn is_live(&self, notice: &Notice, now: Instant) -> bool;
 
         /// Return the toasts that show at `now`, oldest first.
@@ -4454,9 +4450,6 @@ pub mod runtime {
 
         /// Return when the next live toast ends, if one shows at `now`.
         pub fn next_toast_end(&self, now: Instant) -> Option<Instant>;
-
-        /// Return the error that shows until the next input event, if one does.
-        pub fn shown_error(&self) -> Option<&Notice>;
     }
 
     /// A notice that a widget or script asks to show.
@@ -4467,7 +4460,7 @@ pub mod runtime {
         /// Return how long the notice shows as a toast.
         pub fn duration(&self) -> Duration;
 
-        /// Post a failure, which shows until the next input event.
+        /// Post a failure.
         pub fn error(message: impl Into<String>) -> Self;
 
         /// Post an outcome, such as an entry moved to the trash.
@@ -4485,7 +4478,7 @@ pub mod runtime {
         /// Post a refusal that needs no action.
         pub fn warning(message: impl Into<String>) -> Self;
 
-        /// Show the toast for `duration` in place of the default two seconds.
+        /// Show the toast for `duration` in place of its level's default.
         #[must_use]
         pub fn with_duration(self, duration: Duration) -> Self;
     }

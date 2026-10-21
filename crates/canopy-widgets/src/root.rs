@@ -2,13 +2,12 @@ use canopy::{
     Canopy, Context, ContextExt, NodeId, NodeName, Register, Setup, TypedId, ViewContext, Widget,
     derive_commands,
     error::{Error, Result},
-    geom::{Line, Point},
+    geom::Point,
     input::{
         BindingAction, BindingOptions, BindingPhase, BindingTier, FrameworkBindingGroup,
         IntentName, ModalBindings, ModalOptions, ModalToken, NavIntent, key::Key,
     },
-    layout::{Align, Direction, Layout, LayoutOverride, ScrollOp},
-    render::Render,
+    layout::{Direction, Layout, LayoutOverride, ScrollOp},
     style::effects,
     tree::{ChildSlot, FocusDirection, FocusScope},
 };
@@ -83,9 +82,6 @@ const KEY_APP: &str = "AppSlot";
 
 /// Key for the main pane container (app + inspector).
 const KEY_MAIN_PANE: &str = "MainPane";
-
-/// Key for the row that shows the error the application shows.
-const KEY_NOTICE: &str = "Notice";
 
 /// Key for the layer that stacks the live toasts.
 const KEY_TOASTS: &str = "Toasts";
@@ -420,22 +416,18 @@ impl Root {
                 inspector
             };
 
-            // The notice row, the toasts, and mode help overlay the main pane,
-            // and the help modal overlays them all. A modal that the
-            // application adds as it mounts comes before them, so the toasts
-            // draw over it.
-            let notice: NodeId = context.create_detached(NoticeBar)?.into();
+            // The toasts and mode help overlay the main pane, and the help
+            // modal overlays them all. A modal that the application adds as it
+            // mounts comes before them, so the toasts draw over it.
             let toasts = ToastLayer::install(context)?;
             let mode_help = ModeHelp::install(context)?;
             let notices = NoticeLog::install(context)?;
             let help = Help::install(context)?;
             context.attach_slot(root_id, KEY_MAIN_PANE, main_pane)?;
-            context.attach_slot(root_id, KEY_NOTICE, notice)?;
             context.attach_slot(root_id, KEY_TOASTS, toasts)?;
             context.attach_slot(root_id, ModeHelpSlot::KEY, mode_help)?;
             context.attach_slot(root_id, NoticeLogSlot::KEY, notices)?;
             context.attach_slot(root_id, HelpSlot::KEY, help)?;
-            context.set_hidden(notice, context.notice_log().shown_error().is_none())?;
             context.set_hidden(mode_help, true)?;
             context.set_hidden(notices, true)?;
             context.set_hidden(help, true)?;
@@ -453,12 +445,8 @@ impl Root {
 
 impl Widget for Root {
     fn layout(&self) -> Layout {
-        // Stack layout so the help modal overlays the main pane. The filling
-        // children ignore the end alignment, which puts the notice row at the
-        // bottom.
-        Layout::fill()
-            .direction(Direction::Stack)
-            .align_vertical(Align::End)
+        // Stack layout so the help modal overlays the main pane.
+        Layout::fill().direction(Direction::Stack)
     }
 
     fn name(&self) -> NodeName {
@@ -486,44 +474,8 @@ impl Register for Root {
     }
 }
 
-/// The row at the bottom of the main pane that shows the error the
-/// application shows, until the next input event.
-///
-/// Root's notice hook hides the row while no error is shown, so it takes no
-/// clicks then.
-struct NoticeBar;
-
-impl Widget for NoticeBar {
-    fn layout(&self) -> Layout {
-        Layout::fill().fixed_height(1)
-    }
-
-    fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
-        let rect = context.view().outer_rect_local();
-        render.fill("root/notice", rect, ' ')?;
-        let message = context
-            .notice_log()
-            .shown_error()
-            .and_then(|notice| notice.message.lines().next())
-            .unwrap_or_default();
-        render.text(
-            "root/notice",
-            Line::new(rect.tl.x, rect.tl.y, rect.w),
-            &format!(" {message}"),
-        )
-    }
-
-    fn name(&self) -> NodeName {
-        NodeName::convert("notice")
-    }
-}
-
-/// Show the notice row while an error is shown, and the live toasts.
+/// Show the live toasts, and the notice log's notices.
 fn sync_notice(context: &mut dyn Context) -> Result<()> {
-    if let Some(row) = context.child_slot_of(context.node_id(), KEY_NOTICE) {
-        let hidden = context.notice_log().shown_error().is_none();
-        context.set_hidden(row, hidden)?;
-    }
     if let Some(layer) = context.child_slot_of(context.node_id(), KEY_TOASTS) {
         ToastLayer::sync(context, layer)?;
     }
@@ -645,8 +597,8 @@ mod tests {
         CanopyBuilder, Context, EventOutcome, NodeName, ViewContext, Widget,
         commands::{CommandNode, CommandSpec, CommandStatus},
         error::Result,
-        geom::{Line, Point, PointI32, Size},
-        input::{BindingSnapshot, BindingTier, Event, key, mouse},
+        geom::{Line, Point, Size},
+        input::{BindingSnapshot, BindingTier, Event},
         layout::Layout,
         render::{Cell, NopBackend, Render},
         testing::harness::Harness,
@@ -795,60 +747,60 @@ mod tests {
     }
 
     #[test]
-    fn root_shows_the_newest_notice_until_the_next_input() -> Result<()> {
+    fn root_shows_a_failure_as_an_error_toast() -> Result<()> {
         let mut canopy = CanopyBuilder::new()
             .configure(|setup| {
                 Root::register(setup)?;
                 setup.add_commands::<FailingApp>()
             })
             .build()?;
-        let app: NodeId = Root::new().install(&mut canopy, FailingApp)?.into();
+        Root::new().install(&mut canopy, FailingApp)?;
         let mut harness = Harness::from_canopy(canopy, Size::new(30, 4))?;
         harness
             .script(r#"canopy.bind("x", { description = "Fail" }, command.failing_app.fail())"#)?;
         harness.render()?;
-        assert!(!harness.tbuf().lines()[3].contains("disk full"));
+        assert!(!harness.tbuf().contains_text("disk full"));
 
         harness.key('x')?;
         let lines = harness.tbuf().lines();
-        assert!(
-            lines[3].contains("disk full"),
-            "the bottom row shows the notice: {lines:?}"
-        );
-        let expected = harness
-            .canopy
-            .style()
-            .resolve("root/notice")
-            .resolve_solid()
-            .expect("the notice style is solid");
-        let cell = harness
-            .buf()
-            .get(Point { x: 1, y: 3 })
-            .expect("notice cell");
-        assert_eq!(cell.style.fg, expected.fg);
-        assert_eq!(cell.style.bg, expected.bg);
-
-        // A click on the row dismisses the notice before hit testing, so the
-        // application under it takes the click.
-        harness.mouse(mouse::MouseEvent {
-            action: mouse::Action::Down,
-            button: mouse::Button::Left,
-            modifiers: key::Empty,
-            location: PointI32 { x: 1, y: 3 },
-        })?;
-        assert_eq!(
+        // The card rests above the bottom row, so the app's footer shows.
+        let row = lines
+            .iter()
+            .position(|line| line.contains("disk full"))
+            .expect("the failure shows as a toast");
+        assert_eq!(row, 2, "the toast rests above the bottom row: {lines:?}");
+        let resolve = |name: &str| {
             harness
                 .canopy
-                .route_trace()
-                .first()
-                .and_then(|entry| entry.node),
-            Some(app)
+                .style()
+                .resolve(name)
+                .resolve_solid()
+                .expect("the toast style is solid")
+        };
+        let text = resolve("root/toast/error");
+        let edge = resolve("root/toast/error/edge");
+        let column =
+            u32::try_from(lines[row].find("disk full").expect("the message")).expect("a column");
+        let cell = harness
+            .buf()
+            .get(Point { x: column, y: 2 })
+            .expect("a message cell");
+        assert_eq!(cell.style.fg, text.fg);
+        let edge_cell = harness
+            .buf()
+            .get(Point {
+                x: column - 2,
+                y: 2,
+            })
+            .expect("the edge cell");
+        assert_eq!(
+            edge_cell.style.bg, edge.bg,
+            "the edge takes the error colour"
         );
-        let lines = harness.tbuf().lines();
-        assert!(
-            !lines[3].contains("disk full"),
-            "the next input dismisses the notice: {lines:?}"
-        );
+
+        // Input leaves the toast to its time.
+        harness.key('z')?;
+        assert!(harness.tbuf().contains_text("disk full"));
         assert_eq!(harness.canopy.notices().len(), 1, "the record stays");
         Ok(())
     }

@@ -568,7 +568,6 @@ impl Canopy {
         key: key::Key,
         guard: Option<&mut KeyRouteGuard>,
     ) -> Result<bool> {
-        self.dismiss_notice()?;
         if self.core.effective_transient_mode().is_some() {
             self.with_notice_boundary(NoticeSource::Widget, None, |canopy| {
                 canopy.route_transient_key(start, &path, key, scope, guard)
@@ -738,10 +737,6 @@ impl Canopy {
         if m.action == mouse::Action::Leave {
             return self.leave_all();
         }
-        // A bare pointer move is not a response to a notice.
-        if m.action != mouse::Action::Moved {
-            self.dismiss_notice()?;
-        }
         let under = self.node_at(m.location)?;
         self.leave(under, m.location)?;
         let (target, path) = self.mouse_route_start(m.location)?;
@@ -890,12 +885,8 @@ impl Canopy {
     /// Dispatch a paste or focus event to the focused node, bubbling as
     /// needed.
     ///
-    /// A paste is input, so it dismisses the shown notice. A handler's
-    /// notice-class failure becomes a notice.
+    /// A handler's notice-class failure becomes a notice.
     fn dispatch_focus_event(&mut self, event: &Event) -> Result<()> {
-        if matches!(event, Event::Paste(_)) {
-            self.dismiss_notice()?;
-        }
         let start = self.focus_or_root()?;
         let dispatched = self.with_notice_boundary(NoticeSource::Widget, None, |canopy| {
             canopy.core.dispatch_event(start, event)

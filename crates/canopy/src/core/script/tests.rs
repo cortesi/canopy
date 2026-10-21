@@ -698,6 +698,28 @@ fn advance_ends_a_toast_without_waiting() -> Result<()> {
 }
 
 #[test]
+fn a_scripted_notice_takes_its_levels_duration_unless_it_names_one() -> Result<()> {
+    run_ttree(|c, _, _| {
+        let value = c.eval_script(
+            "canopy.notify('broken', { level = 'error' })\n\
+             canopy.notify('quick', { level = 'error', duration = 1 })\n\
+             local live = function(i) return canopy.notices()[i].live end\n\
+             canopy.advance(2000)\n\
+             canopy.assert(live(1), 'an error shows past two seconds')\n\
+             canopy.assert(not live(2), 'a named duration wins')\n\
+             canopy.advance(4500)\n\
+             return not live(1)",
+        )?;
+        assert_eq!(
+            value,
+            ArgValue::Bool(true),
+            "an error ends after six seconds"
+        );
+        Ok(())
+    })
+}
+
+#[test]
 fn wait_for_timeout_surfaces_as_script_timeout() -> Result<()> {
     run_ttree(|c, _, _| {
         let error = c

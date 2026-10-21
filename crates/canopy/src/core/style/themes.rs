@@ -271,23 +271,24 @@ impl Palette {
                 "/status_bar",
                 PartialStyle::new().fg(p.muted_fg).bg(p.panel_bg),
             )
-            // A notice reports a failure the application survived, so it takes
-            // the error colour on the chrome ground of the row it covers.
-            .style("/root/notice", PartialStyle::new().fg(p.red).bg(p.panel_bg))
-            // A toast floats over the application, so it takes the raised
-            // element ground. A warning reads apart from an outcome by its
-            // colour and weight.
+            // A toast floats over the application as a card on the raised
+            // element ground. Its edge takes its level's colour, and so does
+            // the text of a warning or an error.
             .style(
                 "/root/toast/info",
                 PartialStyle::new().fg(p.fg).bg(p.element_bg),
             )
+            .style("/root/toast/info/edge", PartialStyle::new().bg(p.accent))
             .style(
                 "/root/toast/warning",
-                PartialStyle::new()
-                    .fg(p.yellow)
-                    .bg(p.element_bg)
-                    .attrs(AttrSet::new(Attr::Bold)),
+                PartialStyle::new().fg(p.yellow).bg(p.element_bg),
             )
+            .style("/root/toast/warning/edge", PartialStyle::new().bg(p.yellow))
+            .style(
+                "/root/toast/error",
+                PartialStyle::new().fg(p.red).bg(p.element_bg),
+            )
+            .style("/root/toast/error/edge", PartialStyle::new().bg(p.red))
             // A repeated notice's count reads apart from its message.
             .style(
                 "/root/toast/count",

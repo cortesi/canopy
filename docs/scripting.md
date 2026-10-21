@@ -478,7 +478,7 @@ callers must use the fixture tool before evaluating a script.
 `canopy.notices()` returns the notice log, oldest first: the newest 100
 notices of every level. Each `Notice` record has an `id`, a `message`, a
 `level` of `info`, `warning`, or `error`, a `repeats` count, and `live`, which
-is true while a toast shows or while an error is the shown one. An error that
+is true while its toast shows. An error that
 the application reported and survived also has the failure's `kind` as script
 error payloads report it (`command_exec` for a failed command, `app` for an
 application error), a `source` of `binding`, `widget`, or `poll`, and the
@@ -497,7 +497,8 @@ raise a failing command's error in the script.
 
 `canopy.notify(message, options?)` posts a notice. `options.level` is `info`
 (the default), `warning`, or `error`, and `options.duration` is the number of
-seconds a toast shows, two by default. A configuration function can report its
+seconds a toast shows. Without one, the level sets it: two seconds for info,
+four for a warning, and six for an error. A configuration function can report its
 own outcome this way, and a script can read what a key reported after its
 toast has gone:
 

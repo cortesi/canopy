@@ -542,11 +542,11 @@ fn register_observation_info(builder: &mut module::Builder) {
             declaration::Field::new("message", declaration::Type::String)
                 .doc("Human-readable message."),
             declaration::Field::new("level", declaration::Type::named("NoticeLevel"))
-                .doc("An info or warning notice shows as a toast; an error until the next input."),
+                .doc("How the notice reads; a worse level shows longer as a toast."),
             declaration::Field::new("repeats", declaration::Type::Number)
                 .doc("How many posts this entry holds: 1 for a notice posted once."),
             declaration::Field::new("live", declaration::Type::Boolean)
-                .doc("Whether the notice shows now: a toast in its time, or the shown error."),
+                .doc("Whether the notice shows now, as a toast in its time."),
             declaration::Field::new("kind", declaration::Type::String.optional()).doc(
                 "Stable failure category of a caught failure, as script error payloads report it.",
             ),

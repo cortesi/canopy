@@ -44,18 +44,22 @@ Each toast is a card in the stack at the bottom right, the newest lowest,
 as the stack is now:
 
 ```text
-                              ┃ no vault here                ┃
-                              ┃ saved to ~/.fh/options.toml  ┃
-                              ┃ the git worker could not     ┃
-                              ┃ start: permission denied     ┃
+                              ▌ no vault here
+
+                              ▌ saved to ~/.fh/options.toml
+
+                              ▌ the git worker could not
+                              ▌ start: permission denied
 ```
 
-- The card has a ground of its own and an edge in the color of its level.
-  The edge is a cell with a background color, not a block glyph, because
-  fonts draw some block glyphs wide.
+- The card has a ground of its own and an edge at its left in the color
+  of its level. The edge is a cell with a background color, not a block
+  glyph, because fonts draw some block glyphs wide. A blank row parts the
+  cards.
 - The text wraps at word boundaries, at a width of at most 48 columns, on
-  at most 3 lines. A word wider than a line keeps its start. The last line
-  ends with `…` when the text does not fit, and the `×N` count stays whole.
+  at most 3 lines. A word wider than a line breaks across lines. The last
+  line ends with `…` when the text does not fit, and the `×N` count stays
+  whole.
 - The card is as wide as its longest line, so a short notice gives a
   narrow card.
 - Styles: `root/toast/info`, `root/toast/warning`, `root/toast/error`, and
@@ -111,16 +115,17 @@ not an event:
 
 ### Stage 1: Errors are toasts
 
-- [ ] C1: Remove `is_toast`, the error row, and the dismissal on input.
-  Add the durations for each level, and `root/toast/error`.
-- [ ] Update the Canopy tests of the error row and of dismissal, and the
+- [x] C1: Remove `is_toast`, the error row, and the dismissal on input.
+  Add the durations for each level, and `root/toast/error`. A script's
+  `canopy.notify` with a level takes that level's duration.
+- [x] Update the Canopy tests of the error row and of dismissal, and the
   doc comments. Run the Canopy tests and `cargo xtask smoke`.
 
 ### Stage 2: Card toasts
 
-- [ ] C2: the edge, the ground, wrapping on at most 3 lines, the `…` cut,
+- [x] C2: the edge, the ground, wrapping on at most 3 lines, the `…` cut,
   and the styles in the default themes.
-- [ ] Layout and style tests in `toast.rs`. Run `cargo xtask gallery` in
+- [x] Layout and style tests in `toast.rs`. Run `cargo xtask gallery` in
   Canopy and in fh, and review the toasts.
 
 ### Stage 3: Apps

@@ -962,20 +962,22 @@ a later posted call fails, and a command queues an outcome after the work it
 reports. The queue refuses work while the tree removes a node, so `pre_remove`
 and `on_unmount` cannot post. `Canopy::notify` posts at once, as a script does.
 
-An error shows from its record until the next key, paste, or mouse action other
-than a bare move. An info or warning notice is a toast: it shows from its post
-until its duration ends, two seconds by default, whatever the input. At most
-four toasts show, and a newer toast ends the oldest early. `Context::end_toast`
+Every notice is a toast: it shows from its post until its duration ends,
+whatever the input. Its level sets the default duration, longer for worse
+news: two seconds for info, four for a warning, and six for an error. A post
+can name another. At most four toasts show, and a newer toast ends the oldest
+early. `Context::end_toast`
 ends one early too. The log keeps every notice that has stopped showing. The
 driver clock alone decides whether a toast shows, so a headless run and a
 `ManualClock` test see what a terminal shows.
 
 A notice hook runs whenever the log or what shows changes, before the frame
-after a post, and before the dismissing input routes. Changes before one
-synchronization run each hook once. Root's hook shows the shown error as one
-row at the bottom of the main pane, styled `root/notice`, and hides the row
-otherwise, so the row takes no clicks while it is empty. It stacks the live
-toasts at the bottom right, one row above the bottom row, newest lowest. An
+after a post. Changes before one synchronization run each hook once. Root's
+hook stacks the live toasts at the bottom right, one row above the bottom row,
+newest lowest, with a blank row between them. Each toast is a card with an
+edge in the color of its level. Its message wraps at 48 columns on at most
+three lines, and the last line ends with a marker when the message does not
+fit. An
 application that keeps a band at the bottom of the window, such as a text
 editor, names it with `Root::set_toast_floor`, and the stack rests just above
 the band while the band shows. The floor is a layout bound:
