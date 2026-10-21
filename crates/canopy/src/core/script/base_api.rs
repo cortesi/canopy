@@ -1751,7 +1751,7 @@ fn action_from_value<'s>(
     scope: &Scope<'s>,
     value: ScopedValue<'s>,
 ) -> StdResult<ScriptAction<'s>, RuntimeError> {
-    if let Some(call) = command_call_from_value(scope, &value)? {
+    if let Some(call) = command_call_from_value(scope, &value) {
         return Ok(ScriptAction::Target(inputmap::BindingAction::Command(
             call.0,
         )));
@@ -2300,7 +2300,7 @@ fn host_key_for<'s>(
     let value = args
         .raw()
         .ok_or_else(|| RuntimeError::runtime("argument `action` is required"))?;
-    let target = match command_call_from_value(scope, &value)? {
+    let target = match command_call_from_value(scope, &value) {
         Some(call) => BindingTarget::Command(call.0),
         None => BindingTarget::Intent(read_intent_name(scope, value)?),
     };

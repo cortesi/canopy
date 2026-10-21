@@ -239,17 +239,17 @@ pub(super) fn menu_from_value<'s>(
     }
 }
 
-/// Convert a script value into a command call, or report the value's type.
+/// Convert a script value into a command call, when it is one.
 pub(super) fn command_call_from_value<'s>(
     scope: &Scope<'s>,
     value: &ScopedValue<'s>,
-) -> StdResult<Option<ScriptCommandCall>, RuntimeError> {
+) -> Option<ScriptCommandCall> {
     match value {
-        ScopedValue::Userdata(userdata) => match userdata.borrow::<ScriptCommandCall>(scope) {
-            Ok(call) => Ok(Some(call.clone())),
-            Err(_) => Ok(None),
-        },
-        _ => Ok(None),
+        ScopedValue::Userdata(userdata) => userdata
+            .borrow::<ScriptCommandCall>(scope)
+            .ok()
+            .map(|call| call.clone()),
+        _ => None,
     }
 }
 
