@@ -468,22 +468,14 @@ impl Terminal {
         map_key(key).map(TerminalKey::Forward)
     }
 
-    /// Return the focus report the terminal expects, if it enabled focus
-    /// reporting.
-    fn focus_report(&self, focused: bool) -> Option<Vec<u8>> {
-        let state = self.state()?;
-        state.modes.focus_in_out.then(|| {
-            if focused {
-                b"\x1b[I".to_vec()
-            } else {
-                b"\x1b[O".to_vec()
-            }
-        })
+    /// Return whether the terminal enabled focus reporting.
+    fn focus_reporting(&self) -> bool {
+        self.state().is_some_and(|state| state.modes.focus_in_out)
     }
 
     /// Forward a focus change to the terminal as a focus report.
     fn sync_focus(&self, focused: bool) {
-        if self.focus_report(focused).is_none() {
+        if !self.focus_reporting() {
             return;
         }
         if let Some(session) = self.session() {
@@ -1554,19 +1546,16 @@ mod tests {
     #[test]
     fn focus_reports_follow_the_terminal_mode() {
         let (terminal, _receiver) = stream_terminal();
-        assert_eq!(terminal.focus_report(true), None);
-        assert_eq!(terminal.focus_report(false), None);
+        assert!(!terminal.focus_reporting());
         let session = terminal.session().expect("session");
         session
             .feed_stream_output(b"\x1b[?1004h")
             .expect("enable focus reports");
-        assert_eq!(terminal.focus_report(true), Some(b"\x1b[I".to_vec()));
-        assert_eq!(terminal.focus_report(false), Some(b"\x1b[O".to_vec()));
+        assert!(terminal.focus_reporting());
         session
             .feed_stream_output(b"\x1b[?1004l")
             .expect("disable focus reports");
-        assert_eq!(terminal.focus_report(true), None);
-        assert_eq!(terminal.focus_report(false), None);
+        assert!(!terminal.focus_reporting());
     }
 
     #[test]
