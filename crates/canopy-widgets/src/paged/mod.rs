@@ -601,9 +601,9 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
             Seek::Around(_) if self.pending_steps < 0 => Direction::Before,
             _ => Direction::After,
         };
-        if empty && self.adjacent(direction).is_some() {
+        if empty && let Some(seek) = self.adjacent(direction) {
             self.status = Status::Stalled;
-            self.retry = self.adjacent(direction).map(|seek| Work {
+            self.retry = Some(Work {
                 seek,
                 selection: Selection::Preserve,
             });
