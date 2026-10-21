@@ -1011,7 +1011,7 @@ where
                             (marker, label.len() - kept.len()..label.len(), "")
                         }
                     };
-                    render.fill(style, Rect::new(line.tl.x, line.tl.y, line.w, 1), ' ')?;
+                    render.fill(style, line.rect(), ' ')?;
                     let styled = cut_runs(&runs, kept)
                         .into_iter()
                         .map(|(role, text)| (format!("{style}/{role}"), text))

@@ -363,7 +363,7 @@ impl<'a> Render<'a> {
     /// Print text in the specified line. If the text is wider than the
     /// rectangle, it will be truncated; if it is shorter, it will be padded.
     pub fn text(&mut self, style: &str, l: geom::Line, txt: &str) -> Result<()> {
-        let line_rect = geom::Rect::new(l.tl.x, l.tl.y, l.w, 1);
+        let line_rect = l.rect();
         let Some(intersection) = line_rect.intersect(self.clip) else {
             return Ok(());
         };
@@ -379,8 +379,7 @@ impl<'a> Render<'a> {
         self.buf.text_with(adjusted_line, out, |p| {
             style.resolve_at(line_rect, untranslate(origin, p))
         })?;
-        let area = geom::Rect::new(adjusted_line.tl.x, adjusted_line.tl.y, adjusted_line.w, 1);
-        self.mark_motion(&style, area, line_rect);
+        self.mark_motion(&style, adjusted_line.rect(), line_rect);
         Ok(())
     }
 
@@ -396,7 +395,7 @@ impl<'a> Render<'a> {
         runs: impl IntoIterator<Item = (&'r str, &'r str)>,
     ) -> Result<u32> {
         let base = self.resolve_style(base);
-        let line_rect = geom::Rect::new(l.tl.x, l.tl.y, l.w, 1);
+        let line_rect = l.rect();
         let end = l.tl.x.saturating_add(l.w);
         let mut x = l.tl.x;
         'runs: for (style, run) in runs {

@@ -278,7 +278,7 @@ pub fn hbar(
         Some(track) => Rest::Track(render.resolve_style(track).fg),
         None => Rest::Ground,
     };
-    let rect = Rect::new(line.tl.x, line.tl.y, line.w, 1);
+    let rect = line.rect();
     paint_run(render, rect, Fill::Right, scale, segments, rest, Tint::None)
 }
 
