@@ -505,51 +505,33 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         if self.items.is_empty() {
             return Ok(());
         }
-        self.update_selection(ctx, Some(index.min(self.items.len() - 1)))
+        self.update_selection(ctx, index.min(self.items.len() - 1))
     }
 
-    /// Update selection to a new index, managing item selection states.
-    fn update_selection(
-        &mut self,
-        ctx: &mut dyn Context,
-        new_selected: Option<usize>,
-    ) -> Result<()> {
-        if let Some(index) = new_selected
-            && index >= self.items.len()
-        {
-            return Err(Error::Invalid(
-                "list selection index is out of bounds".into(),
-            ));
-        }
-
+    /// Select the item at `index`, which is in bounds, managing item
+    /// selection states.
+    fn update_selection(&mut self, ctx: &mut dyn Context, index: usize) -> Result<()> {
         let old_id = self.selection_id(
             self.selected_index(),
             "list selection points at a missing item",
         )?;
-        let new_id =
-            self.selection_id(new_selected, "new list selection points at a missing item")?;
-        let same_selection = old_id.as_ref().map(|id| NodeId::from(*id))
-            == new_id.as_ref().map(|id| NodeId::from(*id));
-        if same_selection {
-            self.selected = new_selected.map(|index| self.items.keys()[index].clone());
-            return Ok(());
-        }
-
-        if let Some(old_id) = old_id {
-            ctx.with_widget_mut(old_id, |w: &mut W, _| {
-                w.set_selected(false);
-                Ok(())
-            })?;
-        }
-
-        if let Some(new_id) = new_id {
+        let new_id = self
+            .item(index)
+            .ok_or_else(|| Error::Internal("new list selection points at a missing item".into()))?;
+        if old_id.map(NodeId::from) != Some(NodeId::from(new_id)) {
+            if let Some(old_id) = old_id {
+                ctx.with_widget_mut(old_id, |w: &mut W, _| {
+                    w.set_selected(false);
+                    Ok(())
+                })?;
+            }
             ctx.with_widget_mut(new_id, |w: &mut W, _| {
                 w.set_selected(true);
                 Ok(())
             })?;
         }
 
-        self.selected = new_selected.map(|index| self.items.keys()[index].clone());
+        self.selected = Some(self.items.keys()[index].clone());
         debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
@@ -583,10 +565,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     ///
     /// The index is clamped to the last item. An empty list is a no-op.
     fn select_and_reveal(&mut self, c: &mut dyn Context, index: usize) -> Result<()> {
-        if self.items.is_empty() {
-            return Ok(());
-        }
-        self.update_selection(c, Some(index.min(self.items.len() - 1)))?;
+        self.select(c, index)?;
         self.focus_selected(c)?;
         if let Some(item) = self.selected_item() {
             c.reveal_node(item.into(), RevealAlign::Nearest)?;
