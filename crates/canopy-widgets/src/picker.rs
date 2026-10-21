@@ -66,8 +66,6 @@ pub struct Picker<T>
 where
     T: ItemLabel,
 {
-    /// The framed dialog, once mounted, which an overlay covers and dims.
-    dialog: Option<NodeId>,
     /// The list of items, once mounted. The list titles the frame itself, so
     /// the frame needs no second owner.
     list: Option<TypedId<PickerList<T>>>,
@@ -99,7 +97,6 @@ where
     #[must_use]
     pub fn new() -> Self {
         Self {
-            dialog: None,
             list: None,
             filter: None,
             truncate: Truncate::default(),
@@ -296,7 +293,6 @@ where
             list.truncate = truncate;
             Ok(())
         })?;
-        self.dialog = Some(dialog);
         self.list = Some(list);
         self.filter = Some(field);
         Ok(())
