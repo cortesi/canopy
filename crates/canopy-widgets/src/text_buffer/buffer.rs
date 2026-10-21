@@ -61,10 +61,7 @@ impl TextBuffer {
         let rope = Rope::from_str(&text);
         let line_count = rope.len_lines();
         let last_line = line_count.saturating_sub(1);
-        let mut last_len = rope.line(last_line).len_chars();
-        if last_line + 1 < line_count {
-            last_len = last_len.saturating_sub(1);
-        }
+        let last_len = rope.line(last_line).len_chars();
         let selection = Selection::caret(TextPosition::new(last_line, last_len));
         Self {
             rope,
