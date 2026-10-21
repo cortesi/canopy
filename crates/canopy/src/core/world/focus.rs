@@ -124,7 +124,7 @@ impl Core {
     /// Focus the next node in the pre-order traversal of root.
     pub fn focus_next(&mut self, root: NodeId) -> Result<ChangeOutcome> {
         if let Some(current) = self.focus
-            && let Some(target) = find_next_focus(self, root, current, false)
+            && let Some(target) = find_next_focus(self, root, current)
         {
             return self.set_focus(target);
         }
@@ -219,8 +219,9 @@ impl Core {
         }
         let candidate = match lost {
             Some(hint) => self.recovery_candidate(Some(hint), require_view),
-            None => find_next_focus(self, self.root, focus, false)
-                .or_else(|| first_focusable(self, self.root)),
+            None => {
+                find_next_focus(self, self.root, focus).or_else(|| first_focusable(self, self.root))
+            }
         };
         self.transition_focus(candidate)
     }
@@ -428,15 +429,9 @@ fn first_focusable(core: &Core, root: NodeId) -> Option<NodeId> {
 }
 
 /// Find the next focusable node after `target`, preferring nodes with views.
-/// If `skip_subtree` is true, traversal skips `target`'s children.
-fn find_next_focus(
-    core: &Core,
-    root: NodeId,
-    target: NodeId,
-    skip_subtree: bool,
-) -> Option<NodeId> {
+fn find_next_focus(core: &Core, root: NodeId, target: NodeId) -> Option<NodeId> {
     prefer_view(false, |accept| {
-        find_next_with(core, root, target, skip_subtree, accept)
+        find_next_with(core, root, target, false, accept)
     })
 }
 
