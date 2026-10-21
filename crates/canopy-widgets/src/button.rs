@@ -7,7 +7,7 @@ use canopy::{
     commands::{CommandCall, CommandStatus},
     derive_commands,
     error::Result,
-    geom::{Line, Rect, Size},
+    geom::{FrameRects, Line, Rect, Size},
     layout::{Layout, MeasureConstraints, Measurement},
     render::Render,
     runtime::WidgetSemantics,
@@ -301,52 +301,6 @@ impl Button {
         }
         Ok(())
     }
-
-    /// Draw a box border of `glyphs` around `area`.
-    fn draw_border(render: &mut Render, area: Rect, glyphs: BoxGlyphs) -> Result<()> {
-        let right = area.tl.x + area.w - 1;
-        let bottom = area.tl.y + area.h - 1;
-        let span = area.w.saturating_sub(2);
-        let border = roles::BORDER;
-        render.text(
-            border,
-            Line::new(area.tl.x, area.tl.y, 1),
-            &glyphs.topleft.to_string(),
-        )?;
-        render.fill(
-            border,
-            Rect::new(area.tl.x + 1, area.tl.y, span, 1),
-            glyphs.horizontal,
-        )?;
-        render.text(
-            border,
-            Line::new(right, area.tl.y, 1),
-            &glyphs.topright.to_string(),
-        )?;
-        for y in area.tl.y + 1..bottom {
-            render.text(
-                border,
-                Line::new(area.tl.x, y, 1),
-                &glyphs.vertical.to_string(),
-            )?;
-            render.text(border, Line::new(right, y, 1), &glyphs.vertical.to_string())?;
-        }
-        render.text(
-            border,
-            Line::new(area.tl.x, bottom, 1),
-            &glyphs.bottomleft.to_string(),
-        )?;
-        render.fill(
-            border,
-            Rect::new(area.tl.x + 1, bottom, span, 1),
-            glyphs.horizontal,
-        )?;
-        render.text(
-            border,
-            Line::new(right, bottom, 1),
-            &glyphs.bottomright.to_string(),
-        )
-    }
 }
 
 impl Register for Button {
@@ -413,9 +367,7 @@ impl Widget for Button {
             }
             ButtonLook::Bordered(glyphs) => {
                 rndr.fill("fill", area, ' ')?;
-                if area.h >= 3 && area.w >= 2 {
-                    Self::draw_border(rndr, area, glyphs)?;
-                }
+                glyphs.draw(rndr, roles::BORDER, FrameRects::new(area, 1))?;
             }
         }
         self.draw_label(rndr, area)
