@@ -734,10 +734,7 @@ fn parse_screen(text: &str) -> result::Result<ScreenSize, String> {
 /// Execute `canopyctl replay` after parsing all sources and assumptions.
 async fn replay_command(config: LoadedConfig, args: ReplayArgs) -> Result<()> {
     let envelope = load_replay(&args.journal)?;
-    let mut session = match &args.socket {
-        Some(socket) => Session::connect_live(socket).await?,
-        None => Session::spawn_headless(&config.headless_command(&args.command)?).await?,
-    };
+    let mut session = connect_or_spawn(&config, args.socket.as_deref(), &args.command).await?;
     let result = replay_file(&mut session, envelope, &args).await;
     session.shutdown().await;
     result
