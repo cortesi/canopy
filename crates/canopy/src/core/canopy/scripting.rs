@@ -469,13 +469,6 @@ impl Canopy {
         self.script.host.take_logs()
     }
 
-    /// Drain and return assertion outcomes recorded outside a top-level
-    /// evaluation.
-    #[cfg(any(test, feature = "testing"))]
-    pub fn take_script_assertions(&mut self) -> Vec<script::ScriptAssertion> {
-        self.script.host.take_assertions()
-    }
-
     /// Return the in-memory script evaluation journal.
     ///
     /// The journal retains the most recent entries up to the configured limit.

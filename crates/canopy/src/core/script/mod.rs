@@ -716,12 +716,6 @@ impl LuauHost {
         self.state.borrow().logs.clone()
     }
 
-    /// Take the assertions collected outside a top-level evaluation.
-    #[cfg(any(test, feature = "testing"))]
-    pub fn take_assertions(&self) -> Vec<ScriptAssertion> {
-        mem::take(&mut self.state.borrow_mut().assertions)
-    }
-
     /// Return assertions collected during the most recent evaluation.
     pub fn assertions(&self) -> Vec<ScriptAssertion> {
         self.state.borrow().assertions.clone()

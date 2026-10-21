@@ -882,20 +882,6 @@ pub trait ContextExt: Context + ViewContextExt {
         checked_typed_id(self, node)
     }
 
-    /// Return the keyed child `K` of `parent`, creating it with `make` when
-    /// it is missing.
-    fn get_or_create_slot<K: ChildSlot>(
-        &mut self,
-        parent: impl Into<NodeId>,
-        make: impl FnOnce() -> K::Widget,
-    ) -> Result<TypedId<K::Widget>> {
-        let parent = parent.into();
-        if let Some(node) = self.child_slot_of(parent, K::KEY) {
-            return checked_typed_id(self, node);
-        }
-        self.add_slot::<K>(parent, make())
-    }
-
     /// Add `widget` as the keyed child `K` of `parent` and return its typed
     /// node ID.
     fn add_slot<K: ChildSlot>(

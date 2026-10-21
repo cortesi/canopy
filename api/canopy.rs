@@ -381,15 +381,6 @@ pub trait ContextExt: Context + ViewContextExt {
     ) -> Result<ArgValue, CommandError> {
     }
 
-    /// Return the keyed child `K` of `parent`, creating it with `make` when
-    /// it is missing.
-    fn get_or_create_slot<K: ChildSlot>(
-        &mut self,
-        parent: impl Into<NodeId>,
-        make: impl FnOnce() -> <K as ChildSlot>::Widget,
-    ) -> crate::error::Result<TypedId<<K as ChildSlot>::Widget>> {
-    }
-
     /// Return the typed keyed child `K` of `parent`. A missing slot is a
     /// [`Error::NotFound`] that names `K::KEY`.
     fn get_slot<K: ChildSlot>(
