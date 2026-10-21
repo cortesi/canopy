@@ -1,6 +1,6 @@
 //! Image viewer widget with zoom and pan controls.
 
-use std::{mem, path::Path};
+use std::{fmt, mem, path::Path};
 
 use canopy::{
     CommandEnum, Context, Register, Setup, ViewContext, Widget, derive_commands,
@@ -47,9 +47,14 @@ const PREVIEW_MAX_EDGE: u32 = 1024;
 /// Matrix pixels across and down a cell.
 const MATRIX: usize = 8;
 
+/// Report a failure to read or decode an image.
+fn image_error(err: impl fmt::Display) -> Error {
+    Error::Invalid(format!("image error: {err}"))
+}
+
 /// Decode an image file into RGBA pixels.
 fn read_rgba(path: &Path) -> Result<RgbaImage> {
-    let image = image::open(path).map_err(|err| Error::Invalid(format!("image error: {err}")))?;
+    let image = image::open(path).map_err(image_error)?;
     Ok(image.into_rgba8())
 }
 
@@ -67,9 +72,7 @@ pub fn read_preview(path: &Path, bounds: Size) -> Result<RgbaImage> {
         bounds.w.min(PREVIEW_MAX_EDGE),
         bounds.h.min(PREVIEW_MAX_EDGE),
     );
-    let image_error = |err| Error::Invalid(format!("image error: {err}"));
-    let mut reader = image::ImageReader::open(path)
-        .map_err(|err| Error::Invalid(format!("image error: {err}")))?;
+    let mut reader = image::ImageReader::open(path).map_err(image_error)?;
     let mut limits = image::Limits::default();
     limits.max_alloc = Some(PREVIEW_DECODE_BYTES);
     reader.limits(limits.clone());
@@ -502,8 +505,7 @@ impl ImageView {
     /// Create a new image view widget from encoded image bytes, such as a
     /// PNG that an application embeds. The format comes from the bytes.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        let image = image::load_from_memory(bytes)
-            .map_err(|err| Error::Invalid(format!("image error: {err}")))?;
+        let image = image::load_from_memory(bytes).map_err(image_error)?;
         Ok(Self::new(&image.into_rgba8()))
     }
 
