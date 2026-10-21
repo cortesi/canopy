@@ -241,8 +241,7 @@ impl Core {
                     let (mounted, unmounted) = {
                         let journal = self.tree_edit.as_mut().expect("tree edit journal missing");
                         let mounted = journal.mounted.split_off(mounted_len);
-                        let unmounted = journal.unmounted.clone();
-                        journal.unmounted = unmounted_before;
+                        let unmounted = mem::replace(&mut journal.unmounted, unmounted_before);
                         (mounted, unmounted)
                     };
                     self.unwind_mounted_widgets(&mounted, &unmounted);
