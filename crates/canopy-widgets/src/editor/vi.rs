@@ -618,16 +618,12 @@ impl Editor {
             }
             PlainCommand::NextMatch => {
                 if let Some(pos) = self.search.move_next(&self.buffer, false) {
-                    self.buffer.set_cursor(pos);
-                    self.update_preferred_column();
-                    self.ensure_cursor_visible(ctx);
+                    self.set_cursor(ctx, pos);
                 }
             }
             PlainCommand::PrevMatch => {
                 if let Some(pos) = self.search.move_next(&self.buffer, true) {
-                    self.buffer.set_cursor(pos);
-                    self.update_preferred_column();
-                    self.ensure_cursor_visible(ctx);
+                    self.set_cursor(ctx, pos);
                 }
             }
             PlainCommand::ReplaceMode => {
@@ -731,10 +727,7 @@ impl Editor {
             }
             PlainCommand::GotoLastLine => {
                 let last_line = self.buffer.line_count().saturating_sub(1);
-                let pos = TextPosition::new(last_line, 0);
-                self.buffer.set_cursor(pos);
-                self.update_preferred_column();
-                self.ensure_cursor_visible(ctx);
+                self.set_cursor(ctx, TextPosition::new(last_line, 0));
             }
         }
     }
@@ -743,9 +736,7 @@ impl Editor {
     fn execute_pending(&mut self, command: PendingCommand, ctx: &mut dyn Context) {
         match command {
             PendingCommand::GotoTop => {
-                self.buffer.set_cursor(TextPosition::new(0, 0));
-                self.update_preferred_column();
-                self.ensure_cursor_visible(ctx);
+                self.set_cursor(ctx, TextPosition::new(0, 0));
             }
             PendingCommand::MoveDisplay(direction) => {
                 self.move_row(direction, ctx);
