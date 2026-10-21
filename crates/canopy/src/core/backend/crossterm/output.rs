@@ -56,6 +56,8 @@ pub struct CrosstermRender {
     fp: Stderr,
     /// Encoded commands for the current frame, discarded if emission fails.
     pending: Vec<u8>,
+    /// Where the encoded commands leave the cursor, when that is known.
+    cursor: Option<(u16, u16)>,
 }
 
 impl CrosstermRender {
@@ -117,8 +119,17 @@ impl CrosstermRender {
         for run in positioned_text_runs(loc, txt) {
             let x = cell_coord(run.location.x)?;
             let y = cell_coord(run.location.y)?;
-            self.pending.queue(ccursor::MoveTo(x, y))?;
+            if self.cursor != Some((x, y)) {
+                self.pending.queue(ccursor::MoveTo(x, y))?;
+            }
             self.pending.queue(style::Print(run.text))?;
+            // Every terminal agrees on the width of printable ASCII, so the
+            // cursor's place after it is known.
+            self.cursor = text::printable_ascii(run.text)
+                .then(|| u16::try_from(run.text.len()).ok())
+                .flatten()
+                .and_then(|columns| x.checked_add(columns))
+                .map(|end| (end, y));
         }
         Ok(())
     }
@@ -189,6 +200,7 @@ impl Default for CrosstermRender {
         Self {
             fp: io::stderr(),
             pending: Vec::with_capacity(64 * 1024),
+            cursor: None,
         }
     }
 }
@@ -196,6 +208,7 @@ impl Default for CrosstermRender {
 impl RenderBackend for CrosstermRender {
     fn reset(&mut self) -> Result<()> {
         self.pending.clear();
+        self.cursor = None;
         Ok(())
     }
 
@@ -215,6 +228,7 @@ impl RenderBackend for CrosstermRender {
         let Some(location) = location else {
             return Ok(());
         };
+        self.cursor = None;
         translate_result((|| {
             let x = cell_coord(location.x)?;
             let y = cell_coord(location.y)?;
@@ -235,6 +249,7 @@ impl RenderBackend for CrosstermRender {
             return Ok(());
         }
 
+        self.cursor = None;
         let count_abs = count.unsigned_abs().min(u16::MAX as u32) as u16;
         let x = translate_result(cell_coord(loc.x))?;
         let y = translate_result(cell_coord(loc.y))?;
@@ -252,6 +267,8 @@ impl RenderBackend for CrosstermRender {
         if top > bottom {
             return Ok(());
         }
+        // Resetting the scroll region moves the cursor.
+        self.cursor = None;
         let count_abs = count.unsigned_abs().min(u16::MAX as u32) as u16;
         translate_result(write!(self.pending, "\x1b[{};{}r", top + 1, bottom + 1))?;
         translate_result(self.pending.queue(ccursor::MoveTo(0, top)))?;
@@ -301,6 +318,28 @@ mod tests {
                 Ok(())
             }
         }
+    }
+
+    #[test]
+    fn text_after_ascii_on_its_row_moves_no_cursor() -> Result<()> {
+        let mut backend = CrosstermRender::default();
+        backend.text(Point { x: 1, y: 0 }, "ab").unwrap();
+        backend.text(Point { x: 3, y: 0 }, "cd").unwrap();
+        // A wide glyph leaves the cursor where the terminal puts it.
+        backend.text(Point { x: 5, y: 0 }, "界").unwrap();
+        backend.text(Point { x: 7, y: 0 }, "e").unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&backend.pending),
+            "\x1b[1;2Habcd界\x1b[1;8He"
+        );
+        backend.reset()?;
+        backend.text(Point { x: 8, y: 0 }, "f").unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&backend.pending),
+            "\x1b[1;9Hf",
+            "a frame starts with the cursor unknown"
+        );
+        Ok(())
     }
 
     #[test]

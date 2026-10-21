@@ -638,7 +638,7 @@ impl TermBuf {
         };
         let width = self.size.w as usize;
         let can_shift = backend.supports_char_shift();
-        let mut text = String::new();
+        let mut out = Emission::default();
         for y in 0..self.size.h {
             let row_start = y as usize * width;
             let row_end = row_start + width;
@@ -646,7 +646,7 @@ impl TermBuf {
             let source = scroll.map_or(Some(y), |scroll| scroll.source(y));
             let Some(source) = source else {
                 // The scroll exposed the row, so all of it repaints.
-                render_line_range(backend, current_row, y, 0, width, &mut text)?;
+                render_line_range(backend, current_row, y, 0, width, &mut out)?;
                 continue;
             };
             if !dirty[y as usize] {
@@ -661,10 +661,10 @@ impl TermBuf {
                 let gap = shift.unsigned_abs() as usize;
                 backend.shift_chars(Point { x: 0, y }, shift)?;
                 if shift > 0 {
-                    render_line_range(backend, current_row, y, 0, gap, &mut text)?;
+                    render_line_range(backend, current_row, y, 0, gap, &mut out)?;
                 } else {
                     let start = width.saturating_sub(gap);
-                    render_line_range(backend, current_row, y, start, gap, &mut text)?;
+                    render_line_range(backend, current_row, y, start, gap, &mut out)?;
                 }
                 continue;
             }
@@ -693,7 +693,7 @@ impl TermBuf {
                     continue;
                 }
 
-                render_line_range(backend, current_row, y, start_x, end_x - start_x, &mut text)?;
+                render_line_range(backend, current_row, y, start_x, end_x - start_x, &mut out)?;
                 x = end_x;
             }
         }
@@ -706,12 +706,12 @@ impl TermBuf {
     pub fn emit<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {
         self.validate_canonical()?;
         let width = self.size.w as usize;
-        let mut text = String::new();
+        let mut out = Emission::default();
         for y in 0..self.size.h {
             let row_start = y as usize * width;
             let row_end = row_start + width;
             let row = &self.cells[row_start..row_end];
-            render_line_range(backend, row, y, 0, width, &mut text)?;
+            render_line_range(backend, row, y, 0, width, &mut out)?;
         }
         Ok(())
     }
@@ -861,6 +861,16 @@ fn line_matches_shift(current: &[Cell], prev: &[Cell], shift: i32) -> bool {
     }
 }
 
+/// The state of one emission: the text of the run it is writing, and the
+/// style the backend last took.
+#[derive(Default)]
+struct Emission {
+    /// Text of the current run.
+    text: String,
+    /// Style the backend last took, which later runs in it need not repeat.
+    style: Option<ResolvedStyle>,
+}
+
 /// Render a slice of a single line using style runs from the current buffer.
 fn render_line_range<R: RenderBackend>(
     backend: &mut R,
@@ -868,7 +878,7 @@ fn render_line_range<R: RenderBackend>(
     y: u32,
     start: usize,
     len: usize,
-    text: &mut String,
+    out: &mut Emission,
 ) -> Result<()> {
     let Some((start, end)) = grapheme_range(row, start, len) else {
         return Ok(());
@@ -876,7 +886,7 @@ fn render_line_range<R: RenderBackend>(
 
     let mut x = start;
     while x < end {
-        x = render_styled_cells(backend, row, y, x, end, text)?;
+        x = render_styled_cells(backend, row, y, x, end, out)?;
     }
     Ok(())
 }
@@ -888,9 +898,10 @@ fn render_styled_cells<R: RenderBackend>(
     y: u32,
     start: usize,
     end: usize,
-    text: &mut String,
+    out: &mut Emission,
 ) -> Result<usize> {
     let style = &row[start].style;
+    let text = &mut out.text;
     text.clear();
     let mut x = start;
     let mut split_after_wide = false;
@@ -914,7 +925,11 @@ fn render_styled_cells<R: RenderBackend>(
         x += 1;
     }
 
-    backend.style(style)?;
+    if out.style != Some(*style) {
+        backend.style(style)?;
+        out.style = Some(*style);
+    }
+    let text = &out.text;
     if text.is_empty() {
         backend.text(Point { x: start as u32, y }, " ")?;
         return Ok(x.max(start + 1));
