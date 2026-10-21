@@ -511,8 +511,7 @@ impl Editor {
             PromptState::Search { direction, query } => {
                 self.search.set_query(&self.buffer, query, direction);
                 if let Some(pos) = self.search.current_match().map(|range| range.start) {
-                    self.buffer.set_cursor(pos);
-                    self.ensure_cursor_visible(ctx);
+                    self.set_cursor(ctx, pos);
                 }
             }
             PromptState::ReplaceQuery { query } => {

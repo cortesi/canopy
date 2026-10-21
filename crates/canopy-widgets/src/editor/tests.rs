@@ -755,6 +755,19 @@ fn vi_word_motions_cross_lines() {
 }
 
 #[test]
+fn vi_search_sets_the_column_vertical_moves_keep() {
+    let config = EditorConfig::new().with_mode(EditMode::Vi);
+    let mut harness = build_harness("one target\nabcdefghij", config, 20, 3);
+    harness.keys(['g', 'g']).unwrap();
+    harness.key('/').unwrap();
+    harness.type_text("target").unwrap();
+    harness.key(key::KeyCode::Enter).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 4));
+    harness.key('j').unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(1, 4));
+}
+
+#[test]
 fn vi_word_end_moves_past_current_word_end() {
     let config = EditorConfig::new().with_mode(EditMode::Vi);
     let mut harness = build_harness("one two\nthree", config, 10, 3);
