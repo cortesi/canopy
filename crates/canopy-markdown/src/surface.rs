@@ -310,38 +310,36 @@ impl RenderedSurface {
 
     /// Apply a navigation intent to selection, object cursor, or viewport.
     pub fn navigate(&mut self, ctx: &mut dyn Context, intent: NavIntent) -> Result<()> {
-        let selection = self.state.borrow().overlays.selection.is_some();
-        if selection && !matches!(intent, NavIntent::PageUp | NavIntent::PageDown) {
+        let (claimed, selection) = {
+            let state = self.state.borrow();
+            (state.claims(intent), state.overlays.selection.is_some())
+        };
+        if !claimed {
+            return self.scroll(ctx, nav_scroll(intent));
+        }
+        if selection {
             return self.move_selection(ctx, intent);
         }
-        if self.state.borrow().mode == Mode::Interact
-            && matches!(
-                intent,
-                NavIntent::Up | NavIntent::Down | NavIntent::First | NavIntent::Last
-            )
-        {
-            if matches!(intent, NavIntent::First | NavIntent::Last) {
-                let mut state = self.state.borrow_mut();
-                let target = state.presentation.as_ref().and_then(|p| {
-                    if intent == NavIntent::First {
-                        p.document.objects.first()
-                    } else {
-                        p.document.objects.last()
-                    }
-                    .map(|o| o.id)
-                });
-                if target == state.overlays.active_object {
-                    return Ok(());
+        if matches!(intent, NavIntent::First | NavIntent::Last) {
+            let mut state = self.state.borrow_mut();
+            let target = state.presentation.as_ref().and_then(|p| {
+                if intent == NavIntent::First {
+                    p.document.objects.first()
+                } else {
+                    p.document.objects.last()
                 }
-                state.overlays.active_object = target;
-                state.follow = Follow::Paused;
-                state.navigated();
-                drop(state);
-                return self.reveal_object(ctx);
+                .map(|o| o.id)
+            });
+            if target == state.overlays.active_object {
+                return Ok(());
             }
-            return self.object_next(ctx, if intent == NavIntent::Up { -1 } else { 1 }, false);
+            state.overlays.active_object = target;
+            state.follow = Follow::Paused;
+            state.navigated();
+            drop(state);
+            return self.reveal_object(ctx);
         }
-        self.scroll(ctx, nav_scroll(intent))
+        self.object_next(ctx, if intent == NavIntent::Up { -1 } else { 1 }, false)
     }
 
     /// Visit an adjacent object, optionally traversing focus at a boundary.
