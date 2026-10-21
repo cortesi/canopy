@@ -293,6 +293,12 @@ impl TermBuf {
         y.checked_mul(width)?.checked_add(x)
     }
 
+    /// Return the cells of row `y`.
+    fn row(&self, y: u32) -> &[Cell] {
+        let width = self.size.w as usize;
+        &self.cells[y as usize * width..(y as usize + 1) * width]
+    }
+
     /// Return the absolute cell range of the complete grapheme at a cell index.
     fn grapheme_span(&self, index: usize) -> Option<Range<usize>> {
         let width = usize::try_from(self.size.w).ok()?;
@@ -606,18 +612,30 @@ impl TermBuf {
         if self.size != prev.size {
             return self.emit(backend);
         }
-        if self.cells == prev.cells {
+        // Whether each row differs from the row the terminal shows there.
+        let mut dirty: Vec<bool> = (0..self.size.h)
+            .map(|y| self.row(y) != prev.row(y))
+            .collect();
+        if !dirty.contains(&true) {
             return Ok(());
         }
-        if backend.supports_line_shift() {
-            let full = self.rect();
-            if let Some(shift) = detect_row_shift_in_rect(self, prev, full, MAX_ROW_SHIFT) {
-                return render_shifted_rect(self, backend, full, shift);
+        let scroll = backend
+            .supports_line_shift()
+            .then(|| detect_scroll(self, prev, &dirty))
+            .flatten();
+        let scroll = match scroll {
+            Some((scroll, reused)) => {
+                backend.shift_lines(scroll.top, scroll.bottom, scroll.shift)?;
+                for y in scroll.top..=scroll.bottom {
+                    dirty[y as usize] = true;
+                }
+                for y in reused {
+                    dirty[y as usize] = false;
+                }
+                Some(scroll)
             }
-            if let Some((rect, shift)) = detect_inner_shift(self, prev, MAX_ROW_SHIFT) {
-                return render_shifted_rect(self, backend, rect, shift);
-            }
-        }
+            None => None,
+        };
         let width = self.size.w as usize;
         let can_shift = backend.supports_char_shift();
         let mut text = String::new();
@@ -625,11 +643,16 @@ impl TermBuf {
             let row_start = y as usize * width;
             let row_end = row_start + width;
             let current_row = &self.cells[row_start..row_end];
-            let prev_row = &prev.cells[row_start..row_end];
-
-            if current_row == prev_row {
+            let source = scroll.map_or(Some(y), |scroll| scroll.source(y));
+            let Some(source) = source else {
+                // The scroll exposed the row, so all of it repaints.
+                render_line_range(backend, current_row, y, 0, width, &mut text)?;
+                continue;
+            };
+            if !dirty[y as usize] {
                 continue;
             }
+            let prev_row = prev.row(source);
 
             if can_shift
                 && let Some(shift) = detect_line_shift(current_row, prev_row, MAX_LINE_SHIFT)
@@ -747,172 +770,72 @@ fn detect_line_shift(current: &[Cell], prev: &[Cell], max_shift: usize) -> Optio
     None
 }
 
-/// Check whether two buffers have matching borders and a shifted interior.
-fn detect_inner_shift(current: &TermBuf, prev: &TermBuf, max_shift: usize) -> Option<(Rect, i32)> {
-    if current.size != prev.size {
-        return None;
-    }
-    if current.size.w <= 2 || current.size.h <= 2 {
-        return None;
-    }
-    if !borders_match(current, prev) {
-        return None;
-    }
-    if !side_columns_are_uniform(current) {
-        return None;
-    }
-
-    let rect = Rect::new(1, 1, current.size.w - 2, current.size.h - 2);
-    let shift = detect_row_shift_in_rect(current, prev, rect, max_shift)?;
-    Some((rect, shift))
+/// Rows `top..=bottom` that the terminal scrolls by `shift` rows, positive
+/// moving them down, before a diff repaints what still differs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Scroll {
+    /// First row of the region.
+    top: u32,
+    /// Last row of the region.
+    bottom: u32,
+    /// Rows the region moves, positive moving them down.
+    shift: i32,
 }
 
-/// Check that the outer border cells match between buffers.
-fn borders_match(current: &TermBuf, prev: &TermBuf) -> bool {
-    if current.size != prev.size {
-        return false;
-    }
-
-    let width = current.size.w as usize;
-    let height = current.size.h as usize;
-    if width == 0 || height == 0 {
-        return false;
-    }
-
-    let top = &current.cells[..width];
-    let prev_top = &prev.cells[..width];
-    if top != prev_top {
-        return false;
-    }
-
-    if height > 1 {
-        let bottom_start = (height - 1) * width;
-        let bottom = &current.cells[bottom_start..bottom_start + width];
-        let prev_bottom = &prev.cells[bottom_start..bottom_start + width];
-        if bottom != prev_bottom {
-            return false;
+impl Scroll {
+    /// Return the previous row that terminal row `y` shows after the scroll:
+    /// `None` for a row the scroll exposes, and `y` outside the region.
+    fn source(self, y: u32) -> Option<u32> {
+        if !(self.top..=self.bottom).contains(&y) {
+            return Some(y);
         }
+        let source = i64::from(y) - i64::from(self.shift);
+        (i64::from(self.top)..=i64::from(self.bottom))
+            .contains(&source)
+            .then_some(source as u32)
     }
+}
 
-    if width > 1 && height > 2 {
-        for row in 1..height - 1 {
-            let row_start = row * width;
-            let row_end = row_start + width - 1;
-            if current.cells[row_start] != prev.cells[row_start]
-                || current.cells[row_end] != prev.cells[row_end]
-            {
-                return false;
+/// Find the scroll that lets the most changed rows show a previous row
+/// whole, if it saves more rows than it costs, and the rows it lets show
+/// their previous row.
+///
+/// A scroll costs the rows it exposes, and the unchanged rows inside its
+/// region, which it moves away.
+fn detect_scroll(
+    current: &TermBuf,
+    prev: &TermBuf,
+    changed: &[bool],
+) -> Option<(Scroll, Vec<u32>)> {
+    let height = current.size.h;
+    let mut best: Option<(usize, Scroll, Vec<u32>)> = None;
+    for magnitude in 1..=MAX_ROW_SHIFT as i32 {
+        for shift in [magnitude, -magnitude] {
+            let reused: Vec<u32> = (0..height)
+                .filter(|&y| {
+                    let source = i64::from(y) - i64::from(shift);
+                    changed[y as usize]
+                        && (0..i64::from(height)).contains(&source)
+                        && current.row(y) == prev.row(source as u32)
+                })
+                .collect();
+            let (Some(&first), Some(&last)) = (reused.first(), reused.last()) else {
+                continue;
+            };
+            let (top, bottom) = if shift > 0 {
+                (first - shift.unsigned_abs(), last)
+            } else {
+                (first, last + shift.unsigned_abs())
+            };
+            let moved = (top..=bottom).filter(|&y| !changed[y as usize]).count();
+            let cost = moved + shift.unsigned_abs() as usize;
+            let saved = reused.len().saturating_sub(cost);
+            if saved > best.as_ref().map_or(0, |(saved, ..)| *saved) {
+                best = Some((saved, Scroll { top, bottom, shift }, reused));
             }
         }
     }
-
-    true
-}
-
-/// Check that every interior row shares one first cell and one last cell. The
-/// production backend scrolls the full terminal width, so an interior shift is
-/// only safe when the side columns look the same after the scroll moves them.
-fn side_columns_are_uniform(buf: &TermBuf) -> bool {
-    let width = buf.size.w as usize;
-    let height = buf.size.h as usize;
-    let first = &buf.cells[width];
-    let last = &buf.cells[2 * width - 1];
-    (1..height - 1).all(|row| {
-        let row_start = row * width;
-        &buf.cells[row_start] == first && &buf.cells[row_start + width - 1] == last
-    })
-}
-
-/// Check whether two buffers are identical up to a vertical shift within a
-/// rect.
-fn detect_row_shift_in_rect(
-    current: &TermBuf,
-    prev: &TermBuf,
-    rect: Rect,
-    max_shift: usize,
-) -> Option<i32> {
-    let height = rect.h as i32;
-    if rect.w == 0 || rect.h == 0 {
-        return None;
-    }
-
-    let max = max_shift.min(height.saturating_sub(2) as usize);
-    if max == 0 {
-        return None;
-    }
-
-    for shift in 1..=max {
-        let shift = shift as i32;
-        if buffer_matches_shift_in_rect(current, prev, rect, shift) {
-            return Some(shift);
-        }
-        if buffer_matches_shift_in_rect(current, prev, rect, -shift) {
-            return Some(-shift);
-        }
-    }
-    None
-}
-
-/// Shift the rows of `rect` on the backend and repaint the rows the shift
-/// exposed.
-fn render_shifted_rect<R: RenderBackend>(
-    buf: &TermBuf,
-    backend: &mut R,
-    rect: Rect,
-    shift: i32,
-) -> Result<()> {
-    backend.shift_lines(rect.tl.y, rect.tl.y + rect.h - 1, shift)?;
-    let width = buf.size.w as usize;
-    let count = shift.unsigned_abs();
-    let exposed = if shift > 0 {
-        rect.tl.y..rect.tl.y + count
-    } else {
-        rect.tl.y + rect.h - count..rect.tl.y + rect.h
-    };
-    // The backend scrolls the full terminal width, so repaint the whole exposed
-    // row.
-    let mut text = String::new();
-    for y in exposed {
-        let row_start = y as usize * width;
-        let row = &buf.cells[row_start..row_start + width];
-        render_line_range(backend, row, y, 0, width, &mut text)?;
-    }
-    Ok(())
-}
-
-/// Determine whether two buffers match for a given vertical shift within a
-/// rect.
-fn buffer_matches_shift_in_rect(current: &TermBuf, prev: &TermBuf, rect: Rect, shift: i32) -> bool {
-    if shift == 0 {
-        return false;
-    }
-
-    let height = rect.h as i32;
-    if shift.unsigned_abs() as i32 >= height {
-        return false;
-    }
-
-    let width = current.size.w as usize;
-    let rect_x = rect.tl.x as usize;
-    let rect_w = rect.w as usize;
-    if rect_x + rect_w > width {
-        return false;
-    }
-
-    let rect_top = rect.tl.y as i32;
-    let rect_bottom = rect_top + rect.h as i32;
-
-    let mut rows = if shift > 0 {
-        rect_top + shift..rect_bottom
-    } else {
-        rect_top..rect_bottom + shift
-    };
-    rows.all(|y| {
-        let row = y as usize * width;
-        let prev_row = (y - shift) as usize * width;
-        current.cells[row + rect_x..row + rect_x + rect_w]
-            == prev.cells[prev_row + rect_x..prev_row + rect_x + rect_w]
-    })
+    best.map(|(_, scroll, reused)| (scroll, reused))
 }
 
 /// Determine whether the current line matches the previous line shifted by

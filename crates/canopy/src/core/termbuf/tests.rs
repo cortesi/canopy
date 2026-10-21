@@ -908,6 +908,54 @@ fn diff_interior_shift_replays_to_the_full_repaint() {
     backend.model.assert_matches(&cur).unwrap();
 }
 
+proptest! {
+    #[test]
+    fn scrolled_frames_replay_to_the_full_repaint(
+        rows in prop::collection::vec("[ab界]{0,4}", 8),
+        top in 0u32..8,
+        len in 1u32..9,
+        shift in -4i32..=4,
+        edits in prop::collection::vec((0u32..6, 0u32..8, "[c界]"), 0..4),
+    ) {
+        let style = def_style();
+        let mut alternate = style;
+        alternate.fg = Color::Red;
+        let size = Size::new(6, 8);
+        let paint = |text: &dyn Fn(u32) -> String| -> Result<TermBuf> {
+            let mut buf = TermBuf::new(size, ' ', style)?;
+            for y in 0..8 {
+                let row = text(y);
+                let row_style = if row.starts_with('a') { alternate } else { style };
+                buf.text(&row_style, Line::new(0, y, 6), &row)?;
+            }
+            Ok(buf)
+        };
+        let prev = paint(&|y| rows[y as usize].clone())?;
+        // The rows of a region move by `shift`, and new rows fill the gap.
+        let bottom = (top + len).min(8);
+        let mut cur = paint(&|y| {
+            let source = i64::from(y) - i64::from(shift);
+            if !(top..bottom).contains(&y) {
+                rows[y as usize].clone()
+            } else if (i64::from(top)..i64::from(bottom)).contains(&source) {
+                rows[source as usize].clone()
+            } else {
+                "new".into()
+            }
+        })?;
+        for (x, y, grapheme) in &edits {
+            cur.put_grapheme(Point { x: *x, y: *y }, grapheme, alternate)?;
+        }
+        let mut backend = ModelBackend {
+            model: ModelBuffer::new(size, style),
+            style,
+        };
+        prev.emit(&mut backend)?;
+        cur.emit_diff(&prev, &mut backend)?;
+        backend.model.assert_matches(&cur)?;
+    }
+}
+
 #[test]
 fn diff_skips_the_interior_shift_when_a_side_column_varies() {
     let style = def_style();
