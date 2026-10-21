@@ -682,7 +682,8 @@ impl DiffView {
     /// Rebuild the rows for the current scope.
     fn rebuild_rows(&mut self) {
         self.rows = self.diff.rows(self.scope).into();
-        self.side_rows = side_rows(&self.rows);
+        self.side_rows = Vec::new();
+        self.ensure_side_rows();
         self.side_layout.get_mut().take();
         self.prepared = false;
         self.revision = self.revision.wrapping_add(1);
