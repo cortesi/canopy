@@ -432,6 +432,15 @@ impl TableView {
         Ok(())
     }
 
+    /// Copy the selection, or the cursor's cell without one.
+    fn copy_current(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        if self.selection.is_empty() {
+            self.copy_cell(ctx)
+        } else {
+            self.copy_selection(ctx, false)
+        }
+    }
+
     /// Report the host copy capability to command discovery.
     fn copy_status(&self, _ctx: &dyn ViewContext) -> Result<CommandStatus> {
         Ok(if self.copy_enabled {
@@ -729,13 +738,7 @@ impl TableView {
         if key.mods.ctrl {
             return match key.key {
                 KeyCode::Char('a' | 'A') => self.select_all(ctx),
-                KeyCode::Char('c' | 'C') => {
-                    if self.selection.is_empty() {
-                        self.copy_cell(ctx)
-                    } else {
-                        self.copy_selection(ctx, false)
-                    }
-                }
+                KeyCode::Char('c' | 'C') => self.copy_current(ctx),
                 KeyCode::Home => {
                     self.move_to(ctx, 0, self.cursor.map_or(0, |(_, c)| c), key.mods.shift)
                 }
@@ -802,13 +805,7 @@ impl TableView {
             KeyCode::Enter => self.activate(ctx),
             KeyCode::Char('v') => self.select_column(ctx),
             KeyCode::Char('V') => self.select_row(ctx),
-            KeyCode::Char('y') => {
-                if self.selection.is_empty() {
-                    self.copy_cell(ctx)
-                } else {
-                    self.copy_selection(ctx, false)
-                }
-            }
+            KeyCode::Char('y') => self.copy_current(ctx),
             KeyCode::Char('Y') => self.copy_rows(ctx, false),
             _ => Ok(()),
         }
