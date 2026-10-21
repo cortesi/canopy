@@ -1460,13 +1460,9 @@ pub(crate) fn dispatch(
     let checkpoint = core.begin_dispatch();
     let result = dispatch_inner(core, call.target_or(origin), call);
     let completion = core.finish_dispatch(checkpoint, result.is_ok());
-    match result {
-        Ok(value) => {
-            completion.map_err(CommandError::execution)?;
-            Ok(value)
-        }
-        Err(error) => Err(error),
-    }
+    let value = result?;
+    completion.map_err(CommandError::execution)?;
+    Ok(value)
 }
 
 /// Resolve and check a call that runs later, as [`dispatch`] would now.
