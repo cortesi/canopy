@@ -530,25 +530,22 @@ impl DiffView {
     /// Scroll to the next change.
     #[command]
     pub fn next_change(&mut self, c: &mut dyn Context) {
-        let heads = self.change_heads(c.view().view_rect().w);
-        if heads.is_empty() {
-            return;
-        }
-        self.change = (self.change + 1).min(heads.len() - 1);
-        c.scroll(ScrollOp::To(Point {
-            x: 0,
-            y: column(heads[self.change]),
-        }));
+        self.step_change(c, 1);
     }
 
     /// Scroll to the previous change.
     #[command]
     pub fn prev_change(&mut self, c: &mut dyn Context) {
+        self.step_change(c, -1);
+    }
+
+    /// Scroll `step` changes from the current one, stopping at either end.
+    fn step_change(&mut self, c: &mut dyn Context, step: isize) {
         let heads = self.change_heads(c.view().view_rect().w);
         if heads.is_empty() {
             return;
         }
-        self.change = self.change.saturating_sub(1).min(heads.len() - 1);
+        self.change = self.change.saturating_add_signed(step).min(heads.len() - 1);
         c.scroll(ScrollOp::To(Point {
             x: 0,
             y: column(heads[self.change]),
