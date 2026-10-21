@@ -306,7 +306,7 @@ impl ColumnChart {
         };
         let from = self.cursor.unwrap_or(last);
         let fitted = self.fit && self.columns.len() > self.cells;
-        let to = match self.slots.iter().position(|slot| slot.contains(&from)) {
+        let to = match self.cell_of(from) {
             Some(slot) if fitted => {
                 let target = slot
                     .saturating_add_signed(delta as isize)
