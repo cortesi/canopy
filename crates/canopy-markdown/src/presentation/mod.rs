@@ -399,8 +399,6 @@ pub struct PresentationSnapshot {
     blocks: Vec<BlockLayout>,
     /// Reading unit identity to block index.
     unit_blocks: HashMap<u64, usize>,
-    /// Reading unit identity to semantic reading order.
-    unit_order: HashMap<u64, usize>,
     /// Total document rows including inter-block spacing.
     height: u32,
     /// Conservative layout cache allocation estimate, computed on the worker.
@@ -419,12 +417,6 @@ impl PresentationSnapshot {
         supplied: &Supplied,
     ) -> Self {
         let mut result = Self {
-            unit_order: document
-                .units
-                .iter()
-                .enumerate()
-                .map(|(i, u)| (u.id, i))
-                .collect(),
             document,
             geometry,
             stats: PreparationStats::default(),
@@ -592,11 +584,11 @@ impl PresentationSnapshot {
         // Twice usable capacity covers bucket slack, control bytes and
         // allocator alignment conservatively without relying on
         // HashMap's private layout.
-        for capacity in [self.unit_blocks.capacity(), self.unit_order.capacity()] {
-            bytes = bytes.saturating_add(
-                capacity.saturating_mul(2 * (size_of::<(u64, usize)>() + size_of::<usize>())),
-            );
-        }
+        bytes = bytes.saturating_add(
+            self.unit_blocks
+                .capacity()
+                .saturating_mul(2 * (size_of::<(u64, usize)>() + size_of::<usize>())),
+        );
         let mut row_allocations = HashSet::new();
         let mut tables = HashSet::new();
         for block in &self.blocks {
@@ -783,14 +775,14 @@ impl PresentationSnapshot {
     }
     /// Order a selection or match into a nonempty reading-key span.
     fn reading_span(&self, range: &ReadingRange) -> Option<Range<ReadingKey>> {
-        let key = |p: &ReadingPosition| Some((*self.unit_order.get(&p.unit_id)?, p.offset));
+        let key = |p: &ReadingPosition| Some((self.unit_index(p.unit_id)?, p.offset));
         let (a, b) = (key(&range.start)?, key(&range.end)?);
         let span = if a <= b { a..b } else { b..a };
         (!span.is_empty()).then_some(span)
     }
     /// The reading-order index of a unit, if it belongs to this document.
     fn unit_index(&self, unit_id: u64) -> Option<usize> {
-        self.unit_order.get(&unit_id).copied()
+        self.document.unit_position(unit_id)
     }
     /// Paint the visible document rectangle at viewport origin zero. This
     /// method never parses, wraps, or highlights source.
