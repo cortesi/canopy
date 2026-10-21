@@ -265,7 +265,7 @@ fn marshaled_script_error_to_canopy(
 }
 
 /// Build the cooperative-timeout error for a run that stopped early.
-pub(crate) fn script_timeout(timeout: Option<Duration>) -> error::Error {
+pub fn script_timeout(timeout: Option<Duration>) -> error::Error {
     let timeout_ms = timeout
         .map(|timeout| u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX))
         .unwrap_or(0);
