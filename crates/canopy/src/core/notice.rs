@@ -281,9 +281,13 @@ impl NoticeLog {
         now: Instant,
     ) -> NoticeId {
         // A command implementation's error is reported by its own message,
-        // without the dispatch wrapper.
+        // without the dispatch wrapper, and a command's refusal of its input
+        // or state without the "invalid" label, as the user reads it.
         let message = match error {
-            Error::Command(CommandError::Exec(source)) => source.to_string(),
+            Error::Command(CommandError::Exec(source)) => match source.downcast_ref::<Error>() {
+                Some(Error::Invalid(message)) => message.clone(),
+                _ => source.to_string(),
+            },
             other => other.to_string(),
         };
         let failure = Failure {
@@ -491,5 +495,11 @@ mod tests {
             notice.failure.map(|failure| failure.kind),
             Some(ScriptErrorKind::CommandExecution)
         );
+        // A command's refusal reads without the "invalid" label.
+        let refused = Error::Command(CommandError::execution(Error::Invalid(
+            "no vault here".into(),
+        )));
+        log.record_failure(&refused, NoticeSource::Binding, None, now);
+        assert_eq!(log.entries()[1].message, "no vault here");
     }
 }

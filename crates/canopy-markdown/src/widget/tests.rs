@@ -1,7 +1,7 @@
 use std::{cell::Cell, rc::Rc};
 
 use canopy::{
-    runtime::TurnInput,
+    runtime::{NoticeLevel, TurnInput},
     testing::harness::Harness,
     tree::{FocusDirection, FocusScope},
 };
@@ -2545,6 +2545,41 @@ fn an_item_is_what_interact_or_a_selection_chose() {
         0,
         "the host reports a success itself"
     );
+
+    // A failed action posts an error notice, which a toast shows, so the
+    // status row leaves it out, and the action status stays truthful.
+    harness
+        .with_unique(|reader: &mut Markdown, ctx| reader.copy_item(ctx))
+        .unwrap();
+    next_child_work(&mut harness, &manual).finish();
+    harness.canopy.turn(TurnInput::Wake).unwrap();
+    let requests = harness
+        .with_unique(|reader: &mut Markdown, _| Ok(reader.take_requests(8)))
+        .unwrap();
+    let [request] = &requests[..] else {
+        panic!("one copy request: {requests:?}");
+    };
+    let id = request.id;
+    harness
+        .with_unique(|reader: &mut Markdown, ctx| {
+            reader.complete_request(
+                ctx,
+                HostReply {
+                    id,
+                    outcome: HostOutcome::Failed("no clipboard".into()),
+                },
+            )
+        })
+        .unwrap();
+    assert_eq!(actions(&mut harness), 0, "a toast reports the failure");
+    let notice = harness.canopy.notices().last().cloned().expect("a notice");
+    assert_eq!(notice.message, "no clipboard");
+    assert_eq!(notice.level, NoticeLevel::Error);
+    let status = harness
+        .with_unique(|reader: &mut Markdown, _| Ok(reader.action_status()))
+        .unwrap();
+    assert_eq!(status, "Failed: no clipboard");
+
     harness
         .with_unique(|reader: &mut Markdown, ctx| reader.escape(ctx))
         .unwrap();

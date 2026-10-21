@@ -194,8 +194,14 @@ pub struct Markdown {
     requests: Requests,
     /// Latest status of an explicitly activated host effect.
     action_status: String,
-    /// Current worker or publication failure shown outside document text.
+    /// Whether the action status reports a failure or a refusal, which a
+    /// notice reports, so the status row leaves it out.
+    action_failed: bool,
+    /// Current worker or publication failure, which a notice reports.
     failure: Option<String>,
+    /// The failure a notice last reported, so a failure that persists posts
+    /// once.
+    failure_reported: Option<String>,
     /// Shared chrome label read by its sibling widget.
     chrome: Rc<RefCell<ChromeState>>,
     /// Vertical scrollbar interaction state owned by the reader.
@@ -392,7 +398,9 @@ impl Markdown {
             supplied: Arc::default(),
             requests: Requests::default(),
             action_status: String::new(),
+            action_failed: false,
             failure: None,
+            failure_reported: None,
             chrome: Rc::new(RefCell::new(ChromeState::default())),
             vertical: Scrollbar::vertical("markdown/structure", '█'),
             horizontal: Scrollbar::horizontal("markdown/structure", '▄'),
@@ -454,7 +462,7 @@ impl Markdown {
         self.return_position = None;
         self.jumps.clear();
         // An action's status belongs to the document that took it.
-        self.action_status.clear();
+        self.set_action_status(String::new());
         // So do its images, which a new document asks for again.
         self.resource_states.clear();
         self.resource_requests.clear();
@@ -1228,7 +1236,7 @@ impl Markdown {
                         (Some(local_display(local)), self.options.local_links)
                     }
                     ResolvedLink::Unavailable(reason) => {
-                        self.action_status.clone_from(reason);
+                        self.refuse_action(ctx, reason)?;
                         (None, false)
                     }
                     ResolvedLink::Fragment(_) => unreachable!("fragments jump above"),
@@ -1353,12 +1361,12 @@ impl Markdown {
                 if let Err(error) =
                     self.apply_inspector_event(ctx, event, open.epoch, open.revision)
                 {
-                    failure = Some(format!("Failed: {error}"));
+                    failure = Some(error.to_string());
                 }
             }
             open.handle.close(ctx)?;
             if let Some(failure) = failure {
-                self.action_status = failure;
+                self.fail_action(ctx, &failure)?;
             }
         }
         // Events still queued in the inspector have followed its link.
@@ -1435,7 +1443,7 @@ impl Markdown {
             .reserve(self.epoch(), revision, object, self.options.action_limit)
             .ok_or_else(|| invalid("The host request queue is full"))?;
         self.requests.publish(reserved.id, action);
-        self.action_status = status.into();
+        self.set_action_status(status.into());
         self.wake_publication_host()?;
         Ok(true)
     }
@@ -1831,7 +1839,7 @@ impl Markdown {
             self.requests.cancel(context.id);
             return Err(invalid(error));
         }
-        self.action_status = "Copying".into();
+        self.set_action_status("Copying".into());
         self.update_chrome(ctx)
     }
     /// Drain complete immutable requests once. The host performs each action
@@ -1845,13 +1853,34 @@ impl Markdown {
         if let Some(context) = self.requests.complete(reply.id)
             && context.epoch == self.epoch()
         {
-            self.action_status = match reply.outcome {
-                HostOutcome::Success => ACTION_DONE.into(),
-                HostOutcome::Rejected(reason) => format!("Rejected: {reason}"),
-                HostOutcome::Failed(reason) => format!("Failed: {reason}"),
-            };
+            match reply.outcome {
+                HostOutcome::Success => self.set_action_status(ACTION_DONE.into()),
+                HostOutcome::Rejected(reason) => self.refuse_action(ctx, &reason)?,
+                HostOutcome::Failed(reason) => self.fail_action(ctx, &reason)?,
+            }
         }
         self.update_chrome(ctx)
+    }
+
+    /// Record the status of an action that goes on, or that succeeded.
+    fn set_action_status(&mut self, status: String) {
+        self.action_status = status;
+        self.action_failed = false;
+    }
+
+    /// Record a failed action, and report it as an error notice.
+    fn fail_action(&mut self, ctx: &mut dyn Context, reason: &str) -> Result<()> {
+        self.action_status = format!("Failed: {reason}");
+        self.action_failed = true;
+        ctx.notify(NoticePost::error(reason))
+    }
+
+    /// Record an action that something refused, and report it as a warning
+    /// notice.
+    fn refuse_action(&mut self, ctx: &mut dyn Context, reason: &str) -> Result<()> {
+        self.action_status = format!("Rejected: {reason}");
+        self.action_failed = true;
+        ctx.notify(NoticePost::warning(reason))
     }
     /// Latest truthful status of a requested host action.
     #[command]
@@ -2278,9 +2307,6 @@ impl Markdown {
         };
         let snapshot = self.store.snapshot();
         let mut items = Vec::new();
-        if let Some(failure) = &self.failure {
-            items.push(item("markdown.failure", 58, "warning", failure.clone()));
-        }
         match &snapshot.lifecycle {
             Lifecycle::Receiving => {
                 items.push(item("markdown.receiving", 20, "label", "receiving".into()));
@@ -2326,8 +2352,11 @@ impl Markdown {
             items.push(item("markdown.host", 20, "label", status.clone()));
         }
         // The host performed a successful action and reports it in its own
-        // way, so only progress and failures show.
-        if !self.action_status.is_empty() && self.action_status != ACTION_DONE {
+        // way, and a notice reports a failure, so only progress shows.
+        if !self.action_status.is_empty()
+            && self.action_status != ACTION_DONE
+            && !self.action_failed
+        {
             items.push(item(
                 "markdown.action",
                 35,
@@ -2631,7 +2660,7 @@ impl Widget for Markdown {
             let revision = open.revision;
             for event in events {
                 if let Err(error) = self.apply_inspector_event(ctx, event, epoch, revision) {
-                    action_failure = Some(format!("Failed: {error}"));
+                    action_failure = Some(error.to_string());
                 }
             }
         }
@@ -2641,7 +2670,7 @@ impl Widget for Markdown {
             // this turn's worker completions.
             self.shared.borrow_mut().overlays.active_object = Some(object);
             if let Err(error) = self.activate(ctx) {
-                action_failure = Some(format!("Failed: {error}"));
+                action_failure = Some(error.to_string());
             }
         }
         self.deferred_publication = self.drag_active(ctx)?;
@@ -2665,18 +2694,25 @@ impl Widget for Markdown {
             match copy.result {
                 Ok(text) => {
                     if self.requests.publish(copy.id, HostAction::CopyText(text)) {
-                        self.action_status = "Copy ready".into();
+                        self.set_action_status("Copy ready".into());
                         self.wake_publication_host()?;
                     }
                 }
                 Err(error) => {
                     self.requests.cancel(copy.id);
-                    self.action_status = error.to_string();
+                    self.fail_action(ctx, &error.to_string())?;
                 }
             }
         }
         if let Some(failure) = action_failure {
-            self.action_status = failure;
+            self.fail_action(ctx, &failure)?;
+        }
+        // A failure that persists, as a submit retries, posts once.
+        if self.failure != self.failure_reported {
+            if let Some(failure) = &self.failure {
+                ctx.notify(NoticePost::error(failure.clone()))?;
+            }
+            self.failure_reported.clone_from(&self.failure);
         }
         if self.dirty {
             if let Some(deadline) = self.deadline

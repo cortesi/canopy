@@ -130,12 +130,14 @@ not an event:
 
 ### Stage 3: Apps
 
-- [ ] C3: the Markdown reader's and the inspector's errors as notices.
-- [ ] fh: the `notice()` and `toast()` helpers, and the tests and smoke
+- [x] C3: the Markdown reader's and the inspector's errors as notices.
+  A command's `Error::Invalid` reports its message without the "invalid"
+  label.
+- [x] fh: the `notice()` and `toast()` helpers, and the tests and smoke
   suites that read notices.
 
 ### Stage 4: Documents
 
-- [ ] C4: `docs/architecture.md`, `docs/scripting.md`, `docs/styles.md`.
-- [ ] Run `ncode tidy`, `ncode test`, the smoke suites, and the galleries
+- [x] C4: `docs/architecture.md`, `docs/scripting.md`, `docs/styles.md`.
+- [x] Run `ncode tidy`, `ncode test`, the smoke suites, and the galleries
   in both repositories. Run `ncode api` in both, and review the diffs.

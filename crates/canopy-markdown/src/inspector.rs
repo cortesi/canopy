@@ -19,7 +19,7 @@ use canopy::{
     },
     layout::{CanvasContext, Direction, Layout, RevealAlign},
     render::Render,
-    runtime::{NodeWakeHandle, PollLifetime, WakeOutcome},
+    runtime::{NodeWakeHandle, NoticePost, PollLifetime, WakeOutcome},
 };
 use canopy_widgets::{
     Container, TableView, Text,
@@ -659,8 +659,15 @@ impl MarkdownInspector {
         self.emit(InspectorEvent::CopyText(text))?;
         Ok(true)
     }
+    /// Clear the status row, and report an outcome or a failure as a notice,
+    /// which shows as a toast.
+    fn report(&self, ctx: &mut dyn Context, post: NoticePost) -> Result<()> {
+        self.show_status(ctx, "")?;
+        ctx.notify(post)
+    }
     /// Replace the status row without rebuilding the content subtree. The row
-    /// shows only while it has something to say.
+    /// shows only while it has something to say: a prompt, progress, or the
+    /// state of a search.
     fn show_status(&self, ctx: &mut dyn Context, value: impl Into<String>) -> Result<()> {
         if let Some(status) = self.status {
             let value = value.into();
@@ -695,7 +702,7 @@ impl MarkdownInspector {
     #[command]
     pub fn dismiss(&mut self, ctx: &mut dyn Context) -> Result<()> {
         if self.prompt.take().is_some() {
-            self.show_status(ctx, "Search canceled")?;
+            self.report(ctx, NoticePost::info("Search canceled"))?;
             return self.restore_focus(ctx);
         }
         if let Some(source) = self.source_reader() {
@@ -712,7 +719,7 @@ impl MarkdownInspector {
                 self.work_search = None;
                 self.search_fresh = false;
                 self.generation += 1;
-                self.show_status(ctx, "Search cleared")?;
+                self.report(ctx, NoticePost::info("Search cleared"))?;
                 return Ok(());
             }
         }
@@ -720,7 +727,7 @@ impl MarkdownInspector {
             self.detail_loading = false;
             self.pending_source = None;
             self.generation += 1;
-            self.show_status(ctx, "Cell detail canceled")?;
+            self.report(ctx, NoticePost::info("Cell detail canceled"))?;
             return self.restore_focus(ctx);
         }
         if let Some(detail) = self.detail.take() {
@@ -1263,7 +1270,7 @@ impl Widget for Inspector {
                         _ => {}
                     }
                 } else if let Err(error) = &result.result {
-                    self.show_status(ctx, format!("Search failed: {error}"))?;
+                    self.report(ctx, NoticePost::error(format!("Search failed: {error}")))?;
                 }
                 self.work_search = None;
                 return Ok(None);
@@ -1305,7 +1312,12 @@ impl Widget for Inspector {
                     )?;
                 }
                 Ok(PreparedView::Rendered(_)) => {}
-                Err(error) => self.show_status(ctx, format!("Preparation failed: {error}"))?,
+                Err(error) => {
+                    self.report(
+                        ctx,
+                        NoticePost::error(format!("Preparation failed: {error}")),
+                    )?;
+                }
             }
         }
         Ok(None)
@@ -1767,6 +1779,41 @@ mod tests {
         harness.canopy.with_root_context(|ctx| handle.close(ctx))?;
         assert!(!manual.run_next());
         assert!(harness.find_nodes("**/markdown_inspector/")?.is_empty());
+        Ok(())
+    }
+    #[test]
+    fn a_canceled_search_reports_as_a_notice_and_clears_the_status() -> Result<()> {
+        let mut store = SourceStore::stream();
+        store.append("one\ntwo\n").unwrap();
+        let (mut harness, _, handle, manual) = fixture(InspectorContent::Source {
+            snapshot: store.snapshot(),
+        })?;
+        assert!(manual.run_next());
+        harness.canopy.turn(TurnInput::Prepare)?;
+        let status = |harness: &mut Harness| -> Result<bool> {
+            harness.canopy.with_context(handle.node, |ctx| {
+                let status = ctx.with_widget(handle.node, |inspector: &Inspector| {
+                    Ok(NodeId::from(inspector.status.expect("a status row")))
+                })?;
+                Ok(ctx.view_of(status).is_some_and(|view| view.outer.h > 0))
+            })
+        };
+        harness.canopy.with_context(handle.node, |ctx| {
+            ctx.with_widget_mut(handle.node, |inspector: &mut Inspector, ctx| {
+                inspector.search(ctx)
+            })
+        })?;
+        harness.render()?;
+        assert!(status(&mut harness)?, "the prompt shows in the status row");
+        harness.canopy.with_context(handle.node, |ctx| {
+            ctx.with_widget_mut(handle.node, |inspector: &mut Inspector, ctx| {
+                inspector.dismiss(ctx)
+            })
+        })?;
+        harness.render()?;
+        assert!(!status(&mut harness)?, "the status row clears");
+        let notice = harness.canopy.notices().last().cloned().expect("a notice");
+        assert_eq!(notice.message, "Search canceled");
         Ok(())
     }
     #[test]
