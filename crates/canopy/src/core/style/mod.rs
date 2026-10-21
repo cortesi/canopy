@@ -111,7 +111,7 @@ pub enum Attr {
 }
 
 /// A set of active text attributes.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub struct AttrSet {
     /// Bold flag.
     pub bold: bool,
@@ -125,20 +125,6 @@ pub struct AttrSet {
     pub overline: bool,
     /// Underline flag.
     pub underline: bool,
-}
-
-impl Default for AttrSet {
-    /// Construct an empty set of text attributes.
-    fn default() -> Self {
-        Self {
-            bold: false,
-            crossedout: false,
-            dim: false,
-            italic: false,
-            overline: false,
-            underline: false,
-        }
-    }
 }
 
 impl AttrSet {
