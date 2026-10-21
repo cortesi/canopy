@@ -6,10 +6,14 @@ pub mod effects;
 pub mod themes;
 
 use std::{
+    cell::RefCell,
     collections::HashMap,
     f64::consts::TAU,
     iter,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -670,6 +674,15 @@ fn canonical_path(path: &str) -> String {
 pub struct StyleMap {
     /// Path-to-style map.
     styles: HashMap<String, PartialStyle>,
+    /// Identity of the rules, which changes with every insertion, so a
+    /// resolved style can be reused while it stays the same.
+    generation: u64,
+}
+
+/// Return a style map generation that no map has had.
+fn next_generation() -> u64 {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::Relaxed)
 }
 
 impl StyleMap {
@@ -683,6 +696,7 @@ impl StyleMap {
     pub fn new() -> Self {
         let mut cs = Self {
             styles: HashMap::new(),
+            generation: next_generation(),
         };
         cs.insert_style(
             "/",
@@ -729,6 +743,7 @@ impl StyleMap {
 
     /// Insert a partial style at a path.
     fn insert_style(&mut self, path: &str, style: PartialStyle) {
+        self.generation = next_generation();
         self.styles
             .entry(canonical_path(path))
             .and_modify(|existing| *existing = style.join(existing))
@@ -883,7 +898,7 @@ impl<'a> StyleRules<'a> {
 /// So given a layer stack ["foo", "bar"], and an attempt to look up "text",
 /// we try the following lookups in order: ["foo/bar/text", "bar/text",
 /// "foo/text", "text", "foo/bar", "bar", "foo", ""].
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug)]
 pub(crate) struct StyleManager {
     /// Current render level.
     level: usize,
@@ -891,6 +906,21 @@ pub(crate) struct StyleManager {
     layers: Vec<String>,
     /// Render levels corresponding to layers.
     layer_levels: Vec<usize>,
+    /// Number of each layer stack seen, by its layers.
+    stacks: HashMap<Vec<String>, usize>,
+    /// Number of the current layer stack.
+    stack: usize,
+    /// Styles resolved so far.
+    resolved: RefCell<Resolved>,
+}
+
+/// Styles resolved from one style map generation.
+#[derive(Debug, Default)]
+struct Resolved {
+    /// Generation of the style map the styles came from.
+    generation: u64,
+    /// Styles by path, for each layer stack by number.
+    styles: Vec<HashMap<String, Style>>,
 }
 
 impl Default for StyleManager {
@@ -906,7 +936,22 @@ impl StyleManager {
             level: 0,
             layers: vec![],
             layer_levels: vec![0],
+            stacks: HashMap::from([(Vec::new(), 0)]),
+            stack: 0,
+            resolved: RefCell::default(),
         }
+    }
+
+    /// Number the current layer stack.
+    fn enter_stack(&mut self) {
+        self.stack = match self.stacks.get(self.layers.as_slice()) {
+            Some(&stack) => stack,
+            None => {
+                let stack = self.stacks.len();
+                self.stacks.insert(self.layers.clone(), stack);
+                stack
+            }
+        };
     }
 
     /// Increment the render level.
@@ -917,9 +962,13 @@ impl StyleManager {
     /// Decrement the render level and pop any layers at this level.
     pub fn pop(&mut self) {
         if self.level != 0 {
+            let layers = self.layers.len();
             while self.layer_levels.last() == Some(&self.level) {
                 self.layers.pop();
                 self.layer_levels.pop();
+            }
+            if self.layers.len() != layers {
+                self.enter_stack();
             }
             self.level -= 1;
         }
@@ -929,12 +978,28 @@ impl StyleManager {
     pub fn push_layer(&mut self, name: &str) {
         self.layers.push(name.to_owned());
         self.layer_levels.push(self.level);
+        self.enter_stack();
     }
 
-    /// Resolve a style path.
+    /// Resolve a style path, reusing an earlier resolution under the same
+    /// layers and rules.
     pub fn get(&self, smap: &StyleMap, path: &str) -> Style {
-        let path: Vec<&str> = path_segments(path).collect();
-        self.resolve(smap, &self.layers, &path)
+        let mut resolved = self.resolved.borrow_mut();
+        if resolved.generation != smap.generation {
+            resolved.generation = smap.generation;
+            resolved.styles.clear();
+        }
+        if resolved.styles.len() <= self.stack {
+            resolved.styles.resize_with(self.stack + 1, HashMap::new);
+        }
+        let styles = &mut resolved.styles[self.stack];
+        if let Some(style) = styles.get(path) {
+            return style.clone();
+        }
+        let segments: Vec<&str> = path_segments(path).collect();
+        let style = self.resolve(smap, &self.layers, &segments);
+        styles.insert(path.to_owned(), style.clone());
+        style
     }
 
     /// Resolve a style using a path and a layer specification, ignoring
@@ -987,6 +1052,22 @@ mod tests {
     use std::{env, fs};
 
     use super::*;
+
+    #[test]
+    fn a_manager_resolves_again_when_its_layers_or_rules_change() {
+        let mut map = StyleMap::new();
+        map.rules().fg("dialog/text", Color::Red).apply();
+        let mut manager = StyleManager::new();
+        let fg = |manager: &StyleManager, map: &StyleMap| manager.get(map, "text").fg;
+        assert_eq!(fg(&manager, &map), Paint::Solid(Color::White));
+        manager.push();
+        manager.push_layer("dialog");
+        assert_eq!(fg(&manager, &map), Paint::Solid(Color::Red));
+        map.rules().fg("dialog/text", Color::Blue).apply();
+        assert_eq!(fg(&manager, &map), Paint::Solid(Color::Blue));
+        manager.pop();
+        assert_eq!(fg(&manager, &map), Paint::Solid(Color::White));
+    }
 
     #[test]
     fn stock_roles_preserve_fallback_across_decorative_levels() {
