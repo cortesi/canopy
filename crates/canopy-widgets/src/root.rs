@@ -334,13 +334,12 @@ impl Root {
         let panel: NodeId = c.get_slot::<NoticeLogSlot>(c.node_id())?.into();
         let list = NoticeLog::list_id(c, panel)?;
         let origin_focus = c.focused_node();
-        let rows = notice_log::rows(c);
-        let (previous_rows, previous_scroll) =
-            c.with_widget_mut(list, |list: &mut notice_log::NoticeList, context| {
-                let previous = list.replace_rows(rows);
+        NoticeLog::sync(c, panel)?;
+        let previous_scroll =
+            c.with_widget_mut(list, |_: &mut notice_log::NoticeList, context| {
                 let scroll = context.view().scroll;
                 context.scroll(ScrollOp::To(Point { x: 0, y: 0 }));
-                Ok((previous, scroll))
+                Ok(scroll)
             })?;
         let opened = c.open_modal(ModalOptions {
             owner: Self::overlay_owner(c, origin_focus),
@@ -355,12 +354,8 @@ impl Root {
         match opened {
             Ok(token) => self.notices_token = Some(token),
             Err(error) => {
-                c.with_widget_mut(list, |list: &mut notice_log::NoticeList, context| {
-                    list.replace_rows(previous_rows);
-                    context.scroll(ScrollOp::To(Point {
-                        x: previous_scroll.x,
-                        y: previous_scroll.y,
-                    }));
+                c.with_widget_mut(list, |_: &mut notice_log::NoticeList, context| {
+                    context.scroll(ScrollOp::To(previous_scroll));
                     Ok(())
                 })?;
                 return Err(error);

@@ -5,10 +5,7 @@
 //! without a context to read the log. Root's notice hook refreshes the copy
 //! whenever the log changes.
 
-use std::{
-    mem,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, TypedId, ViewContext, ViewContextExt,
@@ -170,11 +167,6 @@ pub struct NoticeList {
 }
 
 impl NoticeList {
-    /// Replace the rows, and return the rows they replace.
-    pub(crate) fn replace_rows(&mut self, rows: Vec<LogRow>) -> Vec<LogRow> {
-        mem::replace(&mut self.rows, rows)
-    }
-
     /// Return the width that shows every row whole.
     fn natural_width(&self) -> u32 {
         let widest = self
