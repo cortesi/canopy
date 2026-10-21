@@ -523,16 +523,14 @@ impl Widget for Terminal {
         if child_exited {
             let message = format!("Process exited (status {child_exit_code})");
             let width = message.chars().count() as u32;
-            if width > 0 && content_size.w > 0 && content_size.h > 0 {
-                let x = (content_size.w.saturating_sub(width)) / 2;
-                let y = content_size.h / 2;
-                let line = geom::Line::new(
-                    view.content_origin().x.saturating_add(x),
-                    view.content_origin().y.saturating_add(y),
-                    width.min(content_size.w),
-                );
-                rndr.text("text", line, &message)?;
-            }
+            let x = (content_size.w.saturating_sub(width)) / 2;
+            let y = content_size.h / 2;
+            let line = geom::Line::new(
+                view.content_origin().x.saturating_add(x),
+                view.content_origin().y.saturating_add(y),
+                width.min(content_size.w),
+            );
+            rndr.text("text", line, &message)?;
         }
 
         if ctx.is_focused()
