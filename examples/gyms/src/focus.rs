@@ -116,25 +116,17 @@ impl Block {
             Some(Direction::Stack) | None => self.horizontal,
         };
 
-        let layout = c.layout_of(c.node_id()).unwrap_or_default();
-        let weight = if adjust_horizontal {
-            match layout.width {
-                Sizing::Flex(w) => w,
-                _ => 1,
-            }
+        let mut layout = c.layout_of(c.node_id()).unwrap_or_default();
+        let sizing = if adjust_horizontal {
+            &mut layout.width
         } else {
-            match layout.height {
-                Sizing::Flex(w) => w,
-                _ => 1,
-            }
+            &mut layout.height
         };
-        let next = weight.saturating_add_signed(delta).max(1);
-        let mut layout = layout;
-        if adjust_horizontal {
-            layout.width = Sizing::Flex(next);
-        } else {
-            layout.height = Sizing::Flex(next);
-        }
+        let weight = match *sizing {
+            Sizing::Flex(w) => w,
+            _ => 1,
+        };
+        *sizing = Sizing::Flex(weight.saturating_add_signed(delta).max(1));
         c.set_layout_override(c.node_id(), layout.into())
     }
 
