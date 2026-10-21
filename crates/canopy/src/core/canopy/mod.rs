@@ -141,7 +141,7 @@ pub struct Canopy {
     mode_hooks: Hooks,
     /// Hooks run when a binding or the mode stack changes.
     binding_hooks: Hooks,
-    /// Hooks run after the shown notice changes.
+    /// Hooks run after the notice log changes.
     notice_hooks: Hooks,
     /// Trace for the most recent key or mouse routing pass.
     route_trace: Vec<RouteTraceEntry>,
@@ -589,7 +589,7 @@ impl Canopy {
         self.core.input_map.active_modes()
     }
 
-    /// Return whether the mode stack, the bindings, or the shown notice
+    /// Return whether the mode stack, the bindings, or the notice log
     /// changed since their hooks last ran.
     pub(super) fn state_hooks_pending(&self) -> bool {
         self.mode_hooks

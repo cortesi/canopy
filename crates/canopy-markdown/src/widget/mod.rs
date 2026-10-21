@@ -1882,6 +1882,14 @@ impl Markdown {
         self.action_failed = true;
         ctx.notify(NoticePost::warning(reason))
     }
+
+    /// The status of an action that goes on. The host reports a success in
+    /// its own way, and a notice reports a failure, so neither shows.
+    fn action_progress(&self) -> Option<&str> {
+        (!self.action_status.is_empty() && self.action_status != ACTION_DONE && !self.action_failed)
+            .then_some(self.action_status.as_str())
+    }
+
     /// Latest truthful status of a requested host action.
     #[command]
     pub fn action_status(&self) -> String {
@@ -2351,18 +2359,8 @@ impl Markdown {
         if let Some(status) = &self.options.status {
             items.push(item("markdown.host", 20, "label", status.clone()));
         }
-        // The host performed a successful action and reports it in its own
-        // way, and a notice reports a failure, so only progress shows.
-        if !self.action_status.is_empty()
-            && self.action_status != ACTION_DONE
-            && !self.action_failed
-        {
-            items.push(item(
-                "markdown.action",
-                35,
-                "text",
-                self.action_status.clone(),
-            ));
+        if let Some(progress) = self.action_progress() {
+            items.push(item("markdown.action", 35, "text", progress.to_owned()));
         } else if let Some(destination) = self.selected_destination() {
             items.push(item(
                 "markdown.link",
@@ -2428,20 +2426,17 @@ impl Markdown {
             String::new()
         };
         let text = format!(
-            "{label}  {mode} · {lifecycle}{partial} · {follow}{update}{new}{}{}{}",
+            "{label}  {mode} · {lifecycle}{partial} · {follow}{update}{new}{}{}",
             self.options
                 .status
                 .as_ref()
                 .map_or(String::new(), |s| format!(" · {s}")),
-            self.failure
-                .as_ref()
-                .map_or(String::new(), |s| format!(" · {s}")),
-            if self.action_status.is_empty() {
-                self.selected_destination()
-                    .map_or(String::new(), |shown| format!(" · → {shown}"))
-            } else {
-                format!(" · {}", self.action_status)
-            }
+            self.action_progress().map_or_else(
+                || self
+                    .selected_destination()
+                    .map_or(String::new(), |shown| format!(" · → {shown}")),
+                |progress| format!(" · {progress}"),
+            )
         );
         let enabled = self.can_toggle_view_type(ctx)?;
         *self.chrome.borrow_mut() = ChromeState {

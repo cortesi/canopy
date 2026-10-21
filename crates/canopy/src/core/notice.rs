@@ -315,7 +315,7 @@ impl NoticeLog {
         let live = self
             .entries
             .iter()
-            .any(|notice| notice.id == id && self.toast_live(notice, now));
+            .any(|notice| notice.id == id && self.is_live(notice, now));
         if !live {
             return false;
         }
@@ -333,13 +333,13 @@ impl NoticeLog {
     pub fn live_toasts(&self, now: Instant) -> Vec<&Notice> {
         self.entries
             .iter()
-            .filter(|notice| self.toast_live(notice, now))
+            .filter(|notice| self.is_live(notice, now))
             .collect()
     }
 
     /// Return whether `notice` shows at `now`, as a toast in its time.
     pub fn is_live(&self, notice: &Notice, now: Instant) -> bool {
-        self.toast_live(notice, now)
+        !self.ended.contains(&notice.id) && notice.at <= now && now < notice.ends()
     }
 
     /// Return when the next live toast ends, if one shows at `now`.
@@ -353,11 +353,6 @@ impl NoticeLog {
     /// Return the number of changes so far.
     pub(crate) fn generation(&self) -> u64 {
         self.generation
-    }
-
-    /// Return whether `notice` is a toast that shows at `now`.
-    fn toast_live(&self, notice: &Notice, now: Instant) -> bool {
-        !self.ended.contains(&notice.id) && notice.at <= now && now < notice.ends()
     }
 }
 

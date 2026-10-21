@@ -1250,13 +1250,14 @@ impl Setup {
         hook: fn(_: &mut dyn Context) -> crate::error::Result<()>,
     );
 
-    /// Register a hook that runs against the root context whenever the shown
-    /// notice changes: after a notice is recorded, before the next frame, and
-    /// when input dismisses it, before that input routes.
+    /// Register a hook that runs against the root context before the next
+    /// frame whenever the notice log changes: after a notice is recorded, and
+    /// when a toast ends early. A toast that ends on its time changes nothing
+    /// here; its widget polls the clock.
     ///
-    /// A hook reads the shown notice with
-    /// [`ViewContext::notice`](crate::ViewContext::notice). Registering a name
-    /// again replaces its hook. Hooks run in name order.
+    /// A hook reads the notices with
+    /// [`ViewContext::notice_log`](crate::ViewContext::notice_log). Registering
+    /// a name again replaces its hook. Hooks run in name order.
     pub fn register_notice_hook(
         &mut self,
         name: &'static str,

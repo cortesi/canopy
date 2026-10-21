@@ -92,6 +92,22 @@ impl ToastLayer {
         let next = log
             .next_toast_end(now)
             .map(|end| end.saturating_duration_since(now));
+        // The newest cards show, with a blank row between each, as many as
+        // fit the layer. The newest shows always.
+        let area = context.view().view_rect_local();
+        let text_width = area.w.saturating_sub(ToastBox::frame()).min(MAX_TEXT_WIDTH);
+        let mut used = 0;
+        let mut first = live.len();
+        for (index, shown) in live.iter().enumerate().rev() {
+            let height = u32::try_from(shown.lines(text_width).len()).unwrap_or(u32::MAX);
+            let needed = used + height + u32::from(used > 0);
+            if area.h > 0 && needed > area.h && first < live.len() {
+                break;
+            }
+            used = needed;
+            first = index;
+        }
+        let live = &live[first..];
         for (index, toast) in self.boxes.iter().enumerate() {
             let shown = live.get(index).cloned();
             let hidden = shown.is_none();
@@ -154,18 +170,25 @@ impl Shown {
     }
 
     /// Return the lines of the message wrapped at `width` columns, with room
-    /// for the count on the last line. A message too long for
+    /// for the count on the last line. The count takes a line of its own when
+    /// the last line is full and a line is free. A message too long for
     /// [`MAX_LINES`] lines ends with a marker.
     fn lines(&self, width: u32) -> Vec<String> {
         let width = width.max(1) as usize;
+        let count = self.count_width() as usize;
         let mut lines = wrap(&self.message, width);
+        let full = lines
+            .last()
+            .is_some_and(|last| text::width(last) as usize + count > width);
+        if count > 0 && full && lines.len() < MAX_LINES {
+            lines.push(String::new());
+        }
         if lines.len() > MAX_LINES {
             let rest = lines.split_off(MAX_LINES - 1).join(" ");
-            lines.push(text::truncate_end(&rest, width).into_owned());
+            lines.push(rest);
         }
         if let Some(last) = lines.last_mut() {
-            let room = width.saturating_sub(self.count_width() as usize);
-            *last = text::truncate_end(last, room).into_owned();
+            *last = text::truncate_end(last, width.saturating_sub(count)).into_owned();
         }
         lines
     }
@@ -222,7 +245,7 @@ fn wrap(message: &str, width: usize) -> Vec<String> {
             }
             line.push_str(word);
         }
-        if !line.is_empty() || lines.is_empty() {
+        if !line.is_empty() {
             lines.push(line);
         }
     }
@@ -289,9 +312,11 @@ impl Widget for ToastBox {
             if index == last
                 && let Some(count) = &shown.count
             {
-                let x = x.saturating_add(text::width(line)).saturating_add(1);
-                let width = shown.count_width().saturating_sub(1);
-                render.text("root/toast/count", Line::new(x, y, width), count)?;
+                // The count follows the text after a blank, or starts a line
+                // of its own, and stays within the card.
+                let offset = text::width(line) + u32::from(!line.is_empty());
+                let width = text_width.saturating_sub(offset);
+                render.text("root/toast/count", Line::new(x + offset, y, width), count)?;
             }
         }
         Ok(())
@@ -482,6 +507,49 @@ mod tests {
             80 - 1 - card + 2
         );
         Ok(())
+    }
+
+    #[test]
+    fn the_newest_cards_show_when_the_stack_does_not_fit() -> Result<()> {
+        let (mut harness, _clock) = app(Size::new(80, 12))?;
+        let long = |index: usize| format!("{index} {}", "word ".repeat(30).trim());
+        for index in 0..TOAST_LIMIT {
+            notify(&mut harness, NoticePost::error(long(index)))?;
+        }
+        let screen = rows(&harness);
+        let shows = |text: &str| screen.iter().any(|row| row.contains(text));
+        assert!(shows("3 word"), "the newest shows: {screen:?}");
+        assert!(shows("2 word"), "{screen:?}");
+        assert!(
+            !shows("0 word"),
+            "the oldest that does not fit hides: {screen:?}"
+        );
+        assert!(screen[11].trim().is_empty(), "the bottom row stays clear");
+        Ok(())
+    }
+
+    #[test]
+    fn a_count_takes_its_own_line_before_it_cuts_the_text() -> Result<()> {
+        let (mut harness, _clock) = app(Size::new(80, 8))?;
+        let message = "x".repeat(47);
+        notify(&mut harness, NoticePost::error(message.clone()))?;
+        notify(&mut harness, NoticePost::error(message.clone()))?;
+        let screen = rows(&harness);
+        assert!(
+            screen.iter().any(|row| row.contains(&message)),
+            "the text shows whole: {screen:?}"
+        );
+        assert!(
+            screen.iter().any(|row| row.trim() == "×2"),
+            "the count takes the next line: {screen:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_leading_blank_line_is_dropped() {
+        assert_eq!(super::wrap("\nfoo", 10), ["foo"]);
+        assert_eq!(super::wrap("", 10), [""]);
     }
 
     #[test]

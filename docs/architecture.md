@@ -868,8 +868,8 @@ list the keys of a transient mode in a panel that overlays the main pane,
 leaving out a key whose command is disabled. The help modal covers that
 panel, and hides it while help is open. A framework-group modal suspends
 transient modes; a scoped or application modal keeps a menu opened inside it.
-`Setup::register_notice_hook` does the same for the shown notice. Root uses
-one to show the newest notice as one row at the bottom of the main pane.
+`Setup::register_notice_hook` does the same for the notice log. Root uses one
+to stack the live notices as toasts at the bottom right.
 
 ## Focus and Mouse Capture
 
@@ -966,8 +966,7 @@ Every notice is a toast: it shows from its post until its duration ends,
 whatever the input. Its level sets the default duration, longer for worse
 news: two seconds for info, four for a warning, and six for an error. A post
 can name another. At most four toasts show, and a newer toast ends the oldest
-early. `Context::end_toast`
-ends one early too. The log keeps every notice that has stopped showing. The
+early. `Context::end_toast` ends one early too. The log keeps every notice that has stopped showing. The
 driver clock alone decides whether a toast shows, so a headless run and a
 `ManualClock` test see what a terminal shows.
 
@@ -977,10 +976,10 @@ hook stacks the live toasts at the bottom right, one row above the bottom row,
 newest lowest, with a blank row between them. Each toast is a card with an
 edge in the color of its level. Its message wraps at 48 columns on at most
 three lines, and the last line ends with a marker when the message does not
-fit. An
-application that keeps a band at the bottom of the window, such as a text
-editor, names it with `Root::set_toast_floor`, and the stack rests just above
-the band while the band shows. The floor is a layout bound:
+fit. When the cards do not all fit, the newest show. An application that
+keeps a band at the bottom of the window, such as a text editor, names it with
+`Root::set_toast_floor`, and the stack rests just above the band while the
+band shows. The floor is a layout bound:
 `Context::set_layout_floor` raises the bottom padding of a node to clear the
 rows from the top of another node down. After each layout pass, a node with a
 floor reads the floor's published view, and a changed inset takes one more
