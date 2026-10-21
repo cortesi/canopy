@@ -5,10 +5,9 @@ use std::sync::Arc;
 use futures::{Stream, StreamExt};
 
 use super::Canopy;
-#[cfg(test)]
-use crate::render::RenderBackend;
 use crate::{
     error::{Error, Result},
+    render::RenderBackend,
     testing::ManualClock,
 };
 
@@ -84,6 +83,13 @@ impl Canopy {
         }
         self.render(be)?;
         Ok(true)
+    }
+
+    /// Emit the published frame to `be`, as the terminal adapter does after
+    /// a turn, diffing against the last emitted frame. Benchmarks use this to
+    /// time emission.
+    pub fn emit_for_testing<R: RenderBackend>(&mut self, be: &mut R) -> Result<()> {
+        self.emit_frame(be)
     }
 
     /// Bring layout up to date without painting, as frame preparation does

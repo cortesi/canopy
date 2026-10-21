@@ -5,6 +5,7 @@ mod help;
 mod list;
 mod markdown;
 mod names;
+mod perf;
 mod shell;
 mod smoke;
 mod style;
