@@ -419,12 +419,17 @@ impl Canopy {
         } else {
             Arc::clone(&snapshot.buffer)
         };
+        // Only canonical writes build a frame, and the termbuf tests check
+        // them, so release builds skip the check of every cell.
+        if cfg!(debug_assertions) {
+            next.validate_canonical()?;
+        }
         let previous = self.frame.emitted_buf.take();
         be.reset()?;
         if let Some(previous) = &previous {
-            next.emit_diff_after(previous, be)?;
+            next.write_diff(previous, be)?;
         } else {
-            next.emit(be)?;
+            next.write(be)?;
         }
         let parked = snapshot
             .cursors

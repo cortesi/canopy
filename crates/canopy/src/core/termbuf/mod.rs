@@ -516,7 +516,7 @@ impl TermBuf {
     }
 
     /// Validate the canonical base-plus-continuation cell representation.
-    fn validate_canonical(&self) -> Result<()> {
+    pub(crate) fn validate_canonical(&self) -> Result<()> {
         let width = usize::try_from(self.size.w)
             .map_err(|_| Error::Internal("terminal buffer width does not fit usize".into()))?;
         if width == 0 {
@@ -605,19 +605,15 @@ impl TermBuf {
     /// to the provided render backend. The caller flushes the backend.
     pub fn emit_diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {
         prev.validate_canonical()?;
-        self.emit_diff_after(prev, backend)
+        self.validate_canonical()?;
+        self.write_diff(prev, backend)
     }
 
-    /// Diff this buffer against `prev`, a buffer that an earlier emission
-    /// validated, so only this buffer needs validation.
-    pub(crate) fn emit_diff_after<R: RenderBackend>(
-        &self,
-        prev: &Self,
-        backend: &mut R,
-    ) -> Result<()> {
-        self.validate_canonical()?;
+    /// Diff this buffer against `prev` as `emit_diff` does, for buffers the
+    /// caller knows are canonical.
+    pub(crate) fn write_diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {
         if self.size != prev.size {
-            return self.emit(backend);
+            return self.write(backend);
         }
         // Whether each row differs from the row the terminal shows there.
         let mut dirty: Vec<bool> = (0..self.size.h)
@@ -712,6 +708,12 @@ impl TermBuf {
     /// backend.
     pub fn emit<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {
         self.validate_canonical()?;
+        self.write(backend)
+    }
+
+    /// Emit this buffer in full as `emit` does, for a buffer the caller
+    /// knows is canonical.
+    pub(crate) fn write<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {
         let width = self.size.w as usize;
         let mut out = Emission::default();
         for y in 0..self.size.h {
