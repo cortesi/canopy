@@ -267,7 +267,7 @@ fn rejected_source_only_switch_preserves_policy_and_status() {
     harness
         .with_root_widget_context(|reader: &mut Markdown, ctx| {
             reader.set_source_only(ctx, false, Some("Complete document".into()))?;
-            reader.outline(ctx)?;
+            reader.inspect_source(ctx)?;
             assert!(
                 reader
                     .set_source_only(ctx, true, Some("Partial source".into()))

@@ -72,12 +72,15 @@ mod tests {
         let mut app = markdown_gym().await?;
         app.keys(&["i"]).await?;
         let first = active_object(&app).await?;
-        app.keys(&["o"]).await?;
-        assert!(inspector_open(&app).await?, "o opens the outline");
+        app.keys(&["ctrl+s"]).await?;
+        assert!(
+            inspector_open(&app).await?,
+            "ctrl+s opens the source inspector"
+        );
         // Escape closes the inspector on the reader's next poll, and the tab
         // right behind it must reach the reader, not the closing inspector.
         app.keys(&["esc", "tab"]).await?;
-        assert!(!inspector_open(&app).await?, "escape closes the outline");
+        assert!(!inspector_open(&app).await?, "escape closes the inspector");
         assert_ne!(
             active_object(&app).await?,
             first,

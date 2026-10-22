@@ -173,12 +173,6 @@ impl Markdown {
     /// Read a bounded page of rendered objects with its snapshot revision.
     pub fn object_window(&self, offset: usize, limit: usize) -> ArgValue;
 
-    /// Open the current rendered heading outline.
-    pub fn outline(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
-
-    /// Read a bounded page of headings with its snapshot revision.
-    pub fn outline_window(&self, offset: usize, limit: usize) -> ArgValue;
-
     /// Capture the current logical viewport anchor.
     pub fn position(&self, ctx: &dyn ViewContext) -> canopy::error::Result<ReaderPosition>;
 
@@ -229,7 +223,7 @@ impl Markdown {
     /// Retry the accepted source after a worker failure.
     pub fn retry(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
-    /// Return once from a fragment, footnote, or outline jump.
+    /// Return once from a fragment or footnote jump.
     pub fn return_from_jump(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Reveal what a link's `#` anchor names: a block by its `^id`, or a
@@ -334,7 +328,7 @@ impl Markdown {
     ) -> canopy::error::Result<()>;
 
     /// Drain the positions the reader left by its own jumps (fragments,
-    /// block and heading anchors, footnotes, and the outline), oldest first.
+    /// block and heading anchors, and footnotes), oldest first.
     /// The reader keeps at most a few; a host with a history drains them
     /// each turn.
     pub fn take_jumps(&mut self) -> Vec<ReaderPosition>;
@@ -409,12 +403,6 @@ impl Markdown {
 
     /// Build a positional call with typed user arguments.
     pub fn call_object_window(offset: usize, limit: usize) -> CommandCall;
-
-    /// Build a positional call with typed user arguments.
-    pub fn call_outline() -> CommandCall;
-
-    /// Build a positional call with typed user arguments.
-    pub fn call_outline_window(offset: usize, limit: usize) -> CommandCall;
 
     /// Build a positional call with typed user arguments.
     pub fn call_ready() -> CommandCall;
@@ -517,12 +505,6 @@ impl Markdown {
 
     /// Return the command spec for this command.
     pub fn spec_object_window() -> &'static CommandSpec;
-
-    /// Return the command spec for this command.
-    pub fn spec_outline() -> &'static CommandSpec;
-
-    /// Return the command spec for this command.
-    pub fn spec_outline_window() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_ready() -> &'static CommandSpec;

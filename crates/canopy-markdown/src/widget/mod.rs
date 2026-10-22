@@ -48,10 +48,7 @@ use crate::{
         HostAction, HostOutcome, HostReply, HostRequest, Requests, Resource, ResourceKind,
         ResourceRequest,
     },
-    inspector::{
-        Inspector, InspectorContent, InspectorEvent, InspectorHandle, InspectorOptions,
-        OutlineEntry,
-    },
+    inspector::{Inspector, InspectorContent, InspectorEvent, InspectorHandle, InspectorOptions},
     presentation::{EmbedInfo, GeometryKey, Supplied, style_rules},
     search::{SearchAddress, SearchCase, SearchLimits, SearchMode, SearchQuery, SearchResults},
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
@@ -96,7 +93,7 @@ struct Nodes {
 struct OpenInspector {
     /// Modal handle used for events, readiness, and dismissal.
     handle: InspectorHandle,
-    /// Pinned inspected object, or None for an outline or full source.
+    /// Pinned inspected object, or None for the full source.
     object: Option<u64>,
     /// Source identity captured when this inspector opened.
     epoch: u64,
@@ -214,7 +211,7 @@ pub struct Markdown {
     saved: [Option<(ReaderPosition, u64)>; 2],
     /// Accepted byte count last seen at the visible tail.
     acknowledged: usize,
-    /// One return anchor for a fragment, footnote, or outline jump.
+    /// One return anchor for a fragment or footnote jump.
     return_position: Option<ReaderPosition>,
     /// The position before each recent jump, oldest first, for the host's
     /// own history.
@@ -1295,24 +1292,6 @@ impl Markdown {
         let revision = snapshot.revision;
         self.open_inspector(ctx, InspectorContent::Source { snapshot }, None, revision)
     }
-    /// Open the current rendered heading outline.
-    #[command]
-    pub fn outline(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.inspector.is_some() {
-            return Ok(());
-        }
-        let Some(p) = self.shared.borrow().presentation.clone() else {
-            return Ok(());
-        };
-        self.open_inspector(
-            ctx,
-            InspectorContent::Outline {
-                entries: outline_entries(&p.document),
-            },
-            None,
-            p.document.source.revision,
-        )
-    }
     /// Lazily mount one pinned modal and pause following on explicit
     /// inspection.
     fn open_inspector(
@@ -1386,10 +1365,6 @@ impl Markdown {
         }
         match event {
             InspectorEvent::Close => self.dismiss_inspector(ctx)?,
-            InspectorEvent::Navigate(byte) => {
-                self.dismiss_inspector(ctx)?;
-                self.jump_source(ctx, byte)?;
-            }
             InspectorEvent::CopyText(text) => {
                 self.queue_copy(ctx, CopyInput::Text(text.into()), None, revision)?;
             }
@@ -1675,13 +1650,13 @@ impl Markdown {
         self.supplied.missing_links.contains(destination)
     }
     /// Drain the positions the reader left by its own jumps (fragments,
-    /// block and heading anchors, footnotes, and the outline), oldest first.
+    /// block and heading anchors, and footnotes), oldest first.
     /// The reader keeps at most a few; a host with a history drains them
     /// each turn.
     pub fn take_jumps(&mut self) -> Vec<ReaderPosition> {
         self.jumps.drain(..).collect()
     }
-    /// Return once from a fragment, footnote, or outline jump.
+    /// Return once from a fragment or footnote jump.
     #[command]
     pub fn return_from_jump(&mut self, ctx: &mut dyn Context) -> Result<()> {
         if let Some(position) = self.return_position.take() {
@@ -1915,11 +1890,6 @@ impl Markdown {
     pub fn object_window(&self, offset: usize, limit: usize) -> ArgValue {
         queries::objects(self, offset, limit)
     }
-    /// Read a bounded page of headings with its snapshot revision.
-    #[command]
-    pub fn outline_window(&self, offset: usize, limit: usize) -> ArgValue {
-        queries::outline(self, offset, limit)
-    }
     /// Read a bounded page of matches in the active search projection.
     #[command]
     pub fn search_window(&self, offset: usize, limit: usize) -> ArgValue {
@@ -2086,25 +2056,23 @@ impl Markdown {
                         "Selection cleared because its displayed text changed",
                     ))?;
                 }
-                if let Some(open) = &self.inspector {
-                    open.handle
-                        .publish_outline(ctx, || outline_entries(&p.document))?;
-                    if let Some(id) = open.object {
-                        match p.document.objects.iter().find(|o| o.id == id) {
-                            Some(object) if matches!(object.kind, ObjectKind::Table) => {
-                                if let Some(table) = p
-                                    .prepared_table(object.unit_id)
-                                    .and_then(|table| full_table(&table))
-                                {
-                                    open.handle.publish_table(ctx, table)?;
-                                }
+                if let Some(open) = &self.inspector
+                    && let Some(id) = open.object
+                {
+                    match p.document.objects.iter().find(|o| o.id == id) {
+                        Some(object) if matches!(object.kind, ObjectKind::Table) => {
+                            if let Some(table) = p
+                                .prepared_table(object.unit_id)
+                                .and_then(|table| full_table(&table))
+                            {
+                                open.handle.publish_table(ctx, table)?;
                             }
-                            None => {
-                                self.dismiss_inspector(ctx)?;
-                                ctx.notify(NoticePost::info("The inspected object changed"))?;
-                            }
-                            _ => {}
                         }
+                        None => {
+                            self.dismiss_inspector(ctx)?;
+                            ctx.notify(NoticePost::info("The inspected object changed"))?;
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -2859,20 +2827,6 @@ impl Widget for Markdown {
     }
 }
 
-/// Project a document's headings into inspector outline rows.
-fn outline_entries(document: &DocumentSnapshot) -> Vec<OutlineEntry> {
-    document
-        .outline
-        .iter()
-        .map(|entry| OutlineEntry {
-            id: entry.id,
-            level: entry.level,
-            text: entry.text.clone(),
-            source_byte: entry.source.start,
-        })
-        .collect()
-}
-
 /// The action status after the host performs an action.
 const ACTION_DONE: &str = "Done";
 
@@ -2903,7 +2857,6 @@ impl Register for Markdown {
             ("/", "Search document", Self::call_start_search()),
             ("y", "Copy", Self::call_copy()),
             ("ctrl-y", "Copy exact source", Self::call_copy_source()),
-            ("o", "Outline", Self::call_outline()),
             (
                 "ctrl-s",
                 "Inspect source snapshot",

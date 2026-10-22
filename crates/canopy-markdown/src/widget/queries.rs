@@ -343,37 +343,6 @@ pub(super) fn objects(reader: &Markdown, offset: usize, limit: usize) -> ArgValu
     )
 }
 
-/// Return a bounded heading page, retaining its semantic revision.
-pub(super) fn outline(reader: &Markdown, offset: usize, limit: usize) -> ArgValue {
-    let document = reader.last_document.as_ref();
-    let window = Window::new(
-        offset,
-        limit,
-        document.map_or(0, |document| document.outline.len()),
-    );
-    let items = document.map_or_else(Vec::new, |document| {
-        document.outline[window.offset..window.end]
-            .iter()
-            .map(|entry| {
-                map([
-                    ("id", ArgValue::UInt(entry.id)),
-                    ("unit_id", ArgValue::UInt(entry.unit_id)),
-                    ("level", ArgValue::UInt(entry.level.into())),
-                    ("text", text(&entry.text)),
-                    ("slug", text(&entry.slug)),
-                    ("source", range(&entry.source)),
-                ])
-            })
-            .collect()
-    });
-    window.value(
-        document.map_or(reader.epoch(), |document| document.source.epoch),
-        document.map(|document| document.source.revision),
-        ViewType::Rendered,
-        items,
-    )
-}
-
 /// Report projection-specific scan coverage without inventing unavailable
 /// counts.
 fn search_coverage(reader: &Markdown) -> ArgValue {
@@ -607,25 +576,9 @@ mod tests {
     }
 
     #[test]
-    fn outline_window_keeps_the_rendered_revision_while_source_advances() {
-        let mut reader = reader("# Heading\n\nbody".into());
-        reader.store.replace("# Heading\n\nbody", true).unwrap();
-        publish(&mut reader);
-        let published = reader.displayed_revision();
-        reader.store.append(" grows").unwrap();
-        reader.active = ViewType::Source;
-        let page = outline(&reader, 0, 8);
-        assert_eq!(field(&page, "view"), &text("rendered"));
-        assert_eq!(field(&page, "revision"), &ArgValue::UInt(published));
-        assert!(reader.accepted_revision() > published);
-        assert_eq!(items(&page).len(), 1);
-        assert_eq!(field(&items(&page)[0], "text"), &text("Heading"));
-    }
-
-    #[test]
     fn empty_and_zero_length_windows_are_explicit_and_never_repeat_next_offset() {
         let reader = reader("# Heading".into());
-        let page = outline(&reader, 999, 0);
+        let page = objects(&reader, 999, 0);
         assert!(items(&page).is_empty());
         assert_eq!(field(&page, "revision"), &ArgValue::Null);
         assert_eq!(field(&page, "next"), &ArgValue::Null);
@@ -679,7 +632,6 @@ mod tests {
         assert!(model_bytes > 0);
         reader.shared.borrow_mut().presentation = None;
         assert_eq!(items(&objects(&reader, 0, 128)).len(), 1);
-        assert_eq!(items(&outline(&reader, 0, 128)).len(), 1);
         let mut harness = Harness::builder(reader)
             .register::<Markdown>()
             .size(40, 8)

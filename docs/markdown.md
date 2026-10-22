@@ -102,7 +102,7 @@ own search field, such as fh, sets `external_search` and calls
 `set_search(query, regex)`: `true` matches a smart-case regular expression, and
 `false` a case-sensitive literal. Rendered searches readable text, including
 omitted code and table cells; Source searches raw Markdown. A new query or view
-does not jump until the reader activates a match. Outline and local fragment
+does not jump until the reader activates a match. Local fragment and footnote
 jumps keep a return position.
 
 Hosts with a separate search or status bar can set `publication_wake` to their
@@ -117,7 +117,7 @@ An oversized inactive layout is evicted while semantic identity and view positio
 are retained. The cache budget is separate from active source, semantic models,
 Editor buffers, in-flight jobs, inspectors, and host payloads.
 
-`state`, `object_window`, `outline_window`, and `search_window` expose bounded,
+`state`, `object_window`, and `search_window` expose bounded,
 revision-addressed automation data. Collection windows cap their item count and
 text length. State includes publication, follow, inspector readiness, search
 coverage, and conservative resource categories. It never returns the full source.

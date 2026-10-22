@@ -11,13 +11,12 @@ use canopy::{
     commands::CommandStatus,
     derive_commands,
     error::{Error, Result},
-    geom::{Line, Rect, Size},
     input::{
         BindingAction, BindingOptions, BindingPhase, BindingTier, Event, FrameworkBindingGroup,
         InputSpec, ModalBindings, ModalOptions, ModalToken,
         key::{Key, KeyCode},
     },
-    layout::{CanvasContext, Direction, Layout, RevealAlign},
+    layout::{Direction, Layout},
     render::Render,
     runtime::{NodeWakeHandle, NoticePost, PollLifetime, WakeOutcome},
 };
@@ -46,20 +45,7 @@ const EVENT_BYTES: usize = 16 * 1024 * 1024;
 /// Default output budget for standalone inspector tests.
 const DEFAULT_COPY_BYTES: usize = 4 * 1024 * 1024;
 
-/// One keyed heading offered by the document outline.
-#[derive(Clone, Debug)]
-pub struct OutlineEntry {
-    /// Stable heading identity within the current document epoch.
-    pub id: u64,
-    /// Markdown heading depth.
-    pub level: u8,
-    /// Full heading label without Markdown delimiters.
-    pub text: String,
-    /// Exact source byte used by an explicit heading jump.
-    pub source_byte: usize,
-}
-
-/// Pinned reader content or the live keyed outline navigation index.
+/// Pinned reader content.
 pub enum InspectorContent {
     /// A complete code-block payload with its fence language.
     Code {
@@ -89,11 +75,6 @@ pub enum InspectorContent {
         /// Whether this explicit destination may produce a host Open request.
         allow_open: bool,
     },
-    /// The document navigation index, updated by keyed heading publication.
-    Outline {
-        /// Headings in document order.
-        entries: Vec<OutlineEntry>,
-    },
 }
 
 /// An explicit action for the owning Markdown controller.
@@ -112,8 +93,6 @@ pub enum InspectorEvent {
     },
     /// Follow the inspected link.
     Open,
-    /// Jump to this explicit source byte in the owning document.
-    Navigate(usize),
 }
 
 /// Bounded immutable actions awaiting the owner poll.
@@ -183,10 +162,7 @@ impl InspectorHandle {
             Ok(inspector.pending_source.is_none()
                 && !inspector.detail_loading
                 && inspector.work_search.is_none()
-                && matches!(
-                    inspector.reader,
-                    Some(Reader::Source(_) | Reader::Table(_) | Reader::Outline(_))
-                ))
+                && matches!(inspector.reader, Some(Reader::Source(_) | Reader::Table(_))))
         })
     }
     /// Conservative retained storage, including shared snapshots. This does not
@@ -230,9 +206,6 @@ impl InspectorHandle {
                     Reader::Table(table) => ctx.with_widget(table, |table: &TableView| {
                         Ok(table.table().derived_bytes())
                     })?,
-                    Reader::Outline(outline) => {
-                        ctx.with_widget(outline, |outline: &OutlineBody| Ok(outline.storage_bytes))?
-                    }
                     Reader::Text(_) => 0,
                 });
             }
@@ -279,23 +252,6 @@ impl InspectorHandle {
             Ok(())
         })?;
         Ok(events)
-    }
-    /// Replace outline headings while preserving its filter and selected
-    /// heading key.
-    pub fn publish_outline(
-        &self,
-        ctx: &mut dyn Context,
-        entries: impl FnOnce() -> Vec<OutlineEntry>,
-    ) -> Result<()> {
-        ctx.with_widget_mut(self.node, |inspector: &mut Inspector, ctx| {
-            if let Some(Reader::Outline(outline)) = inspector.reader {
-                ctx.with_widget_mut(outline, |outline: &mut OutlineBody, _| {
-                    outline.publish(entries());
-                    Ok(())
-                })?;
-            }
-            Ok(())
-        })
     }
     /// Publish a newer prepared table without replacing the surrounding modal.
     pub fn publish_table(&self, ctx: &mut dyn Context, table: Arc<PreparedTable>) -> Result<()> {
@@ -381,15 +337,13 @@ enum Reader {
     Source(TypedId<MarkdownSource>),
     /// A keyed table that may receive newer prepared cell publications.
     Table(TypedId<TableView>),
-    /// The document navigation index, updated by keyed heading publication.
-    Outline(TypedId<OutlineBody>),
     /// A mounted loading message while source preparation is pending.
     Text(NodeId),
 }
 /// The operation requested by the temporary input prompt.
 #[derive(Clone, Copy)]
 enum PromptKind {
-    /// Search prepared source or filter the outline.
+    /// Search prepared source.
     Search,
     /// Reveal a one-based logical source line.
     Line,
@@ -639,7 +593,6 @@ impl MarkdownInspector {
                 ctx.with_widget(table, |table: &TableView| Ok(table.initial_focus()))?
             }
             Some(Reader::Source(id)) => Some(id.into()),
-            Some(Reader::Outline(id)) => Some(id.into()),
             Some(Reader::Text(id)) => Some(id),
             None => None,
         })
@@ -776,15 +729,13 @@ impl MarkdownInspector {
             },
         )
     }
-    /// Describe whether a prepared source or outline can accept a search query.
+    /// Describe whether a prepared source can accept a search query.
     fn search_status(&self, _ctx: &dyn ViewContext) -> Result<CommandStatus> {
-        Ok(
-            if self.source_reader().is_some() || matches!(self.reader, Some(Reader::Outline(_))) {
-                CommandStatus::Enabled
-            } else {
-                CommandStatus::Disabled("no searchable reader is ready".into())
-            },
-        )
+        Ok(if self.source_reader().is_some() {
+            CommandStatus::Enabled
+        } else {
+            CommandStatus::Disabled("no searchable reader is ready".into())
+        })
     }
     /// Describe whether a source reader can accept line or match navigation.
     fn line_status(&self, _ctx: &dyn ViewContext) -> Result<CommandStatus> {
@@ -859,7 +810,7 @@ impl MarkdownInspector {
         }
         Ok(())
     }
-    /// Focus a bounded prompt for source search or outline filtering.
+    /// Focus a bounded prompt for source search.
     #[command(enabled = "search_status")]
     pub fn search(&mut self, ctx: &mut dyn Context) -> Result<()> {
         self.prompt = Some(Prompt {
@@ -1000,13 +951,13 @@ impl Register for Inspector {
         for (key, description, call, phase) in [
             (
                 "/",
-                "Find text or filter outline",
+                "Find text",
                 Self::call_search(),
                 BindingPhase::AfterWidget,
             ),
             (
                 "?",
-                "Find text or filter outline",
+                "Find text",
                 Self::call_search(),
                 BindingPhase::AfterWidget,
             ),
@@ -1048,7 +999,7 @@ impl Register for Inspector {
             ),
             (
                 "ctrl-f",
-                "Find text or filter outline",
+                "Find text",
                 Self::call_search(),
                 BindingPhase::BeforeWidget,
             ),
@@ -1198,14 +1149,6 @@ impl Widget for Inspector {
                 );
                 self.source_options.language = None;
                 false
-            }
-            InspectorContent::Outline { entries } => {
-                let outline = ctx.add_child(
-                    reader_parent,
-                    OutlineBody::new(entries, self.owner.clone(), self.mailbox.clone()),
-                )?;
-                self.reader = Some(Reader::Outline(outline));
-                true
             }
         };
         if !ready {
@@ -1383,27 +1326,18 @@ impl Widget for Inspector {
                         format!("Line {line}")
                     }
                     PromptKind::Search => {
-                        if let Some(Reader::Outline(id)) = self.reader {
-                            ctx.with_widget_mut(id, |outline: &mut OutlineBody, ctx| {
-                                outline.filter(&prompt.value);
-                                ctx.reveal_anchor(RevealAlign::Nearest);
-                                Ok(())
-                            })?;
-                            format!("Filter: {}", prompt.value)
-                        } else {
-                            if self.display_source.is_some() {
-                                self.work_search = Some(WorkSearch {
-                                    query: SearchQuery {
-                                        text: prompt.value.clone(),
-                                        ..SearchQuery::default()
-                                    },
-                                    generation: self.generation + 1,
-                                    limits: SearchLimits::default(),
-                                });
-                                self.submit(ctx)?;
-                            }
-                            format!("Find: {}", prompt.value)
+                        if self.display_source.is_some() {
+                            self.work_search = Some(WorkSearch {
+                                query: SearchQuery {
+                                    text: prompt.value.clone(),
+                                    ..SearchQuery::default()
+                                },
+                                generation: self.generation + 1,
+                                limits: SearchLimits::default(),
+                            });
+                            self.submit(ctx)?;
                         }
+                        format!("Find: {}", prompt.value)
                     }
                 };
                 self.restore_focus(ctx)?;
@@ -1425,196 +1359,6 @@ impl Widget for Inspector {
                 prompt.value
             ),
         )?;
-        Ok(EventOutcome::Handle)
-    }
-}
-
-/// Estimate retained outline entries and their visible index during
-/// publication.
-fn outline_storage(entries: &[OutlineEntry], capacity: usize) -> usize {
-    size_of::<OutlineBody>()
-        .saturating_add(capacity.saturating_mul(size_of::<OutlineEntry>()))
-        .saturating_add(entries.iter().fold(0usize, |bytes, entry| {
-            bytes.saturating_add(entry.text.capacity())
-        }))
-        .saturating_add(entries.len().saturating_mul(size_of::<usize>()))
-}
-
-/// A filtered navigation list that preserves keyed heading selection.
-struct OutlineBody {
-    /// Headings in document order.
-    entries: Vec<OutlineEntry>,
-    /// Filtered indices into the source-ordered heading entries.
-    visible: Vec<usize>,
-    /// Ordinal of the selected entry within the visible index.
-    selected: usize,
-    /// Applied lowercase filter, retained across heading publications.
-    filter: String,
-    /// Cached retained-entry and visible-index storage estimate.
-    storage_bytes: usize,
-    /// Node-lifetime wake used to detect owner removal and signal host actions.
-    owner: NodeWakeHandle,
-    /// Shared bounded actions consumed by the Markdown controller.
-    mailbox: Rc<RefCell<Mailbox>>,
-}
-impl OutlineBody {
-    /// Construct the filtered outline with its owner notification channel.
-    fn new(
-        entries: Vec<OutlineEntry>,
-        owner: NodeWakeHandle,
-        mailbox: Rc<RefCell<Mailbox>>,
-    ) -> Self {
-        let storage_bytes = outline_storage(&entries, entries.capacity());
-        Self {
-            visible: (0..entries.len()).collect(),
-            entries,
-            selected: 0,
-            filter: String::new(),
-            storage_bytes,
-            owner,
-            mailbox,
-        }
-    }
-    /// Return the selected visible heading identity, if one exists.
-    fn selected_id(&self) -> Option<u64> {
-        self.visible
-            .get(self.selected)
-            .map(|index| self.entries[*index].id)
-    }
-    /// Rebuild the filtered index while retaining a heading key or nearby
-    /// ordinal.
-    fn rebuild(&mut self, selected: Option<u64>, fallback: usize) {
-        self.visible = self
-            .entries
-            .iter()
-            .enumerate()
-            .filter_map(|(index, entry)| {
-                entry
-                    .text
-                    .to_lowercase()
-                    .contains(&self.filter)
-                    .then_some(index)
-            })
-            .collect();
-        self.selected = selected
-            .and_then(|id| {
-                self.visible
-                    .iter()
-                    .position(|index| self.entries[*index].id == id)
-            })
-            .unwrap_or(fallback.min(self.visible.len().saturating_sub(1)));
-    }
-    /// Apply a heading filter while preserving the selected heading key.
-    fn filter(&mut self, query: &str) {
-        let selected = self.selected_id();
-        self.filter = query.to_lowercase();
-        self.rebuild(selected, 0);
-    }
-    /// Replace headings without changing the applied filter or taking focus.
-    fn publish(&mut self, entries: Vec<OutlineEntry>) {
-        let selected = self.selected_id();
-        let fallback = self.selected;
-        self.storage_bytes = outline_storage(&entries, entries.capacity());
-        self.entries = entries;
-        self.rebuild(selected, fallback);
-    }
-    /// Classify the raw keys consumed by outline navigation.
-    fn handles(key: Key) -> bool {
-        !key.mods.ctrl
-            && !key.mods.alt
-            && matches!(
-                key.key,
-                KeyCode::Up
-                    | KeyCode::Down
-                    | KeyCode::Home
-                    | KeyCode::End
-                    | KeyCode::Enter
-                    | KeyCode::Char('j' | 'k' | 'g' | 'G')
-            )
-    }
-}
-impl Widget for OutlineBody {
-    fn layout(&self) -> Layout {
-        Layout::fill()
-    }
-    fn name(&self) -> NodeName {
-        NodeName::convert("markdown_outline")
-    }
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
-        true
-    }
-    fn canvas(&self, content: Size, _ctx: &CanvasContext) -> Size {
-        Size::new(content.w, self.visible.len().min(u32::MAX as usize) as u32)
-    }
-    fn render(&mut self, render: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        let view = ctx.view();
-        for (row, index) in self
-            .visible
-            .iter()
-            .enumerate()
-            .skip(view.scroll.y as usize)
-            .take(view.content.h as usize)
-        {
-            let entry = &self.entries[*index];
-            let label = format!(
-                "{}{}",
-                "  ".repeat(entry.level.saturating_sub(1).min(5) as usize),
-                entry
-                    .text
-                    .chars()
-                    .take((view.content.w as usize).saturating_mul(4))
-                    .map(|ch| if ch.is_control() { ' ' } else { ch })
-                    .collect::<String>()
-            );
-            render.text(
-                if row == self.selected {
-                    "list/selected"
-                } else {
-                    "text"
-                },
-                Line::new(0, row as u32, view.content.w),
-                &label,
-            )?;
-        }
-        Ok(())
-    }
-    fn reveal_anchor(&self, _content: Size) -> Option<Rect> {
-        Some(Rect::new(0, self.selected as u32, 1, 1))
-    }
-    fn key_outcome(&self, key: Key, _ctx: &dyn ViewContext) -> EventOutcome {
-        if Self::handles(key) {
-            EventOutcome::Handle
-        } else {
-            EventOutcome::Ignore
-        }
-    }
-    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
-        let Event::Key(key) = event else {
-            return Ok(EventOutcome::Ignore);
-        };
-        if !Self::handles(*key) {
-            return Ok(EventOutcome::Ignore);
-        }
-        match key.key {
-            KeyCode::Up | KeyCode::Char('k') => self.selected = self.selected.saturating_sub(1),
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.selected = (self.selected + 1).min(self.visible.len().saturating_sub(1))
-            }
-            KeyCode::Home | KeyCode::Char('g') => self.selected = 0,
-            KeyCode::End | KeyCode::Char('G') => {
-                self.selected = self.visible.len().saturating_sub(1)
-            }
-            KeyCode::Enter => {
-                if let Some(index) = self.visible.get(self.selected) {
-                    self.mailbox
-                        .borrow_mut()
-                        .push(InspectorEvent::Navigate(self.entries[*index].source_byte))?;
-                    let _ = self.owner.wake()?;
-                }
-            }
-            _ => {}
-        }
-        ctx.reveal_anchor(RevealAlign::Nearest);
         Ok(EventOutcome::Handle)
     }
 }
@@ -1678,27 +1422,16 @@ mod tests {
         harness.canopy.turn(TurnInput::Prepare)?;
         Ok((harness, owner, handle, manual))
     }
-    pub(super) fn outline() -> InspectorContent {
-        InspectorContent::Outline {
-            entries: vec![
-                OutlineEntry {
-                    id: 1,
-                    level: 1,
-                    text: "First".into(),
-                    source_byte: 2,
-                },
-                OutlineEntry {
-                    id: 2,
-                    level: 2,
-                    text: "Second".into(),
-                    source_byte: 20,
-                },
-            ],
+    pub(super) fn source() -> InspectorContent {
+        InspectorContent::Source {
+            snapshot: SourceStore::static_text("first\nsecond\n")
+                .unwrap()
+                .snapshot(),
         }
     }
     #[test]
     fn the_inspector_covers_its_owner_between_controls_and_in_empty_reader_rows() -> Result<()> {
-        let (mut harness, owner, handle, _) = fixture(outline())?;
+        let (mut harness, owner, handle, _) = fixture(source())?;
         harness.render()?;
         let (owner, inspector) = harness.canopy.with_root_context(|ctx| {
             Ok((
@@ -1721,7 +1454,7 @@ mod tests {
 
     #[test]
     fn owner_removal_reclaims_the_inspector_without_a_timer() -> Result<()> {
-        let (mut harness, owner, handle, _) = fixture(outline())?;
+        let (mut harness, owner, handle, _) = fixture(source())?;
         harness
             .canopy
             .with_root_context(|ctx| ctx.remove_subtree(owner))?;
@@ -1732,7 +1465,7 @@ mod tests {
     }
     #[test]
     fn rolled_back_owner_removal_keeps_the_modal_alive() -> Result<()> {
-        let (mut harness, owner, handle, _) = fixture(outline())?;
+        let (mut harness, owner, handle, _) = fixture(source())?;
         let result = harness.canopy.with_root_context(|ctx| {
             ctx.edit_structure(&mut |ctx| {
                 ctx.remove_subtree(owner)?;
@@ -1743,14 +1476,13 @@ mod tests {
         harness.canopy.turn(TurnInput::Prepare)?;
         assert_eq!(harness.find_nodes("**/markdown_inspector/")?.len(), 1);
         assert_ne!(handle.wake()?, WakeOutcome::Expired);
-        harness.key(KeyCode::Down)?;
-        harness.key(KeyCode::Enter)?;
-        assert_eq!(handle.take_events(2), vec![InspectorEvent::Navigate(20)]);
+        harness.key(KeyCode::Esc)?;
+        assert_eq!(handle.take_events(2), vec![InspectorEvent::Close]);
         Ok(())
     }
     #[test]
     fn hiding_and_detaching_owner_preserve_node_lifetime_inspector() -> Result<()> {
-        let (mut harness, owner, handle, _) = fixture(outline())?;
+        let (mut harness, owner, handle, _) = fixture(source())?;
         harness.canopy.with_root_context(|ctx| {
             ctx.set_hidden(owner, true)?;
             ctx.detach(owner)
@@ -1965,9 +1697,11 @@ mod tests {
     }
     #[test]
     fn prompt_escape_does_not_dismiss_and_admission_matches() -> Result<()> {
-        let (mut harness, _, handle, _) = fixture(outline())?;
+        let (mut harness, _, handle, manual) = fixture(source())?;
+        assert!(manual.run_next());
+        harness.canopy.turn(TurnInput::Prepare)?;
         harness.key(Key::parse_spec("ctrl-f")?)?;
-        harness.type_text("Second")?;
+        harness.type_text("second")?;
         harness.key(KeyCode::Esc)?;
         assert!(handle.take_events(4).is_empty());
         harness.key(KeyCode::Esc)?;
@@ -1998,51 +1732,7 @@ mod interaction_tests {
     use canopy::testing::harness::Harness;
     use canopy::{commands::CommandTarget, input::key, runtime::TurnInput};
 
-    use super::{
-        tests::{fixture, outline},
-        *,
-    };
-
-    #[test]
-    fn outline_publication_keeps_filter_and_selected_heading_identity() -> Result<()> {
-        let (mut harness, _, handle, _) = fixture(outline())?;
-        harness.key(Key::parse_spec("ctrl-f")?)?;
-        harness.type_text("Second")?;
-        harness.key(key::KeyCode::Enter)?;
-        harness.canopy.with_root_context(|ctx| {
-            handle.publish_outline(ctx, || {
-                vec![
-                    OutlineEntry {
-                        id: 3,
-                        level: 1,
-                        text: "Second new".into(),
-                        source_byte: 30,
-                    },
-                    OutlineEntry {
-                        id: 2,
-                        level: 2,
-                        text: "Second".into(),
-                        source_byte: 22,
-                    },
-                    OutlineEntry {
-                        id: 4,
-                        level: 1,
-                        text: "Unmatched".into(),
-                        source_byte: 40,
-                    },
-                ]
-            })
-        })?;
-        harness.with_unique(|outline: &mut OutlineBody, _| {
-            assert_eq!(outline.filter, "second");
-            assert_eq!(outline.visible.len(), 2);
-            assert_eq!(outline.selected_id(), Some(2));
-            Ok(())
-        })?;
-        harness.key(key::KeyCode::Enter)?;
-        assert_eq!(handle.take_events(4), vec![InspectorEvent::Navigate(22)]);
-        Ok(())
-    }
+    use super::{tests::fixture, *};
 
     #[test]
     #[cfg(feature = "syntax")]
@@ -2225,66 +1915,11 @@ mod interaction_tests {
         assert!(harness.tbuf().contains_text("Line 2"));
         assert!(!harness.tbuf().contains_text("Find: 2"));
 
-        let (mut harness, _, _, _) = fixture(outline())?;
         harness.key(Key::parse_spec("ctrl-f")?)?;
-        harness.type_text("Sec")?;
+        harness.type_text("b")?;
         harness.key(key::KeyCode::Enter)?;
         harness.render()?;
-        assert!(harness.tbuf().contains_text("Filter: Sec"));
-        Ok(())
-    }
-
-    #[test]
-    fn outline_filter_retains_key_and_explicit_jump() -> Result<()> {
-        let (mut harness, _, handle, _) = fixture(outline())?;
-        harness.key(key::KeyCode::Down)?;
-        harness.key(key::Key::parse_spec("ctrl-f")?)?;
-        harness.type_text("Second")?;
-        harness.key(key::KeyCode::Enter)?;
-        assert!(handle.take_events(4).is_empty());
-        harness.key(key::KeyCode::Enter)?;
-        assert_eq!(handle.take_events(4), vec![InspectorEvent::Navigate(20)]);
-        Ok(())
-    }
-
-    #[test]
-    fn outline_navigates_with_vi_letters() -> Result<()> {
-        let (mut harness, _, handle, _) = fixture(outline())?;
-        for (key, byte) in [('j', 20), ('k', 2), ('G', 20), ('g', 2)] {
-            harness.key(key)?;
-            harness.key(KeyCode::Enter)?;
-            assert_eq!(handle.take_events(4), vec![InspectorEvent::Navigate(byte)]);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn outline_filter_reveals_fallback_selection_from_a_scrolled_view() -> Result<()> {
-        let entries = (0..200)
-            .map(|index| OutlineEntry {
-                id: index,
-                level: 1,
-                text: format!("{} {index}", if index < 100 { "keep" } else { "drop" }),
-                source_byte: index as usize,
-            })
-            .collect();
-        let (mut harness, _, _, _) = fixture(InspectorContent::Outline { entries })?;
-        harness.key(KeyCode::End)?;
-        harness.render()?;
-        harness.with_unique(|_: &mut OutlineBody, ctx| {
-            assert!(ctx.view().scroll.y > 0);
-            Ok(())
-        })?;
-        harness.key(Key::parse_spec("ctrl-f")?)?;
-        harness.type_text("keep")?;
-        harness.key(KeyCode::Enter)?;
-        harness.render()?;
-        harness.with_unique(|outline: &mut OutlineBody, ctx| {
-            assert_eq!(outline.selected_id(), Some(0));
-            assert_eq!(outline.visible.len(), 100);
-            assert_eq!(ctx.view().scroll.y, 0);
-            Ok(())
-        })?;
+        assert!(harness.tbuf().contains_text("Find: b"));
         Ok(())
     }
 
