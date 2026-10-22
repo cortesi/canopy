@@ -174,6 +174,35 @@ struct RenderLineContext<'a, 'b> {
     /// other matches. The effect stack is constant for one widget render,
     /// so these resolve once per frame.
     styles: CellStyles,
+    /// The logical line the last display row drew, which the line's other
+    /// rows reuse.
+    line: Option<LineText>,
+}
+
+/// The text of one logical line.
+struct LineText {
+    /// Index of the line.
+    index: usize,
+    /// Text of the line, without its separator.
+    text: String,
+    /// Length of the text in chars.
+    chars: usize,
+}
+
+impl LineText {
+    /// Return the text of chars `start..end`.
+    fn chars(&self, start: usize, end: usize) -> &str {
+        if self.chars == self.text.len() {
+            return &self.text[start.min(self.chars)..end.min(self.chars)];
+        }
+        let byte = |char: usize| {
+            self.text
+                .char_indices()
+                .nth(char)
+                .map_or(self.text.len(), |(byte, _)| byte)
+        };
+        &self.text[byte(start)..byte(end.max(start))]
+    }
 }
 
 /// The four effect-applied cell styles a display line draws with.
@@ -203,6 +232,7 @@ impl<'a, 'b> RenderLineContext<'a, 'b> {
             origin,
             gutter_width,
             styles,
+            line: None,
         }
     }
 }
@@ -975,6 +1005,17 @@ impl Editor {
             ctx.r.text(style, gutter_line, &number_text)?;
         }
 
+        let line: &LineText = match &mut ctx.line {
+            Some(line) if line.index == line_idx => line,
+            slot => {
+                let text = self.buffer.line_text(line_idx);
+                slot.insert(LineText {
+                    index: line_idx,
+                    chars: text.chars().count(),
+                    text,
+                })
+            }
+        };
         let selection = self.buffer.selection();
         let selection_range = selection.range();
         let selection_active = !selection.is_empty();
@@ -989,16 +1030,13 @@ impl Editor {
         let line_end_sel = if selection_on_line && selection_range.end.line == line_idx {
             selection_range.end.column
         } else {
-            self.buffer.line_char_len(line_idx)
+            line.chars
         };
 
         let highlight_spans: &[HighlightSpan] = match &self.highlighter {
-            Some(highlighter) => {
-                let buffer = &self.buffer;
-                self.highlight_cache.spans_for_line(line_idx, || {
-                    highlighter.highlight_line(line_idx, &buffer.line_text(line_idx))
-                })
-            }
+            Some(highlighter) => self.highlight_cache.spans_for_line(line_idx, || {
+                highlighter.highlight_line(line_idx, &line.text)
+            }),
             None => &[],
         };
 
@@ -1011,10 +1049,7 @@ impl Editor {
             .filter(|r| r.start.line == line_idx);
         let current_search_range = current_search.map(|r| (r.start.column, r.end.column));
 
-        let segment_text = self.buffer.range_text(TextRange::new(
-            TextPosition::new(line_idx, segment.start_char),
-            TextPosition::new(line_idx, segment.end_char),
-        ));
+        let segment_text = line.chars(segment.start_char, segment.end_char);
 
         let text_style = ctx.styles.text.clone();
         let selection_style = ctx.styles.selection.clone();
@@ -1023,7 +1058,7 @@ impl Editor {
 
         run_paint::paint_run(
             ctx.r,
-            &segment_text,
+            segment_text,
             run_paint::column(segment.start_col),
             ctx.gutter_width,
             segment.start_char,

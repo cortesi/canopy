@@ -3,7 +3,7 @@
 //!
 //! Run in release with `cargo test --release -p gyms perf -- --ignored
 //! --nocapture`. `GYMS_PERF` selects scenarios by name, and `GYMS_PERF_ROUNDS`
-//! repeats each script, for a profiler.
+//! repeats each script in a fresh app, for a profiler.
 
 use std::{
     env, iter,
@@ -157,17 +157,19 @@ fn input_latency() -> Result<()> {
         {
             continue;
         }
-        let mut canopy = demo.build(false)?;
-        // A still clock keeps timed work out of the frames, so they repeat.
-        canopy.set_clock_for_testing(Arc::new(ManualClock::new()))?;
-        canopy.set_screen_size(SCREEN)?;
-        canopy.turn(TurnInput::Prepare)?;
-        canopy.emit_for_testing(&mut Counting::default())?;
         let mut backend = Counting::default();
         let mut totals = Vec::new();
         let mut emits = Duration::ZERO;
         let mut frames = 0;
+        // Each round presses the script in a fresh app.
         for _ in 0..rounds {
+            let mut canopy = demo.build(false)?;
+            // A still clock keeps timed work out of the frames, so they
+            // repeat.
+            canopy.set_clock_for_testing(Arc::new(ManualClock::new()))?;
+            canopy.set_screen_size(SCREEN)?;
+            canopy.turn(TurnInput::Prepare)?;
+            canopy.emit_for_testing(&mut Counting::default())?;
             for key in &script {
                 let began = Instant::now();
                 let outcome = canopy.turn(TurnInput::Events(vec![Event::Key(*key)]))?;

@@ -4,7 +4,7 @@ use std::{
 };
 
 use canopy::text;
-use ropey::Rope;
+use ropey::{Rope, RopeSlice};
 
 use super::{
     Selection, TextPosition, TextRange,
@@ -125,22 +125,23 @@ impl TextBuffer {
 
     /// Return the line length in chars without clamping the line index.
     fn line_char_len_at(&self, line: usize) -> usize {
-        let slice = self.rope.line(line);
-        slice.len_chars() - self.line_separator_len(line)
+        let (slice, separator) = self.line_slice(line);
+        slice.len_chars() - separator
     }
 
-    /// Return the trailing separator length without changing stored bytes.
-    fn line_separator_len(&self, line: usize) -> usize {
-        if line + 1 == self.line_count() {
-            return 0;
-        }
+    /// Return a logical line, separator included, and the separator's
+    /// length in chars.
+    fn line_slice(&self, line: usize) -> (RopeSlice<'_>, usize) {
         let slice = self.rope.line(line);
         let len = slice.len_chars();
-        if len >= 2 && slice.char(len - 2) == '\r' && slice.char(len - 1) == '\n' {
+        let separator = if line + 1 == self.line_count() {
+            0
+        } else if len >= 2 && slice.char(len - 2) == '\r' && slice.char(len - 1) == '\n' {
             2
         } else {
             1
-        }
+        };
+        (slice, separator)
     }
 
     /// Return the text of a logical line without a trailing newline.
@@ -151,9 +152,9 @@ impl TextBuffer {
 
     /// Return the text of a logical line without clamping the line index.
     fn line_text_at(&self, line: usize) -> String {
-        let slice = self.rope.line(line);
+        let (slice, separator) = self.line_slice(line);
         let mut text = slice.to_string();
-        for _ in 0..self.line_separator_len(line) {
+        for _ in 0..separator {
             let _ = text.pop();
         }
         text
