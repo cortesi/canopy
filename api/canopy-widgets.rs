@@ -935,6 +935,25 @@ impl Container {
 
 impl Widget for Container {}
 
+/// An image decoded for a preview, before it is scaled.
+///
+/// Reading and scaling are separate stages, so a worker that prepares
+/// previews can give up on a stale request between them. The decode itself
+/// cannot stop part way.
+pub struct DecodedImage {/* private fields */}
+
+impl DecodedImage {
+    /// Decode the image at `path` under the preview limits: at most 32 *
+    /// 1024 * 1024 source pixels and a 128 MiB decoder budget. Callers
+    /// should also bound the encoded file size.
+    pub fn read(path: &Path) -> canopy::error::Result<Self>;
+
+    /// Scale the image to fit `bounds` pixels, preserving its aspect ratio,
+    /// with each edge capped at 1024 pixels. Small images keep their pixels.
+    /// Zero bounds are invalid.
+    pub fn scale(self, bounds: Size) -> canopy::error::Result<ImagePreview>;
+}
+
 /// A titled frame that fits its body, centred over whatever the dialog
 /// covers.
 ///
@@ -1305,6 +1324,20 @@ impl Frame {
 
 impl Widget for Frame {}
 
+/// An image scaled for an image view, which [`ImageView::set_preview`]
+/// shows. Clones share the pixels, so a cache of previews and the view that
+/// shows one hold a single copy.
+#[derive(Clone, Debug)]
+pub struct ImagePreview {/* private fields */}
+
+impl ImagePreview {
+    /// Return the bytes that the pixels hold.
+    pub fn byte_len(&self) -> usize;
+
+    /// Return the size of the preview in pixels.
+    pub fn size(&self) -> Size;
+}
+
 /// Widget that renders an image into terminal cells.
 ///
 /// Each cell is an 8×8 matrix of the image, matched to the block mosaic
@@ -1339,6 +1372,10 @@ impl ImageView {
 }
 
 impl ImageView {
+    /// Show nothing: a single transparent pixel, as [`Self::empty`] does.
+    /// The view keeps its focus setting and its tier.
+    pub fn clear(&mut self);
+
     /// Step the view's own mosaic tier: from the terminal's glyphs, through
     /// each tier from half blocks to the full tier, and back, so that the
     /// tiers can be compared.
@@ -1381,6 +1418,11 @@ impl ImageView {
     ///
     /// The view keeps its current image when the file cannot be read.
     pub fn set_path(&mut self, path: impl AsRef<Path>) -> canopy::error::Result<()>;
+
+    /// Show `preview`, returning the view to its auto-fitted state. The view
+    /// shares the preview's pixels rather than copying them, and keeps its
+    /// focus setting and its tier.
+    pub fn set_preview(&mut self, preview: ImagePreview);
 
     /// Load a thumbnail within `bounds`, preserving its aspect ratio.
     ///

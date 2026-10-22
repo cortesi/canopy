@@ -1,6 +1,7 @@
 //! Image view benchmarks: a 1024×683 image in a 200×60 view, with a cache
 //! that holds, a cache that misses, and a buffer fill of the same area to
-//! compare a warm render with.
+//! compare a warm render with; and the two stages that prepare a preview of
+//! a 1870×1332 PNG, its decode and its scale.
 
 use std::hint::black_box;
 
@@ -10,7 +11,7 @@ use canopy::{
     style::{AttrSet, Color, ResolvedStyle},
     testing::harness::Harness,
 };
-use canopy_widgets::{ImageView, mosaic::Tier};
+use canopy_widgets::{DecodedImage, ImageView, mosaic::Tier};
 use criterion::{Criterion, criterion_group, criterion_main};
 use image::{Rgba, RgbaImage};
 
@@ -41,6 +42,29 @@ fn harness(tier: Tier) -> Harness {
         .expect("harness");
     harness.render().expect("render");
     harness
+}
+
+/// Benchmark the decode and the scale of a preview of a screenshot-sized
+/// PNG, the stages that a selection of an image waits on.
+fn bench_preview(c: &mut Criterion) {
+    let directory = tempfile::tempdir().expect("directory");
+    let path = directory.path().join("source.png");
+    RgbaImage::from_fn(1870, 1332, |x, y| {
+        Rgba([(x % 256) as u8, (y % 256) as u8, ((x ^ y) % 256) as u8, 255])
+    })
+    .save(&path)
+    .expect("save");
+    c.bench_function("image_preview_decode", |b| {
+        b.iter(|| black_box(DecodedImage::read(&path).expect("decode")));
+    });
+    let bounds = Size::new(1024, 1024);
+    c.bench_function("image_preview_scale", |b| {
+        b.iter_batched(
+            || DecodedImage::read(&path).expect("decode"),
+            |decoded| black_box(decoded.scale(bounds).expect("scale")),
+            criterion::BatchSize::LargeInput,
+        );
+    });
 }
 
 /// Benchmark renders that hold the cache and renders that miss it.
@@ -87,6 +111,6 @@ fn bench(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     config = Criterion::default().sample_size(10);
-    targets = bench
+    targets = bench, bench_preview
 }
 criterion_main!(benches);

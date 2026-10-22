@@ -1,6 +1,6 @@
 //! Image viewer widget with zoom and pan controls.
 
-use std::{fmt, mem, path::Path};
+use std::{fmt, mem, path::Path, sync::Arc};
 
 use canopy::{
     CommandEnum, Context, Register, Setup, ViewContext, Widget, derive_commands,
@@ -63,33 +63,99 @@ fn read_rgba(path: &Path) -> Result<RgbaImage> {
 /// 1024 source pixels, a 128 MiB decoder budget, and 1024 pixels an edge.
 /// Callers should also bound the encoded file size.
 pub fn read_preview(path: &Path, bounds: Size) -> Result<RgbaImage> {
+    let bounds = preview_bounds(bounds)?;
+    let preview = DecodedImage::read(path)?.scale(bounds)?;
+    Ok(Arc::unwrap_or_clone(preview.image))
+}
+
+/// Return `bounds` with each edge capped at the largest preview edge, or an
+/// error for an empty bound.
+fn preview_bounds(bounds: Size) -> Result<Size> {
     if bounds.w == 0 || bounds.h == 0 {
         return Err(Error::Invalid(
             "image preview bounds must be nonzero".into(),
         ));
     }
-    let bounds = Size::new(
+    Ok(Size::new(
         bounds.w.min(PREVIEW_MAX_EDGE),
         bounds.h.min(PREVIEW_MAX_EDGE),
-    );
-    let mut reader = image::ImageReader::open(path).map_err(image_error)?;
-    let mut limits = image::Limits::default();
-    limits.max_alloc = Some(PREVIEW_DECODE_BYTES);
-    reader.limits(limits.clone());
-    let mut decoder = reader.into_decoder().map_err(image_error)?;
-    let (width, height) = decoder.dimensions();
-    if u64::from(width) * u64::from(height) > PREVIEW_MAX_PIXELS {
-        return Err(Error::Invalid(format!(
-            "image preview limited to {PREVIEW_MAX_PIXELS} pixels"
-        )));
+    ))
+}
+
+/// An image decoded for a preview, before it is scaled.
+///
+/// Reading and scaling are separate stages, so a worker that prepares
+/// previews can give up on a stale request between them. The decode itself
+/// cannot stop part way.
+pub struct DecodedImage {
+    /// The decoded pixels, in their source format.
+    image: DynamicImage,
+}
+
+impl DecodedImage {
+    /// Decode the image at `path` under the preview limits: at most 32 *
+    /// 1024 * 1024 source pixels and a 128 MiB decoder budget. Callers
+    /// should also bound the encoded file size.
+    pub fn read(path: &Path) -> Result<Self> {
+        let mut reader = image::ImageReader::open(path).map_err(image_error)?;
+        let mut limits = image::Limits::default();
+        limits.max_alloc = Some(PREVIEW_DECODE_BYTES);
+        reader.limits(limits.clone());
+        let mut decoder = reader.into_decoder().map_err(image_error)?;
+        let (width, height) = decoder.dimensions();
+        if u64::from(width) * u64::from(height) > PREVIEW_MAX_PIXELS {
+            return Err(Error::Invalid(format!(
+                "image preview limited to {PREVIEW_MAX_PIXELS} pixels"
+            )));
+        }
+        // ImageReader::decode reserves the output buffer before passing the
+        // remaining budget to the decoder. Keep that accounting after
+        // inspecting dimensions, so conversion and sampling cannot expand an
+        // unchecked image.
+        limits.reserve(decoder.total_bytes()).map_err(image_error)?;
+        decoder.set_limits(limits).map_err(image_error)?;
+        let image = DynamicImage::from_decoder(decoder).map_err(image_error)?;
+        Ok(Self { image })
     }
-    // ImageReader::decode reserves the output buffer before passing the
-    // remaining budget to the decoder. Keep that accounting after inspecting
-    // dimensions, so conversion and sampling cannot expand an unchecked image.
-    limits.reserve(decoder.total_bytes()).map_err(image_error)?;
-    decoder.set_limits(limits).map_err(image_error)?;
-    let image = DynamicImage::from_decoder(decoder).map_err(image_error)?;
-    Ok(thumbnail(image, bounds))
+
+    /// Scale the image to fit `bounds` pixels, preserving its aspect ratio,
+    /// with each edge capped at 1024 pixels. Small images keep their pixels.
+    /// Zero bounds are invalid.
+    pub fn scale(self, bounds: Size) -> Result<ImagePreview> {
+        let bounds = preview_bounds(bounds)?;
+        Ok(ImagePreview {
+            image: Arc::new(thumbnail(self.image, bounds)),
+        })
+    }
+}
+
+/// An image scaled for an image view, which [`ImageView::set_preview`]
+/// shows. Clones share the pixels, so a cache of previews and the view that
+/// shows one hold a single copy.
+#[derive(Clone)]
+pub struct ImagePreview {
+    /// The scaled pixels, RGBA8 with unassociated alpha.
+    image: Arc<RgbaImage>,
+}
+
+impl fmt::Debug for ImagePreview {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ImagePreview")
+            .field("size", &self.size())
+            .finish()
+    }
+}
+
+impl ImagePreview {
+    /// Return the size of the preview in pixels.
+    pub fn size(&self) -> Size {
+        Size::new(self.image.width(), self.image.height())
+    }
+
+    /// Return the bytes that the pixels hold.
+    pub fn byte_len(&self) -> usize {
+        self.image.as_raw().len()
+    }
 }
 
 /// Downsample with premultiplied colors, so a transparent pixel's color does
@@ -214,8 +280,9 @@ struct Mosaic {
 /// symbol and the two colors that reproduce it best. The tier of symbols
 /// comes from the terminal's glyphs, unless the view has a tier of its own.
 pub struct ImageView {
-    /// The image, RGBA8 with unassociated alpha.
-    image: RgbaImage,
+    /// The image, RGBA8 with unassociated alpha, shared with the preview it
+    /// came from.
+    image: Arc<RgbaImage>,
     /// Zoom factor in display subpixels per image pixel. A display subpixel
     /// is one column by half a row.
     zoom: f32,
@@ -452,8 +519,13 @@ impl ImageView {
 
     /// Create a new image view widget.
     pub fn new(image: &RgbaImage) -> Self {
+        Self::shared(Arc::new(image.clone()))
+    }
+
+    /// Create an image view of pixels that a preview may share.
+    fn shared(image: Arc<RgbaImage>) -> Self {
         Self {
-            image: image.clone(),
+            image,
             zoom: 1.0,
             auto_fit: true,
             focusable: true,
@@ -522,8 +594,27 @@ impl ImageView {
     /// Show a different image, returning the view to its auto-fitted state.
     /// The view keeps its focus setting and its tier.
     pub fn set_image(&mut self, image: &RgbaImage) {
+        self.replace(Arc::new(image.clone()));
+    }
+
+    /// Show `preview`, returning the view to its auto-fitted state. The view
+    /// shares the preview's pixels rather than copying them, and keeps its
+    /// focus setting and its tier.
+    pub fn set_preview(&mut self, preview: ImagePreview) {
+        self.replace(preview.image);
+    }
+
+    /// Show nothing: a single transparent pixel, as [`Self::empty`] does.
+    /// The view keeps its focus setting and its tier.
+    pub fn clear(&mut self) {
+        self.replace(Arc::new(RgbaImage::new(1, 1)));
+    }
+
+    /// Show `image` from an auto-fitted state, keeping the focus setting
+    /// and the tier.
+    fn replace(&mut self, image: Arc<RgbaImage>) {
         let (focusable, tier) = (self.focusable, self.tier);
-        *self = Self::new(image);
+        *self = Self::shared(image);
         self.focusable = focusable;
         self.tier = tier;
     }
@@ -550,7 +641,8 @@ impl ImageView {
     /// each pixel. Zero bounds are invalid. On failure, the current image is
     /// preserved. Callers should also bound the encoded file size.
     pub fn set_preview_path(&mut self, path: impl AsRef<Path>, bounds: Size) -> Result<()> {
-        self.set_image(&read_preview(path.as_ref(), bounds)?);
+        let bounds = preview_bounds(bounds)?;
+        self.set_preview(DecodedImage::read(path.as_ref())?.scale(bounds)?);
         Ok(())
     }
 
@@ -814,6 +906,35 @@ mod tests {
         view.set_preview_path(valid, Size::new(16, 16))?;
         assert!(view.auto_fit);
         assert_eq!(view.zoom, 1.0);
+        Ok(())
+    }
+
+    #[test]
+    fn a_staged_preview_shares_its_pixels_with_the_view() -> Result<()> {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("image.png");
+        RgbaImage::from_pixel(512, 256, image::Rgba([80, 160, 40, 255]))
+            .save(&path)
+            .unwrap();
+        let preview = DecodedImage::read(&path)?.scale(Size::new(64, 64))?;
+        assert_eq!(preview.size(), Size::new(64, 32));
+        assert_eq!(preview.byte_len(), 64 * 32 * 4);
+        assert_eq!(
+            *preview.image,
+            read_preview(&path, Size::new(64, 64))?,
+            "the stages make what read_preview makes"
+        );
+        assert!(DecodedImage::read(&path)?.scale(Size::new(0, 8)).is_err());
+
+        let mut view = ImageView::empty().with_focus(false).with_tier(Tier::Halves);
+        view.auto_fit = false;
+        view.set_preview(preview.clone());
+        assert!(Arc::ptr_eq(&view.image, &preview.image), "no copy");
+        assert!(view.auto_fit, "a new preview fits again");
+        assert_eq!(view.image_size(), Size::new(64, 32));
+        view.clear();
+        assert_eq!(view.image_size(), Size::new(1, 1));
+        assert_eq!((view.focusable, view.tier), (false, Some(Tier::Halves)));
         Ok(())
     }
 

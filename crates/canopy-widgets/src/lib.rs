@@ -130,7 +130,7 @@ pub use dropdown::Dropdown;
 pub use font_banner::FontBanner;
 pub use frame::Frame;
 #[cfg(feature = "graphics")]
-pub use image_view::{ImageView, image_cells, read_preview};
+pub use image_view::{DecodedImage, ImagePreview, ImageView, image_cells, read_preview};
 pub use input::{CLEAR_INTENT, Input, ValueExposure, register_clear_intent};
 pub use keyed::KeyedChildren;
 pub use label::{ItemLabel, ItemVisibility};
