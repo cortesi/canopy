@@ -49,7 +49,7 @@ use crate::{
         ResourceRequest,
     },
     inspector::{Inspector, InspectorContent, InspectorEvent, InspectorHandle, InspectorOptions},
-    presentation::{EmbedInfo, GeometryKey, Supplied, style_rules},
+    presentation::{self, EmbedInfo, GeometryKey, Supplied, style_rules},
     search::{SearchAddress, SearchCase, SearchLimits, SearchMode, SearchQuery, SearchResults},
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, SourceAnchor, SourceMatches, SourceOptions},
@@ -497,6 +497,11 @@ impl Markdown {
         }
         self.schedule(ctx, true)?;
         Ok(self.store.snapshot().epoch)
+    }
+    /// Return the width that Rendered prose reads at, with its inset and the
+    /// scrollbar gutter. A wider reader leaves the rest blank at the right.
+    pub fn reading_width(&self) -> u32 {
+        presentation::reading_width(self.options.prose_width)
     }
     /// The presentation currently taking input.
     #[command]

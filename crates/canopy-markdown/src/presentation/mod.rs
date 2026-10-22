@@ -139,6 +139,16 @@ pub enum GlyphPreset {
     Ascii,
 }
 
+/// The columns left of the document's rows, in a canvas wider than three.
+const INSET: u32 = 2;
+
+/// Return the canvas width at which prose stops widening: the prose width,
+/// the inset, and the scrollbar gutter. A wider canvas leaves the rest blank
+/// at the right, where only cards, such as code and tables, reach.
+pub(crate) fn reading_width(prose_width: u32) -> u32 {
+    prose_width.clamp(1, 65535) + INSET + 1
+}
+
 /// All preferences that influence line layout. Width includes the reserved
 /// gutter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1098,7 +1108,7 @@ fn prepare_block(
     } = inputs;
     // A hostile viewport cannot cause an unbounded decoration allocation.
     let width = geometry.width.min(65535);
-    let inset = if width > 3 { 2 } else { 0 };
+    let inset = if width > 3 { INSET } else { 0 };
     let body = width.saturating_sub(inset + u32::from(width > 0));
     let mut rows = Vec::new();
     let ground = if block.provisional {
