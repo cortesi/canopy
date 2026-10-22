@@ -58,6 +58,8 @@ mod keyed;
 mod label;
 /// Typed list container with selection.
 mod list_view;
+/// A modal menu of keyed rows, and the row drawing that every menu shares.
+pub mod menu;
 /// One-row gauge over a track.
 mod meter;
 /// Block mosaics: the symbols of image views, font banners, and big text.
@@ -133,6 +135,7 @@ pub use input::{CLEAR_INTENT, Input, ValueExposure, register_clear_intent};
 pub use keyed::KeyedChildren;
 pub use label::{ItemLabel, ItemVisibility};
 pub use list_view::{List, Selectable};
+pub use menu::{Menu, MenuItem, MenuList, MenuRow};
 pub use meter::Meter;
 pub use picker::{Picker, PickerList};
 pub use root::Root;

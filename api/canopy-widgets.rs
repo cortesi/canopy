@@ -1925,6 +1925,149 @@ impl<W: Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> CommandNode for
 
 impl<W: 'static + Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> Widget for List<W, K> {}
 
+/// A modal menu: a titled frame that holds a [`MenuList`].
+///
+/// The host fills the list with [`Menu::set_items`], opens the menu with
+/// Canopy's modal, giving it [`Menu::list`] as the initial focus and
+/// [`Menu::BINDINGS`] as its binding group, and closes it from the close call
+/// that the list posts.
+pub struct Menu {/* private fields */}
+
+impl Menu {
+    /// The framework group a menu's modal admits.
+    ///
+    /// The arrows, `j` and `k`, the page keys, and Home and End move the
+    /// selection, Enter and Space activate it, and Esc closes.
+    pub const BINDINGS: FrameworkBindingGroup = _;
+    /// Return the list, which takes the keyboard while the menu is open, or
+    /// an error before the menu mounts.
+    pub fn list(&self) -> canopy::error::Result<NodeId>;
+
+    /// Construct an empty menu titled `title`.
+    #[must_use]
+    pub fn new(title: impl Into<String>) -> Self;
+
+    /// Show `items` under `title`, with the row at `selected` selected.
+    ///
+    /// `close` is the call that closes the menu: the list posts it after an
+    /// item's own call, and for Esc.
+    pub fn set_items(
+        &mut self,
+        context: &mut dyn Context,
+        title: impl Into<String>,
+        items: Vec<MenuItem>,
+        selected: usize,
+        close: CommandCall,
+    ) -> canopy::error::Result<()>;
+}
+
+impl CommandNode for Menu {}
+
+impl Widget for Menu {}
+
+/// One row of a [`MenuList`], and what activating it posts.
+#[derive(Clone, Debug)]
+pub struct MenuItem {
+    /// What the row shows.
+    pub row: MenuRow,
+    /// The call that activating the row posts, if it does anything.
+    pub call: Option<CommandCall>,
+}
+
+impl MenuItem {
+    /// Return an item that shows `row` and posts `call` when activated.
+    #[must_use]
+    pub const fn new(row: MenuRow, call: CommandCall) -> Self;
+
+    /// Return an item that shows `row` and does nothing, such as a note
+    /// that a menu has nothing to offer.
+    #[must_use]
+    pub const fn note(row: MenuRow) -> Self;
+}
+
+/// The rows of a menu, which take its keys.
+#[derive(Default)]
+pub struct MenuList {/* private fields */}
+
+impl MenuList {
+    /// Activate the selected row: post its call, then the close call.
+    pub fn activate(&mut self, context: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Close the menu by posting the close call.
+    pub fn cancel(&mut self, context: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Construct an empty list.
+    #[must_use]
+    pub fn new() -> Self;
+
+    /// Return the index of the selected row, if there is one.
+    #[must_use]
+    pub fn selected(&self) -> Option<usize>;
+
+    /// Show `items`, with the row at `selected` selected, and close with
+    /// `close`.
+    pub fn set_items(&mut self, items: Vec<MenuItem>, selected: usize, close: CommandCall);
+}
+
+impl MenuList {
+    /// Build a positional call with typed user arguments.
+    pub fn call_activate() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_cancel() -> CommandCall;
+
+    /// Return the command spec for this command.
+    pub fn spec_activate() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_cancel() -> &'static CommandSpec;
+}
+
+impl CommandNode for MenuList {}
+
+impl Register for MenuList {}
+
+impl Widget for MenuList {}
+
+/// One row of a menu: what it shows.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct MenuRow {
+    /// The accelerator, which activates the row.
+    pub key: Option<char>,
+    /// The label.
+    pub label: String,
+    /// The value at the right, such as a setting's current state.
+    pub value: String,
+    /// Whether the value reads quietly, as for a default.
+    pub muted: bool,
+    /// A mark in the gutter after the row, such as where a value comes from.
+    /// It shows only in a list that shows marks.
+    pub mark: &'static str,
+}
+
+impl MenuRow {
+    /// Return a row with `key` and `label`, and no value.
+    #[must_use]
+    pub fn new(key: Option<char>, label: impl Into<String>) -> Self;
+
+    /// Return the width that shows the whole row, with the mark gutter if
+    /// `marks` is set.
+    #[must_use]
+    pub fn width(&self, marks: bool) -> u32;
+
+    /// Return the row with `mark` in its gutter.
+    #[must_use]
+    pub const fn with_mark(self, mark: &'static str) -> Self;
+
+    /// Return the row with its value muted, or not.
+    #[must_use]
+    pub const fn with_muted(self, muted: bool) -> Self;
+
+    /// Return the row with `value` at the right.
+    #[must_use]
+    pub fn with_value(self, value: impl Into<String>) -> Self;
+}
+
 /// A one-row gauge: a stacked bar of values over a track, drawn to an eighth
 /// of a cell, and a label at its end.
 ///
@@ -4337,6 +4480,45 @@ pub mod list {
     pub struct AutoKey(_);
 
     impl ToArgValue for AutoKey {}
+}
+
+pub mod menu {
+    //! A modal menu of keyed rows, and the row drawing that every menu shares.
+    //! A menu of keyed rows, chosen with the keyboard.
+    //!
+    //! Each row names one action: an accelerator key, a label, and a value at the
+    //! right, such as a setting's current state. The arrows, `j` and `k`, the page
+    //! keys, and Home and End move the selection, Enter or Space activates the
+    //! selected row, a row's key activates that row, and Esc closes.
+    //!
+    //! [`Menu`] is the modal: it centres a titled frame over whatever it covers
+    //! and holds a [`MenuList`] of rows. A host opens it with Canopy's modal, as
+    //! it opens a [`Picker`](crate::Picker). A panel that keeps rows of its own,
+    //! such as an options panel with levels and inline edits, draws them with
+    //! [`render_row`] and the same styles, so every menu reads the same.
+    //!
+    //! The rows draw under the `menu` style layer: `row`, `row/key`,
+    //! `row/value`, `row/muted`, `row/mark`, `selection`, and `edit`. [`styles`]
+    //! derives them from the palette.
+
+    pub use crate::{Menu, MenuItem, MenuList, MenuRow};
+
+    /// Draw `row` in `area`, one line, under the `menu` style layer.
+    ///
+    /// `selected` draws the row selected. `edit`, if given, replaces the value
+    /// with the text being typed and a cursor. `marks` keeps the mark gutter at the
+    /// right, outside the selection, so a mark keeps its colour on a selected row.
+    pub fn render_row(
+        render: &mut Render<'_>,
+        area: Rect,
+        row: &MenuRow,
+        selected: bool,
+        edit: Option<&str>,
+        marks: bool,
+    ) -> canopy::error::Result<()>;
+
+    /// Install the styles of the `menu` layer, from the palette.
+    pub fn styles(palette: &Palette, rules: StyleRules<'_>);
 }
 
 pub mod mosaic {
