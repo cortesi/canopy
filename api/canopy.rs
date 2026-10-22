@@ -1135,11 +1135,14 @@ impl FromArgValue for NodeId {}
 impl ToArgValue for NodeId {}
 
 /// A node name, which consists of lowercase ASCII alphanumeric characters, plus
-/// underscores.
+/// underscores. A clone shares the name's text.
 #[derive(Clone, Debug, Display, Eq, Hash, PartialEq, PartialEq<&str>)]
 pub struct NodeName {/* private fields */}
 
 impl NodeName {
+    /// Return the name's text.
+    pub fn as_str(&self) -> &str;
+
     /// Takes a string and munges it into a valid node name. It does this by
     /// first converting the string to snake case, then removing all invalid
     /// characters.
@@ -4337,7 +4340,7 @@ pub mod runtime {
         /// Children in source order.
         pub children: Vec<NodeId>,
         /// Widget path name.
-        pub name: String,
+        pub name: NodeName,
         /// Explicit application identity.
         pub identity: Option<NodeIdentity>,
         /// Whether the root tree contains this node.

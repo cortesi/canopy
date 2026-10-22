@@ -1,4 +1,4 @@
-use std::{fmt, str::FromStr};
+use std::{fmt, str::FromStr, sync::Arc};
 
 use convert_case::{Case, Casing};
 
@@ -316,11 +316,11 @@ fn valid_nodename(name: &str) -> bool {
 }
 
 /// A node name, which consists of lowercase ASCII alphanumeric characters, plus
-/// underscores.
+/// underscores. A clone shares the name's text.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NodeName {
     /// Stored node name string.
-    name: String,
+    name: Arc<str>,
 }
 
 impl NodeName {
@@ -330,9 +330,12 @@ impl NodeName {
         if !valid_nodename(name) {
             return Err(error::Error::Invalid(name.into()));
         }
-        Ok(Self {
-            name: name.to_string(),
-        })
+        Ok(Self { name: name.into() })
+    }
+
+    /// Return the name's text.
+    pub fn as_str(&self) -> &str {
+        &self.name
     }
 
     /// Takes a string and munges it into a valid node name. It does this by
@@ -342,9 +345,9 @@ impl NodeName {
         let raw = name.to_case(Case::Snake);
         let filtered: String = raw.chars().filter(|x| valid_nodename_char(*x)).collect();
         let name = if filtered.is_empty() {
-            "node".to_string()
+            "node".into()
         } else {
-            filtered
+            filtered.into()
         };
         Self { name }
     }
@@ -358,7 +361,7 @@ impl fmt::Display for NodeName {
 
 impl PartialEq<&str> for NodeName {
     fn eq(&self, other: &&str) -> bool {
-        self.name == *other
+        &*self.name == *other
     }
 }
 

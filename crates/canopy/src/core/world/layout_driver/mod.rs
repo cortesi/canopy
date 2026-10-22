@@ -1,3 +1,5 @@
+use std::mem;
+
 use foldhash::HashMap;
 
 use super::*;
@@ -24,6 +26,7 @@ impl Core {
             screen_size,
         );
         pass.update_views(root, screen_view)?;
+        drop(pass);
 
         // A node with a floor reads the floor's published view. A changed
         // inset moves only the node's own content, so one more pass settles.
@@ -119,9 +122,12 @@ pub(super) fn refresh_layouts(core: &mut Core) -> Result<()> {
     Ok(())
 }
 
+/// Measurements of one layout pass.
+pub(super) type MeasureCache = HashMap<MeasureKey, Measurement>;
+
 #[derive(Hash, PartialEq, Eq)]
 /// Cache key for per-pass measurements.
-struct MeasureKey {
+pub(super) struct MeasureKey {
     /// Node being measured.
     node: NodeId,
     /// Constraints used for the measurement.
@@ -133,7 +139,14 @@ struct LayoutPass<'a> {
     /// Core state being updated.
     core: &'a mut Core,
     /// Cached measurements for this pass.
-    measure_cache: HashMap<MeasureKey, Measurement>,
+    measure_cache: MeasureCache,
+}
+
+impl Drop for LayoutPass<'_> {
+    fn drop(&mut self) {
+        self.measure_cache.clear();
+        self.core.measure_cache = mem::take(&mut self.measure_cache);
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -164,11 +177,12 @@ impl Overflow {
 }
 
 impl<'a> LayoutPass<'a> {
-    /// Create a new layout pass with a fresh measurement cache.
+    /// Create a new layout pass with an empty measurement cache.
     fn new(core: &'a mut Core) -> Self {
+        let measure_cache = mem::take(&mut core.measure_cache);
         Self {
             core,
-            measure_cache: HashMap::default(),
+            measure_cache,
         }
     }
 
@@ -240,9 +254,9 @@ impl<'a> LayoutPass<'a> {
 
         let view = View::new(outer, content, node.scroll, node.canvas);
         node.view = view;
-        let children = node.children.clone();
-
-        for child in children {
+        // Views change no children, so the list is read again by index.
+        for index in 0..node.children.len() {
+            let child = self.core.nodes[node_id].children[index];
             self.update_views(child, view)?;
         }
 

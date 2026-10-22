@@ -138,10 +138,7 @@ impl Canopy {
             let Some(node) = self.core.nodes.get(id) else {
                 continue;
             };
-            let children = node.children.clone();
-            for child in children.into_iter().rev() {
-                stack.push(child);
-            }
+            stack.extend(node.children.iter().rev());
         }
 
         if !focus_seen {

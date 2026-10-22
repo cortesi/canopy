@@ -10,7 +10,7 @@ use super::{
     world::{Core, WidgetOperation},
 };
 use crate::{
-    NodeId,
+    NodeId, NodeName,
     commands::{ArgValue, CommandStatus},
     error::Result,
     geom::{Rect, Size},
@@ -47,7 +47,7 @@ pub struct NodeSnapshot {
     /// Children in source order.
     pub children: Vec<NodeId>,
     /// Widget path name.
-    pub name: String,
+    pub name: NodeName,
     /// Explicit application identity.
     pub identity: Option<NodeIdentity>,
     /// Whether the root tree contains this node.
@@ -120,7 +120,7 @@ pub(super) fn capture(
             id,
             parent: node.parent,
             children: node.children.clone(),
-            name: node.name.to_string(),
+            name: node.name.clone(),
             identity: node.identity.clone(),
             attached,
             displayed,

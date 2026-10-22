@@ -62,6 +62,9 @@ pub struct Core {
     pub(crate) changes: crate::ChangeSet,
     /// Node storage arena.
     pub(crate) nodes: NodeArena<Node>,
+    /// The measurement cache of layout passes, kept empty between passes
+    /// so each pass reuses its allocation.
+    measure_cache: layout_driver::MeasureCache,
     /// Application keys unique within explicit arena scopes.
     semantic_keys: HashMap<(NodeId, String), NodeId>,
     /// Open modals, innermost last.
@@ -216,6 +219,7 @@ impl Core {
         Self {
             changes: crate::ChangeSet::default(),
             nodes,
+            measure_cache: layout_driver::MeasureCache::default(),
             semantic_keys: HashMap::new(),
             modals: modal::ModalStack::default(),
             root,
