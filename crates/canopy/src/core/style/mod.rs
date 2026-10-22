@@ -7,7 +7,6 @@ pub mod themes;
 
 use std::{
     cell::RefCell,
-    collections::HashMap,
     f64::consts::TAU,
     iter,
     sync::{
@@ -20,6 +19,7 @@ use std::{
 pub(crate) use animation::MotionClocks;
 pub use animation::{Animation, AnimationStart, Easing, Pause, Repeat};
 pub use color::{Color, Mix, hex_byte};
+use foldhash::HashMap;
 
 use crate::geom;
 
@@ -695,7 +695,7 @@ impl StyleMap {
     /// Construct a style map with defaults.
     pub fn new() -> Self {
         let mut cs = Self {
-            styles: HashMap::new(),
+            styles: HashMap::default(),
             generation: next_generation(),
         };
         cs.insert_style(
@@ -936,7 +936,7 @@ impl StyleManager {
             level: 0,
             layers: vec![],
             layer_levels: vec![0],
-            stacks: HashMap::from([(Vec::new(), 0)]),
+            stacks: HashMap::from_iter([(Vec::new(), 0)]),
             stack: 0,
             resolved: RefCell::default(),
         }
@@ -990,7 +990,9 @@ impl StyleManager {
             resolved.styles.clear();
         }
         if resolved.styles.len() <= self.stack {
-            resolved.styles.resize_with(self.stack + 1, HashMap::new);
+            resolved
+                .styles
+                .resize_with(self.stack + 1, HashMap::default);
         }
         let styles = &mut resolved.styles[self.stack];
         if let Some(style) = styles.get(path) {

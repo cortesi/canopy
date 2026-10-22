@@ -13,6 +13,7 @@ canopy-geom.workspace = true
 crossterm = { version = "0.29.0", features = ["event-stream"] }
 thiserror.workspace = true
 convert_case.workspace = true
+foldhash.workspace = true
 tracing = "0.1.44"
 canopy-derive.workspace = true
 slotmap = "1.1.1"

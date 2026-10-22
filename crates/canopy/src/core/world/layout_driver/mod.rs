@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use foldhash::HashMap;
 
 use super::*;
 use crate::{
@@ -168,7 +168,7 @@ impl<'a> LayoutPass<'a> {
     fn new(core: &'a mut Core) -> Self {
         Self {
             core,
-            measure_cache: HashMap::new(),
+            measure_cache: HashMap::default(),
         }
     }
 
