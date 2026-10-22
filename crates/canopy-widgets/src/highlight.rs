@@ -172,6 +172,7 @@ pub use syntect_highlighter::{DEFAULT_THEME, Grammar, SyntectHighlighter};
 mod syntect_highlighter {
     use std::{
         cell::{Cell, RefCell},
+        collections::VecDeque,
         fmt, mem,
         ops::Range,
         path::Path,
@@ -268,7 +269,7 @@ mod syntect_highlighter {
 
     /// Lines between the walk states a prepared source keeps, so a walk
     /// over an edited source resumes near the first changed line.
-    const CHECKPOINT_LINES: usize = 32;
+    const CHECKPOINT_LINES: usize = 8;
 
     /// A grammar: a syntax, and the set that holds it.
     ///
@@ -557,7 +558,7 @@ mod syntect_highlighter {
     }
 
     /// The parser and highlight state after a line.
-    #[derive(Clone)]
+    #[derive(Clone, PartialEq)]
     struct EngineState {
         /// The parser's state.
         parse: ParseState,
@@ -624,23 +625,16 @@ mod syntect_highlighter {
         grammar: Option<Grammar>,
     }
 
-    /// The fences of a Markdown source of `lines`, in order, as the Markdown
-    /// parser reads them.
-    fn fences(lines: &[String]) -> Vec<Fence> {
-        let text = lines.concat();
-        let mut starts = Vec::with_capacity(lines.len());
-        let mut at = 0;
-        for line in lines {
-            starts.push(at);
-            at += line.len();
-        }
+    /// The fences of a Markdown source, in order, as the Markdown parser
+    /// reads them, given the byte offset where each line starts.
+    fn fences(text: &str, starts: &[usize]) -> Vec<Fence> {
         // The line that holds byte `at`.
         let line_of = |at: usize| {
             starts
                 .partition_point(|&start| start <= at)
                 .saturating_sub(1)
         };
-        canopy_xmark::fenced_code(&text)
+        canopy_xmark::fenced_code(text)
             .into_iter()
             .map(|code| Fence {
                 lines: line_of(code.body.start)..line_of(code.body.end.saturating_sub(1)) + 1,
@@ -649,13 +643,50 @@ mod syntect_highlighter {
             .collect()
     }
 
+    /// Return the length of the longest common prefix of `a` and `b`.
+    fn common_prefix(a: &[u8], b: &[u8]) -> usize {
+        let whole = a
+            .as_chunks::<64>()
+            .0
+            .iter()
+            .zip(b.as_chunks::<64>().0)
+            .take_while(|(a, b)| a == b)
+            .count()
+            * 64;
+        whole
+            + a[whole..]
+                .iter()
+                .zip(&b[whole..])
+                .take_while(|(a, b)| a == b)
+                .count()
+    }
+
+    /// Return the length of the longest common suffix of `a` and `b`.
+    fn common_suffix(a: &[u8], b: &[u8]) -> usize {
+        let whole = a
+            .rchunks_exact(64)
+            .zip(b.rchunks_exact(64))
+            .take_while(|(a, b)| a == b)
+            .count()
+            * 64;
+        whole
+            + a[..a.len() - whole]
+                .iter()
+                .rev()
+                .zip(b[..b.len() - whole].iter().rev())
+                .take_while(|(a, b)| a == b)
+                .count()
+    }
+
     /// One source text and the highlighting walked over it so far.
     struct Source {
         /// Grammar resolved for this source, including an inferred first-line
         /// hint.
         grammar: Grammar,
-        /// Lines of the source, including the trailing newline syntect expects.
-        lines: Vec<String>,
+        /// Text of the source, whose lines keep the newlines syntect expects.
+        text: String,
+        /// Byte offset where each line starts, and then the end of the text.
+        starts: Vec<usize>,
         /// Theme the spans take their styles from.
         theme: &'static Theme,
         /// Highlighter positioned after the last cached line.
@@ -670,11 +701,37 @@ mod syntect_highlighter {
         spans: Vec<Vec<HighlightSpan>>,
         /// Walk states every `CHECKPOINT_LINES` lines, in order.
         checkpoints: Vec<Checkpoint>,
+        /// The walk from before the last edit over the lines below it, which
+        /// this walk rejoins where their states agree.
+        rejoin: Option<Rejoin>,
+    }
+
+    /// The walk over the lines below an edit, from before the edit.
+    struct Rejoin {
+        /// Lines the edit added above the walk, or removed when negative.
+        shift: isize,
+        /// The walk's checkpoints, at their lines before the edit, in order.
+        checkpoints: VecDeque<Checkpoint>,
+        /// Line before the edit of the first of `spans`.
+        first: usize,
+        /// The walk's spans from line `first` on.
+        spans: Vec<Vec<HighlightSpan>>,
+        /// The state after the walk's last line.
+        engine: EngineState,
     }
 
     impl Source {
-        /// Hold `lines` to highlight in `grammar` and `theme`.
-        fn new(grammar: Grammar, lines: Vec<String>, theme: &'static Theme) -> Self {
+        /// Hold `text` to highlight in `grammar` and `theme`.
+        fn new(grammar: Grammar, text: String, theme: &'static Theme) -> Self {
+            let mut starts: Vec<usize> = text
+                .split_inclusive('\n')
+                .scan(0, |at, line| {
+                    let start = *at;
+                    *at += line.len();
+                    Some(start)
+                })
+                .collect();
+            starts.push(text.len());
             let markdown = grammar
                 .syntax
                 .scope
@@ -682,31 +739,49 @@ mod syntect_highlighter {
                 .starts_with("text.html.markdown");
             Self {
                 grammar,
-                fences: if markdown { fences(&lines) } else { Vec::new() },
-                lines,
+                fences: if markdown {
+                    fences(&text, &starts)
+                } else {
+                    Vec::new()
+                },
+                text,
+                starts,
                 theme,
                 engine: Engine::new(grammar, theme),
                 next_fence: 0,
                 fence_engine: None,
                 spans: Vec::new(),
                 checkpoints: Vec::new(),
+                rejoin: None,
             }
         }
 
-        /// Adopt `lines` in `grammar` as the source, and keep the walk over
-        /// the lines above the first that changed, back to its checkpoint.
-        fn edit(&mut self, grammar: Grammar, lines: Vec<String>) {
-            let mut next = Self::new(grammar, lines, self.theme);
+        /// Return the number of lines.
+        fn line_count(&self) -> usize {
+            self.starts.len() - 1
+        }
+
+        /// Return the line that holds byte `at`, or the line count at the end.
+        fn line_at(&self, at: usize) -> usize {
+            self.starts.partition_point(|&start| start <= at) - 1
+        }
+
+        /// Adopt `text` in `grammar` as the source. Keep the walk over the
+        /// lines above the first that changed, back to its checkpoint, and
+        /// the walk over the lines below the last that changed, to rejoin.
+        fn edit(&mut self, grammar: Grammar, text: String) {
+            if grammar == self.grammar && text == self.text {
+                return;
+            }
+            let mut next = Self::new(grammar, text, self.theme);
             if grammar != self.grammar {
                 *self = next;
                 return;
             }
-            let mut keep = self
-                .lines
-                .iter()
-                .zip(&next.lines)
-                .position(|(old, new)| old != new)
-                .unwrap_or_else(|| self.lines.len().min(next.lines.len()));
+            let (old, new) = (self.text.as_bytes(), next.text.as_bytes());
+            let prefix = common_prefix(old, new);
+            let suffix = common_suffix(&old[prefix..], &new[prefix..]);
+            let mut keep = self.line_at(prefix).min(next.line_at(prefix));
             // A changed fence changes the walk from where either version
             // of it starts.
             let fences = self.fences.len().max(next.fences.len());
@@ -718,6 +793,9 @@ mod syntect_highlighter {
                         keep = keep.min(fence.lines.start);
                     }
                 }
+            }
+            if self.fences.is_empty() && next.fences.is_empty() {
+                next.rejoin = self.rejoin_after(old.len() - suffix, &next);
             }
             self.checkpoints
                 .retain(|checkpoint| checkpoint.line <= keep);
@@ -744,9 +822,34 @@ mod syntect_highlighter {
             *self = next;
         }
 
+        /// Split off the walk over the lines after byte `tail`, from which
+        /// the text is unchanged in `next`, for `next` to rejoin.
+        fn rejoin_after(&mut self, tail: usize, next: &Self) -> Option<Rejoin> {
+            // A line after `tail` starts after an unchanged newline, so it
+            // starts a line of `next` too.
+            let line = self.starts.partition_point(|&start| start <= tail);
+            if line >= self.line_count() {
+                return None;
+            }
+            let moved = (self.starts[line] + next.text.len()).checked_sub(self.text.len())?;
+            let new_line = next.starts.binary_search(&moved).ok()?;
+            let split = self
+                .checkpoints
+                .partition_point(|checkpoint| checkpoint.line < line);
+            let checkpoints = VecDeque::from(self.checkpoints.split_off(split));
+            let first = checkpoints.front()?.line;
+            Some(Rejoin {
+                shift: new_line as isize - line as isize,
+                spans: self.spans.split_off(first),
+                first,
+                checkpoints,
+                engine: self.engine.state.clone(),
+            })
+        }
+
         /// Highlight in `theme`, walking again from the first line.
         fn restart(&mut self, theme: &'static Theme) {
-            *self = Self::new(self.grammar, mem::take(&mut self.lines), theme);
+            *self = Self::new(self.grammar, mem::take(&mut self.text), theme);
         }
 
         /// Walk forward until `line` is cached, and return its spans.
@@ -754,13 +857,52 @@ mod syntect_highlighter {
         /// Returns `None` when the line lies outside the source or beyond the
         /// stateful walking limit.
         fn spans_for(&mut self, line: usize) -> Option<Vec<HighlightSpan>> {
-            if line >= self.lines.len() {
+            if line >= self.line_count() {
                 return None;
             }
             while self.spans.len() <= line {
                 self.walk_line();
             }
             self.spans.get(line).cloned()
+        }
+
+        /// Take the rest of the walk from before the last edit, if the walk
+        /// has reached one of its checkpoints in the same state, and return
+        /// whether it did.
+        fn rejoin(&mut self) -> bool {
+            let line = self.spans.len() as isize;
+            let Some(rejoin) = &mut self.rejoin else {
+                return false;
+            };
+            while rejoin
+                .checkpoints
+                .front()
+                .is_some_and(|checkpoint| checkpoint.line as isize + rejoin.shift < line)
+            {
+                rejoin.checkpoints.pop_front();
+            }
+            let Some(checkpoint) = rejoin.checkpoints.front() else {
+                self.rejoin = None;
+                return false;
+            };
+            if checkpoint.line as isize + rejoin.shift != line
+                || checkpoint.engine != self.engine.state
+            {
+                return false;
+            }
+            let skip = checkpoint.line - rejoin.first;
+            let Some(rejoin) = self.rejoin.take() else {
+                return false;
+            };
+            self.spans.extend(rejoin.spans.into_iter().skip(skip));
+            self.spans.truncate(self.line_count());
+            self.checkpoints
+                .extend(rejoin.checkpoints.into_iter().map(|checkpoint| Checkpoint {
+                    line: (checkpoint.line as isize + rejoin.shift) as usize,
+                    ..checkpoint
+                }));
+            self.engine.state = rejoin.engine;
+            true
         }
 
         /// Highlight the next line, and cache its spans.
@@ -770,6 +912,9 @@ mod syntect_highlighter {
         /// it. The fence lines themselves, and a body in no known language,
         /// stay with the source's highlighter.
         fn walk_line(&mut self) {
+            if self.rejoin() {
+                return;
+            }
             let line = self.spans.len();
             if line.is_multiple_of(CHECKPOINT_LINES) {
                 self.checkpoints.push(Checkpoint {
@@ -795,7 +940,7 @@ mod syntect_highlighter {
                 .get(self.next_fence)
                 .filter(|fence| fence.lines.contains(&line))
                 .and_then(|fence| fence.grammar);
-            let text = &self.lines[line];
+            let text = &self.text[self.starts[line]..self.starts[line + 1]];
             let engine = match grammar {
                 Some(grammar) => self
                     .fence_engine
@@ -951,19 +1096,20 @@ mod syntect_highlighter {
                 hint
             };
             let mut bytes = 0;
-            let lines = text
+            let end: usize = text
                 .split_inclusive('\n')
                 .take(MAX_STATEFUL_LINES)
                 .take_while(|line| {
                     bytes += line.len();
                     bytes <= MAX_STATEFUL_BYTES
                 })
-                .map(str::to_string)
-                .collect::<Vec<_>>();
+                .map(str::len)
+                .sum();
+            let text = text[..end].to_string();
             let mut source = self.source.borrow_mut();
             match source.as_mut() {
-                Some(source) => source.edit(grammar, lines),
-                None => *source = Some(Source::new(grammar, lines, self.theme)),
+                Some(source) => source.edit(grammar, text),
+                None => *source = Some(Source::new(grammar, text, self.theme)),
             }
         }
 
@@ -1431,7 +1577,7 @@ mod syntect_highlighter {
             {
                 let prepared = highlighter.source.borrow();
                 let prepared = prepared.as_ref().expect("source was prepared");
-                assert_eq!(prepared.lines.len(), MAX_STATEFUL_LINES);
+                assert_eq!(prepared.line_count(), MAX_STATEFUL_LINES);
                 assert!(
                     prepared.spans.is_empty(),
                     "preparation must not parse lines"
@@ -1469,7 +1615,7 @@ mod syntect_highlighter {
             highlighter.prepare(&line.repeat(MAX_STATEFUL_BYTES / line.len() * 2));
             let prepared = highlighter.source.borrow();
             let prepared = prepared.as_ref().expect("source was prepared");
-            assert_eq!(prepared.lines.len(), MAX_STATEFUL_BYTES / line.len());
+            assert_eq!(prepared.line_count(), MAX_STATEFUL_BYTES / line.len());
         }
 
         #[test]
