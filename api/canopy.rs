@@ -5789,6 +5789,11 @@ pub mod text {
     /// is mostly ASCII.
     pub fn graphemes(s: &str) -> Graphemes<'_>;
 
+    /// Return whether `s` is printable ASCII, which is one grapheme and one
+    /// column per byte. The check is a byte scan, so the common case avoids
+    /// grapheme segmentation.
+    pub fn printable_ascii(s: &str) -> bool;
+
     /// Slice a string by display columns, returning the substring and its width.
     pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize);
 

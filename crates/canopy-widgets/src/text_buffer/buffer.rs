@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     mem,
     ops::{Deref, DerefMut},
 };
@@ -142,6 +143,23 @@ impl TextBuffer {
             1
         };
         (slice, separator)
+    }
+
+    /// Return the text of each logical line in order, without its
+    /// separator, borrowed where the rope holds it in one piece.
+    pub fn lines(&self) -> impl Iterator<Item = Cow<'_, str>> {
+        let count = self.line_count();
+        self.rope.lines().enumerate().map(move |(index, slice)| {
+            let len = slice.len_chars();
+            let separator = if index + 1 == count {
+                0
+            } else if len >= 2 && slice.char(len - 2) == '\r' && slice.char(len - 1) == '\n' {
+                2
+            } else {
+                1
+            };
+            Cow::from(slice.slice(..len - separator.min(len)))
+        })
     }
 
     /// Return the text of a logical line without a trailing newline.
@@ -560,6 +578,18 @@ mod tests {
     use proptest::{char, prelude::*};
 
     use super::*;
+
+    #[test]
+    fn lines_match_each_line_text() {
+        for text in ["", "a", "a\n", "a\r\nb\n\nc", "\r\n\r\n", "x\ry\nz"] {
+            let buf = TextBuffer::new(text);
+            let lines: Vec<String> = buf.lines().map(String::from).collect();
+            let each: Vec<String> = (0..buf.line_count())
+                .map(|line| buf.line_text(line))
+                .collect();
+            assert_eq!(lines, each, "{text:?}");
+        }
+    }
 
     #[test]
     fn insert_and_delete_roundtrip() {

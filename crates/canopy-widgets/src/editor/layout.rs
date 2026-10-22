@@ -283,9 +283,10 @@ impl LayoutCache {
     /// Rebuild the entire layout cache.
     fn rebuild_all(&mut self, buffer: &TextBuffer, wrap: Wrap) {
         self.lines.clear();
-        let line_count = buffer.line_count().max(1);
-        for line in 0..line_count {
-            self.lines.push(layout_line(&buffer.line_text(line), wrap));
+        self.lines
+            .extend(buffer.lines().map(|line| layout_line(&line, wrap)));
+        if self.lines.is_empty() {
+            self.lines.push(layout_line("", wrap));
         }
         self.rebuild_offsets();
         self.wrap = wrap;
@@ -397,6 +398,24 @@ fn is_blank(grapheme: &str) -> bool {
 /// row follows, where the caret after them shows.
 pub fn layout_line(text: &str, wrap: Wrap) -> LineLayout {
     let wrap_width = wrap.width.max(1);
+    // Printable ASCII is one column per byte, so a line of it that needs no
+    // breaks is one segment.
+    if text::printable_ascii(text) && (wrap.mode != WrapMode::Soft || text.len() <= wrap_width) {
+        let end = Mark {
+            char: text.len(),
+            col: text.len(),
+        };
+        return LineLayout {
+            segments: vec![WrapSegment::between(Mark { char: 0, col: 0 }, end)],
+            display_width: text.len(),
+        };
+    }
+    layout_graphemes(text, wrap)
+}
+
+/// Lay out a line as `layout_line` does, grapheme by grapheme.
+fn layout_graphemes(text: &str, wrap: Wrap) -> LineLayout {
+    let wrap_width = wrap.width.max(1);
     // A grapheme takes no more columns than bytes, except a tab, so a short
     // line without tabs fits its row and needs no breaks.
     let fits = text.len() <= wrap_width && !text.contains('\t');
@@ -482,6 +501,24 @@ mod tests {
             .iter()
             .map(|segment| chars[segment.start_char..segment.end_char].iter().collect())
             .collect()
+    }
+
+    #[test]
+    fn an_ascii_line_lays_out_as_its_graphemes_do() {
+        for text in ["", "a", "hello world", "the quick brown fox jumps", "  x  "] {
+            for width in [1, 3, 5, 11, 40] {
+                for mode in [WrapMode::None, WrapMode::Soft] {
+                    for caret in [false, true] {
+                        let wrap = Wrap::new(mode, width, 4, caret);
+                        assert_eq!(
+                            layout_line(text, wrap),
+                            layout_graphemes(text, wrap),
+                            "{text:?} {width} {mode:?} {caret}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]

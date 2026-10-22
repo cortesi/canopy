@@ -7,7 +7,7 @@ use unicode_width::UnicodeWidthStr;
 /// column per byte. The check is a byte scan, so the common case avoids
 /// grapheme segmentation.
 #[inline]
-pub(crate) fn printable_ascii(s: &str) -> bool {
+pub fn printable_ascii(s: &str) -> bool {
     s.bytes()
         .all(|byte| byte.is_ascii_graphic() || byte == b' ')
 }
