@@ -5053,6 +5053,9 @@ pub mod table {
         /// leading columns that fit when not all do.
         pub fn prepare(data: Arc<TableData>, options: FlowOptions) -> canopy::error::Result<Self>;
 
+        /// Width of the shown columns, separators included.
+        pub fn width(&self) -> u32;
+
         /// Widths of the shown leading columns.
         pub fn widths(&self) -> &[u32];
     }

@@ -52,7 +52,7 @@ use crate::{
         ResourceRequest,
     },
     inspector::{Inspector, InspectorContent, InspectorEvent, InspectorHandle, InspectorOptions},
-    presentation::{self, EmbedInfo, GeometryKey, Supplied, style_rules},
+    presentation::{EmbedInfo, GeometryKey, Supplied, style_rules},
     search::{SearchAddress, SearchCase, SearchLimits, SearchMode, SearchQuery, SearchResults},
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, SourceAnchor, SourceMatches, SourceOptions},
@@ -732,6 +732,16 @@ impl Markdown {
         }
         self.generation += 1;
         self.last_submitted = None;
+        self.schedule(ctx, true)
+    }
+    /// Center each Rendered block, as [`MarkdownOptions::centered`] says,
+    /// without resetting the document.
+    pub fn set_centered(&mut self, ctx: &mut dyn Context, centered: bool) -> Result<()> {
+        if self.options.centered == centered {
+            return Ok(());
+        }
+        self.options.centered = centered;
+        self.generation += 1;
         self.schedule(ctx, true)
     }
     /// Enter or leave the rendered object-navigation mode.
@@ -1928,6 +1938,7 @@ impl Markdown {
             width: self.geometry_width,
             glyphs: self.options.glyphs,
             prose_width: self.options.prose_width,
+            centered: self.options.centered,
             syntax_limit: self.options.syntax_limit,
             mosaic: self.mosaic,
             ..Default::default()
@@ -2473,21 +2484,13 @@ impl Widget for Markdown {
     fn layout(&self) -> Layout {
         Layout::fill().direction(Direction::Column)
     }
-    /// Under an unbounded width, Rendered measures the width its prose reads
-    /// at, with its inset and the scrollbar gutter. A wider reader leaves the
-    /// rest blank at the right.
+    /// The reader centers its own blocks, so under an unbounded width it
+    /// offers no natural width for a parent to center.
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        if c.width != Constraint::Unbounded || self.active != ViewType::Rendered {
-            return c.wrap();
+        if c.width == Constraint::Unbounded {
+            return c.clamp(Size::ZERO);
         }
-        let height = match c.height {
-            Constraint::Exact(height) | Constraint::AtMost(height) => height,
-            Constraint::Unbounded => 1,
-        };
-        c.clamp(Size::new(
-            presentation::reading_width(self.options.prose_width),
-            height,
-        ))
+        c.wrap()
     }
     fn accept_focus(&self, _: &dyn ViewContext) -> bool {
         true

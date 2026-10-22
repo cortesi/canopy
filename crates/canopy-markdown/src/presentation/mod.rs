@@ -139,16 +139,6 @@ pub enum GlyphPreset {
     Ascii,
 }
 
-/// The columns left of the document's rows, in a canvas wider than three.
-const INSET: u32 = 2;
-
-/// Return the canvas width at which prose stops widening: the prose width,
-/// the inset, and the scrollbar gutter. A wider canvas leaves the rest blank
-/// at the right, where only cards, such as code and tables, reach.
-pub(crate) fn reading_width(prose_width: u32) -> u32 {
-    prose_width.clamp(1, 65535) + INSET + 1
-}
-
 /// All preferences that influence line layout. Width includes the reserved
 /// gutter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -161,6 +151,8 @@ pub struct GeometryKey {
     pub spacing: u8,
     /// Preferred maximum prose width; cards use the body width.
     pub prose_width: u32,
+    /// Whether each block centers in the body width.
+    pub centered: bool,
     /// Cumulative eligible code-payload bytes admitted for automatic syntax.
     pub syntax_limit: usize,
     /// Block mosaics that the terminal draws, which big headings draw with.
@@ -173,6 +165,7 @@ impl Default for GeometryKey {
             glyphs: GlyphPreset::Unicode,
             spacing: 1,
             prose_width: 88,
+            centered: false,
             syntax_limit: 256 * 1024,
             mosaic: Tier::Full,
         }
@@ -1108,7 +1101,7 @@ fn prepare_block(
     } = inputs;
     // A hostile viewport cannot cause an unbounded decoration allocation.
     let width = geometry.width.min(65535);
-    let inset = if width > 3 { INSET } else { 0 };
+    let inset = if width > 3 { 2 } else { 0 };
     let body = width.saturating_sub(inset + u32::from(width > 0));
     let mut rows = Vec::new();
     let ground = if block.provisional {
@@ -1449,6 +1442,15 @@ fn prepare_block(
             }
         }
     }
+    let shift = center_block(
+        &mut rows,
+        image_placement.as_mut(),
+        (inset, body),
+        table
+            .is_some()
+            .then_some((card_inset - inset, flow.as_deref())),
+        geometry,
+    );
     frame(&mut rows, make_row, block, unit, (inset, body), geometry);
     BlockLayout {
         id: block.id,
@@ -1459,11 +1461,57 @@ fn prepare_block(
         flow,
         table_start,
         table_height,
-        inset: card_inset,
+        inset: card_inset + shift,
         object,
         source_text_start: None,
         image: image_placement,
     }
+}
+
+/// Move a block right in centered geometry, so it sits centered in the `body`
+/// cells after `inset`, and return how far it moved.
+///
+/// A table centers on its own width: `table` holds its rails' width and its
+/// flow, or no flow for a table too wide to show whole, which fills the body.
+/// Any other block centers on its own width or the prose width, whichever is
+/// wider, so its text keeps the prose column.
+fn center_block(
+    rows: &mut [PreparedRow],
+    image: Option<&mut ImagePlacement>,
+    (inset, body): (u32, u32),
+    table: Option<(u32, Option<&FlowTable>)>,
+    geometry: GeometryKey,
+) -> u32 {
+    if !geometry.centered {
+        return 0;
+    }
+    let prose = body.min(geometry.prose_width.clamp(1, 65535));
+    let extent = match table {
+        Some((rails, Some(flow))) if !flow.cut() => rails + flow.width(),
+        Some(_) => body,
+        None => rows
+            .iter()
+            .flat_map(|row| &row.runs)
+            .map(|run| run.x + run.width)
+            .chain(image.as_ref().map(|image| image.x + image.size.w))
+            .max()
+            .map_or(0, |end| end.saturating_sub(inset))
+            .max(prose),
+    };
+    let shift = body.saturating_sub(extent) / 2;
+    for row in rows.iter_mut() {
+        for run in &mut row.runs {
+            run.x += shift;
+        }
+        // A ground from the row's start still spans it.
+        if row.ground_x > 0 {
+            row.ground_x += shift;
+        }
+    }
+    if let Some(image) = image {
+        image.x += shift;
+    }
+    shift
 }
 
 /// Prepare an image block: rows for its image once its size is known, and

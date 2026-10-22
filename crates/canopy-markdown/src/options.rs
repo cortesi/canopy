@@ -68,6 +68,10 @@ pub struct MarkdownOptions {
     pub glyphs: GlyphPreset,
     /// Maximum prose width before wrapping, in terminal cells.
     pub prose_width: u32,
+    /// Center each Rendered block in the reader: prose as a column at the
+    /// prose width, a table on its own width, and other blocks on the wider of
+    /// the two. A block as wide as the reader fills it.
+    pub centered: bool,
     /// Largest accepted source, in UTF-8 bytes.
     pub source_limit: usize,
     /// Bounds on semantic construction and rich table adaptation.
@@ -126,6 +130,7 @@ impl Default for MarkdownOptions {
             line_numbers: LineNumbers::None,
             glyphs: GlyphPreset::Unicode,
             prose_width: 88,
+            centered: false,
             source_limit: DEFAULT_SOURCE_LIMIT,
             parse_limits: ParseLimits::default(),
             cache_limit: 32 * 1024 * 1024,

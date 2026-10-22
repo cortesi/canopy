@@ -519,6 +519,10 @@ impl FlowTable {
     pub fn widths(&self) -> &[u32] {
         &self.widths
     }
+    /// Width of the shown columns, separators included.
+    pub fn width(&self) -> u32 {
+        self.width
+    }
     /// Whether trailing columns are cut at the right margin.
     pub fn cut(&self) -> bool {
         self.cut

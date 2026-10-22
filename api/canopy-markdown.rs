@@ -267,6 +267,14 @@ impl Markdown {
     /// Extend or start rendered text selection at the reading position.
     pub fn select_text(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Center each Rendered block, as [`MarkdownOptions::centered`] says,
+    /// without resetting the document.
+    pub fn set_centered(
+        &mut self,
+        ctx: &mut dyn Context,
+        centered: bool,
+    ) -> canopy::error::Result<()>;
+
     /// Enter or leave the rendered object-navigation mode.
     pub fn set_mode(&mut self, ctx: &mut dyn Context, mode: Mode) -> canopy::error::Result<()>;
 
@@ -595,6 +603,10 @@ pub struct MarkdownOptions {
     pub glyphs: GlyphPreset,
     /// Maximum prose width before wrapping, in terminal cells.
     pub prose_width: u32,
+    /// Center each Rendered block in the reader: prose as a column at the
+    /// prose width, a table on its own width, and other blocks on the wider of
+    /// the two. A block as wide as the reader fills it.
+    pub centered: bool,
     /// Largest accepted source, in UTF-8 bytes.
     pub source_limit: usize,
     /// Bounds on semantic construction and rich table adaptation.
@@ -1716,6 +1728,8 @@ pub mod presentation {
         pub spacing: u8,
         /// Preferred maximum prose width; cards use the body width.
         pub prose_width: u32,
+        /// Whether each block centers in the body width.
+        pub centered: bool,
         /// Cumulative eligible code-payload bytes admitted for automatic syntax.
         pub syntax_limit: usize,
         /// Block mosaics that the terminal draws, which big headings draw with.

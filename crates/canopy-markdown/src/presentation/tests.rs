@@ -834,3 +834,57 @@ fn a_character_wider_than_the_line_takes_a_line_of_its_own() {
     assert_eq!(wrap_words("中文", 1), ["中", "文"]);
     assert_eq!(wrap_words("a 中b", 2), ["a", "中", "b"]);
 }
+
+#[test]
+fn centered_blocks_center_prose_as_a_column_and_tables_on_their_own_width() {
+    let text = "Some prose.\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n\
+                | one | two | three | four | five | six |\n| - | - | - | - | - | - |\n\
+                | a long first value | a long second value | a long third value | \
+                a long fourth value | a long fifth value | a long sixth value |\n\n\
+                ```\ncode\n```\n";
+    let layout = |centered: bool| {
+        PresentationSnapshot::prepare(
+            document(text),
+            GeometryKey {
+                // An inset of two, a body of a hundred, and the gutter.
+                width: 103,
+                spacing: 0,
+                prose_width: 40,
+                centered,
+                ..Default::default()
+            },
+            None,
+            &Supplied::default(),
+        )
+    };
+    let start = |p: &PresentationSnapshot, block: usize| p.blocks[block].rows[0].runs[0].x;
+    let plain = layout(false);
+    assert_eq!(start(&plain, 0), 2, "prose starts at the inset");
+    assert_eq!(plain.blocks[1].inset, 2, "a table starts at the inset");
+
+    let centered = layout(true);
+    assert_eq!(
+        start(&centered, 0),
+        2 + 30,
+        "prose centers as a column at the prose width"
+    );
+    let narrow = &centered.blocks[1];
+    let width = narrow.flow.as_ref().unwrap().width();
+    assert_eq!(
+        narrow.inset,
+        2 + (100 - width) / 2,
+        "a narrow table centers on its own width"
+    );
+    let wide = &centered.blocks[2];
+    let width = wide.flow.as_ref().unwrap().width();
+    assert_eq!(
+        (wide.inset, width),
+        (2, 100),
+        "a wide table flows into the whole body"
+    );
+    assert_eq!(
+        start(&centered, 3),
+        2 + 30,
+        "a short code block keeps the prose column"
+    );
+}
