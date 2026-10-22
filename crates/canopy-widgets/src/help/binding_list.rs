@@ -269,6 +269,15 @@ fn render_keys(render: &mut Render, key: &str, x: u32, y: u32, width: u32) -> Re
     Ok(())
 }
 
+/// Return each action of `rows` once, with the keys that share it joined,
+/// such as `j, down`, in sorted order.
+pub(super) fn grouped_keys(rows: &[BindingRow]) -> Vec<(String, String)> {
+    binding_groups(rows)
+        .into_iter()
+        .map(|group| (group.keys.join(KEY_SEPARATOR), group.description))
+        .collect()
+}
+
 /// Merge bindings that show the same action into groups, ordered by their
 /// first input.
 fn binding_groups(rows: &[BindingRow]) -> Vec<BindingGroup> {

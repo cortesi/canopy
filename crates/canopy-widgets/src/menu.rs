@@ -1,9 +1,11 @@
 //! A menu of keyed rows, chosen with the keyboard.
 //!
-//! Each row names one action: an accelerator key, a label, and a value at the
-//! right, such as a setting's current state. The arrows, `j` and `k`, the page
-//! keys, and Home and End move the selection, Enter or Space activates the
-//! selected row, a row's key activates that row, and Esc closes.
+//! Each row names one action: its key, a label, and a value at the right,
+//! such as a setting's current state. In a selectable menu, the arrows, `j`
+//! and `k`, the page keys, and Home and End move the selection, Enter or Space
+//! activates the selected row, a row's key activates that row, and Esc closes.
+//! A menu without selection only lists its rows, as the menu of a transient
+//! mode does while the mode waits for its key.
 //!
 //! [`Menu`] is the modal: it centres a titled frame over whatever it covers
 //! and holds a [`MenuList`] of rows. A host opens it with Canopy's modal, as
@@ -39,20 +41,20 @@ use crate::{
     row_cursor::{CursorMove, RowCursor},
 };
 
-/// Columns before the label: the key and a blank.
-const KEY_COLUMNS: u32 = 2;
 /// Columns of the mark gutter after a row, for a list that shows marks. `●`
 /// has ambiguous width, so the gutter keeps a blank cell after the mark for a
 /// font that draws it wide.
 const MARK_GUTTER: u32 = 2;
-/// Narrowest a menu's rows get, so a short menu still reads as a dialog.
+/// Narrowest a selectable menu's rows get, so a short menu still reads as a
+/// dialog.
 const MIN_WIDTH: u32 = 24;
 
 /// One row of a menu: what it shows.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MenuRow {
-    /// The accelerator, which activates the row.
-    pub key: Option<char>,
+    /// The key that activates the row, such as `c`, or the keys that share
+    /// it, such as `j, down`. Empty for none.
+    pub key: String,
     /// The label.
     pub label: String,
     /// The value at the right, such as a setting's current state.
@@ -65,11 +67,18 @@ pub struct MenuRow {
 }
 
 impl MenuRow {
-    /// Return a row with `key` and `label`, and no value.
+    /// Return a row with the accelerator `key` and `label`, and no value.
     #[must_use]
     pub fn new(key: Option<char>, label: impl Into<String>) -> Self {
+        Self::keyed(key.map_or_else(String::new, String::from), label)
+    }
+
+    /// Return a row that names its keys as `keys`, such as `ctrl+r` or
+    /// `j, down`, with `label`, and no value.
+    #[must_use]
+    pub fn keyed(keys: impl Into<String>, label: impl Into<String>) -> Self {
         Self {
-            key,
+            key: keys.into(),
             label: label.into(),
             ..Self::default()
         }
@@ -96,42 +105,67 @@ impl MenuRow {
         self
     }
 
-    /// Return the width that shows the whole row, with the mark gutter if
-    /// `marks` is set.
+    /// Return the width that shows the whole row in `layout`.
     #[must_use]
-    pub fn width(&self, marks: bool) -> u32 {
+    pub fn width(&self, layout: RowLayout) -> u32 {
         let value = text::width(&self.value);
         // A blank cell on each side of the value keeps it off the label and
         // off the end of the selection.
         let gap = if value > 0 { 2 } else { 1 };
-        KEY_COLUMNS
+        layout
+            .key_columns
             .saturating_add(text::width(&self.label))
             .saturating_add(value)
             .saturating_add(gap)
-            .saturating_add(if marks { MARK_GUTTER } else { 0 })
+            .saturating_add(if layout.marks { MARK_GUTTER } else { 0 })
     }
 }
 
-/// Draw `row` in `area`, one line, under the `menu` style layer.
+/// The columns that every row of one menu shares.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RowLayout {
+    /// Columns before the label: the widest key and a blank.
+    pub key_columns: u32,
+    /// Whether the rows keep a mark gutter at the right.
+    pub marks: bool,
+}
+
+impl RowLayout {
+    /// Return the layout that fits `rows`: a key column as wide as the widest
+    /// key, and a mark gutter if any row has a mark.
+    pub fn fit<'a>(rows: impl IntoIterator<Item = &'a MenuRow>) -> Self {
+        let mut layout = Self {
+            key_columns: 2,
+            marks: false,
+        };
+        for row in rows {
+            layout.key_columns = layout.key_columns.max(text::width(&row.key) + 1);
+            layout.marks |= !row.mark.is_empty();
+        }
+        layout
+    }
+}
+
+/// Draw `row` in `area`, one line in `layout`, under the `menu` style layer.
 ///
 /// `selected` draws the row selected. `edit`, if given, replaces the value
-/// with the text being typed and a cursor. `marks` keeps the mark gutter at the
-/// right, outside the selection, so a mark keeps its colour on a selected row.
+/// with the text being typed and a cursor. The mark gutter stays outside the
+/// selection, so a mark keeps its colour on a selected row.
 pub fn render_row(
     render: &mut Render,
     area: Rect,
     row: &MenuRow,
+    layout: RowLayout,
     selected: bool,
     edit: Option<&str>,
-    marks: bool,
 ) -> Result<()> {
     let x = area.tl.x;
     let y = area.tl.y;
-    let key = row.key.map_or_else(String::new, String::from);
-    render.text("row/key", Line::new(x, y, KEY_COLUMNS.min(area.w)), &key)?;
-    let body_x = x.saturating_add(KEY_COLUMNS);
-    let gutter = if marks { MARK_GUTTER } else { 0 };
-    let body_w = area.w.saturating_sub(KEY_COLUMNS + gutter);
+    let key_columns = layout.key_columns.min(area.w);
+    render.text("row/key", Line::new(x, y, key_columns), &row.key)?;
+    let body_x = x.saturating_add(key_columns);
+    let gutter = if layout.marks { MARK_GUTTER } else { 0 };
+    let body_w = area.w.saturating_sub(key_columns + gutter);
     let base = if selected {
         roles::selection(true)
     } else {
@@ -149,7 +183,10 @@ pub fn render_row(
     let room = body_w.saturating_sub(text::width(&row.label) + 2);
     let value = text::truncate_start(&value, room as usize).into_owned();
     let value_w = text::width(&value).min(room);
-    let label_w = body_w.saturating_sub(value_w + 2);
+    // A row without a value keeps one blank cell at the end of the selection,
+    // as MenuRow::width counts.
+    let gap = if value_w > 0 { 2 } else { 1 };
+    let label_w = body_w.saturating_sub(value_w + gap);
     render.text(base, Line::new(body_x, y, label_w), &row.label)?;
     let value_x = body_x + body_w.saturating_sub(value_w + 1);
     let value_style = match (selected, edit.is_some(), row.muted) {
@@ -159,13 +196,13 @@ pub fn render_row(
         (false, _, false) => "row/value",
     };
     render.text(value_style, Line::new(value_x, y, value_w), &value)?;
-    if marks {
+    if layout.marks {
         render.text(
             "row/mark",
             Line::new(
                 body_x + body_w,
                 y,
-                1.min(area.w.saturating_sub(KEY_COLUMNS)),
+                1.min(area.w.saturating_sub(key_columns)),
             ),
             row.mark,
         )?;
@@ -286,7 +323,8 @@ impl Menu {
             .list
             .ok_or_else(|| Error::Invalid("the menu is not mounted".into()))?;
         context.with_widget_mut(list, |list: &mut MenuList, _| {
-            list.set_items(items, selected, close);
+            list.set_items(items, Some(selected));
+            list.set_close(Some(close));
             Ok(())
         })
     }
@@ -318,7 +356,11 @@ impl Widget for Menu {
     }
 }
 
-/// The rows of a menu, which take its keys.
+/// The rows of a menu.
+///
+/// A selectable list takes the keyboard: it moves its selection, and
+/// activates rows. A list without selection takes no focus and no keys, and
+/// only shows its rows, in the same columns and styles.
 pub struct MenuList {
     /// The rows.
     items: Vec<MenuItem>,
@@ -326,43 +368,62 @@ pub struct MenuList {
     cursor: RowCursor,
     /// The call that closes the menu.
     close: Option<CommandCall>,
-    /// Whether the rows keep a mark gutter.
-    marks: bool,
+    /// The columns the rows share.
+    layout: RowLayout,
+    /// Whether the list has a selection and takes keys.
+    selectable: bool,
 }
 
 #[derive_commands]
 impl MenuList {
-    /// Construct an empty list.
+    /// Construct an empty, selectable list.
     #[must_use]
     pub fn new() -> Self {
         Self {
             items: Vec::new(),
             cursor: RowCursor::new(0),
             close: None,
-            marks: false,
+            layout: RowLayout::fit([]),
+            selectable: true,
         }
     }
 
-    /// Show `items`, with the row at `selected` selected, and close with
-    /// `close`.
-    pub fn set_items(&mut self, items: Vec<MenuItem>, selected: usize, close: CommandCall) {
-        self.marks = items.iter().any(|item| !item.row.mark.is_empty());
-        self.cursor = RowCursor::new(items.len());
-        self.cursor.set_index(selected);
-        self.items = items;
-        self.close = Some(close);
+    /// Return the list with a selection, or without one.
+    #[must_use]
+    pub const fn with_selection(mut self, selectable: bool) -> Self {
+        self.selectable = selectable;
+        self
     }
 
-    /// Return the index of the selected row, if there is one.
+    /// Show `items`, with the row at `selected` selected, or the first row.
+    pub fn set_items(&mut self, items: Vec<MenuItem>, selected: Option<usize>) {
+        self.layout = RowLayout::fit(items.iter().map(|item| &item.row));
+        self.cursor = RowCursor::new(items.len());
+        self.cursor.set_index(selected.unwrap_or(0));
+        self.items = items;
+    }
+
+    /// Show `rows`, which do nothing, as a list without selection does.
+    pub fn set_rows(&mut self, rows: Vec<MenuRow>) {
+        self.set_items(rows.into_iter().map(MenuItem::note).collect(), None);
+    }
+
+    /// Set the call that closes the menu: the list posts it after a row's
+    /// own call, and for Esc.
+    pub fn set_close(&mut self, close: Option<CommandCall>) {
+        self.close = close;
+    }
+
+    /// Return the index of the selected row, if the list has a selection.
     #[must_use]
     pub fn selected(&self) -> Option<usize> {
-        self.cursor.index()
+        self.cursor.index().filter(|_| self.selectable)
     }
 
     /// Activate the selected row: post its call, then the close call.
     #[command]
     pub fn activate(&mut self, context: &mut dyn Context) -> Result<()> {
-        match self.cursor.index() {
+        match self.selected() {
             Some(index) => self.activate_row(context, index),
             None => Ok(()),
         }
@@ -388,26 +449,29 @@ impl MenuList {
         self.cancel(context)
     }
 
-    /// Return the row whose accelerator `key` is, for a plain character.
+    /// Return the row whose accelerator `key` is, for a plain character, in
+    /// a selectable list.
     fn accelerated(&self, key: Key) -> Option<usize> {
         let key = key.normalize();
-        if key.mods.ctrl || key.mods.alt {
+        if !self.selectable || key.mods.ctrl || key.mods.alt {
             return None;
         }
         let KeyCode::Char(c) = key.key else {
             return None;
         };
-        self.items.iter().position(|item| item.row.key == Some(c))
+        let mut buffer = [0; 4];
+        let c: &str = c.encode_utf8(&mut buffer);
+        self.items.iter().position(|item| item.row.key == c)
     }
 
     /// Return the width that shows every row.
     fn natural_width(&self) -> u32 {
         self.items
             .iter()
-            .map(|item| item.row.width(self.marks))
+            .map(|item| item.row.width(self.layout))
             .max()
             .unwrap_or(0)
-            .max(MIN_WIDTH)
+            .max(if self.selectable { MIN_WIDTH } else { 0 })
     }
 }
 
@@ -491,7 +555,7 @@ impl Widget for MenuList {
     }
 
     fn accept_focus(&self, _context: &dyn ViewContext) -> bool {
-        true
+        self.selectable
     }
 
     fn key_outcome(&self, key: Key, _context: &dyn ViewContext) -> EventOutcome {
@@ -514,7 +578,7 @@ impl Widget for MenuList {
     }
 
     fn accepts_intent(&self, intent: &str, _context: &dyn ViewContext) -> bool {
-        !self.items.is_empty() && CursorMove::of(intent).is_some()
+        self.selectable && !self.items.is_empty() && CursorMove::of(intent).is_some()
     }
 
     fn on_intent(&mut self, intent: &str, context: &mut dyn Context) -> Result<EventOutcome> {
@@ -539,16 +603,16 @@ impl Widget for MenuList {
         if rect.w == 0 || rect.h == 0 {
             return Ok(());
         }
-        let selected = self.cursor.index();
+        let selected = self.selected();
         let end = rect.tl.y.saturating_add(rect.h);
         for ((y, index), item) in (rect.tl.y..end).zip(0..).zip(&self.items) {
             render_row(
                 render,
                 Rect::new(rect.tl.x, y, rect.w, 1),
                 &item.row,
+                self.layout,
                 selected == Some(index),
                 None,
-                self.marks,
             )?;
         }
         Ok(())
@@ -566,7 +630,7 @@ mod tests {
         input::key::Key, testing::harness::Harness,
     };
 
-    use super::{Menu, MenuItem, MenuList, MenuRow};
+    use super::{Menu, MenuItem, MenuList, MenuRow, RowLayout};
 
     /// Holds a menu, and records what its rows post.
     #[derive(Default)]
@@ -681,8 +745,25 @@ mod tests {
     #[test]
     fn a_row_measures_its_parts() {
         let row = MenuRow::new(Some('c'), "columns").with_value("...");
-        assert_eq!(row.width(false), 2 + 7 + 3 + 2);
-        assert_eq!(row.width(true), 2 + 7 + 3 + 2 + 2);
-        assert_eq!(MenuRow::new(None, "note").width(false), 2 + 4 + 1);
+        let plain = RowLayout::fit([&row]);
+        assert_eq!(row.width(plain), 2 + 7 + 3 + 2);
+        let marked = RowLayout {
+            marks: true,
+            ..plain
+        };
+        assert_eq!(row.width(marked), 2 + 7 + 3 + 2 + 2);
+        assert_eq!(MenuRow::new(None, "note").width(plain), 2 + 4 + 1);
+        let next = MenuRow::keyed("j, down", "next");
+        let wide = RowLayout::fit([&row, &next]);
+        assert_eq!(wide.key_columns, 8, "the widest key sets the column");
+    }
+
+    #[test]
+    fn a_list_without_selection_takes_no_keys() -> Result<()> {
+        let mut list = MenuList::new().with_selection(false);
+        list.set_rows(vec![MenuRow::keyed("f", "files")]);
+        assert_eq!(list.selected(), None);
+        assert_eq!(list.accelerated(Key::parse_spec("f")?), None);
+        Ok(())
     }
 }

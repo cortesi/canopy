@@ -1985,7 +1985,11 @@ impl MenuItem {
     pub const fn note(row: MenuRow) -> Self;
 }
 
-/// The rows of a menu, which take its keys.
+/// The rows of a menu.
+///
+/// A selectable list takes the keyboard: it moves its selection, and
+/// activates rows. A list without selection takes no focus and no keys, and
+/// only shows its rows, in the same columns and styles.
 #[derive(Default)]
 pub struct MenuList {/* private fields */}
 
@@ -1996,17 +2000,27 @@ impl MenuList {
     /// Close the menu by posting the close call.
     pub fn cancel(&mut self, context: &mut dyn Context) -> canopy::error::Result<()>;
 
-    /// Construct an empty list.
+    /// Construct an empty, selectable list.
     #[must_use]
     pub fn new() -> Self;
 
-    /// Return the index of the selected row, if there is one.
+    /// Return the index of the selected row, if the list has a selection.
     #[must_use]
     pub fn selected(&self) -> Option<usize>;
 
-    /// Show `items`, with the row at `selected` selected, and close with
-    /// `close`.
-    pub fn set_items(&mut self, items: Vec<MenuItem>, selected: usize, close: CommandCall);
+    /// Set the call that closes the menu: the list posts it after a row's
+    /// own call, and for Esc.
+    pub fn set_close(&mut self, close: Option<CommandCall>);
+
+    /// Show `items`, with the row at `selected` selected, or the first row.
+    pub fn set_items(&mut self, items: Vec<MenuItem>, selected: Option<usize>);
+
+    /// Show `rows`, which do nothing, as a list without selection does.
+    pub fn set_rows(&mut self, rows: Vec<MenuRow>);
+
+    /// Return the list with a selection, or without one.
+    #[must_use]
+    pub const fn with_selection(self, selectable: bool) -> Self;
 }
 
 impl MenuList {
@@ -2032,8 +2046,9 @@ impl Widget for MenuList {}
 /// One row of a menu: what it shows.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct MenuRow {
-    /// The accelerator, which activates the row.
-    pub key: Option<char>,
+    /// The key that activates the row, such as `c`, or the keys that share
+    /// it, such as `j, down`. Empty for none.
+    pub key: String,
     /// The label.
     pub label: String,
     /// The value at the right, such as a setting's current state.
@@ -2046,14 +2061,18 @@ pub struct MenuRow {
 }
 
 impl MenuRow {
-    /// Return a row with `key` and `label`, and no value.
+    /// Return a row that names its keys as `keys`, such as `ctrl+r` or
+    /// `j, down`, with `label`, and no value.
+    #[must_use]
+    pub fn keyed(keys: impl Into<String>, label: impl Into<String>) -> Self;
+
+    /// Return a row with the accelerator `key` and `label`, and no value.
     #[must_use]
     pub fn new(key: Option<char>, label: impl Into<String>) -> Self;
 
-    /// Return the width that shows the whole row, with the mark gutter if
-    /// `marks` is set.
+    /// Return the width that shows the whole row in `layout`.
     #[must_use]
-    pub fn width(&self, marks: bool) -> u32;
+    pub fn width(&self, layout: RowLayout) -> u32;
 
     /// Return the row with `mark` in its gutter.
     #[must_use]
@@ -4486,10 +4505,12 @@ pub mod menu {
     //! A modal menu of keyed rows, and the row drawing that every menu shares.
     //! A menu of keyed rows, chosen with the keyboard.
     //!
-    //! Each row names one action: an accelerator key, a label, and a value at the
-    //! right, such as a setting's current state. The arrows, `j` and `k`, the page
-    //! keys, and Home and End move the selection, Enter or Space activates the
-    //! selected row, a row's key activates that row, and Esc closes.
+    //! Each row names one action: its key, a label, and a value at the right,
+    //! such as a setting's current state. In a selectable menu, the arrows, `j`
+    //! and `k`, the page keys, and Home and End move the selection, Enter or Space
+    //! activates the selected row, a row's key activates that row, and Esc closes.
+    //! A menu without selection only lists its rows, as the menu of a transient
+    //! mode does while the mode waits for its key.
     //!
     //! [`Menu`] is the modal: it centres a titled frame over whatever it covers
     //! and holds a [`MenuList`] of rows. A host opens it with Canopy's modal, as
@@ -4503,18 +4524,33 @@ pub mod menu {
 
     pub use crate::{Menu, MenuItem, MenuList, MenuRow};
 
-    /// Draw `row` in `area`, one line, under the `menu` style layer.
+    /// The columns that every row of one menu shares.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct RowLayout {
+        /// Columns before the label: the widest key and a blank.
+        pub key_columns: u32,
+        /// Whether the rows keep a mark gutter at the right.
+        pub marks: bool,
+    }
+
+    impl RowLayout {
+        /// Return the layout that fits `rows`: a key column as wide as the widest
+        /// key, and a mark gutter if any row has a mark.
+        pub fn fit<'a>(rows: impl IntoIterator<Item = &'a MenuRow>) -> Self;
+    }
+
+    /// Draw `row` in `area`, one line in `layout`, under the `menu` style layer.
     ///
     /// `selected` draws the row selected. `edit`, if given, replaces the value
-    /// with the text being typed and a cursor. `marks` keeps the mark gutter at the
-    /// right, outside the selection, so a mark keeps its colour on a selected row.
+    /// with the text being typed and a cursor. The mark gutter stays outside the
+    /// selection, so a mark keeps its colour on a selected row.
     pub fn render_row(
         render: &mut Render<'_>,
         area: Rect,
         row: &MenuRow,
+        layout: RowLayout,
         selected: bool,
         edit: Option<&str>,
-        marks: bool,
     ) -> canopy::error::Result<()>;
 
     /// Install the styles of the `menu` layer, from the palette.

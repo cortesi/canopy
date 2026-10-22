@@ -17,6 +17,7 @@ use crate::inspector::Inspector;
 use crate::{
     Button, Container, KeyHint,
     help::{BindingList, Help, ModeHelp, Shown},
+    menu,
     notice_log::{self, NoticeLog},
     toast::ToastLayer,
 };
@@ -461,6 +462,8 @@ impl Register for Root {
         #[cfg(feature = "devtools")]
         Inspector::register(setup)?;
         Button::register(setup)?;
+        // A transient mode's menu takes the menu styles.
+        setup.widget_styles(menu::styles);
         register_help_bindings(setup)?;
         register_notice_bindings(setup)?;
         setup.register_mode_hook("root.mode_help", sync_mode_help);
@@ -1301,7 +1304,7 @@ mod tests {
             canopy.assert(screen:find("Default key") == nil, "the panel should omit other keys")
             -- The panel sits in the middle of the 60 by 14 screen, as every
             -- other modal panel does.
-            local panel = assert(canopy.node_info(assert(canopy.find_node("**/mode_bindings"))).rect)
+            local panel = assert(canopy.node_info(assert(canopy.find_node("**/mode_help/**/menu_list"))).rect)
             local middle_x = panel.x + panel.w / 2
             local middle_y = panel.y + panel.h / 2
             canopy.assert(math.abs(middle_x - 30) <= 1, "the panel should centre across: " .. middle_x)
