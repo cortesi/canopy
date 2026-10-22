@@ -364,14 +364,18 @@ impl Canopy {
             None => {}
         }
         self.run_state_hooks()?;
-        self.mount_pending()?;
+        let mut mounted = self.mount_pending()?;
         // A first poll during the sweep can record a notice, which its hooks
         // show in this frame.
         if self.state_hooks_pending() {
             self.run_state_hooks()?;
-            self.mount_pending()?;
+            mounted |= self.mount_pending()?;
         }
-        self.core.update_layout(screen_size)?;
+        // Only a change that invalidates layout moves geometry, so a frame
+        // that repaints alone keeps the views it has.
+        if mounted || self.core.changes.layout_pending() {
+            self.core.update_layout(screen_size)?;
+        }
         if self.run_on_start_hooks()? {
             self.mount_pending()?;
             self.core.update_layout(screen_size)?;
