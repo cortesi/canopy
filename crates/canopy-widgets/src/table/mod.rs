@@ -15,7 +15,6 @@ use canopy::{
     style::{Mix, Style, StyleRules, themes::Palette},
     text,
 };
-use unicode_segmentation::UnicodeSegmentation;
 
 mod flow;
 pub use flow::{FlowOptions, FlowTable};
@@ -708,7 +707,7 @@ pub(crate) fn display_control(c: char) -> bool {
 /// Measure the one-line representation, stopping at the supplied width cap.
 fn display_width(value: &str, cap: u32) -> u32 {
     let mut width = 0u32;
-    for g in value.graphemes(true) {
+    for g in text::graphemes(value) {
         width = width.saturating_add(flow::cells(g));
         if width >= cap {
             return cap;
@@ -1282,8 +1281,7 @@ impl PreparedTable {
         let cut = fragment
             .cut
             .then_some((fragment.bytes.end, ellipsis.as_str()));
-        let graphemes = value
-            .grapheme_indices(true)
+        let graphemes = text::grapheme_indices(value)
             .map(|(byte, g)| (fragment.bytes.start + byte, g))
             .chain(cut);
         for (byte, g) in graphemes {

@@ -14,7 +14,6 @@ use canopy::{
     style::{WidgetState, roles},
     text,
 };
-use unicode_segmentation::UnicodeSegmentation;
 
 use crate::border::BoxGlyphs;
 
@@ -384,7 +383,7 @@ impl Widget for Button {
 /// The range is a whole grapheme cluster, so a highlighted letter keeps any
 /// mark that belongs to it rather than being split from it.
 fn accelerator_range(label: &str, accelerator: char) -> Option<Range<usize>> {
-    label.grapheme_indices(true).find_map(|(offset, grapheme)| {
+    text::grapheme_indices(label).find_map(|(offset, grapheme)| {
         names_grapheme(grapheme, accelerator).then(|| offset..offset + grapheme.len())
     })
 }

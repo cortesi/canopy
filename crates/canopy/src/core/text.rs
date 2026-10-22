@@ -18,11 +18,11 @@ fn ascii_boundary(a: u8, b: u8) -> bool {
     a.is_ascii() && b.is_ascii() && !(a == b'\r' && b == b'\n')
 }
 
-/// The extended grapheme clusters of a string.
+/// The extended grapheme clusters of a string, from [`graphemes`].
 ///
 /// An ASCII byte before another ASCII byte is a cluster of its own, so only
 /// the stretches around other characters go through Unicode segmentation.
-pub(crate) struct Graphemes<'a> {
+pub struct Graphemes<'a> {
     /// Text after the current stretch.
     rest: &'a str,
     /// Clusters of the current stretch, which ends at a boundary.
@@ -59,11 +59,18 @@ impl<'a> Iterator for Graphemes<'a> {
 /// Split `s` into extended grapheme clusters, as
 /// `UnicodeSegmentation::graphemes(s, true)` does, but faster for text that
 /// is mostly ASCII.
-pub(crate) fn graphemes(s: &str) -> Graphemes<'_> {
+pub fn graphemes(s: &str) -> Graphemes<'_> {
     Graphemes {
         rest: s,
         stretch: "".graphemes(true),
     }
+}
+
+/// Split `s` into extended grapheme clusters with their byte offsets, as
+/// `UnicodeSegmentation::grapheme_indices(s, true)` does, but faster for
+/// text that is mostly ASCII.
+pub fn grapheme_indices(s: &str) -> impl Iterator<Item = (usize, &str)> {
+    graphemes(s).map(move |grapheme| (grapheme.as_ptr() as usize - s.as_ptr() as usize, grapheme))
 }
 
 /// Slice a string by display columns, returning the substring and its width.

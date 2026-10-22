@@ -14,7 +14,7 @@ use canopy::{
     layout::{CanvasContext, Layout, MeasureConstraints, Measurement, RevealAlign, ScrollOp, View},
     render::Render,
     runtime::NodeWakeHandle,
-    text::grapheme_width,
+    text::{self, grapheme_width},
     tree::{FocusDirection, FocusScope},
 };
 use unicode_segmentation::UnicodeSegmentation;
@@ -934,7 +934,7 @@ fn display_position(presentation: &PresentationSnapshot, position: ReadingPositi
             continue;
         };
         let mut x = run.x;
-        for (byte, grapheme) in run.text.grapheme_indices(true) {
+        for (byte, grapheme) in text::grapheme_indices(&run.text) {
             let offset = if run.text.len() == range.len() {
                 range.start + byte
             } else {

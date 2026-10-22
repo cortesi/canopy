@@ -1,6 +1,5 @@
 use canopy::{geom::Point, text};
 use icu_segmenter::{LineSegmenter, LineSegmenterBorrowed, options::LineBreakOptions};
-use unicode_segmentation::UnicodeSegmentation;
 
 use super::WrapMode;
 use crate::text_buffer::{LineChange, TextBuffer, TextPosition};
@@ -415,7 +414,7 @@ pub fn layout_line(text: &str, wrap: Wrap) -> LineLayout {
     // Whether the last grapheme hangs past the end of its row.
     let mut hanging = false;
 
-    for (byte, grapheme) in text.grapheme_indices(true) {
+    for (byte, grapheme) in text::grapheme_indices(text) {
         let width = text::cell_width(grapheme, next.col, wrap.tab_stop);
         let blank = is_blank(grapheme);
         if let Some(breaks) = breaks.as_mut() {
@@ -626,11 +625,11 @@ mod tests {
                 let row: String = chars[segment.start_char..segment.end_char].iter().collect();
                 let trimmed = row.trim_end_matches([' ', '\t']);
                 let mut col = segment.start_col;
-                for grapheme in trimmed.graphemes(true) {
+                for grapheme in text::graphemes(trimmed) {
                     col += text::cell_width(grapheme, col, 4);
                 }
                 prop_assert!(
-                    col - segment.start_col <= width || trimmed.graphemes(true).count() == 1,
+                    col - segment.start_col <= width || text::graphemes(trimmed).count() == 1,
                     "row {row:?} is too wide for {width}",
                 );
             }
@@ -645,7 +644,7 @@ mod tests {
             let mut cache = LayoutCache::new();
             cache.sync(&mut buffer, soft(width));
             let mut column = 0;
-            for grapheme in iter::once("").chain(text.graphemes(true)) {
+            for grapheme in iter::once("").chain(text::graphemes(&text)) {
                 column += grapheme.chars().count();
                 let position = TextPosition::new(0, column);
                 let cached = cache.point_for_position(&buffer, position);

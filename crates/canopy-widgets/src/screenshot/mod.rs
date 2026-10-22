@@ -20,7 +20,6 @@ use canopy::{
 };
 use fontdue::{Font, FontSettings, Metrics};
 use image::{ImageFormat, RgbImage};
-use unicode_segmentation::UnicodeSegmentation;
 
 /// The faces of the font of screenshots, JetBrains Mono, under the SIL Open
 /// Font License: regular, bold, italic, and bold italic.
@@ -199,7 +198,7 @@ impl Screenshot {
                 } else {
                     style.fg
                 };
-                for grapheme in run.text.graphemes(true) {
+                for grapheme in text::graphemes(&run.text) {
                     let width = text::grapheme_width(grapheme).max(1) as u32;
                     if column >= end {
                         break;

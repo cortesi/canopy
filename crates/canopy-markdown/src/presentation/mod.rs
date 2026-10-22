@@ -35,7 +35,6 @@ use canopy_widgets::{
     },
 };
 use image::RgbaImage;
-use unicode_segmentation::UnicodeSegmentation;
 
 use crate::document::{
     AlertTone, Alignment, Block, BlockKind, CodeBlock, DocumentSnapshot, EmbedBlock, InlineRole,
@@ -741,7 +740,7 @@ impl PresentationSnapshot {
                 continue;
             };
             let mut x = run.x;
-            for (byte, g) in run.text.grapheme_indices(true) {
+            for (byte, g) in text::grapheme_indices(&run.text) {
                 let width = text::grapheme_width(g) as u32;
                 // Sanitized control glyphs may have a different byte length.
                 let offset = if run.text.len() == range.len() {
@@ -860,7 +859,7 @@ impl PresentationSnapshot {
                     &text_bg,
                 );
                 let mut x = run.x;
-                for (byte, g) in run.text.grapheme_indices(true) {
+                for (byte, g) in text::grapheme_indices(&run.text) {
                     let width = text::grapheme_width(g) as u32;
                     let area = Rect::new(x, y, width.max(1), 1);
                     if !visible.contains_rect(area) {
@@ -1842,8 +1841,7 @@ impl Prefix {
             .parts
             .iter()
             .map(|(text, style)| {
-                let blanked = text
-                    .graphemes(true)
+                let blanked = text::graphemes(text)
                     .map(|g| {
                         if matches!(g, "│" | "|") {
                             g.to_owned()
@@ -2120,7 +2118,7 @@ fn decoration(
     glyphs: GlyphPreset,
 ) {
     let mut col = 0;
-    for g in value.graphemes(true) {
+    for g in text::graphemes(value) {
         let safe = safe(g, glyphs, col);
         let w = text::width(&safe);
         if col + w > budget {
@@ -2171,7 +2169,7 @@ fn wrap(
     spans.sort_by_key(|(_, span)| span.range.start);
     let mut next_span = 0;
     let mut active = Vec::new();
-    for (offset, g) in value.grapheme_indices(true) {
+    for (offset, g) in text::grapheme_indices(value) {
         if rows.len() >= MAX_PREPARED_ROWS - 1 {
             row = make_row();
             decoration(
@@ -2299,14 +2297,14 @@ fn clipped(
         role,
         glyphs,
     } = layout;
-    let total = value.graphemes(true).fold(0u32, |column, g| {
+    let total = text::graphemes(value).fold(0u32, |column, g| {
         column.saturating_add(text::width(&safe(g, glyphs, column)))
     });
     let clipped = total > budget;
     let limit = budget.saturating_sub(u32::from(clipped));
     let mut column = 0;
     let mut chars = 0;
-    for (byte, g) in value.grapheme_indices(true) {
+    for (byte, g) in text::grapheme_indices(value) {
         let safe = safe(g, glyphs, column);
         let width = text::width(&safe);
         if column + width > limit {

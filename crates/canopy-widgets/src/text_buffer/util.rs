@@ -1,4 +1,4 @@
-use unicode_segmentation::UnicodeSegmentation;
+use canopy::text;
 
 /// Replace newline characters with spaces for single-line text.
 pub fn single_line(text: &str) -> String {
@@ -9,7 +9,7 @@ pub fn single_line(text: &str) -> String {
 pub fn prev_grapheme_boundary(line: &str, column: usize) -> usize {
     let mut previous = 0usize;
     let mut count = 0usize;
-    for grapheme in line.graphemes(true) {
+    for grapheme in text::graphemes(line) {
         if count >= column {
             break;
         }
@@ -23,7 +23,7 @@ pub fn prev_grapheme_boundary(line: &str, column: usize) -> usize {
 /// itself.
 pub fn next_grapheme_boundary(line: &str, column: usize) -> usize {
     let mut count = 0usize;
-    for grapheme in line.graphemes(true) {
+    for grapheme in text::graphemes(line) {
         let next = count.saturating_add(grapheme.chars().count());
         if column < next {
             return next;

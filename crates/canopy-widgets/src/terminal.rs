@@ -25,7 +25,6 @@ use itty_core::{
     inspect::{StyledRunPublic, TerminalState},
     key::{Key as IttyKey, KeyCode as IttyKeyCode, Modifiers as IttyModifiers},
 };
-use unicode_segmentation::UnicodeSegmentation;
 
 use crate::click::ClickTracker;
 
@@ -286,8 +285,7 @@ impl Terminal {
         };
 
         let mut column = 0;
-        let spans: Vec<_> = line
-            .graphemes(true)
+        let spans: Vec<_> = text::graphemes(&line)
             .map(|grapheme| {
                 let start = column;
                 column += text::grapheme_width(grapheme);
@@ -844,7 +842,7 @@ fn render_run(
         1,
     );
     let mut col = run.start_col;
-    for grapheme in run.text.graphemes(true) {
+    for grapheme in text::graphemes(&run.text) {
         let width = text::grapheme_width(grapheme);
         let style = if selection_contains(selection, row_idx, col, display_offset) {
             &selected

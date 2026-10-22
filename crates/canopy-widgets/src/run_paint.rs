@@ -13,9 +13,8 @@ use canopy::{
     geom::{Point, Rect},
     render::Render,
     style::Style,
-    text::{grapheme_width, tab_width},
+    text::{self, grapheme_width, tab_width},
 };
-use unicode_segmentation::UnicodeSegmentation;
 
 /// Convert a `usize` cell count to the coordinate type, saturating.
 pub fn column(value: usize) -> u32 {
@@ -55,7 +54,7 @@ pub fn paint_run(
     let mut tab_col = tab_col;
     let mut screen_col = screen_col;
     let mut char_index = start_char;
-    for grapheme in text.graphemes(true) {
+    for grapheme in text::graphemes(text) {
         let chars = grapheme.chars().count();
         let g_start = char_index;
         let g_end = char_index.saturating_add(chars);

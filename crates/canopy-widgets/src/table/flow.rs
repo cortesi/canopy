@@ -164,7 +164,7 @@ pub(super) fn measure(value: &str) -> Measure {
     };
     let (mut line, mut gap, mut words) = (0u32, 0u32, 0usize);
     let mut word: Option<(usize, u32)> = None;
-    for (i, g) in value[..end].grapheme_indices(true) {
+    for (i, g) in text::grapheme_indices(&value[..end]) {
         match g {
             "\n" | "\r" | "\r\n" => {
                 close(&mut m, &mut word, i, &mut gap);
@@ -245,7 +245,7 @@ pub(super) fn wrap(value: &str, m: &Measure, width: u32, lines: u32) -> Vec<Frag
                     width: 0,
                     cut: false,
                 };
-                for (i, g) in value[bytes.clone()].grapheme_indices(true) {
+                for (i, g) in text::grapheme_indices(&value[bytes.clone()]) {
                     let at = bytes.start + i;
                     let gw = cells(g);
                     if piece.width + gw > width && piece.width > 0 {
@@ -613,7 +613,7 @@ impl FlowTable {
                 let padding = self.data.columns[column].alignment.padding(width, used);
                 let base = render.resolve_style(path);
                 let mut x = start + padding;
-                for (i, g) in cell.text[fragment.bytes.clone()].grapheme_indices(true) {
+                for (i, g) in text::grapheme_indices(&cell.text[fragment.bytes.clone()]) {
                     let byte = fragment.bytes.start + i;
                     let w = cells(g);
                     if visible(x, w) {

@@ -4006,6 +4006,8 @@ pub mod render {
         pub fn text(&mut self, style: &str, l: Line, txt: &str) -> crate::error::Result<()>;
     }
 
+    impl !Sync for Render {}
+
     /// Limits for a materialized visible render target.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub struct RenderLimits {
@@ -5738,6 +5740,16 @@ pub mod terminal {
 pub mod text {
     //! Text utilities.
 
+    /// The extended grapheme clusters of a string, from [`graphemes`].
+    ///
+    /// An ASCII byte before another ASCII byte is a cluster of its own, so only
+    /// the stretches around other characters go through Unicode segmentation.
+    pub struct Graphemes<'a> {/* private fields */}
+
+    impl<'a> Iterator for Graphemes<'a> {
+        type Item = &'a str;
+    }
+
     /// Which end of a string a truncation drops when it does not fit.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub enum Truncate {
@@ -5760,9 +5772,19 @@ pub mod text {
     /// Expand tabs into spaces using the configured tab stop.
     pub fn expand_tabs(s: &str, tab_stop: usize) -> Cow<'_, str>;
 
+    /// Split `s` into extended grapheme clusters with their byte offsets, as
+    /// `UnicodeSegmentation::grapheme_indices(s, true)` does, but faster for
+    /// text that is mostly ASCII.
+    pub fn grapheme_indices(s: &str) -> impl Iterator<Item = (usize, &str)>;
+
     /// Return the display width of a grapheme cluster, capped at terminal cell
     /// widths.
     pub fn grapheme_width(grapheme: &str) -> usize;
+
+    /// Split `s` into extended grapheme clusters, as
+    /// `UnicodeSegmentation::graphemes(s, true)` does, but faster for text that
+    /// is mostly ASCII.
+    pub fn graphemes(s: &str) -> Graphemes<'_>;
 
     /// Slice a string by display columns, returning the substring and its width.
     pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize);

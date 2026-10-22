@@ -5,7 +5,6 @@ use std::{
 
 use canopy::text;
 use ropey::Rope;
-use unicode_segmentation::UnicodeSegmentation;
 
 use super::{
     Selection, TextPosition, TextRange,
@@ -528,7 +527,7 @@ fn advance_position(start: TextPosition, text: &str) -> TextPosition {
 fn column_for_char(line: &str, column: usize, tab_stop: usize) -> usize {
     let mut col = 0usize;
     let mut consumed = 0usize;
-    for grapheme in line.graphemes(true) {
+    for grapheme in text::graphemes(line) {
         let grapheme_chars = grapheme.chars().count();
         if consumed >= column {
             break;
@@ -544,7 +543,7 @@ fn column_for_char(line: &str, column: usize, tab_stop: usize) -> usize {
 fn char_for_column(line: &str, column: usize, tab_stop: usize) -> usize {
     let mut col = 0usize;
     let mut chars = 0usize;
-    for grapheme in line.graphemes(true) {
+    for grapheme in text::graphemes(line) {
         let width = text::cell_width(grapheme, col, tab_stop);
         if col + width > column {
             break;
