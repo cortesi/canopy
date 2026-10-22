@@ -34,7 +34,7 @@ mod tests {
             if file_type.is_dir() {
                 if matches!(
                     entry.file_name().to_str(),
-                    Some(".git" | ".cargo" | "target" | "tmp")
+                    Some(".git" | ".cargo" | ".claude" | "target" | "tmp")
                 ) {
                     continue;
                 }

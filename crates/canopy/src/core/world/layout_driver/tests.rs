@@ -1342,3 +1342,63 @@ fn refreshed_base_must_remain_valid_after_parent_constraints() -> Result<()> {
     assert!(core.nodes[node].layout_dirty);
     Ok(())
 }
+
+/// Create a detached leaf that fills what it is offered, and measures
+/// `natural` cells wide under an unbounded width.
+fn natural_leaf(core: &mut Core, natural: u32) -> Result<NodeId> {
+    let (widget, _) = TestWidget::new(move |c| {
+        let width = match c.width {
+            Constraint::Exact(n) | Constraint::AtMost(n) => n,
+            Constraint::Unbounded => natural,
+        };
+        c.clamp(Size::new(width, 1))
+    });
+    let node = core.create_detached(widget)?;
+    core.set_layout_override(node, Layout::fill().into())?;
+    Ok(node)
+}
+
+/// Lay out a leaf of `natural` width in a 40-cell parent of `direction` that
+/// centers natural widths, and return the leaf's horizontal span.
+fn centered_span(direction: Direction, natural: u32) -> Result<(u32, u32)> {
+    let mut core = Core::new();
+    let parent = wrap_node(&mut core)?;
+    let child = natural_leaf(&mut core, natural)?;
+    core.set_children(parent, vec![child])?;
+    attach_root_child(&mut core, parent)?;
+    core.set_layout_of(
+        parent,
+        Layout::fill().direction(direction).center_natural(true),
+    )?;
+    core.update_layout(Size::new(40, 5))?;
+    let rect = core.nodes[child].rect;
+    Ok((rect.tl.x, rect.w))
+}
+
+#[test]
+fn center_natural_starts_a_child_where_its_natural_width_centers() -> Result<()> {
+    for direction in [Direction::Column, Direction::Stack] {
+        assert_eq!(
+            centered_span(direction, 10)?,
+            (15, 25),
+            "{direction:?}: the child starts centered and reaches the end"
+        );
+        assert_eq!(
+            centered_span(direction, 0)?,
+            (0, 40),
+            "{direction:?}: a child without a natural width fills"
+        );
+        assert_eq!(
+            centered_span(direction, 50)?,
+            (0, 40),
+            "{direction:?}: a child wider than the parent fills"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn a_row_rejects_center_natural() {
+    assert!(Layout::row().center_natural(true).validate().is_err());
+    assert!(Layout::column().center_natural(true).validate().is_ok());
+}

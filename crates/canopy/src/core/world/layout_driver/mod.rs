@@ -529,13 +529,23 @@ impl<'a> LayoutPass<'a> {
                 // Stack: all children get full content area, positioned
                 // according to alignment
                 for child in &children {
+                    // A child that centers its natural width starts at its
+                    // offset and takes the rest of the width.
+                    let natural = if layout.center_natural {
+                        Some(self.natural_offset(*child, content)?)
+                    } else {
+                        None
+                    };
+                    let available = Size::new(content.w - natural.unwrap_or(0), content.h);
                     // First, layout the child to determine its size
                     let child_size =
-                        self.layout_node(*child, content, parent_overflow, Some(content.w))?;
+                        self.layout_node(*child, available, parent_overflow, Some(content.w))?;
 
                     // Then apply alignment to position the child within content
                     // area
-                    let offset_x = align_offset(child_size.w, content.w, layout.align_horizontal);
+                    let offset_x = natural.unwrap_or_else(|| {
+                        align_offset(child_size.w, content.w, layout.align_horizontal)
+                    });
                     let offset_y = align_offset(child_size.h, content.h, layout.align_vertical);
                     self.set_node_position(
                         *child,
@@ -597,6 +607,7 @@ impl<'a> LayoutPass<'a> {
 
         let mut flex_idx = 0usize;
         let mut actual_sizes = Vec::with_capacity(children.len());
+        let mut natural_offsets = Vec::with_capacity(children.len());
         for (i, child) in children.iter().enumerate() {
             let child_layout = self.node_layout_snapshot(*child)?.0;
 
@@ -609,11 +620,20 @@ impl<'a> LayoutPass<'a> {
                 Sizing::Measure => layout.direction.main_size(pre_sizes[i]),
             };
 
-            let child_available = layout
+            let mut child_available = layout
                 .direction
                 .size_from_main_cross(main, layout.direction.cross_size(content));
+            // Only a column centers natural widths, across its cross axis.
+            let natural = if layout.center_natural {
+                let offset = self.natural_offset(*child, child_available)?;
+                child_available.w -= offset;
+                Some(offset)
+            } else {
+                None
+            };
             let actual = self.layout_node(*child, child_available, parent_overflow, budget)?;
             actual_sizes.push(actual);
+            natural_offsets.push(natural);
         }
 
         let children_main = actual_sizes.iter().fold(0u32, |total, size| {
@@ -624,12 +644,14 @@ impl<'a> LayoutPass<'a> {
         let available_cross = layout.direction.cross_size(content);
         let mut pos_main = align_offset(group_main, available_main, main_alignment(layout));
 
-        for (child, actual) in children.iter().zip(actual_sizes) {
-            let cross = align_offset(
-                layout.direction.cross_size(actual),
-                available_cross,
-                cross_alignment(layout),
-            );
+        for ((child, actual), natural) in children.iter().zip(actual_sizes).zip(natural_offsets) {
+            let cross = natural.unwrap_or_else(|| {
+                align_offset(
+                    layout.direction.cross_size(actual),
+                    available_cross,
+                    cross_alignment(layout),
+                )
+            });
             let position = match layout.direction {
                 LayoutDirection::Row => Point {
                     x: pos_main,
@@ -647,6 +669,25 @@ impl<'a> LayoutPass<'a> {
                 .saturating_add(layout.gap);
         }
         Ok(())
+    }
+
+    /// Return the offset that centers `child`'s natural width in `available`.
+    ///
+    /// The natural width is the child's outer width under an unbounded width
+    /// and the available height. A child that measures zero, or at least the
+    /// available width, takes no offset.
+    fn natural_offset(&mut self, child: NodeId, available: Size) -> Result<u32> {
+        let layout = self.node_layout_snapshot(child)?.0;
+        let constraints = MeasureConstraints::new(
+            Constraint::Unbounded,
+            Constraint::Exact(available.h.saturating_sub(layout.padding.vertical())),
+        );
+        let content = self.measure_content(child, layout, constraints, available)?;
+        if content.w == 0 {
+            return Ok(0);
+        }
+        let natural = content.w.saturating_add(layout.padding.horizontal());
+        Ok(available.w.saturating_sub(natural) / 2)
     }
 
     /// Set a node's position within its parent's content area.

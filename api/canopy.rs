@@ -3279,6 +3279,16 @@ pub mod layout {
         /// For columns this aligns the complete child group on the main axis. For
         /// rows it aligns each child on the cross axis. Stacks align each child.
         pub align_vertical: Align,
+        /// Start each child where its natural width would sit centered, and
+        /// extend it to the end of the content area.
+        ///
+        /// A child's natural width is its measured width under an unbounded
+        /// width. Content at the child's left edge then reads centered, while the
+        /// child still reaches the right edge of the content area, where its
+        /// scrollbar sits. A child that measures zero, which has no natural
+        /// width, and a child at least as wide as the content area fill it. This
+        /// replaces `align_horizontal` in columns and stacks, and a row rejects it.
+        pub center_natural: bool,
     }
 
     impl Layout {
@@ -3293,6 +3303,11 @@ pub mod layout {
         /// Set vertical alignment of children within content area.
         #[must_use]
         pub fn align_vertical(self, align: Align) -> Self;
+
+        /// Set whether each child starts where its natural width would sit
+        /// centered, and extends to the end, as the field of that name says.
+        #[must_use]
+        pub fn center_natural(self, center: bool) -> Self;
 
         /// Column layout with measured sizing on both axes.
         pub fn column() -> Self;
@@ -3408,6 +3423,8 @@ pub mod layout {
         pub align_horizontal: Option<Align>,
         /// Override for [`Layout::align_vertical`].
         pub align_vertical: Option<Align>,
+        /// Override for [`Layout::center_natural`].
+        pub center_natural: Option<bool>,
     }
 
     impl LayoutOverride {
@@ -3465,6 +3482,10 @@ pub mod layout {
             /// Padding axis name.
             axis: &'static str,
         },
+        /// A row centers its children's natural widths, which only a column or a
+        /// stack can.
+        #[error("a row cannot center its children's natural widths")]
+        CenterNaturalRow,
         /// A fraction bound lies outside `(0, 1]`.
         #[error("{axis} fraction {numerator}/{denominator} must lie in (0, 1]")]
         InvalidFraction {

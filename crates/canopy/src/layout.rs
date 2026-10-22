@@ -97,6 +97,10 @@ pub enum LayoutValidationError {
         /// Padding axis name.
         axis: &'static str,
     },
+    /// A row centers its children's natural widths, which only a column or a
+    /// stack can.
+    #[error("a row cannot center its children's natural widths")]
+    CenterNaturalRow,
     /// A fraction bound lies outside `(0, 1]`.
     #[error("{axis} fraction {numerator}/{denominator} must lie in (0, 1]")]
     InvalidFraction {
@@ -268,6 +272,17 @@ pub struct Layout {
     /// For columns this aligns the complete child group on the main axis. For
     /// rows it aligns each child on the cross axis. Stacks align each child.
     pub align_vertical: Align,
+
+    /// Start each child where its natural width would sit centered, and
+    /// extend it to the end of the content area.
+    ///
+    /// A child's natural width is its measured width under an unbounded
+    /// width. Content at the child's left edge then reads centered, while the
+    /// child still reaches the right edge of the content area, where its
+    /// scrollbar sits. A child that measures zero, which has no natural
+    /// width, and a child at least as wide as the content area fill it. This
+    /// replaces `align_horizontal` in columns and stacks, and a row rejects it.
+    pub center_natural: bool,
 }
 
 /// Persistent parent constraints applied after the widget's base layout.
@@ -303,6 +318,8 @@ pub struct LayoutOverride {
     pub align_horizontal: Option<Align>,
     /// Override for [`Layout::align_vertical`].
     pub align_vertical: Option<Align>,
+    /// Override for [`Layout::center_natural`].
+    pub center_natural: Option<bool>,
 }
 
 impl LayoutOverride {
@@ -356,6 +373,9 @@ impl LayoutOverride {
         }
         if let Some(value) = self.align_vertical {
             layout.align_vertical = value;
+        }
+        if let Some(value) = self.center_natural {
+            layout.center_natural = value;
         }
         layout.validate()?;
         Ok(layout)
@@ -411,6 +431,7 @@ impl From<Layout> for LayoutOverride {
             gap: Some(layout.gap),
             align_horizontal: Some(layout.align_horizontal),
             align_vertical: Some(layout.align_vertical),
+            center_natural: Some(layout.center_natural),
         }
     }
 }
@@ -439,6 +460,7 @@ impl Layout {
             gap: 0,
             align_horizontal: Align::Start,
             align_vertical: Align::Start,
+            center_natural: false,
         }
     }
 
@@ -572,6 +594,14 @@ impl Layout {
         self
     }
 
+    /// Set whether each child starts where its natural width would sit
+    /// centered, and extends to the end, as the field of that name says.
+    #[must_use]
+    pub fn center_natural(mut self, center: bool) -> Self {
+        self.center_natural = center;
+        self
+    }
+
     /// Center children both horizontally and vertically.
     #[must_use]
     pub fn align_center(self) -> Self {
@@ -609,6 +639,9 @@ impl Layout {
         validate_padding("horizontal", self.padding.left, self.padding.right)?;
         validate_padding("vertical", self.padding.top, self.padding.bottom)?;
         validate_fraction("width", self.max_width_fraction)?;
+        if self.center_natural && self.direction == Direction::Row {
+            return Err(LayoutValidationError::CenterNaturalRow);
+        }
         Ok(())
     }
 }

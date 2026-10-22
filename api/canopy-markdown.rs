@@ -176,10 +176,6 @@ impl Markdown {
     /// Capture the current logical viewport anchor.
     pub fn position(&self, ctx: &dyn ViewContext) -> canopy::error::Result<ReaderPosition>;
 
-    /// Return the width that Rendered prose reads at, with its inset and the
-    /// scrollbar gutter. A wider reader leaves the rest blank at the right.
-    pub fn reading_width(&self) -> u32;
-
     /// Whether the active view has caught up with accepted input and requested
     /// geometry.
     pub fn ready(&self) -> bool;

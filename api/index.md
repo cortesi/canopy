@@ -34,7 +34,7 @@ Canopy: A terminal UI library.
 - Workspace dependencies: canopy-derive, canopy-geom
 - Workspace dependents: canopy (dev), canopy-derive (dev), canopy-markdown, canopy-mcp, canopy-widgets, canopyctl, gyms, hello, mosaic-score, todo
 - Unnameable: crate::core::commands::sealed::Inject, crate::core::context::sealed::Context, crate::core::context::sealed::ViewContext
-- Items: 728
+- Items: 729
 - Exposes: canopy-geom, futures-channel, ruau, ruau-declaration, schemars, serde_core, serde_json
 
 ## canopy-mcp
@@ -98,7 +98,7 @@ Interactive Markdown reading and exact source viewing for Canopy.
 - Declared features: default, syntax
 - Workspace dependencies: canopy, canopy-widgets, canopy-xmark
 - Workspace dependents: gyms
-- Items: 316
+- Items: 315
 - Exposes: canopy, canopy-widgets, canopy-xmark, image, url
 
 ## hello

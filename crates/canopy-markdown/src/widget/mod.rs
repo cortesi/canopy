@@ -21,7 +21,10 @@ use canopy::{
         BindingAction, BindingOptions, BindingPhase, BindingTier, Event, IntentName, IntentSpec,
         NavIntent, key::Key, mouse,
     },
-    layout::{Direction, Edges, Layout, RevealAlign, ScrollOp},
+    layout::{
+        Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement, RevealAlign,
+        ScrollOp,
+    },
     render::Render,
     runtime::{NodeWakeHandle, NoticePost, PollLifetime, WidgetSemantics},
     status::StatusItem,
@@ -497,11 +500,6 @@ impl Markdown {
         }
         self.schedule(ctx, true)?;
         Ok(self.store.snapshot().epoch)
-    }
-    /// Return the width that Rendered prose reads at, with its inset and the
-    /// scrollbar gutter. A wider reader leaves the rest blank at the right.
-    pub fn reading_width(&self) -> u32 {
-        presentation::reading_width(self.options.prose_width)
     }
     /// The presentation currently taking input.
     #[command]
@@ -2474,6 +2472,22 @@ impl Widget for Markdown {
     }
     fn layout(&self) -> Layout {
         Layout::fill().direction(Direction::Column)
+    }
+    /// Under an unbounded width, Rendered measures the width its prose reads
+    /// at, with its inset and the scrollbar gutter. A wider reader leaves the
+    /// rest blank at the right.
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        if c.width != Constraint::Unbounded || self.active != ViewType::Rendered {
+            return c.wrap();
+        }
+        let height = match c.height {
+            Constraint::Exact(height) | Constraint::AtMost(height) => height,
+            Constraint::Unbounded => 1,
+        };
+        c.clamp(Size::new(
+            presentation::reading_width(self.options.prose_width),
+            height,
+        ))
     }
     fn accept_focus(&self, _: &dyn ViewContext) -> bool {
         true

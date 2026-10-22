@@ -364,6 +364,14 @@ taking the smaller, and yields to `min_width`. A measurement without a width
 bound reports the child's natural width, and the fraction applies once the
 parent has a finite allocation.
 
+`Layout::center_natural()` centers the children of a column or a stack, and
+keeps their full extent to the right. The parent measures each child under an
+unbounded width, which gives the child's natural width. The child starts where
+that width would sit centered, and extends to the end of the content area.
+Content at its left edge then reads centered, and its scrollbar stays at the
+parent's right edge. A child that measures zero has no natural width and fills.
+A row rejects the setting.
+
 Measurement is an infallible widget hook. A widget returns a fixed content size
 or asks layout to wrap visible children. Layout may measure a widget several
 times in one pass.
