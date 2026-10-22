@@ -147,8 +147,8 @@ fn input_latency() -> Result<()> {
         .and_then(|rounds| rounds.parse().ok())
         .unwrap_or(1);
     println!(
-        "{:<10} {:>6} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9} {:>8}",
-        "scenario", "keys", "mean", "p50", "p95", "max", "emit", "frames", "bytes"
+        "{:<10} {:>6} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9} {:>8} {:>8}",
+        "scenario", "keys", "mean", "p50", "p95", "max", "emit", "frames", "bytes", "start"
     );
     for (name, demo, script) in scenarios() {
         if only
@@ -161,8 +161,10 @@ fn input_latency() -> Result<()> {
         let mut totals = Vec::new();
         let mut emits = Duration::ZERO;
         let mut frames = 0;
+        let mut starts = Duration::ZERO;
         // Each round presses the script in a fresh app.
         for _ in 0..rounds {
+            let began = Instant::now();
             let mut canopy = demo.build(false)?;
             // A still clock keeps timed work out of the frames, so they
             // repeat.
@@ -170,6 +172,7 @@ fn input_latency() -> Result<()> {
             canopy.set_screen_size(SCREEN)?;
             canopy.turn(TurnInput::Prepare)?;
             canopy.emit_for_testing(&mut Counting::default())?;
+            starts += began.elapsed();
             for key in &script {
                 let began = Instant::now();
                 let outcome = canopy.turn(TurnInput::Events(vec![Event::Key(*key)]))?;
@@ -186,9 +189,10 @@ fn input_latency() -> Result<()> {
         let presses = totals.len();
         let (mean, p50, p95, max) = stats(&mut totals);
         println!(
-            "{name:<10} {presses:>6} {mean:>9.1} {p50:>9.1} {p95:>9.1} {max:>9.1} {:>9.1} {frames:>9} {:>8}",
+            "{name:<10} {presses:>6} {mean:>9.1} {p50:>9.1} {p95:>9.1} {max:>9.1} {:>9.1} {frames:>9} {:>8} {:>8.1}",
             emits.as_secs_f64() * 1e6 / presses as f64,
             backend.bytes / frames.max(1),
+            starts.as_secs_f64() * 1e3 / rounds as f64,
         );
     }
     Ok(())
