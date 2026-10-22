@@ -16,28 +16,63 @@ use crate::{
     style::{Color, ResolvedStyle},
 };
 
-/// Translate a canopy color into a crossterm color.
-fn translate_color(c: Color) -> style::Color {
-    match c {
-        Color::Black => style::Color::Black,
-        Color::DarkGrey => style::Color::DarkGrey,
-        Color::Red => style::Color::Red,
-        Color::DarkRed => style::Color::DarkRed,
-        Color::Green => style::Color::Green,
-        Color::DarkGreen => style::Color::DarkGreen,
-        Color::Yellow => style::Color::Yellow,
-        Color::DarkYellow => style::Color::DarkYellow,
-        Color::Blue => style::Color::Blue,
-        Color::DarkBlue => style::Color::DarkBlue,
-        Color::Magenta => style::Color::Magenta,
-        Color::DarkMagenta => style::Color::DarkMagenta,
-        Color::Cyan => style::Color::Cyan,
-        Color::DarkCyan => style::Color::DarkCyan,
-        Color::White => style::Color::White,
-        Color::Grey => style::Color::Grey,
-        Color::Rgb { r, g, b } => style::Color::Rgb { r, g, b },
-        Color::AnsiValue(a) => style::Color::AnsiValue(a),
+/// Append the decimal digits of `value`.
+fn push_decimal(out: &mut Vec<u8>, value: u16) {
+    let mut digits = [0; 5];
+    let mut at = digits.len();
+    let mut value = value;
+    loop {
+        at -= 1;
+        digits[at] = b'0' + (value % 10) as u8;
+        value /= 10;
+        if value == 0 {
+            break;
+        }
     }
+    out.extend_from_slice(&digits[at..]);
+}
+
+/// Append the SGR parameters of a color after its `38;` or `48;`, as
+/// crossterm writes them: the named colors as palette indices.
+fn push_color(out: &mut Vec<u8>, color: Color) {
+    let index = match color {
+        Color::Rgb { r, g, b } => {
+            out.extend_from_slice(b"2");
+            for channel in [r, g, b] {
+                out.push(b';');
+                push_decimal(out, channel.into());
+            }
+            return;
+        }
+        Color::AnsiValue(value) => value,
+        Color::Black => 0,
+        Color::DarkRed => 1,
+        Color::DarkGreen => 2,
+        Color::DarkYellow => 3,
+        Color::DarkBlue => 4,
+        Color::DarkMagenta => 5,
+        Color::DarkCyan => 6,
+        Color::Grey => 7,
+        Color::DarkGrey => 8,
+        Color::Red => 9,
+        Color::Green => 10,
+        Color::Yellow => 11,
+        Color::Blue => 12,
+        Color::Magenta => 13,
+        Color::Cyan => 14,
+        Color::White => 15,
+    };
+    out.extend_from_slice(b"5;");
+    push_decimal(out, index.into());
+}
+
+/// Append a cursor move to `(x, y)`.
+fn push_move(out: &mut Vec<u8>, x: u16, y: u16) {
+    out.extend_from_slice(b"\x1b[");
+    push_decimal(out, y.saturating_add(1));
+    out.push(b';');
+    push_decimal(out, x.saturating_add(1));
+    out.push(b'H');
 }
 
 /// Convert a terminal cell coordinate into the crossterm `u16` range.
@@ -58,6 +93,8 @@ pub struct CrosstermRender {
     pending: Vec<u8>,
     /// Where the encoded commands leave the cursor, when that is known.
     cursor: Option<(u16, u16)>,
+    /// The style the encoded commands set last this frame.
+    style: Option<ResolvedStyle>,
 }
 
 impl CrosstermRender {
@@ -74,44 +111,52 @@ impl CrosstermRender {
         flush_frame(&mut self.fp.lock(), &mut self.pending)
     }
 
-    /// Apply a style to subsequent output.
-    fn apply_style(&mut self, s: &ResolvedStyle) -> io::Result<()> {
-        // Always reset first to clear any previous attributes, then set colors
-        // and attrs. Order is important: reset clears everything, so we
-        // must set colors after.
-        self.pending
-            .queue(style::SetAttribute(style::Attribute::Reset))?;
-        self.pending
-            .queue(style::SetForegroundColor(translate_color(s.fg)))?;
-        self.pending
-            .queue(style::SetBackgroundColor(translate_color(s.bg)))?;
-
-        // Now add the desired attributes
-        if s.attrs.bold {
-            self.pending
-                .queue(style::SetAttribute(style::Attribute::Bold))?;
+    /// Apply a style to subsequent output, in one SGR sequence that sets
+    /// what differs from the style this frame set last. A change of
+    /// attributes resets them all, and then both colors.
+    fn apply_style(&mut self, s: &ResolvedStyle) {
+        let last = self.style.replace(*s);
+        if last == Some(*s) {
+            return;
         }
-        if s.attrs.crossedout {
-            self.pending
-                .queue(style::SetAttribute(style::Attribute::CrossedOut))?;
+        let kept = last.filter(|last| last.attrs == s.attrs);
+        let out = &mut self.pending;
+        out.push(0x1b);
+        // Each parameter follows a `;`, and the first becomes the `[`.
+        let start = out.len();
+        if kept.is_none() {
+            out.extend_from_slice(b";0");
+            let attrs = s.attrs;
+            for (on, code) in [
+                (attrs.bold, b";1".as_slice()),
+                (attrs.crossedout, b";9"),
+                (attrs.dim, b";2"),
+                (attrs.italic, b";3"),
+                (attrs.overline, b";53"),
+                (attrs.underline, b";4"),
+            ] {
+                if on {
+                    out.extend_from_slice(code);
+                }
+            }
         }
-        if s.attrs.dim {
-            self.pending
-                .queue(style::SetAttribute(style::Attribute::Dim))?;
+        // Crossterm leaves colors out under NO_COLOR, and so does this.
+        if !style::Colored::ansi_color_disabled_memoized() {
+            if kept.is_none_or(|kept| kept.fg != s.fg) {
+                out.extend_from_slice(b";38;");
+                push_color(out, s.fg);
+            }
+            if kept.is_none_or(|kept| kept.bg != s.bg) {
+                out.extend_from_slice(b";48;");
+                push_color(out, s.bg);
+            }
         }
-        if s.attrs.italic {
-            self.pending
-                .queue(style::SetAttribute(style::Attribute::Italic))?;
+        if out.len() == start {
+            out.pop();
+            return;
         }
-        if s.attrs.overline {
-            self.pending
-                .queue(style::SetAttribute(style::Attribute::OverLined))?;
-        }
-        if s.attrs.underline {
-            self.pending
-                .queue(style::SetAttribute(style::Attribute::Underlined))?;
-        }
-        Ok(())
+        out[start] = b'[';
+        out.push(b'm');
     }
 
     /// Write text at a position.
@@ -120,9 +165,9 @@ impl CrosstermRender {
             let x = cell_coord(run.location.x)?;
             let y = cell_coord(run.location.y)?;
             if self.cursor != Some((x, y)) {
-                self.pending.queue(ccursor::MoveTo(x, y))?;
+                push_move(&mut self.pending, x, y);
             }
-            self.pending.queue(style::Print(run.text))?;
+            self.pending.extend_from_slice(run.text.as_bytes());
             // Every terminal agrees on the width of printable ASCII, so the
             // cursor's place after it is known.
             self.cursor = text::printable_ascii(run.text)
@@ -201,6 +246,7 @@ impl Default for CrosstermRender {
             fp: io::stderr(),
             pending: Vec::with_capacity(64 * 1024),
             cursor: None,
+            style: None,
         }
     }
 }
@@ -209,6 +255,7 @@ impl RenderBackend for CrosstermRender {
     fn reset(&mut self) -> Result<()> {
         self.pending.clear();
         self.cursor = None;
+        self.style = None;
         Ok(())
     }
 
@@ -217,7 +264,8 @@ impl RenderBackend for CrosstermRender {
     }
 
     fn style(&mut self, s: &ResolvedStyle) -> Result<()> {
-        translate_result(self.apply_style(s))
+        self.apply_style(s);
+        Ok(())
     }
 
     fn text(&mut self, loc: Point, txt: &str) -> Result<()> {
@@ -318,6 +366,42 @@ mod tests {
                 Ok(())
             }
         }
+    }
+
+    #[test]
+    fn a_style_sets_only_what_changed_since_the_last() -> Result<()> {
+        use crate::style::{Attr, AttrSet};
+
+        let plain = ResolvedStyle::new(Color::White, Color::Black, AttrSet::default());
+        let red = ResolvedStyle {
+            fg: Color::Rgb { r: 255, g: 0, b: 9 },
+            ..plain
+        };
+        let bold = ResolvedStyle {
+            attrs: AttrSet::new(Attr::Bold).with(Attr::Underline),
+            ..red
+        };
+        let mut backend = CrosstermRender::default();
+        for style in [plain, red, red, bold, plain] {
+            backend.style(&style)?;
+        }
+        assert_eq!(
+            String::from_utf8_lossy(&backend.pending),
+            concat!(
+                "\x1b[0;38;5;15;48;5;0m",
+                "\x1b[38;2;255;0;9m",
+                "\x1b[0;1;4;38;2;255;0;9;48;5;0m",
+                "\x1b[0;38;5;15;48;5;0m",
+            )
+        );
+        backend.reset()?;
+        backend.style(&red)?;
+        assert_eq!(
+            String::from_utf8_lossy(&backend.pending),
+            "\x1b[0;38;2;255;0;9;48;5;0m",
+            "a frame starts with no style set"
+        );
+        Ok(())
     }
 
     #[test]
