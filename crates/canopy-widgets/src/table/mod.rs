@@ -891,6 +891,16 @@ impl PreparedTable {
             self.sampled_bytes,
         )
     }
+    /// Return the width the table takes when no column wraps: its natural
+    /// column widths and their separators for a wrapping layout, and its
+    /// prepared width otherwise.
+    pub fn natural_width(&self) -> u32 {
+        if !self.wraps() || self.natural.is_empty() {
+            return self.width;
+        }
+        let gaps = u32::try_from(self.natural.len().saturating_sub(1)).unwrap_or(u32::MAX);
+        self.natural.iter().sum::<u32>().saturating_add(gaps)
+    }
     /// Lines the header takes.
     pub fn header_lines(&self) -> u32 {
         self.rows.as_ref().map_or(1, |rows| rows.header)

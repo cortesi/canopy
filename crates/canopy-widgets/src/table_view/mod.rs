@@ -14,7 +14,10 @@ use canopy::{
         key::{Key, KeyCode},
         mouse,
     },
-    layout::{CanvasContext, Edges, Layout, RevealAlign, ScrollOp},
+    layout::{
+        CanvasContext, Constraint, Edges, Layout, MeasureConstraints, Measurement, RevealAlign,
+        ScrollOp,
+    },
     render::Render,
     runtime::{NodeWakeHandle, WidgetSemantics},
 };
@@ -874,6 +877,18 @@ impl Widget for TableView {
     }
     fn layout(&self) -> Layout {
         Layout::fill().padding(Edges::new(self.header_lines(), 1, 1, self.gutter()))
+    }
+    /// Under an unbounded width the view reports the width its table takes
+    /// whole, so a parent can center a table narrower than itself.
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        if c.width != Constraint::Unbounded {
+            return c.wrap();
+        }
+        let height = match c.height {
+            Constraint::Exact(height) | Constraint::AtMost(height) => height,
+            Constraint::Unbounded => self.table.size().h,
+        };
+        c.clamp(Size::new(self.table.natural_width(), height))
     }
     fn owns_scrollbars(&self) -> bool {
         true

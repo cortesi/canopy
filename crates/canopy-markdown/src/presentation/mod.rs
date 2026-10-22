@@ -151,12 +151,26 @@ pub struct GeometryKey {
     pub spacing: u8,
     /// Preferred maximum prose width; cards use the body width.
     pub prose_width: u32,
-    /// Whether each block centers in the body width.
+    /// Whether the margin moves in, so the prose column sits centered.
     pub centered: bool,
     /// Cumulative eligible code-payload bytes admitted for automatic syntax.
     pub syntax_limit: usize,
     /// Block mosaics that the terminal draws, which big headings draw with.
     pub mosaic: Tier,
+}
+impl GeometryKey {
+    /// Return how far a centered document moves its margin in, so the prose
+    /// column sits centered and every block starts at the margin. Outside
+    /// centered mode the margin stays at the canvas edge.
+    fn margin(&self) -> u32 {
+        if !self.centered {
+            return 0;
+        }
+        let width = self.width.min(65535);
+        let inset = if width > 3 { 2 } else { 0 };
+        let body = width.saturating_sub(inset + u32::from(width > 0));
+        body.saturating_sub(self.prose_width.clamp(1, 65535)) / 2
+    }
 }
 impl Default for GeometryKey {
     fn default() -> Self {
@@ -926,10 +940,15 @@ impl PresentationSnapshot {
                 }
             }
             // A bar in the left margin marks every row of the active object.
-            let margin = Rect::new(0, y, 1, 1);
-            if active_row && block.inset > 0 && visible.contains_rect(margin) {
-                let (_, _, bg) = cell_ground(0, row, (false, false), &ground_bg, &text_bg);
-                margin_bar(render, bg.clone(), local_y, self.geometry.glyphs)?;
+            let margin_x = self.geometry.margin();
+            let margin = Rect::new(margin_x, y, 1, 1);
+            if active_row && block.inset > margin_x && visible.contains_rect(margin) {
+                let (_, _, bg) = cell_ground(margin_x, row, (false, false), &ground_bg, &text_bg);
+                let at = Point {
+                    x: margin_x - visible.tl.x,
+                    y: local_y,
+                };
+                margin_bar(render, bg.clone(), at, self.geometry.glyphs)?;
             }
         }
         // A table that fits flows into the body width; one that does not
@@ -1103,6 +1122,8 @@ fn prepare_block(
     let width = geometry.width.min(65535);
     let inset = if width > 3 { 2 } else { 0 };
     let body = width.saturating_sub(inset + u32::from(width > 0));
+    let margin = geometry.margin();
+    let (inset, body) = (inset + margin, body.saturating_sub(margin));
     let mut rows = Vec::new();
     let ground = if block.provisional {
         "markdown/provisional"
@@ -1114,7 +1135,7 @@ fn prepare_block(
         unit_id: unit.id,
         source: block.source.clone(),
         ground,
-        ground_x: 0,
+        ground_x: margin,
         atomic: unit.atomic,
     };
     let mut table = None;
@@ -1442,15 +1463,6 @@ fn prepare_block(
             }
         }
     }
-    let shift = center_block(
-        &mut rows,
-        image_placement.as_mut(),
-        (inset, body),
-        table
-            .is_some()
-            .then_some((card_inset - inset, flow.as_deref())),
-        geometry,
-    );
     frame(&mut rows, make_row, block, unit, (inset, body), geometry);
     BlockLayout {
         id: block.id,
@@ -1461,57 +1473,11 @@ fn prepare_block(
         flow,
         table_start,
         table_height,
-        inset: card_inset + shift,
+        inset: card_inset,
         object,
         source_text_start: None,
         image: image_placement,
     }
-}
-
-/// Move a block right in centered geometry, so it sits centered in the `body`
-/// cells after `inset`, and return how far it moved.
-///
-/// A table centers on its own width: `table` holds its rails' width and its
-/// flow, or no flow for a table too wide to show whole, which fills the body.
-/// Any other block centers on its own width or the prose width, whichever is
-/// wider, so its text keeps the prose column.
-fn center_block(
-    rows: &mut [PreparedRow],
-    image: Option<&mut ImagePlacement>,
-    (inset, body): (u32, u32),
-    table: Option<(u32, Option<&FlowTable>)>,
-    geometry: GeometryKey,
-) -> u32 {
-    if !geometry.centered {
-        return 0;
-    }
-    let prose = body.min(geometry.prose_width.clamp(1, 65535));
-    let extent = match table {
-        Some((rails, Some(flow))) if !flow.cut() => rails + flow.width(),
-        Some(_) => body,
-        None => rows
-            .iter()
-            .flat_map(|row| &row.runs)
-            .map(|run| run.x + run.width)
-            .chain(image.as_ref().map(|image| image.x + image.size.w))
-            .max()
-            .map_or(0, |end| end.saturating_sub(inset))
-            .max(prose),
-    };
-    let shift = body.saturating_sub(extent) / 2;
-    for row in rows.iter_mut() {
-        for run in &mut row.runs {
-            run.x += shift;
-        }
-        // A ground from the row's start still spans it.
-        if row.ground_x > 0 {
-            row.ground_x += shift;
-        }
-    }
-    if let Some(image) = image {
-        image.x += shift;
-    }
-    shift
 }
 
 /// Prepare an image block: rows for its image once its size is known, and
@@ -2007,16 +1973,15 @@ fn cell_ground<'a>(
     }
 }
 
-/// Paint the active object's bar in the left margin of row `y`.
-fn margin_bar(render: &mut Render, bg: Paint, y: u32, glyphs: GlyphPreset) -> Result<()> {
+/// Paint the active object's bar in the left margin, at `local`.
+fn margin_bar(render: &mut Render, bg: Paint, local: Point, glyphs: GlyphPreset) -> Result<()> {
     let mut bar = render.resolve_style("markdown/object/bar");
     bar.bg = bg;
     let glyph = match glyphs {
         GlyphPreset::Unicode => "▌",
         GlyphPreset::Ascii => "|",
     };
-    let local = Point { x: 0, y };
-    let local_area = Rect::new(0, y, 1, 1);
+    let local_area = Rect::new(local.x, local.y, 1, 1);
     render.put_grapheme(bar.resolve_at(local_area, local), local, glyph)
 }
 

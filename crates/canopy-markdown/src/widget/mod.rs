@@ -734,13 +734,16 @@ impl Markdown {
         self.last_submitted = None;
         self.schedule(ctx, true)
     }
-    /// Center each Rendered block, as [`MarkdownOptions::centered`] says,
+    /// Center the reader's content, as [`MarkdownOptions::centered`] says,
     /// without resetting the document.
     pub fn set_centered(&mut self, ctx: &mut dyn Context, centered: bool) -> Result<()> {
         if self.options.centered == centered {
             return Ok(());
         }
         self.options.centered = centered;
+        if let Some(open) = &self.inspector {
+            open.handle.set_centered(ctx, centered)?;
+        }
         self.generation += 1;
         self.schedule(ctx, true)
     }
@@ -1334,6 +1337,7 @@ impl Markdown {
                 copy_limit: self.options.copy_limit,
                 syntax_limit: self.options.syntax_limit,
                 row_numbers: self.options.line_numbers != LineNumbers::None,
+                centered: self.options.centered,
             },
         )?;
         self.inspector = Some(OpenInspector {

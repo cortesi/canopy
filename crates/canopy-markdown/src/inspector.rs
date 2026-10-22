@@ -16,7 +16,7 @@ use canopy::{
         InputSpec, ModalBindings, ModalOptions, ModalToken,
         key::{Key, KeyCode},
     },
-    layout::{Direction, Layout},
+    layout::{Direction, Layout, LayoutOverride},
     render::Render,
     runtime::{NodeWakeHandle, NoticePost, PollLifetime, WakeOutcome},
 };
@@ -304,6 +304,12 @@ impl InspectorHandle {
             Ok(())
         })
     }
+    /// Center what the inspector shows at its natural width, or fill.
+    pub fn set_centered(&self, ctx: &mut dyn Context, centered: bool) -> Result<()> {
+        ctx.with_widget_mut(self.node, |inspector: &mut Inspector, ctx| {
+            inspector.set_centered(ctx, centered)
+        })
+    }
     /// Show or hide a table's row-number gutter.
     pub fn set_row_numbers(&self, ctx: &mut dyn Context, show: bool) -> Result<()> {
         ctx.with_widget_mut(self.node, |inspector: &mut Inspector, ctx| {
@@ -419,6 +425,8 @@ pub struct MarkdownInspector {
     reveal: Option<InspectorReveal>,
     /// Whether a table shows its row-number gutter.
     row_numbers: bool,
+    /// Whether what the inspector shows centers at its natural width.
+    centered: bool,
 }
 
 /// Host capabilities and preparation bounds for one inspector.
@@ -432,6 +440,8 @@ pub struct InspectorOptions {
     pub syntax_limit: usize,
     /// Whether a table shows its row-number gutter.
     pub row_numbers: bool,
+    /// Whether what the inspector shows centers at its natural width.
+    pub centered: bool,
 }
 
 #[derive_commands]
@@ -456,6 +466,7 @@ impl MarkdownInspector {
                 copy_limit: DEFAULT_COPY_BYTES,
                 syntax_limit: 256 * 1024,
                 row_numbers: true,
+                centered: false,
             },
         )
     }
@@ -483,6 +494,7 @@ impl MarkdownInspector {
         inspector.copy_limit = options.copy_limit.min(EVENT_BYTES);
         inspector.source_options.syntax_limit = options.syntax_limit;
         inspector.row_numbers = options.row_numbers;
+        inspector.centered = options.centered;
         let node = ctx.add_child(parent, inspector)?;
         let view: &dyn ViewContext = ctx;
         let (focus, wake) = view.with_widget(node, |widget: &Self| {
@@ -550,6 +562,7 @@ impl MarkdownInspector {
             pending_copy: None,
             reveal: None,
             row_numbers: true,
+            centered: false,
         }
     }
     /// Apply a queued source location once the source reader has mounted.
@@ -631,6 +644,25 @@ impl MarkdownInspector {
             })?;
         }
         Ok(())
+    }
+    /// Center what the inspector shows at its natural width, or fill.
+    fn set_centered(&mut self, ctx: &mut dyn Context, centered: bool) -> Result<()> {
+        self.centered = centered;
+        self.sync_centered(ctx)
+    }
+    /// Lay out the content as centered says. Content without a natural
+    /// width, or wider than the inspector, fills it.
+    fn sync_centered(&self, ctx: &mut dyn Context) -> Result<()> {
+        let Some(parent) = self.reader_parent else {
+            return Ok(());
+        };
+        ctx.set_layout_override(
+            parent,
+            LayoutOverride {
+                center_natural: Some(self.centered),
+                ..LayoutOverride::default()
+            },
+        )
     }
     /// Show or hide a table's row-number gutter.
     fn set_row_numbers(&mut self, ctx: &mut dyn Context, show: bool) -> Result<()> {
@@ -1088,6 +1120,7 @@ impl Widget for Inspector {
         )?;
         let reader_parent = ctx.add_child(body, Container::new(Layout::fill()))?;
         self.reader_parent = Some(reader_parent.into());
+        self.sync_centered(ctx)?;
         self.source_options.wrap = WrapMode::None;
         self.source_options.line_numbers = LineNumbers::Absolute;
         let ready = match content {
@@ -1650,6 +1683,7 @@ mod tests {
                     copy_limit: usize::MAX,
                     syntax_limit: 0,
                     row_numbers: true,
+                    centered: false,
                 },
             )
         })?;
@@ -2018,6 +2052,51 @@ mod table_tests {
         )
         .unwrap();
         Arc::new(table::prepare(Arc::new(data), TableLayoutOptions::default()).unwrap())
+    }
+    /// Open `table` centered, and return the table's span and the
+    /// inspector's.
+    fn centered_spans(table: Arc<PreparedTable>) -> Result<((i32, i32), (i32, i32))> {
+        let (mut harness, _, handle, _) = fixture(InspectorContent::Table { table })?;
+        harness
+            .canopy
+            .with_context(handle.node, |ctx| handle.set_centered(ctx, true))?;
+        harness.render()?;
+        harness.canopy.with_root_context(|ctx| {
+            let table = ctx.with_widget(handle.node, |inspector: &Inspector| {
+                match inspector.reader {
+                    Some(Reader::Table(table)) => Ok(NodeId::from(table)),
+                    _ => Err(Error::Invalid("the inspector shows a table".into())),
+                }
+            })?;
+            let span = |node: NodeId| {
+                let rect = ctx.view_of(node).unwrap().outer;
+                (rect.tl.x, rect.tl.x + rect.w as i32)
+            };
+            Ok((span(table), span(handle.node.into())))
+        })
+    }
+    #[test]
+    fn a_centered_inspector_centers_a_narrow_table_and_fills_with_a_wide_one() -> Result<()> {
+        let (table, inspector) = centered_spans(prepared("table", 1, "cell"))?;
+        assert!(
+            table.0 > inspector.0,
+            "a narrow table moves in from the left"
+        );
+        assert_eq!(table.1, inspector.1, "and reaches the right edge");
+        let columns = (0..8)
+            .map(|i| TableColumn::new(format!("c{i}"), format!("column {i}")))
+            .collect();
+        let cells = (0..8)
+            .map(|_| TableCell::plain("a value of some width"))
+            .collect();
+        let data = TableData::new("wide", 1, columns, vec![TableRow::new("row", cells)]).unwrap();
+        let wide = Arc::new(table::prepare(Arc::new(data), TableLayoutOptions::default()).unwrap());
+        let (table, inspector) = centered_spans(wide)?;
+        assert_eq!(
+            table, inspector,
+            "a table wider than the inspector fills it"
+        );
+        Ok(())
     }
     #[test]
     fn the_reader_fills_the_inspector_until_a_status_takes_the_last_row() -> Result<()> {

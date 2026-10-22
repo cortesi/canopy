@@ -68,9 +68,10 @@ pub struct MarkdownOptions {
     pub glyphs: GlyphPreset,
     /// Maximum prose width before wrapping, in terminal cells.
     pub prose_width: u32,
-    /// Center each Rendered block in the reader: prose as a column at the
-    /// prose width, a table on its own width, and other blocks on the wider of
-    /// the two. A block as wide as the reader fills it.
+    /// Center the reader's content. Rendered moves its margin in, so the
+    /// prose column sits centered and every block starts at that margin. An
+    /// inspector centers what it shows at its natural width, and content
+    /// wider than the reader fills it.
     pub centered: bool,
     /// Largest accepted source, in UTF-8 bytes.
     pub source_limit: usize,

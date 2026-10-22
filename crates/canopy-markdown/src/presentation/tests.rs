@@ -836,12 +836,8 @@ fn a_character_wider_than_the_line_takes_a_line_of_its_own() {
 }
 
 #[test]
-fn centered_blocks_center_prose_as_a_column_and_tables_on_their_own_width() {
-    let text = "Some prose.\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n\
-                | one | two | three | four | five | six |\n| - | - | - | - | - | - |\n\
-                | a long first value | a long second value | a long third value | \
-                a long fourth value | a long fifth value | a long sixth value |\n\n\
-                ```\ncode\n```\n";
+fn a_centered_document_starts_every_block_at_its_centered_margin() {
+    let text = "Some prose.\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n```\ncode\n```\n";
     let layout = |centered: bool| {
         PresentationSnapshot::prepare(
             document(text),
@@ -861,30 +857,15 @@ fn centered_blocks_center_prose_as_a_column_and_tables_on_their_own_width() {
     let plain = layout(false);
     assert_eq!(start(&plain, 0), 2, "prose starts at the inset");
     assert_eq!(plain.blocks[1].inset, 2, "a table starts at the inset");
+    assert_eq!(start(&plain, 2), 2, "code starts at the inset");
 
+    // The margin moves in by half of what the prose leaves of the body.
     let centered = layout(true);
+    assert_eq!(start(&centered, 0), 32, "prose starts at the margin");
+    assert_eq!(centered.blocks[1].inset, 32, "a table starts at the margin");
+    assert_eq!(start(&centered, 2), 32, "code starts at the margin");
     assert_eq!(
-        start(&centered, 0),
-        2 + 30,
-        "prose centers as a column at the prose width"
-    );
-    let narrow = &centered.blocks[1];
-    let width = narrow.flow.as_ref().unwrap().width();
-    assert_eq!(
-        narrow.inset,
-        2 + (100 - width) / 2,
-        "a narrow table centers on its own width"
-    );
-    let wide = &centered.blocks[2];
-    let width = wide.flow.as_ref().unwrap().width();
-    assert_eq!(
-        (wide.inset, width),
-        (2, 100),
-        "a wide table flows into the whole body"
-    );
-    assert_eq!(
-        start(&centered, 3),
-        2 + 30,
-        "a short code block keeps the prose column"
+        centered.blocks[2].rows[0].ground_x, 30,
+        "a card's ground starts at the margin's edge"
     );
 }

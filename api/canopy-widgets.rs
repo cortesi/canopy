@@ -5053,9 +5053,6 @@ pub mod table {
         /// leading columns that fit when not all do.
         pub fn prepare(data: Arc<TableData>, options: FlowOptions) -> canopy::error::Result<Self>;
 
-        /// Width of the shown columns, separators included.
-        pub fn width(&self) -> u32;
-
         /// Widths of the shown leading columns.
         pub fn widths(&self) -> &[u32];
     }
@@ -5103,6 +5100,11 @@ pub mod table {
 
         /// Hit a grid using the same offsets and decoration widths as paint.
         pub fn hit_test(&self, area: Rect, window: TableWindow, point: Point) -> Option<TableHit>;
+
+        /// Return the width the table takes when no column wraps: its natural
+        /// column widths and their separators for a wrapping layout, and its
+        /// prepared width otherwise.
+        pub fn natural_width(&self) -> u32;
 
         /// Paint only the visible row/column window. No per-cell nodes or hit
         /// rectangles exist.
