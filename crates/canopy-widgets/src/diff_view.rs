@@ -1111,7 +1111,13 @@ impl Widget for DiffView {
         let origin = view.content_origin();
         let width = view.view_rect().w;
         if let Some(message) = &self.message {
-            rndr.text("message", Line::new(origin.x, origin.y, width), message)?;
+            // A message wraps at word boundaries, so a narrow pane shows all
+            // of it rather than a clipped first line.
+            let height = view.view_rect().h as usize;
+            let lines = textwrap::wrap(message, (width as usize).max(1));
+            for (row, line) in (0..).zip(lines.iter().take(height)) {
+                rndr.text("message", Line::new(origin.x, origin.y + row, width), line)?;
+            }
         } else {
             self.prepare_highlighters();
             match self.strategy {
@@ -1474,6 +1480,27 @@ mod tests {
             assert_eq!(view.message(), Some("binary file"));
             Ok(())
         })?;
+        Ok(())
+    }
+
+    #[test]
+    fn a_message_wraps_to_the_view_width() -> Result<()> {
+        let mut view = DiffView::new(DiffModel::from_texts("a\n", "b\n"));
+        view.set_message("Unresolved conflict: deleted by them. The worktree matches HEAD.");
+        let mut harness = Harness::builder(view).size(25, 6).build()?;
+        harness.render()?;
+        let lines = harness.tbuf().lines();
+        assert_eq!(
+            lines.iter().map(|line| line.trim_end()).collect::<Vec<_>>(),
+            [
+                "Unresolved conflict:",
+                "deleted by them. The",
+                "worktree matches HEAD.",
+                "",
+                "",
+                ""
+            ]
+        );
         Ok(())
     }
 
