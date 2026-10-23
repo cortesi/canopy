@@ -24,6 +24,37 @@ impl Debug for NodeId {
     }
 }
 
+/// A widget node and the incarnation it held when the stamp was taken.
+///
+/// A node keeps its ID when its widget is replaced, so work that belongs to
+/// one widget checks the stamp: a stamp of a node that is gone, or that holds
+/// another widget now, has expired.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct WidgetStamp {
+    /// The node.
+    node: NodeId,
+    /// The widget incarnation of the node.
+    incarnation: u64,
+}
+
+impl WidgetStamp {
+    /// Stamp `node` with its current incarnation.
+    pub(crate) const fn new(node: NodeId, incarnation: u64) -> Self {
+        Self { node, incarnation }
+    }
+
+    /// Return the node.
+    #[must_use]
+    pub const fn node(self) -> NodeId {
+        self.node
+    }
+
+    /// Return the widget incarnation.
+    pub(crate) const fn incarnation(self) -> u64 {
+        self.incarnation
+    }
+}
+
 /// Internal arena that translates between opaque node IDs and slotmap keys.
 #[derive(Clone)]
 pub struct NodeArena<T>(SlotMap<RawNodeId, T>);

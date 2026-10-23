@@ -37,8 +37,8 @@ pub(crate) use core::backend;
 pub use core::testing;
 // The app-author root: the application, widgets, contexts, and node handles.
 pub use core::{
-    Canopy, CanopyBuilder, ChangeOutcome, Context, ContextExt, NodeId, Register, Setup, TypedId,
-    ViewContext, ViewContextExt, path::NodeName,
+    Canopy, CanopyBuilder, ChangeOutcome, Context, ContextExt, Delivery, NodeId, Register, Setup,
+    TypedId, ViewContext, ViewContextExt, WidgetCall, WidgetStamp, path::NodeName,
 };
 // App-author modules used by widget implementations and derive output.
 pub use core::{commands, error, path, script, status, style, text};

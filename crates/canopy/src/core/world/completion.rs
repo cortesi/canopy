@@ -1,5 +1,5 @@
-//! Dispatch boundaries, posted calls, deferred removals and modal closes, and
-//! wake handles.
+//! Dispatch boundaries, posted calls, deferred widget calls, deferred removals
+//! and modal closes, and wake handles.
 //!
 //! Work that a callback cannot do while widget cells are out waits in one FIFO
 //! batch, and the batch drains when the outermost dispatch boundary succeeds.
@@ -18,9 +18,10 @@ use std::{collections::VecDeque, mem};
 
 use super::Core;
 use crate::{
-    NodeId,
+    NodeId, WidgetStamp,
     commands::{self, CommandCall, CommandTarget},
     core::{
+        context::{Delivery, WidgetCall},
         notice::{NoticePost, NoticeSource},
         wake::PollOwner,
     },
@@ -45,6 +46,14 @@ pub(super) struct RemovalRequest {
     incarnation: u64,
 }
 
+/// The work of a posted call.
+pub(super) enum PostedWork {
+    /// A command call, bound to exactly the target.
+    Command(CommandCall),
+    /// A call on the target widget, which was busy when it was posted.
+    Widget(WidgetCall),
+}
+
 /// One posted call, resolved when it was posted.
 pub(super) struct PostRequest {
     /// Node that posted the call, which a failure's notice names.
@@ -53,8 +62,8 @@ pub(super) struct PostRequest {
     target: NodeId,
     /// Target widget incarnation when posted.
     incarnation: u64,
-    /// The call, bound to exactly the target.
-    call: CommandCall,
+    /// The work to run on the target.
+    work: PostedWork,
     /// Event in scope when posted, which the call's injections read.
     event: Option<Event>,
     /// Kind of handler that was running when posted, which a failure's
@@ -229,10 +238,49 @@ impl Core {
             origin,
             target,
             incarnation,
-            call: call.clone().with_target(CommandTarget::Exact(target)),
+            work: PostedWork::Command(call.clone().with_target(CommandTarget::Exact(target))),
             event: self.current_event().cloned(),
             source: self.completion.notice_sources.last().copied(),
         }))
+    }
+
+    /// Run `call` on the widget of `stamp` from `origin`: now if the widget
+    /// is free, or as the outermost dispatch completes if it is busy.
+    ///
+    /// A stamp that has expired runs nothing. A deferred call follows the
+    /// rules of a posted call, and keeps the event in scope.
+    pub(crate) fn call_widget(
+        &mut self,
+        origin: NodeId,
+        stamp: WidgetStamp,
+        call: WidgetCall,
+    ) -> Result<Delivery> {
+        let node = stamp.node();
+        if !self.is_incarnation(node, stamp.incarnation()) {
+            return Ok(Delivery::Expired);
+        }
+        if !self.widget_busy(node) {
+            self.with_widget_ctx(node, |widget, ctx| call(widget, ctx))??;
+            return Ok(Delivery::Ran);
+        }
+        self.enqueue_completion(CompletionRequest::Post(PostRequest {
+            origin,
+            target: node,
+            incarnation: stamp.incarnation(),
+            work: PostedWork::Widget(call),
+            event: self.current_event().cloned(),
+            source: self.completion.notice_sources.last().copied(),
+        }))?;
+        Ok(Delivery::Posted)
+    }
+
+    /// Return whether the widget of `node` is out of its cell, because a
+    /// callback on the stack holds it.
+    fn widget_busy(&self, node: NodeId) -> bool {
+        self.nodes[node]
+            .widget
+            .try_borrow()
+            .map_or(true, |slot| slot.is_none())
     }
 
     /// Run `hook`, a lifecycle hook, with the batch sealed against new work.
@@ -355,9 +403,21 @@ impl Core {
     /// call queued, and a success leaves its work for this drain to pick up.
     fn deliver(&mut self, request: PostRequest) -> Result<()> {
         let outer = mem::replace(&mut self.event_scope, request.event.into_iter().collect());
-        let result = commands::dispatch(self, request.target, &request.call);
+        let result = match request.work {
+            PostedWork::Command(call) => commands::dispatch(self, request.target, &call)
+                .map(|_| ())
+                .map_err(Error::from),
+            PostedWork::Widget(call) => {
+                let checkpoint = self.begin_dispatch();
+                let result = self
+                    .with_widget_ctx(request.target, |widget, ctx| call(widget, ctx))
+                    .and_then(|result| result);
+                let completion = self.finish_dispatch(checkpoint, result.is_ok());
+                result.and(completion)
+            }
+        };
         self.event_scope = outer;
-        result.map(|_| ()).map_err(Error::from)
+        result
     }
 }
 

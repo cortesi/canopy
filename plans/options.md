@@ -213,32 +213,32 @@ Canopy.
 
 ### Stage 1: Canopy's enums and the standalone follower
 
-- [ ] C2: the impls for `Glyphs` and `LineNumbers`, the `Glyphs` order, and
+- [x] C2: the impls for `Glyphs` and `LineNumbers`, the `Glyphs` order, and
   `Default` for `LineNumbers`, with their tests.
-- [ ] C3: `Follower::standalone`, with its tests.
-- [ ] Run the Canopy tests and `ncode api`. Commit Canopy.
-- [ ] fh: replace `GlyphSet`, `LineNumbering`, and `own_options`. Run fh's
+- [x] C3: `Follower::standalone`, with its tests.
+- [x] Run the Canopy tests and `ncode api`. Commit Canopy.
+- [x] fh: replace `GlyphSet`, `LineNumbering`, and `own_options`. Run fh's
   tests and `ncode api`, and check that the copies are gone from the API.
   Commit fh.
 
 ### Stage 2: Deferred widget calls in the runtime
 
-- [ ] C1: `WidgetStamp`, `Delivery`, `widget_stamp`, the `Context` method,
+- [x] C1: `WidgetStamp`, `Delivery`, `widget_stamp`, the `Context` method,
   the `CompletionRequest` variant, and
   `ContextExt::with_widget_mut_or_post`.
-- [ ] Core tests:
-  - [ ] A free widget runs the call at once. A busy widget runs it as the
+- [x] Core tests:
+  - [x] A free widget runs the call at once. A busy widget runs it as the
     dispatch completes, in the event that it was queued in.
-  - [ ] A type mismatch fails at once. A removed or replaced widget gives
+  - [x] A type mismatch fails at once. A removed or replaced widget gives
     `Expired` at admission, and drops a queued call.
-  - [ ] A failed dispatch discards the calls it queued.
-  - [ ] A call queued at mount runs, through `replace_root`, the render
+  - [x] A failed dispatch discards the calls it queued.
+  - [x] A call queued at mount runs, through `replace_root`, the render
     sweep, and a widget callback. A failed mount discards it.
-  - [ ] A sealed batch refuses the call. Mixed and recursive calls hit
+  - [x] A sealed batch refuses the call. Mixed and recursive calls hit
     the limits.
-  - [ ] A failure is a notice at an input boundary, and an error from
+  - [x] A failure is a notice at an input boundary, and an error from
     `with_context`.
-- [ ] Run the Canopy tests, `cargo xtask smoke`, and `ncode api`. Commit.
+- [x] Run the Canopy tests, `cargo xtask smoke`, and `ncode api`. Commit.
 
 ### Stage 3: The follower uses deferred calls
 

@@ -11,7 +11,7 @@ use std::{
 
 use super::*;
 use crate::{
-    Context, NodeName, ViewContext,
+    Context, Delivery, NodeName, ViewContext, WidgetStamp,
     commands::{self, CommandCall, CommandTarget},
     core::{context::ContextExt, world::MAX_POSTED_CALLS},
     derive_commands,
@@ -36,6 +36,14 @@ enum Act {
     RemoveAfter(NodeId),
     /// Post an info notice.
     Notify(&'static str),
+    /// Call the notifier itself through `with_widget_mut_or_post`. The call
+    /// counts its runs in `ran`, and fails if `fail` is set.
+    CallSelf {
+        /// The runs of the call.
+        ran: Rc<Cell<usize>>,
+        /// Whether the call fails.
+        fail: bool,
+    },
     /// Fail the trigger.
     Fail,
 }
@@ -53,6 +61,18 @@ fn run(acts: &[Act], ctx: &mut dyn Context) -> Result<()> {
             }
             Act::RemoveAfter(node) => ctx.remove_after_dispatch(*node)?,
             Act::Notify(message) => ctx.notify(NoticePost::info(*message))?,
+            Act::CallSelf { ran, fail } => {
+                let (ran, fail) = (Rc::clone(ran), *fail);
+                let stamp = ctx.widget_stamp(ctx.node_id())?;
+                ctx.with_widget_mut_or_post(stamp, move |notifier: &mut Notifier, _| {
+                    notifier.touched = true;
+                    ran.set(ran.get() + 1);
+                    if fail {
+                        return Err(Error::App("widget call failed".into()));
+                    }
+                    Ok(())
+                })?;
+            }
             Act::Fail => return Err(Error::App("trigger failed".into())),
         }
     }
@@ -1167,5 +1187,264 @@ fn a_mount_in_the_sweep_delivers_before_the_sweep_goes_on() -> Result<()> {
         "the sweep skipped the removed sibling"
     );
     assert!(site.notice().is_none());
+    Ok(())
+}
+
+/// Run `f` on the core with `node`'s widget out of its cell, as it is while
+/// the widget's own callback runs.
+fn inside(
+    core: &mut Core,
+    node: NodeId,
+    f: impl FnOnce(&mut dyn Context) -> Result<()>,
+) -> Result<()> {
+    core.with_widget_ctx(node, |_, ctx| f(ctx))?
+}
+
+/// Count a widget call's runs in `ran`.
+fn counting(
+    ran: &Rc<Cell<usize>>,
+) -> impl FnOnce(&mut Notifier, &mut dyn Context) -> Result<()> + use<> {
+    let ran = Rc::clone(ran);
+    move |_, _| {
+        ran.set(ran.get() + 1);
+        Ok(())
+    }
+}
+
+#[test]
+fn a_widget_call_runs_now_or_as_the_dispatch_completes() -> Result<()> {
+    let mut site = Site::new(Vec::new())?;
+    let (notifier, sibling) = (site.notifier, site.sibling);
+    let seen: Rc<RefCell<Vec<String>>> = Rc::default();
+    let log = Rc::clone(&seen);
+    site.boundary(|core| {
+        let depth = core.push_event_scope(&Event::Key('k'.into()));
+        let result = inside(core, notifier, |ctx| {
+            let free = ctx.with_widget_mut_or_post(ctx.widget_stamp(sibling)?, {
+                let log = Rc::clone(&log);
+                move |_: &mut Notifier, _| {
+                    log.borrow_mut().push("sibling".into());
+                    Ok(())
+                }
+            })?;
+            let busy = ctx.with_widget_mut_or_post(ctx.widget_stamp(notifier)?, {
+                let log = Rc::clone(&log);
+                move |_: &mut Notifier, ctx| {
+                    let keyed = is_key(ctx.current_event(), 'k');
+                    log.borrow_mut().push(format!("self, keyed {keyed}"));
+                    Ok(())
+                }
+            })?;
+            assert_eq!((free, busy), (Delivery::Ran, Delivery::Posted));
+            assert_eq!(*log.borrow(), ["sibling"], "the busy call waits");
+            Ok(())
+        });
+        core.pop_event_scope(depth);
+        result
+    })?;
+    assert_eq!(
+        *seen.borrow(),
+        ["sibling", "self, keyed true"],
+        "the busy call ran in the event it was queued in"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_widget_call_expires_with_its_widget() -> Result<()> {
+    let mut site = Site::new(Vec::new())?;
+    let (host, notifier, sibling) = (site.host, site.notifier, site.sibling);
+    let ran = Rc::new(Cell::new(0));
+
+    // A live widget of another type is an error at admission.
+    site.boundary(|core| {
+        inside(core, notifier, |ctx| {
+            let error = ctx
+                .with_widget_mut_or_post(ctx.widget_stamp(host)?, counting(&ran))
+                .expect_err("the host is no notifier");
+            assert!(matches!(error, Error::NodeTypeMismatch { .. }), "{error}");
+            Ok(())
+        })
+    })?;
+
+    // A call queued for a widget that is replaced before the drain drops.
+    site.boundary(|core| {
+        inside(core, notifier, |ctx| {
+            let delivery =
+                ctx.with_widget_mut_or_post(ctx.widget_stamp(notifier)?, counting(&ran))?;
+            assert_eq!(delivery, Delivery::Posted);
+            Ok(())
+        })?;
+        core.replace_subtree(notifier, Notifier::default())?;
+        Ok(())
+    })?;
+    assert_eq!(ran.get(), 0, "the replaced widget's call dropped");
+
+    // A stamp of a removed node, or of a replaced widget, has expired.
+    let stamps: Vec<WidgetStamp> = site.canopy.with_context(host, |ctx| {
+        Ok(vec![
+            ctx.widget_stamp(sibling)?,
+            ctx.widget_stamp(notifier)?,
+        ])
+    })?;
+    site.canopy.core.remove_subtree(sibling)?;
+    site.canopy
+        .core
+        .replace_subtree(notifier, Notifier::default())?;
+    for stamp in stamps {
+        let delivery = site.canopy.with_context(host, |ctx| {
+            ctx.with_widget_mut_or_post(stamp, counting(&ran))
+        })?;
+        assert_eq!(delivery, Delivery::Expired);
+    }
+    assert_eq!(ran.get(), 0);
+    Ok(())
+}
+
+#[test]
+fn a_failed_dispatch_discards_its_widget_calls() -> Result<()> {
+    let mut site = Site::new(Vec::new())?;
+    let notifier = site.notifier;
+    let ran = Rc::new(Cell::new(0));
+    let failed = site.boundary(|core| {
+        inside(core, notifier, |ctx| {
+            ctx.with_widget_mut_or_post(ctx.widget_stamp(notifier)?, counting(&ran))?;
+            Err(Error::App("dispatch failed".into()))
+        })
+    });
+    assert!(failed.is_err());
+    assert_eq!(ran.get(), 0, "the failed dispatch discarded the call");
+    assert_eq!(site.canopy.core.queued_completions(), 0);
+    Ok(())
+}
+
+#[test]
+fn a_widget_call_queued_at_mount_runs_on_every_mount_path() -> Result<()> {
+    let ran = Rc::new(Cell::new(0));
+    let mounting = |fail: bool| Notifier {
+        on_mount: vec![Act::CallSelf {
+            ran: Rc::clone(&ran),
+            fail,
+        }],
+        ..Notifier::default()
+    };
+
+    // replace_root.
+    let mut site = Site::new(Vec::new())?;
+    site.canopy.replace_root(mounting(false))?;
+    assert_eq!(ran.take(), 1, "replace_root ran the mount's call");
+
+    // The render sweep.
+    let mut site = Site::new(Vec::new())?;
+    let node = site.canopy.core.create_detached(mounting(false))?;
+    site.canopy.core.attach(site.host, node)?;
+    ran.set(0);
+    site.canopy.core.nodes[node].mounted = false;
+    site.lay_out()?;
+    assert_eq!(ran.take(), 1, "the sweep's mount ran its call");
+
+    // A widget callback that adds a child.
+    let host = site.host;
+    site.canopy.with_context(host, |ctx| {
+        ctx.add_child(host, mounting(false))?;
+        Ok(())
+    })?;
+    assert_eq!(ran.take(), 1, "a callback's mount ran its call");
+
+    // A mount that fails discards its call.
+    let failing = Notifier {
+        on_mount: vec![
+            Act::CallSelf {
+                ran: Rc::clone(&ran),
+                fail: false,
+            },
+            Act::Fail,
+        ],
+        ..Notifier::default()
+    };
+    let added = site.canopy.with_context(host, |ctx| {
+        ctx.add_child(host, failing)?;
+        Ok(())
+    });
+    assert!(added.is_err());
+    assert_eq!(ran.take(), 0, "the failed mount discarded its call");
+    Ok(())
+}
+
+#[test]
+fn a_sealed_hook_cannot_queue_a_widget_call() -> Result<()> {
+    let mut site = Site::new(Vec::new())?;
+    let notifier = site.notifier;
+    let ran = Rc::new(Cell::new(0));
+    let refused = site.canopy.core.sealed(|core| {
+        inside(core, notifier, |ctx| {
+            ctx.with_widget_mut_or_post(ctx.widget_stamp(notifier)?, counting(&ran))
+                .map(|_| ())
+        })
+    });
+    let error = refused.expect_err("a sealed batch refuses the call");
+    assert!(error.to_string().contains("lifecycle cleanup"), "{error}");
+    assert_eq!(ran.get(), 0);
+    Ok(())
+}
+
+/// Queue a call on the widget of `stamp` that queues itself again, counting
+/// its runs in `ran`.
+fn repost(ctx: &mut dyn Context, stamp: WidgetStamp, ran: Rc<Cell<usize>>) -> Result<()> {
+    ctx.with_widget_mut_or_post(stamp, move |_: &mut Notifier, ctx| {
+        ran.set(ran.get() + 1);
+        repost(ctx, stamp, ran)
+    })?;
+    Ok(())
+}
+
+#[test]
+fn widget_calls_share_the_posted_call_limit() -> Result<()> {
+    let mut site = Site::new(Vec::new())?;
+    let (host, notifier) = (site.host, site.notifier);
+    let ran = Rc::new(Cell::new(0));
+    let error = site
+        .boundary(|core| {
+            core.post(host, &note("first"))?;
+            inside(core, notifier, |ctx| {
+                let stamp = ctx.widget_stamp(notifier)?;
+                repost(ctx, stamp, Rc::clone(&ran))
+            })
+        })
+        .expect_err("a call that queues itself stops at the limit");
+    assert!(error.to_string().contains("posting itself"), "{error}");
+    assert_eq!(site.log(), ["first"]);
+    assert_eq!(
+        ran.get(),
+        MAX_POSTED_CALLS - 1,
+        "the posted command and the widget calls share the limit"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_failed_widget_call_is_a_notice_from_input_and_an_error_elsewhere() -> Result<()> {
+    let ran = Rc::new(Cell::new(0));
+    let failing = vec![Act::CallSelf {
+        ran: Rc::clone(&ran),
+        fail: true,
+    }];
+
+    let mut site = Site::new(failing.clone())?;
+    site.canopy.key(None, 'x')?;
+    let (source, node, message) = site.notice().expect("a key's failed call is a notice");
+    assert_eq!((source, node), (NoticeSource::Widget, Some(site.notifier)));
+    assert!(message.contains("widget call failed"), "{message}");
+    assert_eq!(ran.take(), 1);
+
+    let mut site = Site::new(failing)?;
+    let notifier = site.notifier;
+    let result = site.canopy.with_context(notifier, |ctx| {
+        ctx.dispatch(&Notifier::call_fire())?;
+        Ok(())
+    });
+    assert!(result.is_err(), "with_context returns the failure");
+    assert!(site.canopy.notices().is_empty());
+    assert_eq!(ran.take(), 1);
     Ok(())
 }

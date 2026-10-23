@@ -9,7 +9,7 @@ use std::{
 use super::{
     commands,
     help::BindingSnapshot,
-    id::{NodeId, TypedId},
+    id::{NodeId, TypedId, WidgetStamp},
     style::effects::Effect,
     view::View,
     world::{Core, WidgetOperation, scroll::RevealTarget},
@@ -164,6 +164,10 @@ pub trait ViewContext: sealed::ViewContext {
 
     /// Return a node's independently assigned identity.
     fn identity(&self, node: NodeId) -> Option<NodeIdentity>;
+
+    /// Stamp `node` with the widget it holds now, so later work can tell
+    /// whether that widget is still there.
+    fn widget_stamp(&self, node: NodeId) -> Result<WidgetStamp>;
 
     /// Children of a specific node in tree order.
     fn children_of(&self, node: NodeId) -> Vec<NodeId>;
@@ -377,6 +381,23 @@ fn node_matches_type<W: Widget + 'static, C: ViewContext + ?Sized>(
     node: NodeId,
 ) -> bool {
     context.type_id_of(node) == Some(TypeId::of::<W>())
+}
+
+/// A call on a widget and its context, which
+/// [`Context::with_widget_dyn_mut_or_post`] runs now or later.
+pub type WidgetCall = Box<dyn FnOnce(&mut dyn Widget, &mut dyn Context) -> Result<()>>;
+
+/// What became of a call to a widget that may be busy, from
+/// [`ContextExt::with_widget_mut_or_post`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Delivery {
+    /// The call ran at once.
+    Ran,
+    /// The widget was busy, and the call runs as the outermost dispatch
+    /// completes.
+    Posted,
+    /// The stamp had expired, so the call did not run.
+    Expired,
 }
 
 /// Subtree used by a focus traversal operation.
@@ -654,6 +675,25 @@ pub trait Context: ViewContext + sealed::Context {
         f: &mut dyn FnMut(&mut dyn Widget, &mut dyn Context) -> Result<()>,
     ) -> Result<()>;
 
+    /// Run `call` on the widget of `widget`: now if the widget is free, or
+    /// as the outermost dispatch completes if a callback on the stack holds
+    /// it. Use [`ContextExt::with_widget_mut_or_post`] for a typed call.
+    ///
+    /// A stamp that has expired, because its node is gone or holds another
+    /// widget, runs nothing and returns [`Delivery::Expired`]. A call that
+    /// runs now returns its error to the caller.
+    ///
+    /// A deferred call follows the rules of [`Self::post`]: it runs in the
+    /// event that was in scope, a failed dispatch discards it, a widget that
+    /// is gone or replaced when it would run drops it, and it counts toward
+    /// the posted call limit. Its failure stops the drain. Input and polls
+    /// show that failure as a notice, and other callers get it back.
+    fn with_widget_dyn_mut_or_post(
+        &mut self,
+        widget: WidgetStamp,
+        call: WidgetCall,
+    ) -> Result<Delivery>;
+
     /// Dispatch a command call. A call without a target resolves from the
     /// current node.
     ///
@@ -826,6 +866,37 @@ pub trait ContextExt: Context + ViewContextExt {
             once.call(|f| f(widget, ctx))
         })?;
         once.finish()
+    }
+
+    /// Run `f` on the widget of `widget`: now if the widget is free, or as
+    /// the outermost dispatch completes if a callback on the stack holds it.
+    ///
+    /// This is the typed form of [`Context::with_widget_dyn_mut_or_post`],
+    /// which describes when a deferred call runs. A stamp that has expired
+    /// returns [`Delivery::Expired`]. A live widget of another type fails
+    /// with [`Error::NodeTypeMismatch`].
+    fn with_widget_mut_or_post<W>(
+        &mut self,
+        widget: WidgetStamp,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<()> + 'static,
+    ) -> Result<Delivery>
+    where
+        W: Widget + 'static,
+    {
+        let node = widget.node();
+        if self.widget_stamp(node).ok() != Some(widget) {
+            return Ok(Delivery::Expired);
+        }
+        checked_typed_id::<W, _>(&*self, node)?;
+        self.with_widget_dyn_mut_or_post(
+            widget,
+            Box::new(move |widget, ctx| {
+                let widget = (widget as &mut dyn Any)
+                    .downcast_mut::<W>()
+                    .ok_or_else(|| type_mismatch::<W>(node))?;
+                f(widget, ctx)
+            }),
+        )
     }
 
     /// Create a widget node detached from the tree.
@@ -1042,6 +1113,11 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.core.nodes.get(node).map(|n| n.widget_type)
     }
 
+    fn widget_stamp(&self, node: NodeId) -> Result<WidgetStamp> {
+        let entry = self.core.nodes.require(node)?;
+        Ok(WidgetStamp::new(node, entry.incarnation))
+    }
+
     fn children_of(&self, node: NodeId) -> Vec<NodeId> {
         self.core
             .nodes
@@ -1226,6 +1302,14 @@ impl Context for NodeCtx<&mut Core> {
     ) -> Result<()> {
         self.core
             .with_widget_ctx(node, |widget, ctx| f(widget, ctx))?
+    }
+
+    fn with_widget_dyn_mut_or_post(
+        &mut self,
+        widget: WidgetStamp,
+        call: WidgetCall,
+    ) -> Result<Delivery> {
+        self.core.call_widget(self.node_id, widget, call)
     }
 
     fn dispatch(&mut self, call: &CommandCall) -> StdResult<ArgValue, CommandError> {

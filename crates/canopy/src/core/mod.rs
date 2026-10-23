@@ -69,6 +69,6 @@ pub mod world;
 // Public exports from internal modules
 pub use canopy::{Canopy, CanopyBuilder, Register, Setup};
 pub use change::ChangeOutcome;
-pub use context::{Context, ContextExt, ViewContext, ViewContextExt};
-pub use id::{NodeId, TypedId};
+pub use context::{Context, ContextExt, Delivery, ViewContext, ViewContextExt, WidgetCall};
+pub use id::{NodeId, TypedId, WidgetStamp};
 pub use world::Core;

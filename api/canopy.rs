@@ -335,6 +335,25 @@ pub trait Context: ViewContext + Context {
         node: NodeId,
         f: &mut dyn FnMut(&mut dyn Widget, &mut dyn Context) -> crate::error::Result<()>,
     ) -> crate::error::Result<()>;
+
+    /// Run `call` on the widget of `widget`: now if the widget is free, or
+    /// as the outermost dispatch completes if a callback on the stack holds
+    /// it. Use [`ContextExt::with_widget_mut_or_post`] for a typed call.
+    ///
+    /// A stamp that has expired, because its node is gone or holds another
+    /// widget, runs nothing and returns [`Delivery::Expired`]. A call that
+    /// runs now returns its error to the caller.
+    ///
+    /// A deferred call follows the rules of [`Self::post`]: it runs in the
+    /// event that was in scope, a failed dispatch discards it, a widget that
+    /// is gone or replaced when it would run drops it, and it counts toward
+    /// the posted call limit. Its failure stops the drain. Input and polls
+    /// show that failure as a notice, and other callers get it back.
+    fn with_widget_dyn_mut_or_post(
+        &mut self,
+        widget: WidgetStamp,
+        call: WidgetCall,
+    ) -> crate::error::Result<Delivery>;
 }
 
 /// Typed mutation and composition helpers for contexts.
@@ -415,6 +434,22 @@ pub trait ContextExt: Context + ViewContextExt {
         node: impl Into<NodeId>,
         f: impl FnOnce(&mut W, &mut dyn Context) -> crate::error::Result<R>,
     ) -> crate::error::Result<R>
+    where
+        W: 'static + Widget, {
+    }
+
+    /// Run `f` on the widget of `widget`: now if the widget is free, or as
+    /// the outermost dispatch completes if a callback on the stack holds it.
+    ///
+    /// This is the typed form of [`Context::with_widget_dyn_mut_or_post`],
+    /// which describes when a deferred call runs. A stamp that has expired
+    /// returns [`Delivery::Expired`]. A live widget of another type fails
+    /// with [`Error::NodeTypeMismatch`].
+    fn with_widget_mut_or_post<W>(
+        &mut self,
+        widget: WidgetStamp,
+        f: impl 'static + FnOnce(&mut W, &mut dyn Context) -> crate::error::Result<()>,
+    ) -> crate::error::Result<Delivery>
     where
         W: 'static + Widget, {
     }
@@ -557,6 +592,10 @@ pub trait ViewContext: ViewContext {
 
     /// View information for a specific node.
     fn view_of(&self, node: NodeId) -> Option<View>;
+
+    /// Stamp `node` with the widget it holds now, so later work can tell
+    /// whether that widget is still there.
+    fn widget_stamp(&self, node: NodeId) -> crate::error::Result<WidgetStamp>;
 
     /// Read a widget without extracting its slot or marking it changed.
     fn with_widget_dyn(
@@ -1113,6 +1152,19 @@ impl ChangeOutcome {
     pub fn changed(self) -> bool;
 }
 
+/// What became of a call to a widget that may be busy, from
+/// [`ContextExt::with_widget_mut_or_post`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Delivery {
+    /// The call ran at once.
+    Ran,
+    /// The widget was busy, and the call runs as the outermost dispatch
+    /// completes.
+    Posted,
+    /// The stamp had expired, so the call did not run.
+    Expired,
+}
+
 /// The result of an event handler.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EventOutcome {
@@ -1290,6 +1342,25 @@ impl !Sync for Setup {}
 /// Type-safe wrapper around a node identifier tied to a widget type.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct TypedId<T> {/* private fields */}
+
+/// A call on a widget and its context, which
+/// [`Context::with_widget_dyn_mut_or_post`] runs now or later.
+pub type WidgetCall =
+    Box<dyn FnOnce(&mut dyn Widget, &mut dyn Context) -> crate::error::Result<()>>;
+
+/// A widget node and the incarnation it held when the stamp was taken.
+///
+/// A node keeps its ID when its widget is replaced, so work that belongs to
+/// one widget checks the stamp: a stamp of a node that is gone, or that holds
+/// another widget now, has expired.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct WidgetStamp {/* private fields */}
+
+impl WidgetStamp {
+    /// Return the node.
+    #[must_use]
+    pub const fn node(self) -> NodeId;
+}
 
 /// Build a [`Color`](crate::style::Color) from a `#RRGGBB` or `RRGGBB` literal
 /// at compile time.

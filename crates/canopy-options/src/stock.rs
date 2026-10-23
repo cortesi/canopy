@@ -4,9 +4,10 @@
 use canopy::render::Glyphs;
 use canopy_widgets::editor::LineNumbers;
 
-/// Implement [`OptionEnum`](crate::OptionEnum), [`LeafValue`](crate::LeafValue),
-/// and [`OptionField`](crate::OptionField) for a fieldless enum of another
-/// crate, as `#[derive(OptionEnum)]` does for an enum of this one.
+/// Implement [`OptionEnum`](crate::OptionEnum),
+/// [`LeafValue`](crate::LeafValue), and [`OptionField`](crate::OptionField) for
+/// a fieldless enum of another crate, as `#[derive(OptionEnum)]` does for an
+/// enum of this one.
 ///
 /// The variants are listed in declaration order, each with its `snake_case`
 /// name. A label is the name in lower case, as the derive gives it, so a name
