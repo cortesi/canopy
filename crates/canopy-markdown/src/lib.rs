@@ -26,7 +26,18 @@ mod surface;
 /// The document controller and view control.
 mod widget;
 
+use canopy::Setup;
+use canopy_widgets::{highlight::palette_style_rules, table};
 pub use options::{Follow, MarkdownOptions, Mode, ViewType};
 pub use source_store::{DocumentInput, FinishOutcome};
 pub use source_view::MarkdownSource;
 pub use widget::{Markdown, ReaderPosition};
+
+/// Register the styles that prepared documents paint with: the Markdown roles,
+/// the colors of syntax highlighting, and tables. A host that paints documents
+/// itself, without a reader, calls this in place of `Markdown::register`.
+pub fn register_styles(setup: &mut Setup) {
+    setup.widget_styles(presentation::style_rules);
+    setup.widget_styles(palette_style_rules);
+    setup.widget_styles(table::style_rules);
+}

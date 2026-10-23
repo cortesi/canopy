@@ -515,6 +515,10 @@ pub trait ViewContext: ViewContext {
     /// `root` included.
     fn focused_within(&self, root: NodeId) -> Option<NodeId>;
 
+    /// Return the block mosaic characters that the application set, which
+    /// sizes can depend on.
+    fn glyphs(&self) -> Glyphs;
+
     /// Does the current node hold mouse capture?
     fn has_mouse_capture(&self) -> bool;
 
@@ -4099,6 +4103,24 @@ pub mod render {
         /// Print text in the specified line. If the text is wider than the
         /// rectangle, it will be truncated; if it is shorter, it will be padded.
         pub fn text(&mut self, style: &str, l: Line, txt: &str) -> crate::error::Result<()>;
+
+        /// Run `paint` with `effect` on top of the effect stack, so every style
+        /// that it resolves takes the effect too.
+        pub fn with_effect<R>(
+            &mut self,
+            effect: Effect,
+            paint: impl FnOnce(&mut Render<'_>) -> R,
+        ) -> R;
+
+        /// Run `paint` on a renderer whose point zero lies at `origin` of this
+        /// one. Its drawing clips to this renderer's visible cells at or past
+        /// `origin`, so a widget can paint a part of its view through code that
+        /// draws from point zero.
+        pub fn with_origin<R>(
+            &mut self,
+            origin: Point,
+            paint: impl FnOnce(&mut Render<'_>) -> R,
+        ) -> R;
     }
 
     impl !Sync for Render {}

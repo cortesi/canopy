@@ -39,6 +39,22 @@ action in progress or one that failed, and where a selected link leads. The
 host reports an action it performed itself. A whole, current document reports
 nothing.
 
+## Paint documents yourself
+
+A host that lays out many documents in one canvas, such as a transcript, uses
+the pipeline under the reader. `SourceStore` accepts the text, complete or as a
+stream. `document::parse_document` parses an accepted revision, and
+`PresentationSnapshot::prepare` lays it out for a `GeometryKey`. Each step takes
+the result before it, and reuses what did not change.
+
+`PresentationSnapshot::paint_at` paints a document rectangle with its top-left
+cell at a render point, so each document can sit below the one before it.
+`end_caret` gives the cell after the last grapheme, where a stream's marker
+goes. The host registers the styles with `canopy_markdown::register_styles`,
+and wraps a paint in `Render::with_effect` to tint one document, such as
+muted reasoning. Such a host shows the document only: objects, links, search,
+and selection are the reader's.
+
 ## Reading and actions
 
 Scroll mode moves the document. Interact mode adds an object cursor and readable

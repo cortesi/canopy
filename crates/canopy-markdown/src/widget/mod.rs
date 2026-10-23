@@ -32,7 +32,6 @@ use canopy::{
 use canopy_widgets::{
     Container, SearchBar, TableView,
     editor::{Editor, LineNumbers, WrapMode},
-    highlight::palette_style_rules,
     mosaic::{Tier, tier_for},
     scrollbar::Scrollbar,
     table::{self, CellKey, PreparedTable, TableLayoutOptions},
@@ -52,7 +51,7 @@ use crate::{
         ResourceRequest,
     },
     inspector::{Inspector, InspectorContent, InspectorEvent, InspectorHandle, InspectorOptions},
-    presentation::{EmbedInfo, GeometryKey, Supplied, style_rules},
+    presentation::{EmbedInfo, GeometryKey, Supplied},
     search::{SearchAddress, SearchCase, SearchLimits, SearchMode, SearchQuery, SearchResults},
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, SourceAnchor, SourceMatches, SourceOptions},
@@ -2869,8 +2868,7 @@ impl Register for Markdown {
         Editor::register(setup)?;
         Inspector::register(setup)?;
         TableView::register(setup)?;
-        setup.widget_styles(style_rules);
-        setup.widget_styles(palette_style_rules);
+        crate::register_styles(setup);
         for (key, description, call) in [
             ("i", "Interact", Self::call_interact()),
             ("v", "Select text", Self::call_select_text()),

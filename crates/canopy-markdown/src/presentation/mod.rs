@@ -647,6 +647,30 @@ impl PresentationSnapshot {
     pub fn width(&self) -> u32 {
         self.geometry.width
     }
+    /// Return the cell after the last grapheme of the document, where a host
+    /// marks the end of a stream, if that cell lies inside the body.
+    ///
+    /// The cell follows the last run of the last block's last row with runs.
+    /// A table or an image ends no text, so a last block of either gives
+    /// `None`. A receiving trailing table is literal source, so it has runs.
+    pub fn end_caret(&self) -> Option<Point> {
+        let block = self.blocks.last()?;
+        if block.table.is_some() || block.image.is_some() {
+            return None;
+        }
+        let (index, run) = block
+            .rows
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(index, row)| row.runs.last().map(|run| (index, run)))?;
+        let x = run.x.saturating_add(run.width);
+        // The last column is the reserved gutter, which no text reaches.
+        (x < self.geometry.width.saturating_sub(1)).then(|| Point {
+            x,
+            y: block.start + index as u32,
+        })
+    }
     /// Share the identical dataset and geometry with the table inspector.
     pub fn prepared_table(&self, unit_id: u64) -> Option<Arc<PreparedTable>> {
         self.blocks
@@ -800,6 +824,20 @@ impl PresentationSnapshot {
     fn unit_index(&self, unit_id: u64) -> Option<usize> {
         self.document.unit_position(unit_id)
     }
+    /// Paint the document rectangle `visible` with its top-left cell at the
+    /// render point `destination`. A host that lays out many documents in one
+    /// canvas places each one this way. This method never parses, wraps, or
+    /// highlights source.
+    pub fn paint_at(
+        &self,
+        render: &mut Render<'_>,
+        visible: Rect,
+        destination: Point,
+        overlays: &PaintOverlays,
+    ) -> Result<PaintStats> {
+        render.with_origin(destination, |render| self.paint(render, visible, overlays))
+    }
+
     /// Paint the visible document rectangle at viewport origin zero. This
     /// method never parses, wraps, or highlights source.
     pub fn paint(

@@ -695,3 +695,78 @@ fn styled_cells_land_where_the_clip_translates_them() {
         .unwrap();
     target.assert_matches(buf!("XXX" "X▌X"));
 }
+
+#[test]
+fn a_scoped_origin_moves_drawing_and_clips_it_to_the_cells_past_the_origin() {
+    let mut target = TestTarget::new(geom::Rect::new(0, 0, 6, 3));
+    target
+        .render(|r| {
+            r.with_origin(geom::Point { x: 2, y: 1 }, |r| {
+                r.fill("default", geom::Rect::new(0, 0, 2, 1), '#')?;
+                // Cells past the parent's clip stay unpainted.
+                r.text("default", geom::Line::new(0, 1, 10), "abcdefgh")
+            })
+        })
+        .unwrap();
+    target.assert_matches(buf!(
+        "XXXXXX"
+        "XX##XX"
+        "XXabcd"
+    ));
+}
+
+#[test]
+fn a_scoped_origin_before_the_clip_hides_what_lies_before_it() {
+    // The clip starts at column 3, so a scope at column 1 sees its own
+    // columns from 2 on.
+    let mut target = TestTarget::new(geom::Rect::new(3, 0, 4, 1));
+    target
+        .render(|r| {
+            r.with_origin(geom::Point { x: 1, y: 0 }, |r| {
+                r.text("default", geom::Line::new(0, 0, 6), "012345")
+            })
+        })
+        .unwrap();
+    target.assert_matches(buf!("2345"));
+}
+
+#[test]
+fn a_scoped_effect_applies_inside_its_scope_alone() {
+    use crate::style::effects;
+
+    let mut target = TestTarget::new(geom::Rect::new(0, 0, 2, 1));
+    target
+        .stylemap
+        .rules()
+        .style(
+            "row",
+            PartialStyle::new().fg(Color::Rgb {
+                r: 200,
+                g: 200,
+                b: 200,
+            }),
+        )
+        .apply();
+    target
+        .render(|r| {
+            r.with_effect(effects::brightness(0.5), |r| {
+                r.text("row", geom::Line::new(0, 0, 1), "a")
+            })?;
+            r.text("row", geom::Line::new(1, 0, 1), "b")
+        })
+        .unwrap();
+    let inside = target.buf.get(geom::Point { x: 0, y: 0 }).unwrap();
+    let outside = target.buf.get(geom::Point { x: 1, y: 0 }).unwrap();
+    assert_eq!(
+        outside.style.fg,
+        Color::Rgb {
+            r: 200,
+            g: 200,
+            b: 200
+        }
+    );
+    assert_ne!(
+        inside.style.fg, outside.style.fg,
+        "the effect dims the scope"
+    );
+}

@@ -869,3 +869,144 @@ fn a_centered_document_starts_every_block_at_its_centered_margin() {
         "a card's ground starts at the margin's edge"
     );
 }
+
+/// Paints one document window at a destination, as a host that lays out
+/// many documents in one canvas does.
+struct Placed {
+    prepared: PresentationSnapshot,
+    visible: Rect,
+    destination: Point,
+}
+impl Widget for Placed {
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
+    fn render(&mut self, render: &mut Render, _: &dyn ViewContext) -> Result<()> {
+        self.prepared.paint_at(
+            render,
+            self.visible,
+            self.destination,
+            &PaintOverlays::default(),
+        )?;
+        Ok(())
+    }
+}
+fn placed(text: &str, width: u32, visible: Rect, destination: Point, size: Size) -> Harness {
+    Harness::builder(Placed {
+        prepared: prepared(text, width),
+        visible,
+        destination,
+    })
+    .configure(|setup| {
+        crate::register_styles(setup);
+        Ok(())
+    })
+    .size(size.w, size.h)
+    .build()
+    .unwrap()
+}
+
+#[test]
+fn a_window_paints_at_its_destination_as_it_paints_at_zero() {
+    // A paragraph, a code card, a table that flows, and a table that clips.
+    let text = "intro words here\n\n```rust\nlet value = 1;\n```\n\n| A | B |\n| - | - |\n| x | y |\n\n\
+                | Alpha column | Beta column | Gamma column | Delta column |\n| - | - | - | - |\n\
+                | one | two | three | four |\n";
+    let width = 30;
+    let height = prepared(text, width).height();
+    let visible = Rect::new(1, 1, width - 1, height - 1);
+    let destination = Point { x: 4, y: 3 };
+    let size = Size::new(width + 4, height + 3);
+    let mut zero = placed(text, width, visible, Point { x: 0, y: 0 }, size);
+    let mut moved = placed(text, width, visible, destination, size);
+    zero.render().unwrap();
+    moved.render().unwrap();
+    for y in 0..visible.h {
+        for x in 0..visible.w {
+            let at_zero = zero.buf().get(Point { x, y }).unwrap();
+            let at_destination = moved
+                .buf()
+                .get(Point {
+                    x: x + destination.x,
+                    y: y + destination.y,
+                })
+                .unwrap();
+            assert_eq!(at_zero, at_destination, "cell {x},{y}");
+        }
+    }
+    assert!(moved.tbuf().contains_text("value"));
+    assert!(moved.tbuf().contains_text("Alpha"));
+    // Nothing paints before the destination.
+    let before = moved.buf().get(Point { x: 1, y: 1 }).unwrap();
+    assert_eq!(
+        before,
+        zero.buf()
+            .get(Point {
+                x: width + 2,
+                y: height + 1
+            })
+            .unwrap()
+    );
+}
+
+#[test]
+fn the_end_caret_follows_the_last_grapheme_of_the_text() {
+    let caret = |text: &str, width: u32| prepared(text, width).end_caret();
+    assert_eq!(caret("", 40), None, "an empty document has no end");
+    // The body starts after the two-column inset.
+    assert_eq!(caret("alpha", 40), Some(Point { x: 7, y: 0 }));
+    assert_eq!(caret("alpha\n", 40), Some(Point { x: 7, y: 0 }));
+    // A wide grapheme takes two cells.
+    assert_eq!(caret("界", 40), Some(Point { x: 4, y: 0 }));
+    // A wrapped line ends on its last row.
+    let wrapped = prepared("alpha beta gamma delta", 13);
+    let end = wrapped.end_caret().unwrap();
+    assert_eq!(
+        end,
+        Point {
+            x: 7,
+            y: wrapped.height() - 1
+        }
+    );
+    // A last row that fills the body leaves no cell for the caret.
+    assert_eq!(caret("alpha beta gamma delta", 14), None);
+    // A completed table ends no text.
+    assert_eq!(caret("| A | B |\n| - | - |\n| x | y |\n", 40), None);
+    // A body too narrow for the inset still ends inside the body or not at all.
+    if let Some(end) = caret("abc", 3) {
+        assert!(end.x < 2);
+    }
+}
+
+#[test]
+fn the_end_caret_of_a_stream_follows_an_open_fence_and_a_receiving_table() {
+    let streamed = |text: &str| {
+        let mut store = SourceStore::stream();
+        store.append(text).unwrap();
+        let document = Arc::new(parse_document(
+            &store.snapshot(),
+            &ParseLimits::default(),
+            None,
+        ));
+        PresentationSnapshot::prepare(
+            document,
+            GeometryKey {
+                width: 40,
+                spacing: 0,
+                ..Default::default()
+            },
+            None,
+            &Supplied::default(),
+        )
+    };
+    let fence = streamed("```rust\nlet a = 1;\n");
+    let end = fence
+        .end_caret()
+        .expect("an open fence ends after its last line");
+    assert!(row_text(&fence, end.y).contains("let a = 1;"));
+    let table = streamed("| A | B |\n| - | - |\n| x | y |\n");
+    let end = table
+        .end_caret()
+        .expect("a receiving trailing table is literal source");
+    assert!(row_text(&table, end.y).contains('y'));
+}

@@ -302,6 +302,77 @@ impl<'a> Render<'a> {
         self
     }
 
+    /// Run `paint` on a renderer whose point zero lies at `origin` of this
+    /// one. Its drawing clips to this renderer's visible cells at or past
+    /// `origin`, so a widget can paint a part of its view through code that
+    /// draws from point zero.
+    pub fn with_origin<R>(
+        &mut self,
+        origin: geom::Point,
+        paint: impl FnOnce(&mut Render<'_>) -> R,
+    ) -> R {
+        let effects = self.effects.to_vec();
+        self.scoped(origin, &effects, paint)
+    }
+
+    /// Run `paint` with `effect` on top of the effect stack, so every style
+    /// that it resolves takes the effect too.
+    pub fn with_effect<R>(
+        &mut self,
+        effect: Effect,
+        paint: impl FnOnce(&mut Render<'_>) -> R,
+    ) -> R {
+        let mut effects = self.effects.to_vec();
+        effects.push(effect);
+        self.scoped(geom::Point::ZERO, &effects, paint)
+    }
+
+    /// Run `paint` on a renderer that shares this one's targets, with point
+    /// zero at `origin` and the effect stack `effects`.
+    fn scoped<R>(
+        &mut self,
+        origin: geom::Point,
+        effects: &[Effect],
+        paint: impl FnOnce(&mut Render<'_>) -> R,
+    ) -> R {
+        // The visible cells at or past the origin, in the scoped renderer's
+        // coordinates. A clip wholly before the origin leaves nothing visible.
+        let clip = self
+            .clip
+            .intersect(geom::Rect::new(
+                origin.x,
+                origin.y,
+                u32::MAX - origin.x,
+                u32::MAX - origin.y,
+            ))
+            .map_or(geom::Rect::new(0, 0, 0, 0), |visible| {
+                geom::Rect::new(
+                    visible.tl.x - origin.x,
+                    visible.tl.y - origin.y,
+                    visible.w,
+                    visible.h,
+                )
+            });
+        let mut scoped = Render {
+            buf: &mut *self.buf,
+            style: &mut *self.style,
+            stylemap: self.stylemap,
+            clip,
+            origin: Offset {
+                x: self.origin.x + i64::from(origin.x),
+                y: self.origin.y + i64::from(origin.y),
+            },
+            effects,
+            glyphs: self.glyphs,
+            frame: self.frame.as_mut().map(|frame| RenderFrame {
+                node: frame.node,
+                clocks: frame.clocks,
+                cursors: &mut *frame.cursors,
+            }),
+        };
+        paint(&mut scoped)
+    }
+
     /// Apply the current effect stack to a style.
     /// Use this when you have a Style from a source other than the style
     /// manager.

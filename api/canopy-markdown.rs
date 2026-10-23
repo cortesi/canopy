@@ -22,7 +22,7 @@ use std::{
 };
 
 use canopy::{
-    Context, NodeId, Point, Rect, Register, ViewContext, Widget,
+    Context, NodeId, Point, Rect, Register, Setup, ViewContext, Widget,
     commands::{
         ArgValue, CommandCall, CommandNode, CommandSpec, CommandType, FromArgValue, ToArgValue,
     },
@@ -855,6 +855,11 @@ impl CommandType for ViewType {}
 impl FromArgValue for ViewType {}
 
 impl ToArgValue for ViewType {}
+
+/// Register the styles that prepared documents paint with: the Markdown roles,
+/// the colors of syntax highlighting, and tables. A host that paints documents
+/// itself, without a reader, calls this in place of `Markdown::register`.
+pub fn register_styles(setup: &mut Setup);
 
 pub mod document {
     //! Semantic documents, source mappings, and actionable objects.
@@ -1867,6 +1872,14 @@ pub mod presentation {
         /// rows.
         pub fn derived_bytes(&self) -> usize;
 
+        /// Return the cell after the last grapheme of the document, where a host
+        /// marks the end of a stream, if that cell lies inside the body.
+        ///
+        /// The cell follows the last run of the last block's last row with runs.
+        /// A table or an image ends no text, so a last block of either gives
+        /// `None`. A receiving trailing table is literal source, so it has runs.
+        pub fn end_caret(&self) -> Option<Point>;
+
         /// Indexed canvas height, including block decoration and spacing.
         pub fn height(&self) -> u32;
 
@@ -1879,6 +1892,18 @@ pub mod presentation {
             &self,
             render: &mut Render<'_>,
             visible: Rect,
+            overlays: &PaintOverlays,
+        ) -> canopy::error::Result<PaintStats>;
+
+        /// Paint the document rectangle `visible` with its top-left cell at the
+        /// render point `destination`. A host that lays out many documents in one
+        /// canvas places each one this way. This method never parses, wraps, or
+        /// highlights source.
+        pub fn paint_at(
+            &self,
+            render: &mut Render<'_>,
+            visible: Rect,
+            destination: Point,
             overlays: &PaintOverlays,
         ) -> canopy::error::Result<PaintStats>;
 

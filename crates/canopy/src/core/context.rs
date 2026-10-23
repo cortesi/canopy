@@ -121,6 +121,10 @@ pub trait ViewContext: sealed::ViewContext {
     /// that animates by itself shows its state at rest when this is false.
     fn motion_active(&self) -> bool;
 
+    /// Return the block mosaic characters that the application set, which
+    /// sizes can depend on.
+    fn glyphs(&self) -> Glyphs;
+
     /// The root node of the tree.
     fn root_id(&self) -> NodeId;
 
@@ -1067,6 +1071,10 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.core.motion_active
     }
 
+    fn glyphs(&self) -> Glyphs {
+        self.core.glyphs
+    }
+
     fn root_id(&self) -> NodeId {
         self.core.root
     }
@@ -1424,6 +1432,19 @@ mod tests {
     pub struct Modal;
     impl Widget for Modal {}
     slot!(pub ModalSlot: Modal);
+
+    #[test]
+    fn a_context_reads_the_glyphs_it_set() {
+        use super::{Context, CoreContext, ViewContext};
+        use crate::{core::Core, render::Glyphs};
+
+        let mut core = Core::new();
+        let root = core.root_id();
+        let mut context = CoreContext::new(&mut core, root);
+        assert_eq!(context.glyphs(), Glyphs::Full);
+        context.set_glyphs(Glyphs::Blocks);
+        assert_eq!(context.glyphs(), Glyphs::Blocks);
+    }
 
     #[test]
     fn key_macro_names_the_slot_after_the_key_type() {
