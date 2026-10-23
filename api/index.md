@@ -117,7 +117,7 @@ Declared options for Canopy applications.
 
 - Publish: crates.io
 - Workspace dependencies: canopy, canopy-options-derive, canopy-widgets
-- Workspace dependents: none
+- Workspace dependents: todo
 - Items: 139
 - Exposes: canopy, canopy-widgets
 
@@ -138,10 +138,10 @@ Todo application used as Canopy's end-to-end example and smoke-test target.
 
 - Publish: no
 - Binaries: todo
-- Workspace dependencies: canopy, canopy-mcp, canopy-widgets
+- Workspace dependencies: canopy, canopy-mcp, canopy-options, canopy-widgets
 - Workspace dependents: none
-- Items: 8
-- Exposes: anyhow, canopy, canopy-mcp, canopy-widgets, musq
+- Items: 15
+- Exposes: anyhow, canopy, canopy-mcp, canopy-options, canopy-widgets, musq
 
 ## Binary-only packages
 

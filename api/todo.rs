@@ -3,15 +3,16 @@
 // Package: todo
 // Publish: no
 // Binaries: todo
-// Workspace dependencies: canopy, canopy-mcp, canopy-widgets
+// Workspace dependencies: canopy, canopy-mcp, canopy-options, canopy-widgets
 // Workspace dependents: none
 
 //! Todo application used as Canopy's end-to-end example and smoke-test target.
 
-use std::fmt::Debug;
+use std::{fmt::Debug, path::Path};
 
 use canopy::{Canopy, Widget};
 use canopy_mcp::ConfigHome;
+use canopy_options::{LeafValue, OptionEnum, OptionField, OptionGroup};
 use canopy_widgets::Selectable;
 use musq::{
     decode::Decode,
@@ -20,10 +21,16 @@ use musq::{
 
 /// Default configuration: the startup script that runs when the user has no
 /// `init.luau`.
-pub const DEFAULT_CONFIG: &str = "-- Todo\'s default configuration. Todo reads ~/.todo/init.luau when that file\n-- exists, and uses these defaults otherwise. Set TODO_CONFIG_HOME to read the\n-- file from another directory.\n\nfunction setup()\n    root.default_bindings()\n\n    canopy.keymap({\n        { key = \"ctrl-x\", description = \"Clear text\", action = \"canopy.clear\" },\n        { key = \"d\", description = \"Delete item\", action = command.todo.delete_item() },\n        { key = \"a\", description = \"Add item\", action = command.todo.enter_item() },\n        { key = \"g\", description = \"First item\", action = command.todo.select_first() },\n        { key = { \"j\", \"Down\" }, description = \"Next item\", action = command.todo.select_by(1) },\n        { key = { \"k\", \"Up\" }, description = \"Previous item\", action = command.todo.select_by(-1) },\n        { key = { \"Space\", \"PageDown\" }, description = \"Page down\", action = command.todo.page(1) },\n        { key = \"PageUp\", description = \"Page up\", action = command.todo.page(-1) },\n        {\n            mouse = \"ScrollUp\",\n            description = \"Previous item\",\n            action = function()\n                todo.select_by(-1)\n            end,\n        },\n        {\n            mouse = \"ScrollDown\",\n            description = \"Next item\",\n            action = function()\n                todo.select_by(1)\n            end,\n        },\n    })\n\n    canopy.keymap({\n        path = \"input\",\n        phase = \"before_widget\",\n        { key = \"Left\", description = \"Cursor left\", action = command.input.left() },\n        { key = \"Right\", description = \"Cursor right\", action = command.input.right() },\n        { key = \"Backspace\", description = \"Delete char\", action = command.input.backspace() },\n        { key = \"Enter\", description = \"Confirm new item\", action = command.todo.accept_add() },\n        { key = \"Escape\", description = \"Cancel add\", action = command.todo.cancel_add() },\n    })\nend\n";
+pub const DEFAULT_CONFIG: &str = "-- Todo\'s default configuration. Todo reads ~/.todo/init.luau when that file\n-- exists, and uses these defaults otherwise. Set TODO_CONFIG_HOME to read the\n-- file from another directory.\n--\n-- The o key opens the options panel, which shows and changes the order of the\n-- list and whether a long todo wraps, and saves them to ~/.todo/options.toml.\n-- A binding can change an option by its path, such as\n-- command.options.toggle(\"list.wrap\").\n\nfunction setup()\n    root.default_bindings()\n\n    canopy.keymap({\n        { key = \"ctrl-x\", description = \"Clear text\", action = \"canopy.clear\" },\n        { key = \"d\", description = \"Delete item\", action = command.todo.delete_item() },\n        { key = \"a\", description = \"Add item\", action = command.todo.enter_item() },\n        { key = \"g\", description = \"First item\", action = command.todo.select_first() },\n        { key = \"o\", description = \"Options\", action = command.options.open() },\n        { key = { \"j\", \"Down\" }, description = \"Next item\", action = command.todo.select_by(1) },\n        { key = { \"k\", \"Up\" }, description = \"Previous item\", action = command.todo.select_by(-1) },\n        { key = { \"Space\", \"PageDown\" }, description = \"Page down\", action = command.todo.page(1) },\n        { key = \"PageUp\", description = \"Page up\", action = command.todo.page(-1) },\n        {\n            mouse = \"ScrollUp\",\n            description = \"Previous item\",\n            action = function()\n                todo.select_by(-1)\n            end,\n        },\n        {\n            mouse = \"ScrollDown\",\n            description = \"Next item\",\n            action = function()\n                todo.select_by(1)\n            end,\n        },\n    })\n\n    canopy.keymap({\n        path = \"input\",\n        phase = \"before_widget\",\n        { key = \"Left\", description = \"Cursor left\", action = command.input.left() },\n        { key = \"Right\", description = \"Cursor right\", action = command.input.right() },\n        { key = \"Backspace\", description = \"Delete char\", action = command.input.backspace() },\n        { key = \"Enter\", description = \"Confirm new item\", action = command.todo.accept_add() },\n        { key = \"Escape\", description = \"Cancel add\", action = command.todo.cancel_add() },\n    })\nend\n";
 
 /// Widget for a todo entry.
 pub struct TodoEntry {/* private fields */}
+
+impl TodoEntry {
+    /// Return the todo's text.
+    #[must_use]
+    pub fn text(&self) -> &str;
+}
 
 impl Selectable for TodoEntry {}
 
@@ -33,8 +40,64 @@ impl Widget for TodoEntry {}
 pub fn api_app() -> canopy::error::Result<Canopy>;
 
 /// Create a todo application with an explicit database. A `home` holding
-/// `init.luau` replaces [`DEFAULT_CONFIG`].
+/// `init.luau` replaces [`DEFAULT_CONFIG`], and its `options.toml` holds the
+/// options. Without a `home`, the options keep no file.
 pub fn create_app(store: Store, home: Option<&ConfigHome>) -> anyhow::Result<Canopy>;
+
+pub mod options {
+    //! The todo's options: how the list orders and shows its todos.
+
+    /// How the list orders and shows its todos.
+    #[derive(Clone, Debug, Default, PartialEq)]
+    pub struct ListOptions {
+        /// The order of the todos.
+        pub order: TodoOrder,
+        /// Wrap a long todo onto more rows. Off, a todo shows one row, cut at
+        /// the width of the list.
+        #[option(default = true)]
+        pub wrap: bool,
+    }
+
+    impl OptionField for ListOptions {}
+
+    impl OptionGroup for ListOptions {}
+
+    /// Every option of the todo.
+    #[derive(Clone, Debug, Default, PartialEq)]
+    pub struct TodoOptions {
+        /// How the list orders and shows its todos. The panel shows them at its
+        /// root, and their paths keep the group's name, such as `list.wrap`.
+        #[option(inline)]
+        pub list: ListOptions,
+    }
+
+    impl OptionField for TodoOptions {}
+
+    impl OptionGroup for TodoOptions {}
+
+    /// The order of the todos.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub enum TodoOrder {
+        /// The todo added first comes first.
+        #[default]
+        OldestFirst,
+        /// The todo added last comes first.
+        NewestFirst,
+    }
+
+    impl LeafValue for TodoOrder {}
+
+    impl OptionEnum for TodoOrder {
+        const ALL: &'static [Self] = _;
+    }
+
+    impl OptionField for TodoOrder {}
+
+    /// Load the options of a run. The global file is in `config_home`, and a run
+    /// without a config home keeps no files.
+    #[must_use]
+    pub fn load(config_home: Option<&Path>) -> canopy_options::Store<TodoOptions>;
+}
 
 pub mod store {
     //! SQLite storage for the todo example.
@@ -44,6 +107,9 @@ pub mod store {
     pub struct Store {/* private fields */}
 
     impl Store {
+        /// Insert a todo and return its persisted record.
+        pub fn add_todo(&self, item: &str) -> anyhow::Result<Todo>;
+
         /// Open or initialize a SQLite store.
         pub fn open(path: &str) -> anyhow::Result<Self>;
 

@@ -256,16 +256,16 @@ Canopy.
   - [x] The panel close still polls the widget.
 - [x] Run the Canopy tests, `cargo xtask smoke`, and `ncode api`. Commit
   Canopy.
-- [ ] fh: remove the pending checks from `Commander::poll` and
+- [x] fh: remove the pending checks from `Commander::poll` and
   `FileSelect`, and remove `poll_options`. Run fh's tests, smoke suites,
   and `ncode api`. Commit fh.
 
 ### Stage 4: The todo example and documents
 
-- [ ] C4: the todo's options, the registration, the `Options` wrapper, the
+- [x] C4: the todo's options, the registration, the `Options` wrapper, the
   follower, the `o` binding, the native tests, and the smoke suite.
-- [ ] `docs/options.md`, the crate docs, and `AGENTS.md`.
-- [ ] Run `ncode tidy`, `ncode test`, `cargo xtask smoke`, and `ncode api`
+- [x] `docs/options.md`, the crate docs, and `AGENTS.md`.
+- [x] Run `ncode tidy`, `ncode test`, `cargo xtask smoke`, and `ncode api`
   in Canopy. Commit.
 - [ ] Run `ncode tidy` and `ncode test` in both repositories on the final
   state.

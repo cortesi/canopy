@@ -1,6 +1,11 @@
 -- Todo's default configuration. Todo reads ~/.todo/init.luau when that file
 -- exists, and uses these defaults otherwise. Set TODO_CONFIG_HOME to read the
 -- file from another directory.
+--
+-- The o key opens the options panel, which shows and changes the order of the
+-- list and whether a long todo wraps, and saves them to ~/.todo/options.toml.
+-- A binding can change an option by its path, such as
+-- command.options.toggle("list.wrap").
 
 function setup()
     root.default_bindings()
@@ -10,6 +15,7 @@ function setup()
         { key = "d", description = "Delete item", action = command.todo.delete_item() },
         { key = "a", description = "Add item", action = command.todo.enter_item() },
         { key = "g", description = "First item", action = command.todo.select_first() },
+        { key = "o", description = "Options", action = command.options.open() },
         { key = { "j", "Down" }, description = "Next item", action = command.todo.select_by(1) },
         { key = { "k", "Up" }, description = "Previous item", action = command.todo.select_by(-1) },
         { key = { "Space", "PageDown" }, description = "Page down", action = command.todo.page(1) },

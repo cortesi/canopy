@@ -3,7 +3,7 @@
 // Package: canopy-options
 // Publish: crates.io
 // Workspace dependencies: canopy, canopy-options-derive, canopy-widgets
-// Workspace dependents: none
+// Workspace dependents: todo
 
 //! Declared options for Canopy applications.
 //!
@@ -12,7 +12,11 @@
 //! order, or a list, or a nested group. A [`Store`] merges the defaults, the
 //! global option file, the local option files, and the live values of a run.
 //! The [`Options`] widget owns the `options` script commands, and opens a panel
-//! that shows and changes every option.
+//! that shows and changes every option. A [`Follower`] applies the changes to
+//! the values that a widget shows.
+//!
+//! `docs/options.md` in the Canopy repository describes how an application
+//! uses options, and the todo example uses them.
 
 use std::{
     error::Error,

@@ -16,9 +16,11 @@ use canopy::{
     render::Render,
     script::Fixture,
     style::{StyleRules, themes::Palette},
+    text,
     tree::ChildSlot,
 };
 use canopy_mcp::{ConfigHome, UserConfig};
+use canopy_options::{Follower, Options, OptionsHandle};
 use canopy_widgets::{
     Container, Frame, Input, KeyHint, List, Root, Selectable, StatusBar, Text, ValueExposure,
 };
@@ -27,7 +29,10 @@ use canopy_widgets::{
 canopy::slot!(MainSlot: MainContent);
 canopy::slot!(ModalSlot: Container);
 
+pub mod options;
 pub mod store;
+
+use options::{TodoOptions, TodoOrder};
 
 /// Stable sample data used by automation fixtures.
 const FIXTURE_WITH_ITEMS: &[&str] = &[
@@ -45,6 +50,9 @@ pub struct TodoEntry {
     pub(crate) todo: store::Todo,
     /// Selection state.
     selected: bool,
+    /// Whether a long todo wraps onto more rows, or shows one row cut at the
+    /// width.
+    wrap: bool,
 }
 
 impl Selectable for TodoEntry {
@@ -54,11 +62,31 @@ impl Selectable for TodoEntry {
 }
 
 impl TodoEntry {
-    /// Create a new todo entry widget.
-    pub(crate) fn new(t: store::Todo) -> Self {
+    /// Create a new todo entry widget, which wraps a long todo if `wrap` is
+    /// set.
+    pub(crate) fn new(t: store::Todo, wrap: bool) -> Self {
         Self {
             todo: t,
             selected: false,
+            wrap,
+        }
+    }
+
+    /// Return the todo's text.
+    #[must_use]
+    pub fn text(&self) -> &str {
+        &self.todo.item
+    }
+
+    /// Return the rows of the todo's text at `width` columns.
+    fn lines(&self, width: usize) -> Vec<String> {
+        if self.wrap {
+            textwrap::wrap(&self.todo.item, width)
+                .into_iter()
+                .map(|line| line.into_owned())
+                .collect()
+        } else {
+            vec![text::truncate_end(&self.todo.item, width).into_owned()]
         }
     }
 }
@@ -78,9 +106,7 @@ impl Widget for TodoEntry {
         let height = if text_width == 0 {
             1
         } else {
-            textwrap::wrap(&self.todo.item, text_width as usize)
-                .len()
-                .max(1) as u32
+            self.lines(text_width as usize).len().max(1) as u32
         };
         c.clamp(Size::new(available_width, height))
     }
@@ -111,7 +137,7 @@ impl Widget for TodoEntry {
 
         if text_visible_width > 0 {
             let width = text_visible_width as usize;
-            let lines = textwrap::wrap(&self.todo.item, width);
+            let lines = self.lines(width);
             for (i, line) in lines.iter().enumerate().take(area.h as usize) {
                 let line_rect =
                     Rect::new(text_start_x, area.tl.y + i as u32, text_visible_width, 1);
@@ -142,13 +168,43 @@ pub(crate) struct Todo {
     store: store::Store,
     /// Owned interaction scope for the add-item modal.
     adder: Option<ModalToken>,
+    /// The todo's link to its options.
+    options: Follower<TodoOptions>,
 }
 
 #[derive_commands]
 impl Todo {
-    /// Load a todo widget from its database.
-    pub(crate) fn new(store: store::Store) -> Self {
-        Self { store, adder: None }
+    /// Load a todo widget from its database, with the options of `options`.
+    pub(crate) fn new(store: store::Store, options: OptionsHandle<TodoOptions>) -> Self {
+        Self {
+            store,
+            adder: None,
+            options: Follower::new(options),
+        }
+    }
+
+    /// Apply the options that changed since the todo applied them last.
+    fn apply_options(&mut self, c: &mut dyn Context) -> Result<()> {
+        let Some((previous, next)) = self.options.take_change() else {
+            return Ok(());
+        };
+        if previous.list.order != next.list.order {
+            // The list keeps each entry, and the selection, by its id.
+            self.reconcile_items(c, self.store.todos().map_err(store_error)?)?;
+        }
+        if previous.list.wrap != next.list.wrap {
+            let wrap = next.list.wrap;
+            self.with_list(c, |list, ctx| {
+                for entry in (0..list.len()).filter_map(|index| list.item(index)) {
+                    ctx.with_widget_mut(entry, |entry: &mut TodoEntry, _| {
+                        entry.wrap = wrap;
+                        Ok(())
+                    })?;
+                }
+                Ok(())
+            })?;
+        }
+        Ok(())
     }
 
     /// Build the Todo widget subtree once.
@@ -216,8 +272,14 @@ impl Todo {
         Ok(())
     }
 
-    /// Reconcile database rows by their persistent identifiers.
-    fn reconcile_items(&self, c: &mut dyn Context, items: Vec<store::Todo>) -> Result<()> {
+    /// Reconcile database rows by their persistent identifiers, in the order
+    /// that the options set. The rows come in the order they were added.
+    fn reconcile_items(&self, c: &mut dyn Context, mut items: Vec<store::Todo>) -> Result<()> {
+        let list = &self.options.applied().list;
+        if list.order == TodoOrder::NewestFirst {
+            items.reverse();
+        }
+        let wrap = list.wrap;
         let keys: Vec<i64> = items.iter().map(|item| item.id).collect();
         let items: HashMap<i64, store::Todo> =
             items.into_iter().map(|item| (item.id, item)).collect();
@@ -225,7 +287,7 @@ impl Todo {
             list.reconcile(
                 ctx,
                 keys,
-                |key| Ok(TodoEntry::new(items[key].clone())),
+                |key| Ok(TodoEntry::new(items[key].clone(), wrap)),
                 |key, id, ctx| {
                     ctx.with_widget_mut(id, |entry: &mut TodoEntry, _| {
                         entry.todo = items[key].clone();
@@ -397,7 +459,10 @@ impl Widget for Todo {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.ensure_tree(c)
+        // The tree shows the options that loaded, so a file sets the first
+        // frame, and the follower then hears the changes after it.
+        self.ensure_tree(c)?;
+        self.options.follow(c, Self::apply_options)
     }
 
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
@@ -487,6 +552,7 @@ fn app_builder(home: Option<&ConfigHome>) -> CanopyBuilder {
     CanopyBuilder::new()
         .configure(|setup| {
             Root::register(setup)?;
+            Options::register(setup)?;
             Todo::register(setup)?;
             setup.widget_styles(style);
             register_fixtures(setup)
@@ -495,12 +561,14 @@ fn app_builder(home: Option<&ConfigHome>) -> CanopyBuilder {
 }
 
 /// Create a todo application with an explicit database. A `home` holding
-/// `init.luau` replaces [`DEFAULT_CONFIG`].
+/// `init.luau` replaces [`DEFAULT_CONFIG`], and its `options.toml` holds the
+/// options. Without a `home`, the options keep no file.
 pub fn create_app(store: store::Store, home: Option<&ConfigHome>) -> AnyResult<Canopy> {
+    let options = options::load(home.map(ConfigHome::path));
     Ok(app_builder(home)
         .assemble(move |cnpy| {
-            let todo = Todo::new(store);
-            Root::new().install(cnpy, todo)?;
+            let todo = Todo::new(store, options.handle());
+            Root::new().install(cnpy, Options::new(&options, todo))?;
             Ok(())
         })
         .build()?)
@@ -527,26 +595,33 @@ mod tests {
             ("aaaa bbb", 2, 1),
             ("", 8, 1),
         ] {
-            let entry = TodoEntry::new(store::Todo {
+            let todo = store::Todo {
                 id: 1,
                 item: text.to_owned(),
-            });
+            };
+            let constraints =
+                MeasureConstraints::new(Constraint::Exact(width), Constraint::Unbounded);
             assert_eq!(
-                entry.measure(MeasureConstraints::new(
-                    Constraint::Exact(width),
-                    Constraint::Unbounded
-                )),
+                TodoEntry::new(todo.clone(), true).measure(constraints),
                 Measurement::Fixed(Size::new(width, height))
+            );
+            assert_eq!(
+                TodoEntry::new(todo, false).measure(constraints),
+                Measurement::Fixed(Size::new(width, 1)),
+                "an entry that does not wrap takes one row"
             );
         }
     }
 
     #[test]
     fn narrow_todo_entry_renders_every_wrapped_line() -> AnyResult<()> {
-        let entry = TodoEntry::new(store::Todo {
-            id: 1,
-            item: "aaaa bbb".to_owned(),
-        });
+        let entry = TodoEntry::new(
+            store::Todo {
+                id: 1,
+                item: "aaaa bbb".to_owned(),
+            },
+            true,
+        );
         let Measurement::Fixed(size) = entry.measure(MeasureConstraints::new(
             Constraint::Exact(8),
             Constraint::Unbounded,

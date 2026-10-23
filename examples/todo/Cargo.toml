@@ -13,6 +13,7 @@ doctest = false
 anyhow.workspace = true
 canopy.workspace = true
 canopy-mcp.workspace = true
+canopy-options.workspace = true
 canopy-widgets.workspace = true
 clap.workspace = true
 musq = { path = "../../../musq/crates/musq", default-features = false }

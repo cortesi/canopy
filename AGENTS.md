@@ -24,7 +24,8 @@
   `crates/canopy-derive` the geometry and command macros.
 - `examples/hello`, `examples/todo`, and `examples/gyms` are apps. Each
   launches through `canopy_mcp::launch` and has a `.canopyctl.toml` and a Luau
-  smoke suite.
+  smoke suite. The todo is the example of options; `docs/options.md`
+  describes them.
 - Sibling path dependencies: `../itty` (the terminal widget's emulator),
   `../../private/ruau` (the Luau runtime), `../tmcp` (MCP), and `../musq`
   (todo's store). A sibling mid-edit can break the build for a while.

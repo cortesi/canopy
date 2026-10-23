@@ -3282,6 +3282,7 @@ dependencies = [
  "anyhow",
  "canopy",
  "canopy-mcp",
+ "canopy-options",
  "canopy-widgets",
  "clap",
  "futures",

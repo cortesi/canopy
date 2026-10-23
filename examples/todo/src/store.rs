@@ -64,7 +64,7 @@ impl Store {
     }
 
     /// Insert a todo and return its persisted record.
-    pub(crate) fn add_todo(&self, item: &str) -> Result<Todo> {
+    pub fn add_todo(&self, item: &str) -> Result<Todo> {
         block_on(
             sql_as!("INSERT INTO todo (item) VALUES ({item}) RETURNING id, item;")?
                 .fetch_one(&self.pool),
