@@ -594,6 +594,7 @@ fn help_lists_the_keys_of_the_panel_mode() {
     harness.script("options.open()").unwrap();
     assert!(bound(&harness, "S", "Choose the file to save to"));
     assert!(bound(&harness, "Esc", "Back, or close the panel"));
+    assert!(bound(&harness, "q", "Close the panel"));
     // Nothing is unsaved, and the selected row is a group.
     assert!(!bound(&harness, "R", "Revert every unsaved value"));
     assert!(!bound(&harness, "x", "Revert the unsaved value"));
@@ -621,6 +622,32 @@ fn help_lists_the_keys_of_the_panel_mode() {
     assert!(!bound(&harness, "S", "Choose the file to save to"));
     keys(&mut harness, &["Esc"]);
     assert!(bound(&harness, "S", "Choose the file to save to"));
+}
+
+#[test]
+fn q_closes_the_panel_from_any_level_but_an_edit_types_it() {
+    let store: Store<Root> = Store::default();
+    let mut harness = options_harness(&store);
+    harness.script("options.open()").unwrap();
+    // The listing group, then the variants of its order: two levels down.
+    keys(&mut harness, &["i", "o"]);
+    assert!(screen(&mut harness).contains("(•)"));
+    keys(&mut harness, &["q"]);
+    assert!(!panel_open(&mut harness), "q closes the whole panel");
+
+    // An edit takes q as text.
+    harness.script("options.open()").unwrap();
+    keys(&mut harness, &["a", "q", "Enter"]);
+    assert_eq!(store.current().name, "q");
+    assert!(panel_open(&mut harness));
+    keys(&mut harness, &["q"]);
+    assert!(!panel_open(&mut harness));
+
+    // The panel opens at the top again.
+    harness.script("options.open()").unwrap();
+    assert!(bound(&harness, "Esc", "Back, or close the panel"));
+    keys(&mut harness, &["Esc"]);
+    assert!(!panel_open(&mut harness), "the panel opened at the top");
 }
 
 #[test]

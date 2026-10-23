@@ -38,12 +38,13 @@ use canopy_widgets::editor::LineNumbers;
 pub const OPTIONS_FILE: &str = "options.toml";
 
 /// Keys that the options panel always binds, and that no option or variant
-/// can take as its accelerator: the navigation keys, revert all, and save.
+/// can take as its accelerator: the navigation keys, revert all, save, and
+/// `q`, which closes the panel from any level.
 ///
 /// The panel binds other keys too, such as `x` and `+`. An accelerator can
 /// take one of those, and the panel then leaves that key to the accelerator
 /// in its level. An accelerator is a visible character, never a space.
-pub const RESERVED_KEYS: [char; 6] = _;
+pub const RESERVED_KEYS: [char; 7] = _;
 
 /// A type that one leaf holds.
 // Not dyn-compatible.

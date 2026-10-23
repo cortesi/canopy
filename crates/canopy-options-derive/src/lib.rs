@@ -19,7 +19,7 @@ use syn::{
 /// Keys that the options panel uses for its own actions.
 ///
 /// Keep this list in step with `canopy_options::RESERVED_KEYS`.
-const RESERVED_KEYS: [char; 6] = ['h', 'j', 'k', 'l', 'R', 'S'];
+const RESERVED_KEYS: [char; 7] = ['h', 'j', 'k', 'l', 'q', 'R', 'S'];
 
 /// Derive an option group for a struct with named fields.
 ///
@@ -612,7 +612,7 @@ mod tests {
     fn a_valid_group_and_enum_expand() {
         let group: DeriveInput = parse_quote! {
             struct Group {
-                #[option(key = 'q')]
+                #[option(key = 'u')]
                 hidden: bool,
                 #[option(min = 0, max = 20, default = 3)]
                 context: u32,
@@ -633,15 +633,15 @@ mod tests {
     fn two_options_cannot_share_a_key() {
         let input: DeriveInput = parse_quote! {
             struct Group {
-                #[option(key = 'q')]
+                #[option(key = 'u')]
                 hidden: bool,
-                #[option(key = 'q')]
+                #[option(key = 'u')]
                 holes: bool,
             }
         };
         assert_eq!(
             group_error(&input),
-            "the key 'q' is already used by `hidden`"
+            "the key 'u' is already used by `hidden`"
         );
     }
 
@@ -689,6 +689,16 @@ mod tests {
         assert_eq!(
             group_error(&reserved),
             "the key 'S' is reserved by the options panel"
+        );
+        let quit: DeriveInput = parse_quote! {
+            enum Order {
+                #[option(key = 'q')]
+                Quick,
+            }
+        };
+        assert_eq!(
+            enum_error(&quit),
+            "the key 'q' is reserved by the options panel"
         );
     }
 

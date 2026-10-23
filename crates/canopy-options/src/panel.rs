@@ -71,6 +71,8 @@ enum Intent {
     Pop,
     /// Go back one level, or close the panel at the top.
     Back,
+    /// Close the panel from any level.
+    Quit,
     /// Open the save menu.
     Save,
     /// Revert the selected leaf.
@@ -104,11 +106,12 @@ enum Intent {
 impl Intent {
     /// The intents of the panel's own, which it registers. The navigation
     /// intents belong to Canopy.
-    const OWN: [Self; 18] = [
+    const OWN: [Self; 19] = [
         Self::Activate,
         Self::Forward,
         Self::Pop,
         Self::Back,
+        Self::Quit,
         Self::Save,
         Self::Revert,
         Self::RevertAll,
@@ -133,6 +136,7 @@ impl Intent {
             Self::Forward => "options.forward",
             Self::Pop => "options.pop",
             Self::Back => "options.back",
+            Self::Quit => "options.quit",
             Self::Save => "options.save",
             Self::Revert => "options.revert",
             Self::RevertAll => "options.revert_all",
@@ -160,7 +164,7 @@ impl Intent {
 
 /// The keys of the panel: the group of the mode, the key, the intent, and
 /// what help says of it.
-const KEYS: [(FrameworkBindingGroup, &str, Intent, &str); 29] = [
+const KEYS: [(FrameworkBindingGroup, &str, Intent, &str); 30] = [
     (
         BROWSE_BINDINGS,
         "Up",
@@ -239,6 +243,7 @@ const KEYS: [(FrameworkBindingGroup, &str, Intent, &str); 29] = [
         Intent::Back,
         "Back, or close the panel",
     ),
+    (BROWSE_BINDINGS, "q", Intent::Quit, "Close the panel"),
     (BROWSE_BINDINGS, "h", Intent::Pop, "Back"),
     (BROWSE_BINDINGS, "Left", Intent::Pop, "Back"),
     (
@@ -906,7 +911,7 @@ impl PanelBody {
             ),
             Mode::Browse if self.yields(intent) => false,
             Mode::Browse => match intent {
-                Intent::Back => true,
+                Intent::Back | Intent::Quit => true,
                 Intent::Nav(_) | Intent::Activate => !self.rows().is_empty(),
                 Intent::Save => self.level().kind != LevelKind::Save,
                 Intent::Forward => self.selected_action().is_some(),
@@ -1224,6 +1229,7 @@ impl PanelBody {
             Intent::Activate => self.activate(context)?,
             Intent::Forward => self.forward(context)?,
             Intent::Pop | Intent::Back => self.back(context)?,
+            Intent::Quit => self.close(context)?,
             Intent::Save => self.push(context, LevelKind::Save, 0)?,
             Intent::Revert => {
                 if let Some(path) = self.selected_leaf() {

@@ -227,6 +227,7 @@ The `options` commands take a leaf's dotted path:
 
 A binding changes an option with a command value, such as
 `command.options.toggle("list.wrap")`. The panel lists each group's options
-with their values, and marks a value from a file or a live value. In quick
-mode, `options.open(nil, true)`, the first change closes the panel. The
-panel's help lists its keys.
+with their values, and marks a value from a file or a live value. Esc goes
+back one level, and `q` closes the panel from any level, so no option can
+take `q` as its key. In quick mode, `options.open(nil, true)`, the first
+change closes the panel. The panel's help lists its keys.

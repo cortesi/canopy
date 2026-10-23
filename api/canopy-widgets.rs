@@ -1979,7 +1979,8 @@ impl Menu {
     /// The framework group a menu's modal admits.
     ///
     /// The arrows, `j` and `k`, the page keys, and Home and End move the
-    /// selection, Enter and Space activate it, and Esc closes.
+    /// selection, Enter and Space activate it, and Esc or `q` closes. A row
+    /// whose key is `q` takes that key instead.
     pub const BINDINGS: FrameworkBindingGroup = _;
     /// Return the list, which takes the keyboard while the menu is open, or
     /// an error before the menu mounts.
@@ -4551,7 +4552,8 @@ pub mod menu {
     //! Each row names one action: its key, a label, and a value at the right,
     //! such as a setting's current state. In a selectable menu, the arrows, `j`
     //! and `k`, the page keys, and Home and End move the selection, Enter or Space
-    //! activates the selected row, a row's key activates that row, and Esc closes.
+    //! activates the selected row, a row's key activates that row, and Esc or `q`
+    //! closes.
     //! A menu without selection only lists its rows, as the menu of a transient
     //! mode does while the mode waits for its key.
     //!

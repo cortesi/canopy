@@ -4,12 +4,13 @@
 use std::{error::Error, fmt, iter, marker::PhantomData};
 
 /// Keys that the options panel always binds, and that no option or variant
-/// can take as its accelerator: the navigation keys, revert all, and save.
+/// can take as its accelerator: the navigation keys, revert all, save, and
+/// `q`, which closes the panel from any level.
 ///
 /// The panel binds other keys too, such as `x` and `+`. An accelerator can
 /// take one of those, and the panel then leaves that key to the accelerator
 /// in its level. An accelerator is a visible character, never a space.
-pub const RESERVED_KEYS: [char; 6] = ['h', 'j', 'k', 'l', 'R', 'S'];
+pub const RESERVED_KEYS: [char; 7] = ['h', 'j', 'k', 'l', 'q', 'R', 'S'];
 
 /// Keys that the panel binds in every level besides the reserved keys, and
 /// that it thus never chooses as an accelerator: revert, clear, and select
@@ -1097,16 +1098,16 @@ mod key_tests {
 
     #[test]
     fn a_capital_serves_only_when_no_lowercase_letter_is_free() {
-        // Of the lowercase letters, h, j, k, l, and x never serve, which
-        // leaves 21.
-        let labels: Vec<(&'static str, Option<char>)> = ["alpha"; 22]
+        // Of the lowercase letters, h, j, k, l, q, and x never serve, which
+        // leaves 20.
+        let labels: Vec<(&'static str, Option<char>)> = ["alpha"; 21]
             .into_iter()
             .map(|label| (label, None))
             .collect();
         let keys = keys(&labels);
         let lower = keys.iter().flatten().filter(|key| key.is_ascii_lowercase());
-        assert_eq!(lower.count(), 21, "every free lowercase letter serves");
+        assert_eq!(lower.count(), 20, "every free lowercase letter serves");
         // A is the panel's select-all key, so the label's next letter serves.
-        assert_eq!(keys[21], Some('L'), "the next row takes a capital");
+        assert_eq!(keys[20], Some('L'), "the next row takes a capital");
     }
 }

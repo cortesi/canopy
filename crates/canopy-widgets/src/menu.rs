@@ -3,7 +3,8 @@
 //! Each row names one action: its key, a label, and a value at the right,
 //! such as a setting's current state. In a selectable menu, the arrows, `j`
 //! and `k`, the page keys, and Home and End move the selection, Enter or Space
-//! activates the selected row, a row's key activates that row, and Esc closes.
+//! activates the selected row, a row's key activates that row, and Esc or `q`
+//! closes.
 //! A menu without selection only lists its rows, as the menu of a transient
 //! mode does while the mode waits for its key.
 //!
@@ -278,7 +279,8 @@ impl Menu {
     /// The framework group a menu's modal admits.
     ///
     /// The arrows, `j` and `k`, the page keys, and Home and End move the
-    /// selection, Enter and Space activate it, and Esc closes.
+    /// selection, Enter and Space activate it, and Esc or `q` closes. A row
+    /// whose key is `q` takes that key instead.
     pub const BINDINGS: FrameworkBindingGroup = FrameworkBindingGroup::new("menu");
 
     /// Construct an empty menu titled `title`.
@@ -489,7 +491,7 @@ impl Register for MenuList {
         let nav = |intent: NavIntent| -> Result<BindingAction> {
             Ok(BindingAction::Intent(IntentName::new(intent.name())?))
         };
-        let bindings: [(&str, &str, BindingAction); 11] = [
+        let bindings: [(&str, &str, BindingAction); 12] = [
             ("Up", "Previous row", nav(NavIntent::Up)?),
             ("k", "Previous row", nav(NavIntent::Up)?),
             ("Down", "Next row", nav(NavIntent::Down)?),
@@ -510,6 +512,11 @@ impl Register for MenuList {
             ),
             (
                 "Esc",
+                "Close the menu",
+                BindingAction::Command(Self::call_cancel()),
+            ),
+            (
+                "q",
                 "Close the menu",
                 BindingAction::Command(Self::call_cancel()),
             ),
@@ -626,8 +633,11 @@ impl Widget for MenuList {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, ContextExt, NodeId, Widget, commands::CommandTarget, error::Result,
-        input::key::Key, testing::harness::Harness,
+        Context, ContextExt, NodeId, Widget,
+        commands::CommandTarget,
+        error::Result,
+        input::{ModalBindings, ModalOptions, key::Key},
+        testing::harness::Harness,
     };
 
     use super::{Menu, MenuItem, MenuList, MenuRow, RowLayout};
@@ -658,7 +668,7 @@ mod tests {
 
     impl Widget for MenuHost {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-            self.menu = Some(ctx.add_child(ctx.node_id(), Menu::new("menu"))?.into());
+            self.menu = Some(ctx.add_modal(Menu::new("menu"))?.into());
             Ok(())
         }
     }
@@ -666,6 +676,13 @@ mod tests {
     /// Build a host whose menu shows rows `a` and `b`, and a note, with `b`
     /// selected. Return the harness and the list.
     fn hosting() -> Result<(Harness, NodeId)> {
+        hosting_keys(['a', 'b'])
+    }
+
+    /// Build a host whose menu shows a row for each of `keys`, named by its
+    /// key, and a note, with the second row selected. Return the harness and
+    /// the list.
+    fn hosting_keys(keys: [char; 2]) -> Result<(Harness, NodeId)> {
         let mut harness = Harness::builder(MenuHost::default())
             .configure(|setup| setup.add_commands::<MenuHost>())
             .register::<MenuList>()
@@ -683,11 +700,11 @@ mod tests {
                 MenuHost::call_chose(name.to_owned()).with_target(owner),
             )
         };
-        let items = vec![
-            item('a', "a"),
-            item('b', "b"),
-            MenuItem::note(MenuRow::new(None, "a note")),
-        ];
+        let mut items: Vec<MenuItem> = keys
+            .iter()
+            .map(|key| item(*key, &key.to_string()))
+            .collect();
+        items.push(MenuItem::note(MenuRow::new(None, "a note")));
         let list = harness.canopy.with_context(menu, |ctx| {
             ctx.with_widget_mut(menu, |menu: &mut Menu, ctx| {
                 menu.set_items(
@@ -700,9 +717,19 @@ mod tests {
                 menu.list()
             })
         })?;
-        harness
-            .canopy
-            .with_context(list, |ctx| ctx.set_focus(list).map(|_| ()))?;
+        harness.canopy.with_context(root, |ctx| {
+            ctx.open_modal(ModalOptions {
+                owner: root,
+                modal: menu,
+                initial_focus: list,
+                dim_target: None,
+                bindings: ModalBindings::Framework {
+                    groups: &[Menu::BINDINGS],
+                    intents: &[],
+                },
+            })
+            .map(|_| ())
+        })?;
         harness.render()?;
         Ok((harness, list))
     }
@@ -739,6 +766,18 @@ mod tests {
             ["a", "closed", "closed"],
             "a note posts nothing, and a cancel posts the close"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn q_closes_the_menu_unless_a_row_takes_it() -> Result<()> {
+        let (mut harness, _) = hosting()?;
+        harness.key(Key::parse_spec("q")?)?;
+        assert_eq!(posted(&mut harness), ["closed"]);
+
+        let (mut harness, _) = hosting_keys(['a', 'q'])?;
+        harness.key(Key::parse_spec("q")?)?;
+        assert_eq!(posted(&mut harness), ["q", "closed"], "the row's key wins");
         Ok(())
     }
 
