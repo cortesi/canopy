@@ -242,19 +242,19 @@ Canopy.
 
 ### Stage 3: The follower uses deferred calls
 
-- [ ] C1: `Follower::follow` takes the stamp and uses
+- [x] C1: `Follower::follow` takes the stamp and uses
   `with_widget_mut_or_post`. Remove `take_pending` and the pending flag.
   A deferred apply's failure is an `options:` notice.
-- [ ] Tests in `canopy-options`:
-  - [ ] A widget's command writes an option through another handle, and
+- [x] Tests in `canopy-options`:
+  - [x] A widget's command writes an option through another handle, and
     the widget follows that option. The widget shows the change after the
     dispatch, with no poll.
-  - [ ] Two writes in one dispatch apply once, through `take_change`.
-  - [ ] A removed or replaced widget ignores changes, with no notice.
-  - [ ] A deferred apply's failure is a notice, and other queued work
+  - [x] Two writes in one dispatch apply once, through `take_change`.
+  - [x] A removed or replaced widget ignores changes, with no notice.
+  - [x] A deferred apply's failure is a notice, and other queued work
     still runs.
-  - [ ] The panel close still polls the widget.
-- [ ] Run the Canopy tests, `cargo xtask smoke`, and `ncode api`. Commit
+  - [x] The panel close still polls the widget.
+- [x] Run the Canopy tests, `cargo xtask smoke`, and `ncode api`. Commit
   Canopy.
 - [ ] fh: remove the pending checks from `Commander::poll` and
   `FileSelect`, and remove `poll_options`. Run fh's tests, smoke suites,

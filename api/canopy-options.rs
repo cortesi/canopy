@@ -227,9 +227,11 @@ pub struct FieldMeta {
 ///
 /// A change reaches the widget through a subscription. A widget can be busy
 /// when the store changes, such as when a host calls it and the call writes
-/// an option. The change then waits for the widget's next poll, which
-/// [`Self::take_pending`] reports. An error of the widget's apply reaches
-/// the store, which shows it as a notice.
+/// an option. The change then waits until the outermost dispatch completes,
+/// as [`ContextExt::with_widget_mut_or_post`] describes. An error of an
+/// apply that runs at once reaches the store, which shows it as a notice
+/// with the errors of the other subscribers. A waiting apply shows its own
+/// error as a notice.
 pub struct Follower<G> {/* private fields */}
 
 impl<G: 'static + Clone + PartialEq> Follower<G> {
@@ -241,9 +243,10 @@ impl<G: 'static + Clone + PartialEq> Follower<G> {
     /// group.
     ///
     /// The widget calls this as it mounts. `apply` takes the change with
-    /// [`Self::take_change`]. The widget also polls as the options panel
-    /// closes, so it can move the focus that the panel held.
-    pub fn follow<W: Widget>(
+    /// [`Self::take_change`]. A widget that is gone, or that another widget
+    /// replaced, hears no more changes. The widget also polls as the options
+    /// panel closes, so it can move the focus that the panel held.
+    pub fn follow<W: 'static + Widget>(
         &self,
         context: &mut dyn Context,
         apply: fn(_: &mut W, _: &mut dyn Context) -> canopy::error::Result<()>,
@@ -274,9 +277,6 @@ impl<G: 'static + Clone + PartialEq> Follower<G> {
     /// Return the values the widget applied last and the current values, if
     /// they differ, and remember the current values as applied.
     pub fn take_change(&mut self) -> Option<(G, G)>;
-
-    /// Return whether a change waits for the widget's poll, and clear it.
-    pub fn take_pending(&self) -> bool;
 
     /// Change the group with `write`. The widget applies the change itself
     /// afterwards, with [`Self::take_change`].

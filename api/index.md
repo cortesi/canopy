@@ -118,7 +118,7 @@ Declared options for Canopy applications.
 - Publish: crates.io
 - Workspace dependencies: canopy, canopy-options-derive, canopy-widgets
 - Workspace dependents: none
-- Items: 140
+- Items: 139
 - Exposes: canopy, canopy-widgets
 
 ## hello
