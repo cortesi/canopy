@@ -4163,9 +4163,10 @@ pub mod editor {
     }
 
     /// Line number rendering mode.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub enum LineNumbers {
         /// Do not render line numbers.
+        #[default]
         None,
         /// Render absolute line numbers.
         Absolute,

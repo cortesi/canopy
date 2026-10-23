@@ -5,7 +5,10 @@ use std::{cell::Cell, mem, rc::Rc};
 
 use canopy::{Context, ContextExt, Widget, error::Result, runtime::PollLifetime};
 
-use crate::store::OptionsHandle;
+use crate::{
+    model::OptionGroup,
+    store::{OptionsHandle, Store},
+};
 
 /// A widget's link to its group of a store.
 ///
@@ -31,6 +34,18 @@ pub struct Follower<G> {
 }
 
 impl<G: Clone + PartialEq + 'static> Follower<G> {
+    /// Follow a store of the follower's own, which has no files.
+    ///
+    /// Each call makes a separate store. A widget uses one until a host
+    /// gives it a handle to the host's store.
+    #[must_use]
+    pub fn standalone() -> Self
+    where
+        G: OptionGroup + Send + Sync,
+    {
+        Self::new(Store::<G>::default().handle())
+    }
+
     /// Follow `handle`, with its current values applied.
     #[must_use]
     pub fn new(handle: OptionsHandle<G>) -> Self {

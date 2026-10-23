@@ -3883,15 +3883,15 @@ pub mod render {
     /// big text, choose their symbols from it.
     #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub enum Glyphs {
-        /// The block elements, U+2580 to U+259F, except the shades. Nearly every
-        /// terminal font has them, so this is the fallback for a font that lacks
-        /// the mosaics of the full set.
-        Blocks,
         /// The block elements, plus the octants, sextants, bars, and smooth
         /// mosaics of Symbols for Legacy Computing. It draws the best pictures,
         /// and it is the default. Some fonts lack these mosaics.
         #[default]
         Full,
+        /// The block elements, U+2580 to U+259F, except the shades. Nearly every
+        /// terminal font has them, so this is the fallback for a font that lacks
+        /// the mosaics of the full set.
+        Blocks,
     }
 
     impl Glyphs {

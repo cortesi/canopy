@@ -72,9 +72,10 @@ pub enum EditMode {
 }
 
 /// Line number rendering mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum LineNumbers {
     /// Do not render line numbers.
+    #[default]
     None,
     /// Render absolute line numbers.
     Absolute,

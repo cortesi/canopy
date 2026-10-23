@@ -25,9 +25,11 @@ use std::{
 use canopy::{
     Context, Register, Widget,
     commands::{ArgValue, CommandCall, CommandNode, CommandSpec},
+    render::Glyphs,
     runtime::NodeWakeHandle,
 };
 pub use canopy_options_derive::{OptionEnum, OptionGroup};
+use canopy_widgets::editor::LineNumbers;
 /// The name of an option file in its directory.
 pub const OPTIONS_FILE: &str = "options.toml";
 
@@ -53,6 +55,10 @@ pub trait LeafValue: Clone + PartialEq + Sized {
     /// Return the dynamic value.
     fn to_value(&self) -> Value;
 }
+
+impl LeafValue for Glyphs {}
+
+impl LeafValue for LineNumbers {}
 
 impl LeafValue for String {}
 
@@ -98,6 +104,14 @@ pub trait OptionEnum: 'static + Copy + PartialEq {
     fn variants() -> &'static [Variant];
 }
 
+impl OptionEnum for Glyphs {
+    const ALL: &'static [Self] = _;
+}
+
+impl OptionEnum for LineNumbers {
+    const ALL: &'static [Self] = _;
+}
+
 /// A field of an option group: a leaf, or a nested group.
 // Not dyn-compatible.
 pub trait OptionField: Clone + PartialEq + Sized {
@@ -114,6 +128,10 @@ pub trait OptionField: Clone + PartialEq + Sized {
     /// Set the value at `path`, relative to this field.
     fn set_path(&mut self, path: &[&str], value: &Value) -> Result<(), SetError>;
 }
+
+impl OptionField for Glyphs {}
+
+impl OptionField for LineNumbers {}
 
 impl OptionField for String {}
 
@@ -243,6 +261,15 @@ impl<G: 'static + Clone + PartialEq> Follower<G> {
     /// Remove the live values at or below `path`, relative to the group.
     /// The widget applies the change itself afterwards.
     pub fn revert(&self, context: &mut dyn Context, path: &str) -> canopy::error::Result<()>;
+
+    /// Follow a store of the follower's own, which has no files.
+    ///
+    /// Each call makes a separate store. A widget uses one until a host
+    /// gives it a handle to the host's store.
+    #[must_use]
+    pub fn standalone() -> Self
+    where
+        G: OptionGroup + Send + Sync;
 
     /// Return the values the widget applied last and the current values, if
     /// they differ, and remember the current values as applied.

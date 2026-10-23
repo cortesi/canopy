@@ -17,20 +17,20 @@ use crate::{
 /// big text, choose their symbols from it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum Glyphs {
-    /// The block elements, U+2580 to U+259F, except the shades. Nearly every
-    /// terminal font has them, so this is the fallback for a font that lacks
-    /// the mosaics of the full set.
-    Blocks,
     /// The block elements, plus the octants, sextants, bars, and smooth
     /// mosaics of Symbols for Legacy Computing. It draws the best pictures,
     /// and it is the default. Some fonts lack these mosaics.
     #[default]
     Full,
+    /// The block elements, U+2580 to U+259F, except the shades. Nearly every
+    /// terminal font has them, so this is the fallback for a font that lacks
+    /// the mosaics of the full set.
+    Blocks,
 }
 
 impl Glyphs {
     /// Every setting.
-    pub const ALL: [Self; 2] = [Self::Blocks, Self::Full];
+    pub const ALL: [Self; 2] = [Self::Full, Self::Blocks];
 
     /// The name of the setting, in lower case.
     pub fn name(self) -> &'static str {

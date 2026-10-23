@@ -19,7 +19,7 @@ use canopy::{
 };
 
 use crate::{
-    Changes, Kind, Layout, OptionEnum, OptionGroup, Options, Set, SetError, Store, Value,
+    Changes, Follower, Kind, Layout, OptionEnum, OptionGroup, Options, Set, SetError, Store, Value,
     file::Scope, model, store::Source,
 };
 
@@ -402,6 +402,17 @@ fn handles_narrow_notify_and_queue_writes() {
     thread::spawn(move || assert!(snapshot.hidden))
         .join()
         .unwrap();
+}
+
+#[test]
+fn standalone_followers_keep_separate_stores() {
+    let mut first = Follower::<Root>::standalone();
+    let second = Follower::<Root>::standalone();
+    assert_eq!(*first.applied(), Root::default());
+    with_context(|context| first.write(context, |root| root.diff.context = 7));
+    assert_eq!(first.take_change().unwrap().1.diff.context, 7);
+    assert_eq!(*second.applied(), Root::default());
+    assert!(!second.live_at(""));
 }
 
 #[test]

@@ -14,6 +14,7 @@ mod follow;
 mod layout;
 mod model;
 mod panel;
+mod stock;
 mod store;
 #[cfg(test)]
 mod tests;
