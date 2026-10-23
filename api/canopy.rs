@@ -4,7 +4,7 @@
 // Publish: crates.io
 // Declared features: testing
 // Workspace dependencies: canopy-derive, canopy-geom
-// Workspace dependents: canopy (dev), canopy-derive (dev), canopy-markdown, canopy-mcp, canopy-widgets, canopyctl, gyms, hello, mosaic-score, todo
+// Workspace dependents: canopy (dev), canopy-derive (dev), canopy-markdown, canopy-mcp, canopy-options, canopy-widgets, canopyctl, gyms, hello, mosaic-score, todo
 // Unnameable: crate::core::commands::sealed::Inject, crate::core::context::sealed::Context, crate::core::context::sealed::ViewContext
 
 //! Canopy: A terminal UI library.

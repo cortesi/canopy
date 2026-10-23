@@ -32,7 +32,7 @@ Canopy: A terminal UI library.
 - Publish: crates.io
 - Declared features: testing
 - Workspace dependencies: canopy-derive, canopy-geom
-- Workspace dependents: canopy (dev), canopy-derive (dev), canopy-markdown, canopy-mcp, canopy-widgets, canopyctl, gyms, hello, mosaic-score, todo
+- Workspace dependents: canopy (dev), canopy-derive (dev), canopy-markdown, canopy-mcp, canopy-options, canopy-widgets, canopyctl, gyms, hello, mosaic-score, todo
 - Unnameable: crate::core::commands::sealed::Inject, crate::core::context::sealed::Context, crate::core::context::sealed::ViewContext
 - Items: 729
 - Exposes: canopy-geom, futures-channel, ruau, ruau-declaration, schemars, serde_core, serde_json
@@ -55,6 +55,16 @@ Draw pictures and large text with block mosaic characters.
 - Workspace dependencies: none
 - Workspace dependents: canopy-widgets, mosaic-score
 - Items: 58
+- Exposes: none
+
+## canopy-options-derive
+
+Derive macros for `canopy-options`.
+
+- Publish: crates.io
+- Workspace dependencies: none
+- Workspace dependents: canopy-options
+- Items: 2
 - Exposes: none
 
 ## canopy-term
@@ -85,7 +95,7 @@ Built-in widgets for canopy applications.
 - Publish: crates.io
 - Declared features: default, devtools, graphics, syntax, terminal-widget
 - Workspace dependencies: canopy, canopy-mosaic, canopy-xmark (optional)
-- Workspace dependents: canopy-markdown, canopyctl, gyms, hello, todo
+- Workspace dependents: canopy-markdown, canopy-options, canopyctl, gyms, hello, todo
 - Unnameable: crate::image_view::ZoomDirection
 - Items: 969
 - Exposes: canopy, canopy-mosaic, grep-regex, image, syntect
@@ -100,6 +110,16 @@ Interactive Markdown reading and exact source viewing for Canopy.
 - Workspace dependents: gyms
 - Items: 316
 - Exposes: canopy, canopy-widgets, canopy-xmark, image, url
+
+## canopy-options
+
+Declared options for Canopy applications.
+
+- Publish: crates.io
+- Workspace dependencies: canopy, canopy-options-derive, canopy-widgets
+- Workspace dependents: none
+- Items: 137
+- Exposes: canopy
 
 ## hello
 

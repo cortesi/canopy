@@ -1,0 +1,20 @@
+[package]
+name = "canopy-options-derive"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Derive macros for canopy-options"
+
+[lib]
+proc-macro = true
+doctest = false
+
+[dependencies]
+syn = { version = "3.0.6", features = ["extra-traits", "full"] }
+quote = "1.0.47"
+proc-macro2 = "1.0.107"
+convert_case.workspace = true
+
+[lints]
+workspace = true

@@ -16,7 +16,9 @@
   `crates/canopy-markdown` the rendered and exact-source Markdown readers;
   `crates/canopy-mosaic` the block mosaic matcher, which depends on no other
   workspace crate; `crates/mosaic-score` the perceptual score of its drawing;
-  `crates/canopy-mcp` the MCP launcher, config homes, and smoke suites;
+  `crates/canopy-options` the declared, layered, and saved options, with
+  their panel and `options` commands, and `crates/canopy-options-derive` its
+  derives; `crates/canopy-mcp` the MCP launcher, config homes, and smoke suites;
   `crates/canopy-term` the host that runs an app in a real terminal for tests
   and tools; `crates/canopyctl` the automation CLI; `crates/canopy-geom` and
   `crates/canopy-derive` the geometry and command macros.

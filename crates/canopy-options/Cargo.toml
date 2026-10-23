@@ -1,0 +1,24 @@
+[package]
+name = "canopy-options"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Declared, layered, and saved options for Canopy applications"
+
+[lib]
+doctest = false
+
+[dependencies]
+canopy.workspace = true
+canopy-options-derive.workspace = true
+canopy-widgets = { workspace = true, default-features = false }
+tempfile.workspace = true
+toml_edit = "0.25.15"
+
+[dev-dependencies]
+anyhow.workspace = true
+canopy = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true

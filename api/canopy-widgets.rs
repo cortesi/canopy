@@ -4,7 +4,7 @@
 // Publish: crates.io
 // Declared features: default, devtools, graphics, syntax, terminal-widget
 // Workspace dependencies: canopy, canopy-mosaic, canopy-xmark (optional)
-// Workspace dependents: canopy-markdown, canopyctl, gyms, hello, todo
+// Workspace dependents: canopy-markdown, canopy-options, canopyctl, gyms, hello, todo
 // Unnameable: crate::image_view::ZoomDirection
 
 //! Built-in widgets for canopy applications.
