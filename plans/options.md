@@ -267,5 +267,5 @@ Canopy.
 - [x] `docs/options.md`, the crate docs, and `AGENTS.md`.
 - [x] Run `ncode tidy`, `ncode test`, `cargo xtask smoke`, and `ncode api`
   in Canopy. Commit.
-- [ ] Run `ncode tidy` and `ncode test` in both repositories on the final
+- [x] Run `ncode tidy` and `ncode test` in both repositories on the final
   state.
