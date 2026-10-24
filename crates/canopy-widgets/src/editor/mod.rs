@@ -79,8 +79,6 @@ pub enum LineNumbers {
     None,
     /// Render absolute line numbers.
     Absolute,
-    /// Render relative line numbers (current line stays absolute).
-    Relative,
 }
 
 /// Configuration for the editor widget.

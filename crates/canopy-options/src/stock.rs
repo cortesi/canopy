@@ -54,7 +54,6 @@ foreign_enum!(Glyphs {
 foreign_enum!(LineNumbers {
     None => "none",
     Absolute => "absolute",
-    Relative => "relative",
 });
 
 #[cfg(test)]
@@ -92,15 +91,11 @@ mod tests {
         assert_eq!(<Glyphs as OptionEnum>::ALL, Glyphs::ALL);
         assert_eq!(
             names(LineNumbers::variants()),
-            [
-                ("none", "none"),
-                ("absolute", "absolute"),
-                ("relative", "relative")
-            ]
+            [("none", "none"), ("absolute", "absolute")]
         );
         assert_eq!(
-            <LineNumbers as OptionEnum>::from_name("Relative"),
-            Some(LineNumbers::Relative)
+            <LineNumbers as OptionEnum>::from_name("Absolute"),
+            Some(LineNumbers::Absolute)
         );
     }
 
@@ -124,14 +119,14 @@ mod tests {
     fn a_file_sets_the_enums_by_name() {
         let root = tempfile::tempdir().unwrap();
         let file = root.path().join("options.toml");
-        fs::write(&file, "glyphs = \"blocks\"\nline_numbers = \"relative\"\n").unwrap();
+        fs::write(&file, "glyphs = \"blocks\"\nline_numbers = \"absolute\"\n").unwrap();
         let layout = Layout {
             global: Some(file),
             ..Layout::default()
         };
         let shown = Store::<Shown>::load(&layout).current();
         assert_eq!(shown.glyphs, Glyphs::Blocks);
-        assert_eq!(shown.line_numbers, LineNumbers::Relative);
+        assert_eq!(shown.line_numbers, LineNumbers::Absolute);
         let document = default_document::<Shown>();
         assert!(document.contains("glyphs = \"full\""), "{document}");
         assert!(document.contains("line_numbers = \"none\""), "{document}");

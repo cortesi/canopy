@@ -4171,8 +4171,6 @@ pub mod editor {
         None,
         /// Render absolute line numbers.
         Absolute,
-        /// Render relative line numbers (current line stays absolute).
-        Relative,
     }
 
     /// Owned text and wrapping prepared before publication to a read-only editor.

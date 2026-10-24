@@ -529,7 +529,7 @@ impl Editor {
     pub(super) fn gutter_width(&self) -> u32 {
         match self.config.line_numbers {
             LineNumbers::None => 0,
-            LineNumbers::Absolute | LineNumbers::Relative => {
+            LineNumbers::Absolute => {
                 let digits = self.buffer.line_count().max(1).to_string().len() as u32;
                 digits.saturating_add(1)
             }
@@ -987,12 +987,7 @@ impl Editor {
 
         if ctx.gutter_width > 0 {
             let gutter_line = Line::new(ctx.origin.x, line_y, ctx.gutter_width);
-            let number_text = line_number_text(
-                self.config.line_numbers == LineNumbers::Relative,
-                line_idx,
-                self.buffer.cursor().line,
-                ctx.gutter_width,
-            );
+            let number_text = line_number_text(line_idx, ctx.gutter_width);
             // The cursor marks the line the user would edit. An editor that
             // declines focus is a display with no cursor to place, so its
             // gutter marks no current line.
@@ -1575,17 +1570,10 @@ pub(super) fn prompt_text(prompt: &PromptState) -> String {
 }
 
 /// Format a line number gutter entry.
-///
-/// A relative gutter shows the distance to the cursor line, and the cursor
-/// line's own number.
-fn line_number_text(relative: bool, line: usize, cursor_line: usize, width: u32) -> String {
-    let number = if relative && line != cursor_line {
-        line.abs_diff(cursor_line)
-    } else {
-        line + 1
-    };
+fn line_number_text(line: usize, width: u32) -> String {
     format!(
-        "{number:>width$} ",
+        "{:>width$} ",
+        line + 1,
         width = width.saturating_sub(1) as usize
     )
 }

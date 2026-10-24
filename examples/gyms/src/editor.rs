@@ -204,11 +204,11 @@ impl EditorGym {
         add_editor_frame(
             c,
             column_id,
-            "Vi mode (relative numbers)",
+            "Vi mode",
             vi_text,
             EditorConfig::new()
                 .with_mode(EditMode::Vi)
-                .with_line_numbers(LineNumbers::Relative),
+                .with_line_numbers(LineNumbers::Absolute),
             Some(8),
             None,
         )?;
