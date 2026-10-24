@@ -11,12 +11,16 @@ use canopy::{
     error::Result,
     geom::{Point, Rect, Size},
     input::{Event, NavIntent, mouse},
-    layout::{CanvasContext, Layout, MeasureConstraints, Measurement, RevealAlign, ScrollOp, View},
+    layout::{
+        CanvasContext, Layout, MeasureConstraints, Measurement, RevealAlign, ScrollAxis,
+        ScrollMark, ScrollOp, View,
+    },
     render::Render,
     runtime::NodeWakeHandle,
     text::{self, grapheme_width},
     tree::{FocusDirection, FocusScope},
 };
+use canopy_widgets::view_search;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
@@ -50,6 +54,9 @@ pub struct SurfaceState {
     pub dragging: bool,
     /// Prepared canvas rectangle for the next local reveal request.
     pub reveal: Option<Rect>,
+    /// Whether a new query waits to reveal its first match once its matches
+    /// publish. Reader input clears it.
+    pub search_reveal: bool,
     /// Fixed reading endpoint for the current pointer gesture.
     drag_anchor: Option<ReadingPosition>,
     /// Retained display column for vertical selection movement.
@@ -77,6 +84,7 @@ impl SurfaceState {
     fn navigated(&mut self) {
         self.navigation = self.navigation.wrapping_add(1);
         self.reveal = None;
+        self.search_reveal = false;
     }
 
     /// Record a moved viewport as navigation, pausing follow only when the
@@ -766,7 +774,11 @@ impl Widget for RenderedSurface {
             && size == view.content_size()
             && before != view.scroll
         {
+            // A scroll seen only as the surface paints may be a restore's,
+            // so it leaves a pending search reveal alone.
+            let search_reveal = state.search_reveal;
             state.scrolled(&view);
+            state.search_reveal = search_reveal;
             state.notify()?;
         }
         self.observed_scroll = Some((view.scroll, view.content_size()));
@@ -814,6 +826,23 @@ impl Widget for RenderedSurface {
     }
     fn reveal_anchor(&self, _content: Size) -> Option<Rect> {
         self.state.borrow().reveal
+    }
+    fn scroll_marks(&self, axis: ScrollAxis, _content: Size) -> Vec<ScrollMark> {
+        let state = self.state.borrow();
+        let Some(presentation) = state.presentation.as_ref() else {
+            return Vec::new();
+        };
+        if axis != ScrollAxis::Vertical {
+            return Vec::new();
+        }
+        // Matches arrive in reading order, so their rows ascend.
+        view_search::marks(
+            state
+                .overlays
+                .search
+                .iter()
+                .map(|range| presentation.row_for_unit(range.start.unit_id, range.start.offset)),
+        )
     }
     fn on_unmount(&mut self, ctx: &mut dyn Context) {
         let mut state = self.state.borrow_mut();

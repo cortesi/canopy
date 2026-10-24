@@ -27,6 +27,7 @@ use crate::{
     highlight::{HighlightSpan, Highlighter},
     scrollbar::ScrollbarGlyphs,
     text_buffer::{Selection, TextPosition, TextRange},
+    view_search,
 };
 
 canopy::slot!(EditorSlot: Editor);
@@ -1743,7 +1744,7 @@ fn search_command_uses_smart_case_and_scrolls_to_matches() {
 }
 
 #[test]
-fn revealed_search_match_sits_three_rows_below_the_top() {
+fn revealed_search_match_sits_near_the_middle_of_the_view() {
     let text = (1..=40)
         .map(|n| {
             if n == 25 {
@@ -1763,7 +1764,7 @@ fn revealed_search_match_sits_three_rows_below_the_top() {
         editor.search(ctx, "target".into());
     });
     assert_eq!((matches, position), (1, 1));
-    assert_eq!(top, 21, "row 24 sits three below the top");
+    assert_eq!(top, 20, "row 24 sits in the middle of eight rows");
 
     let (matches, position, top) = run_search(&mut harness, |editor, ctx| {
         editor.set_matches(
@@ -1808,8 +1809,8 @@ fn search_current_other_matches_and_syntax_keep_separate_styles() {
         editor.buffer.set_cursor(TextPosition::new(0, 6));
     });
     harness.render().unwrap();
-    let current = harness.canopy.style().resolve("editor/search/current");
-    let other = harness.canopy.style().resolve("editor/search/match");
+    let current = harness.canopy.style().resolve(view_search::CURRENT);
+    let other = harness.canopy.style().resolve(view_search::MATCH);
     let selected = harness.canopy.style().resolve("editor/selection");
     let buffer = harness.buf();
     assert_eq!(
@@ -1858,7 +1859,7 @@ fn scroll_marks_report_one_row_per_match_line() {
         [ScrollMark {
             start: 0,
             end: 1,
-            style: "editor/search/mark",
+            style: view_search::MARK,
             glyph: ScrollbarGlyphs::THIN.track_vertical,
         }]
     );

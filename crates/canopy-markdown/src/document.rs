@@ -1638,6 +1638,52 @@ fn count_cells(node: &Node) -> usize {
         + node.children.iter().map(count_cells).sum::<usize>()
 }
 /// Join normalized cell values using tabs and logical LF rows.
+/// Where one table cell's text lies in its table's readable text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CellSpan {
+    /// Body row index, or `None` for the header.
+    pub(crate) row: Option<usize>,
+    /// Key of the body row, or `None` for the header.
+    pub(crate) row_key: Option<u64>,
+    /// Column index.
+    pub(crate) column: usize,
+    /// Key of the cell.
+    pub(crate) key: u64,
+    /// Bytes of the cell in the table's readable text.
+    pub(crate) text: Range<usize>,
+}
+
+/// Return where each cell's text lies in the readable text that
+/// [`table_text`] builds, header first and in reading order.
+pub(crate) fn cell_spans(table: &MarkdownTable) -> Vec<CellSpan> {
+    let mut spans = Vec::new();
+    let mut at = 0;
+    let lines = iter::once((None, &table.headers)).chain(
+        table
+            .rows
+            .iter()
+            .enumerate()
+            .map(|(i, r)| (Some((i, r.key)), &r.cells)),
+    );
+    for (index, (row, cells)) in lines.enumerate() {
+        at += usize::from(index > 0);
+        for (column, cell) in cells.iter().enumerate() {
+            at += usize::from(column > 0);
+            spans.push(CellSpan {
+                row: row.map(|(i, _)| i),
+                row_key: row.map(|(_, key)| key),
+                column,
+                key: cell.key,
+                text: at..at + cell.text.len(),
+            });
+            at += cell.text.len();
+        }
+    }
+    spans
+}
+
+/// Join a table's cells into readable text: tabs between cells and newlines
+/// between rows, as [`cell_spans`] places them.
 fn table_text(table: &MarkdownTable) -> String {
     let mut out = String::new();
     for (index, cells) in iter::once(&table.headers)

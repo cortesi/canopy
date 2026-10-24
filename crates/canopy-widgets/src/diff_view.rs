@@ -29,7 +29,10 @@ use canopy::{
     Context, NodeName, Register, Setup, ViewContext, Widget, derive_commands,
     error::Result,
     geom::{Line, Point, Rect, Size},
-    layout::{CanvasContext, Constraint, MeasureConstraints, Measurement, RevealAlign, ScrollOp},
+    layout::{
+        CanvasContext, Constraint, MeasureConstraints, Measurement, ScrollAxis, ScrollMark,
+        ScrollOp,
+    },
     render::Render,
     style::Style,
     text,
@@ -44,6 +47,7 @@ use crate::{
     },
     highlight::{HighlightSpan, Highlighter},
     run_paint::{self, column},
+    view_search,
 };
 
 /// Tab stop a model built from texts assumes.
@@ -434,17 +438,10 @@ impl DiffView {
 
     /// Move between matches, wrapping at either end, and reveal the match.
     pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32) {
-        let count = self.matches.len();
-        if count == 0 {
+        if self.matches.is_empty() {
             return;
         }
-        let step = delta.unsigned_abs() as usize % count;
-        let current = self.current_match.unwrap_or(0);
-        self.current_match = Some(if delta < 0 {
-            (current + count - step) % count
-        } else {
-            (current + step) % count
-        });
+        self.current_match = view_search::step(self.current_match, self.matches.len(), delta);
         self.reveal_match(ctx);
     }
 
@@ -472,14 +469,14 @@ impl DiffView {
         self.current_match = None;
     }
 
-    /// Reveal the current match with up to three preceding rows of context.
+    /// Reveal the current match near the middle of the view.
     fn reveal_match(&self, ctx: &mut dyn Context) {
         let Some(found) = self.current_match.and_then(|index| self.matches.get(index)) else {
             return;
         };
         ctx.reveal_area(
             self.match_area(found, ctx.view().view_rect().w),
-            RevealAlign::Top(3),
+            view_search::REVEAL,
         );
     }
 
@@ -822,8 +819,8 @@ impl DiffView {
         let text = side.line(&self.diff, line);
         let spans = self.highlight(side, line, text);
         let matches = self.match_lines.get(&(side, line));
-        let search_current = rndr.resolve_style("search/current");
-        let search_match = rndr.resolve_style("search/match");
+        let search_current = rndr.resolve_style(view_search::CURRENT);
+        let search_match = rndr.resolve_style(view_search::MATCH);
         let mut span_index = 0usize;
         let mut span_style: Option<Style> = None;
         let line_rect = Rect::new(origin.x, y, width, 1);
@@ -1158,6 +1155,18 @@ impl Widget for DiffView {
         Ok(())
     }
 
+    fn scroll_marks(&self, axis: ScrollAxis, content: Size) -> Vec<ScrollMark> {
+        if axis != ScrollAxis::Vertical {
+            return Vec::new();
+        }
+        // Matches sort by the row they wrap onto, so their rows ascend.
+        view_search::marks(
+            self.matches
+                .iter()
+                .map(|found| self.match_area(found, content.w).tl.y),
+        )
+    }
+
     fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {
         // A waiting view repaints to turn its spinner.
         Ok(self.loading.map(|_| Spinner::LINE.period()))
@@ -1304,7 +1313,10 @@ mod tests {
     };
 
     use super::{DiffModel, DiffRow, DiffView, Mode, Scope, SideRow, header_text, side_rows};
-    use crate::editor::{TextPosition, TextRange};
+    use crate::{
+        editor::{TextPosition, TextRange},
+        view_search,
+    };
 
     #[test]
     fn paired_panes_wrap_equally_and_keep_the_divider_through_empty_rows() -> Result<()> {
@@ -1380,7 +1392,7 @@ mod tests {
         })?;
         harness.render()?;
         assert!(harness.tbuf().contains_text("needle"));
-        let current = harness.canopy.style().resolve("diff_view/search/current");
+        let current = harness.canopy.style().resolve(view_search::CURRENT);
         let point = harness.with_root_widget_context(|view: &mut DiffView, ctx| {
             let area = view.match_area(&view.matches[1], ctx.view().view_rect().w);
             Ok(Point::new(area.tl.x, area.tl.y - ctx.view().scroll.y))
@@ -1667,7 +1679,7 @@ mod tests {
                 Ok(())
             })?;
             harness.render()?;
-            let current = harness.canopy.style().resolve("diff_view/search/current");
+            let current = harness.canopy.style().resolve(view_search::CURRENT);
             let cell = harness.buf().get(Point::new(7, 1)).expect("first match");
             assert_eq!(
                 cell.style.bg,

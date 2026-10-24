@@ -1,6 +1,7 @@
 use std::{cell::Cell, rc::Rc};
 
 use canopy::{
+    layout::ScrollAxis,
     runtime::{NoticeLevel, TurnInput},
     testing::harness::Harness,
     tree::{FocusDirection, FocusScope},
@@ -347,73 +348,205 @@ fn replacement_rejects_a_held_result_from_the_old_epoch() {
 }
 
 #[test]
-fn search_publication_does_not_navigate_and_pending_query_is_not_ready() {
+fn rendered_search_publication_reveals_its_first_match_once() {
+    let text = format!(
+        "{}needle first\n\nneedle second\n{}",
+        "Filler paragraph.\n\n".repeat(20),
+        "More filler.\n\n".repeat(20)
+    );
+    let (mut harness, manual) = fixture(&text, ViewType::Rendered, false, false, false);
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            assert_eq!(reader.view_offset(ctx), 0);
+            reader.set_search(ctx, "needle".into(), false)
+        })
+        .unwrap();
+    let held = next_work(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            assert!(!reader.ready());
+            assert_eq!(reader.view_offset(ctx), 0, "nothing moves before results");
+            Ok(())
+        })
+        .unwrap();
+    held.finish();
+    settle(&mut harness, &manual);
+    let (offset, height) = harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            assert_eq!((reader.search_matches(), reader.search_position()), (2, 1));
+            let view = ctx.view_of(reader.navigation_node().unwrap()).unwrap();
+            Ok((reader.view_offset(ctx), view.content.h))
+        })
+        .unwrap();
+    // The first match sits near the middle of the view, not at its edge.
+    let row = harness.with_root_widget(|reader: &mut Markdown| {
+        let state = reader.shared.borrow();
+        let found = &state.overlays.search[0];
+        state
+            .presentation
+            .as_ref()
+            .unwrap()
+            .row_for_unit(found.start.unit_id, found.start.offset)
+    });
+    assert!(offset > 0);
+    assert!(
+        row.abs_diff(offset + height / 2) <= 1,
+        "{row} in {offset}+{height}"
+    );
+    // A later publication of the same query leaves the reader in place.
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.scroll_view(ctx, ScrollOp::To(Point::ZERO))
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            assert_eq!(reader.view_offset(ctx), 0);
+            reader.search_next(ctx, 1)
+        })
+        .unwrap();
+    service(&mut harness);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            assert_eq!(reader.search_position(), 2);
+            assert!(reader.view_offset(ctx) > 0);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn source_search_publication_does_not_navigate() {
     let text = format!(
         "{}needle first\n\nneedle second\n",
         "Filler paragraph.\n\n".repeat(20)
     );
-    for view in [ViewType::Rendered, ViewType::Source] {
-        let (mut harness, manual) = fixture(&text, view, false, false, false);
-        settle(&mut harness, &manual);
-        let before = harness
-            .with_root_widget_context(|reader: &mut Markdown, ctx| Ok(reader.view_offset(ctx)))
-            .unwrap();
-        harness
-            .with_root_widget_context(|reader: &mut Markdown, ctx| {
-                reader.set_search(ctx, "needle".into(), false)
-            })
-            .unwrap();
-        let held = next_work(&mut harness, &manual);
-        assert_eq!(
-            held.request().unwrap().search.as_ref().unwrap().query.text,
-            "needle"
-        );
-        harness
-            .with_root_widget_context(|reader: &mut Markdown, ctx| {
-                assert!(!reader.ready());
-                assert_eq!(reader.view_offset(ctx), before);
+    let (mut harness, manual) = fixture(&text, ViewType::Source, false, false, false);
+    settle(&mut harness, &manual);
+    let before = harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| Ok(reader.view_offset(ctx)))
+        .unwrap();
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_search(ctx, "needle".into(), false)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            assert_eq!(reader.search_matches(), 2);
+            assert_eq!(reader.search_position(), 0);
+            assert_eq!(reader.view_offset(ctx), before);
+            reader.search_next(ctx, 1)
+        })
+        .unwrap();
+    service(&mut harness);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            assert_eq!(reader.search_position(), 1);
+            assert!(reader.view_offset(ctx) > before);
+            let node = reader.navigation_node().unwrap();
+            ctx.with_widget(node, |source: &MarkdownSource| {
+                let point = source
+                    .point_for_anchor(SourceAnchor {
+                        epoch: reader.epoch(),
+                        byte: text.find("needle").unwrap(),
+                    })
+                    .unwrap();
+                let view = ctx.view_of(node).unwrap();
+                assert!(
+                    view.view_rect().contains_point(point),
+                    "Source match point {point:?} must be visible in {view:?}"
+                );
                 Ok(())
             })
-            .unwrap();
-        held.finish();
+        })
+        .unwrap();
+}
+
+#[test]
+fn reader_navigation_or_a_kept_position_cancels_the_search_reveal() {
+    let text = format!("{}needle\n", "Filler paragraph.\n\n".repeat(40));
+    for keep in [false, true] {
+        let (mut harness, manual) = fixture(&text, ViewType::Rendered, false, false, false);
         settle(&mut harness, &manual);
         harness
             .with_root_widget_context(|reader: &mut Markdown, ctx| {
-                assert_eq!(reader.search_matches(), 2);
-                assert_eq!(reader.search_position(), 0);
-                assert_eq!(reader.view_offset(ctx), before);
-                reader.search_next(ctx, 1)
+                reader.set_search(ctx, "needle".into(), false)?;
+                if keep {
+                    reader.keep_search_position();
+                    Ok(())
+                } else {
+                    reader.scroll_view(ctx, ScrollOp::By(0, 2))
+                }
             })
             .unwrap();
-        service(&mut harness);
+        settle(&mut harness, &manual);
+        let expected = if keep { 0 } else { 2 };
         harness
             .with_root_widget_context(|reader: &mut Markdown, ctx| {
-                assert_eq!(reader.search_position(), 1);
-                assert!(
-                    reader.view_offset(ctx) > before,
-                    "explicit navigation failed for {view:?}"
-                );
-                if view == ViewType::Source {
-                    let node = reader.navigation_node().unwrap();
-                    ctx.with_widget(node, |source: &MarkdownSource| {
-                        let point = source
-                            .point_for_anchor(SourceAnchor {
-                                epoch: reader.epoch(),
-                                byte: text.find("needle").unwrap(),
-                            })
-                            .unwrap();
-                        let view = ctx.view_of(node).unwrap();
-                        assert!(
-                            view.view_rect().contains_point(point),
-                            "explicit Source match point {point:?} must be visible in {view:?}"
-                        );
-                        Ok(())
-                    })?;
-                }
+                assert_eq!(reader.search_matches(), 1);
+                assert_eq!(reader.search_position(), 0);
+                assert_eq!(reader.view_offset(ctx), expected);
                 Ok(())
             })
             .unwrap();
     }
+}
+
+#[test]
+fn rendered_search_marks_the_scrollbar_beside_each_match_row() {
+    let text = format!(
+        "needle top\n\n{}needle bottom\n",
+        "Filler paragraph.\n\n".repeat(30)
+    );
+    let (mut harness, manual) = fixture(&text, ViewType::Rendered, false, false, false);
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_search(ctx, "needle".into(), false)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            let node = reader.nodes.as_ref().unwrap().rendered;
+            let content = ctx.view_of(node).unwrap().content_size();
+            let rows = reader
+                .shared
+                .borrow()
+                .overlays
+                .search
+                .iter()
+                .map(|found| {
+                    reader
+                        .shared
+                        .borrow()
+                        .presentation
+                        .as_ref()
+                        .unwrap()
+                        .row_for_unit(found.start.unit_id, found.start.offset)
+                })
+                .collect::<Vec<_>>();
+            ctx.with_widget(node, |surface: &RenderedSurface| {
+                assert_eq!(
+                    surface.scroll_marks(ScrollAxis::Vertical, content),
+                    view_search::marks(rows.iter().copied())
+                );
+                assert!(
+                    surface
+                        .scroll_marks(ScrollAxis::Horizontal, content)
+                        .is_empty()
+                );
+                Ok(())
+            })?;
+            assert_eq!(rows.len(), 2);
+            assert!(rows[1] > rows[0]);
+            Ok(())
+        })
+        .unwrap();
 }
 
 #[test]
@@ -453,8 +586,13 @@ fn search_failure_replaces_matches_and_success_clears_the_error() {
     settle(&mut harness, &manual);
     harness
         .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            assert_eq!(
+                reader.search_position(),
+                1,
+                "publication makes a match current"
+            );
             reader.search_next(ctx, 1)?;
-            assert_eq!(reader.search_position(), 1);
+            assert_eq!(reader.search_position(), 2);
             let results = reader.results.clone().unwrap();
             reader.apply_search(ctx, Err("scan failed".into()))?;
             assert_eq!(reader.search_error(), Some("scan failed"));
@@ -515,16 +653,33 @@ fn rendered_search_highlights_code_table_and_source_cards() {
         })
         .unwrap();
     settle(&mut harness, &manual);
-    harness.with_root_widget(|reader: &mut Markdown| assert_eq!(reader.search_matches(), 3));
-    let style = harness.canopy.style().resolve("markdown/search");
-    for text in ["needle code", "needle table", "needle source"] {
+    harness.with_root_widget(|reader: &mut Markdown| {
+        assert_eq!((reader.search_matches(), reader.search_position()), (3, 1));
+    });
+    let ground = |role| PartialStyle::new().bg(harness.canopy.style().resolve(role).bg);
+    let (current, other) = (ground(view_search::CURRENT), ground(view_search::MATCH));
+    let buffer = harness.tbuf();
+    // Code lines, table cells, and source lines all mark the match alone.
+    for (text, style) in [("needle", &current), ("needle", &other)] {
         assert!(
-            harness
-                .tbuf()
-                .contains_text_style(text, &PartialStyle::new().bg(style.bg.clone())),
+            buffer.contains_text_style(text, style),
             "missing search highlight for {text}"
         );
     }
+    for text in [" code", " table", " source", "Header"] {
+        assert!(!buffer.contains_text_style(text, &current), "{text}");
+        assert!(!buffer.contains_text_style(text, &other), "{text}");
+    }
+    // The table's match marks its word within its cell.
+    let lines = buffer.lines();
+    let (y, line) = lines
+        .iter()
+        .enumerate()
+        .find(|(_, line)| line.contains("needle table"))
+        .unwrap();
+    let x = line[..line.find("needle table").unwrap()].chars().count() as u32;
+    let bg = harness.buf().get(Point::new(x, y as u32)).unwrap().style.bg;
+    assert_eq!(Some(bg), other.bg.and_then(|paint| paint.solid_color()));
 }
 
 #[test]
@@ -558,7 +713,7 @@ fn provisional_source_search_keeps_line_offsets_and_highlights_only_matching_tex
         assert_eq!(found.start.offset, expected);
         assert_eq!(found.end.offset, expected + "needle".len());
     });
-    let style = harness.canopy.style().resolve("markdown/search");
+    let style = harness.canopy.style().resolve(view_search::CURRENT);
     assert!(
         harness
             .tbuf()
@@ -2607,4 +2762,56 @@ fn an_html_card_opens_its_own_source_rather_than_the_document() {
         assert_eq!(requests.len(), 1, "{requests:?}");
         assert_eq!(requests[0].action, HostAction::CopyText(block.into()));
     });
+}
+
+#[test]
+fn table_matches_mark_their_words_and_rows_beside_the_object_ground() {
+    use canopy::style::PartialStyle;
+
+    let text = "---\ntitle: Basics\ndescription: YAML front matter\n---\n\n\
+        | Key | Value |\n| --- | --- |\n| a | plain |\n| b | plain |\n| c | front row |\n";
+    let (mut harness, manual) = fixture(text, ViewType::Rendered, false, false, false);
+    harness.canopy.set_screen_size(Size::new(60, 30)).unwrap();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_search(ctx, "front".into(), false)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    let rows = harness.with_root_widget(|reader: &mut Markdown| {
+        assert_eq!((reader.search_matches(), reader.search_position()), (2, 1));
+        let state = reader.shared.borrow();
+        let p = state.presentation.as_ref().unwrap();
+        state
+            .overlays
+            .search
+            .iter()
+            .map(|found| {
+                let unit = p.document.unit(found.start.unit_id).unwrap();
+                assert_eq!(&unit.text[found.start.offset..found.end.offset], "front");
+                p.row_for_unit(found.start.unit_id, found.start.offset)
+            })
+            .collect::<Vec<_>>()
+    });
+    let style = |role| PartialStyle::new().bg(harness.canopy.style().resolve(role).bg);
+    let (current, other) = (style(view_search::CURRENT), style(view_search::MATCH));
+    let buffer = harness.tbuf();
+    // The current match shows over the ground of the table it makes the
+    // object, and neither table marks the rest of its text.
+    assert!(buffer.contains_text_style("front", &current));
+    assert!(buffer.contains_text_style("front", &other));
+    for text in [" matter", "YAML", " row", "plain", "Basics"] {
+        assert!(!buffer.contains_text_style(text, &current), "{text}");
+        assert!(!buffer.contains_text_style(text, &other), "{text}");
+    }
+    // Each match maps to the row of its own cell, not its table's top.
+    let lines = buffer.lines();
+    for (row, needle) in rows.iter().zip(["YAML front", "front row"]) {
+        let y = lines.iter().position(|line| line.contains(needle)).unwrap();
+        let top = harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| Ok(reader.view_offset(ctx)))
+            .unwrap();
+        assert_eq!(*row, top + y as u32, "{needle}");
+    }
 }

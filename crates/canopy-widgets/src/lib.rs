@@ -115,6 +115,8 @@ mod text;
 mod text_buffer;
 /// The toast stack that the root draws over the application.
 mod toast;
+/// Conventions every searchable view shares: roles, steps, reveal, and marks.
+pub mod view_search;
 
 pub use big_text::{BigFace, BigGrid, BigSize, BigText, BigWeight};
 pub use border::{Border, BoxGlyphs};

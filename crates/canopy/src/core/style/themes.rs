@@ -138,19 +138,6 @@ impl Palette {
             .fg("/diff_view/separator", p.frame)
             .fg("/diff_view/message", p.faint_fg)
             .fg("/diff_view/loading", p.faint_fg)
-            .style(
-                "/diff_view/search/match",
-                PartialStyle::new()
-                    .fg(p.fg)
-                    .bg(p.yellow.mix(p.bg, MATCH_FADE, Mix::Rgb)),
-            )
-            .style(
-                "/diff_view/search/current",
-                PartialStyle::new()
-                    .fg(p.bg)
-                    .bg(p.yellow)
-                    .attrs(AttrSet::new(Attr::Bold)),
-            )
             .fg("/blue", p.blue)
             .fg("/red", p.red)
             .fg("/magenta", p.magenta)
@@ -237,27 +224,29 @@ impl Palette {
                 "/editor/selection",
                 PartialStyle::new().fg(p.fg).bg(p.selection_bg),
             )
+            // Every searchable view paints its matches with these roles, so
+            // a search reads alike in text, a diff, and a rendered document.
             // Every match shares one hue, and lightness tells them apart: the
             // other matches fade toward the ground under the ordinary text,
             // and the current match takes the full yellow in bold.
             .style(
-                "/editor/search/match",
+                "/search/match",
                 PartialStyle::new()
                     .fg(p.fg)
                     .bg(p.yellow.mix(p.bg, MATCH_FADE, Mix::Rgb)),
             )
-            // Scrollbar marks take the full yellow as a foreground: a mark
-            // under the thumb keeps its style but takes the thumb glyph, and a
-            // block thumb glyph hides the background, so the text style's dark
-            // foreground would turn the mark dark just when it slides under.
-            .fg("/editor/search/mark", p.yellow)
             .style(
-                "/editor/search/current",
+                "/search/current",
                 PartialStyle::new()
                     .fg(p.bg)
                     .bg(p.yellow)
                     .attrs(AttrSet::new(Attr::Bold)),
             )
+            // Scrollbar marks take the full yellow as a foreground: a mark
+            // under the thumb keeps its style but takes the thumb glyph, and a
+            // block thumb glyph hides the background, so the text style's dark
+            // foreground would turn the mark dark just when it slides under.
+            .fg("/search/mark", p.yellow)
             .fg("/editor/line-number", p.line_number)
             .fg("/editor/line-number/current", p.accent)
             .style(

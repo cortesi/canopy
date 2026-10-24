@@ -486,10 +486,54 @@ fn search_overlay_marks_only_matched_prose_graphemes() {
     };
     let mut h = mounted(p, overlays, 24, 2);
     h.render().unwrap();
-    let search = h.canopy.style().resolve("markdown/search");
+    let search = h.canopy.style().resolve(view_search::MATCH);
     let marked = PartialStyle::new().bg(search.bg);
     assert!(h.tbuf().contains_text_style("beta", &marked));
     assert!(!h.tbuf().contains_text_style("alpha", &marked));
+}
+
+#[test]
+fn the_current_match_paints_apart_from_the_others() {
+    let p = prepared("alpha beta alpha\n\n```\nalpha code\n```\n", 40);
+    let prose = p.document.units[0].id;
+    let code = p.document.units[1].id;
+    let range = |unit_id, start, end| ReadingRange {
+        start: ReadingPosition {
+            unit_id,
+            offset: start,
+        },
+        end: ReadingPosition {
+            unit_id,
+            offset: end,
+        },
+    };
+    let overlays = PaintOverlays {
+        search: vec![range(prose, 0, 5), range(prose, 11, 16), range(code, 0, 5)],
+        search_current: Some(1),
+        ..Default::default()
+    };
+    let mut h = mounted(p, overlays, 40, 8);
+    h.render().unwrap();
+    let bg = |role| h.canopy.style().resolve(role).bg.solid_color().unwrap();
+    let (current, other) = (bg(view_search::CURRENT), bg(view_search::MATCH));
+    assert_ne!(current, other);
+    // The background of the cell `skip` columns into the first `text` shown.
+    let at = |text: &str, skip: u32| {
+        let lines = h.tbuf().lines();
+        let (y, line) = lines
+            .iter()
+            .enumerate()
+            .find(|(_, line)| line.contains(text))
+            .unwrap();
+        let x = line[..line.find(text).unwrap()].chars().count() as u32 + skip;
+        h.buf().get(Point::new(x, y as u32)).unwrap().style.bg
+    };
+    assert_eq!(at("alpha beta alpha", 0), other);
+    assert_ne!(at("alpha beta alpha", 6), other);
+    assert_eq!(at("alpha beta alpha", 11), current);
+    // A match in a code line marks its own text, not the whole card.
+    assert_eq!(at("alpha code", 0), other);
+    assert_ne!(at("alpha code", 6), other);
 }
 
 #[test]

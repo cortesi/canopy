@@ -26,8 +26,8 @@ use crate::{
     scrollbar::Scrollbar,
     table::{
         CellKey, PreparedTable, TableCopy, TableData, TableEvent, TableGlyphs, TableHit,
-        TablePaintStats, TableSelection, TableViewOptions, TableWindow, display_control,
-        style_rules,
+        TableOverlay, TablePaintStats, TableSelection, TableViewOptions, TableWindow,
+        display_control, style_rules,
     },
 };
 
@@ -47,6 +47,8 @@ struct BodyPaint {
     cursor: Option<CellKey>,
     /// Shared immutable axis membership.
     selection: TableSelection,
+    /// What the host paints over the table's own styles.
+    overlay: TableOverlay,
     /// Counters from the most recent visible body paint.
     stats: TablePaintStats,
 }
@@ -94,6 +96,7 @@ impl Widget for TableBody {
             },
             paint.cursor.as_ref(),
             &paint.selection,
+            &paint.overlay,
         )?;
         paint.stats = stats;
         Ok(())
@@ -160,6 +163,7 @@ impl TableView {
             table: table.clone(),
             fitted: None,
             selection: TableSelection::default(),
+            overlay: TableOverlay::default(),
             stats: Default::default(),
         }));
         Self {
@@ -302,6 +306,12 @@ impl TableView {
     /// Explicit selection membership, independent of cursor and clipping.
     pub fn selection(&self) -> &TableSelection {
         &self.selection
+    }
+    /// Paint `overlay` over the table's own styles, such as the matches of a
+    /// search. Its marks address rows of the current publication, so a
+    /// publication drops them.
+    pub fn set_overlay(&mut self, overlay: TableOverlay) {
+        self.paint.borrow_mut().overlay = overlay;
     }
     /// Drain at most `limit` pending host actions.
     pub fn take_events(&mut self, limit: usize) -> Vec<TableEvent> {
@@ -525,6 +535,8 @@ impl TableView {
         let mut paint = self.paint.borrow_mut();
         if !Arc::ptr_eq(&paint.base, &self.table) {
             paint.base = self.table.clone();
+            // Marks address the rows of the publication they were made for.
+            paint.overlay = TableOverlay::default();
             // A new table fits the body's width at once, so scrolling and
             // hits agree with what the next paint shows.
             let fitted = paint
@@ -954,6 +966,7 @@ impl Widget for TableView {
                     window,
                     None,
                     &TableSelection::default(),
+                    &self.paint.borrow().overlay,
                 )?;
             }
             if self.options.row_numbers {
@@ -967,6 +980,7 @@ impl Widget for TableView {
                     },
                     None,
                     &TableSelection::default(),
+                    &TableOverlay::default(),
                 )?;
             }
             let (vertical, horizontal) = self.tracks(ctx);

@@ -37,6 +37,70 @@ pub struct TableSpan {
     pub style: Style,
 }
 
+/// A role over a half-open UTF-8 byte range of one cell's text, such as a
+/// search match.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CellMark {
+    /// Body row index in the table data, or `None` for the header.
+    pub row: Option<usize>,
+    /// Column index in the table data.
+    pub column: usize,
+    /// Bytes of the full value.
+    pub bytes: Range<usize>,
+    /// Style role the bytes paint with, in place of the cell's style.
+    pub role: &'static str,
+}
+
+/// What a host paints over a table's own styles.
+///
+/// A ground is a role that every part of the table takes, as when the whole
+/// table is selected. Marks paint byte ranges of single cells in roles of
+/// their own, over the ground, such as the matches of a search.
+#[derive(Clone, Debug, Default)]
+pub struct TableOverlay {
+    /// The role every part of the table takes in place of its own.
+    ground: Option<&'static str>,
+    /// Marks ordered by cell, then by first byte.
+    marks: Vec<CellMark>,
+}
+impl TableOverlay {
+    /// Construct an overlay from a ground and marks in any order.
+    pub fn new(ground: Option<&'static str>, mut marks: Vec<CellMark>) -> Self {
+        marks.sort_by_key(|mark| (mark.row, mark.column, mark.bytes.start));
+        Self { ground, marks }
+    }
+    /// Return the role a table part painted as `path` takes.
+    fn role<'a>(&self, path: &'a str) -> &'a str {
+        self.ground.unwrap_or(path)
+    }
+    /// Return the role of the mark over `byte` of a cell, if any.
+    fn mark_at(&self, row: Option<usize>, column: usize, byte: usize) -> Option<&'static str> {
+        let cell = (row, column);
+        let start = self
+            .marks
+            .partition_point(|mark| (mark.row, mark.column) < cell);
+        self.marks[start..]
+            .iter()
+            .take_while(|mark| (mark.row, mark.column) == cell && mark.bytes.start <= byte)
+            .find(|mark| mark.bytes.contains(&byte))
+            .map(|mark| mark.role)
+    }
+    /// Return the style of `byte` of `cell`, whose own style is `base`.
+    fn style_at(
+        &self,
+        render: &Render,
+        (row, column): (Option<usize>, usize),
+        cell: &TableCell,
+        base: &Style,
+        byte: usize,
+    ) -> Style {
+        match self.mark_at(row, column, byte) {
+            Some(role) => render.resolve_style(role),
+            None => cell.style_at(render, base, byte),
+        }
+    }
+}
+
 /// A full cell value and optional presentation spans.
 #[derive(Clone, Debug)]
 pub struct TableCell {
@@ -1058,8 +1122,8 @@ impl PreparedTable {
             column: self.column_at((x - gutter).saturating_add(window.offset.x))?,
         })
     }
-    /// Paint only the visible row/column window. No per-cell nodes or hit
-    /// rectangles exist.
+    /// Paint only the visible row/column window, with `overlay` over the
+    /// table's own styles. No per-cell nodes or hit rectangles exist.
     pub fn paint(
         &self,
         render: &mut Render,
@@ -1067,12 +1131,13 @@ impl PreparedTable {
         window: TableWindow,
         cursor: Option<&CellKey>,
         selection: &TableSelection,
+        overlay: &TableOverlay,
     ) -> Result<TablePaintStats> {
         let mut stats = TablePaintStats::default();
         if area.w == 0 || area.h == 0 {
             return Ok(stats);
         }
-        render.fill("table", area, ' ')?;
+        render.fill(overlay.role("table"), area, ' ')?;
         let gutter = if window.row_numbers {
             self.gutter_width().min(area.w)
         } else {
@@ -1087,7 +1152,7 @@ impl PreparedTable {
         // The header band runs across the whole area, past the last column.
         if header > 0 {
             render.fill(
-                "table/header",
+                overlay.role("table/header"),
                 Rect::new(area.tl.x, area.tl.y, area.w, header),
                 ' ',
             )?;
@@ -1121,10 +1186,11 @@ impl PreparedTable {
                     body,
                     window.offset.x,
                     body.tl.y + line,
-                    column,
+                    (None, column),
                     label,
                     label_lines.get(line as usize),
                     "table/header",
+                    overlay,
                 )?;
             }
             stats.labels += usize::from(header > 0 && shown);
@@ -1138,7 +1204,14 @@ impl PreparedTable {
                 let (row, line) = match placed {
                     BodyLine::Row { row, line } => (row, line),
                     BodyLine::Rule => {
-                        self.paint_rule(render, body, window.offset.x, body.tl.y + y, column)?;
+                        self.paint_rule(
+                            render,
+                            body,
+                            window.offset.x,
+                            body.tl.y + y,
+                            column,
+                            overlay,
+                        )?;
                         continue;
                     }
                 };
@@ -1165,10 +1238,11 @@ impl PreparedTable {
                     body,
                     window.offset.x,
                     body.tl.y + y,
-                    column,
+                    (Some(row), column),
                     cell,
                     fragments.and_then(|lines| lines.get(line as usize)),
                     style,
+                    overlay,
                 )?;
             }
         }
@@ -1183,7 +1257,7 @@ impl PreparedTable {
                     // line numbers do.
                     let digits = gutter.saturating_sub(1) as usize;
                     render.text(
-                        "table/gutter",
+                        overlay.role("table/gutter"),
                         Line::new(area.tl.x, area.tl.y + y, gutter),
                         &format!("{:>digits$} ", row + 1),
                     )?;
@@ -1218,12 +1292,13 @@ impl PreparedTable {
         offset: u32,
         y: u32,
         column: usize,
+        overlay: &TableOverlay,
     ) -> Result<()> {
         let start = self.starts[column];
         let mut glyph = [0; 4];
         if column > 0 && start > offset && start - 1 < offset.saturating_add(area.w) {
             render.text(
-                "table/separator",
+                overlay.role("table/separator"),
                 Line::new(area.tl.x + (start - 1 - offset), y, 1),
                 self.options.glyphs.cross.encode_utf8(&mut glyph),
             )?;
@@ -1238,7 +1313,7 @@ impl PreparedTable {
                 .to_string()
                 .repeat((right - left) as usize);
             render.text(
-                "table/separator",
+                overlay.role("table/separator"),
                 Line::new(area.tl.x + (left - offset), y, right - left),
                 &rule,
             )?;
@@ -1254,17 +1329,19 @@ impl PreparedTable {
         area: Rect,
         offset: u32,
         y: u32,
-        column: usize,
+        (row, column): (Option<usize>, usize),
         cell: &TableCell,
         fragment: Option<&flow::Fragment>,
         path: &str,
+        overlay: &TableOverlay,
     ) -> Result<()> {
+        let path = overlay.role(path);
         let start = self.starts[column];
         let width = self.widths[column];
         let mut glyph = [0; 4];
         if column > 0 && start > offset && start - 1 < offset.saturating_add(area.w) {
             render.text(
-                separator_role(path),
+                overlay.role(separator_role(path)),
                 Line::new(area.tl.x + (start - 1 - offset), y, 1),
                 self.options.glyphs.separator.encode_utf8(&mut glyph),
             )?;
@@ -1308,7 +1385,7 @@ impl PreparedTable {
                     x: area.tl.x + (x - offset),
                     y,
                 };
-                let style = cell.style_at(render, &base, byte);
+                let style = overlay.style_at(render, (row, column), cell, &base, byte);
                 render.put_grapheme(style.resolve_at(line, point), point, g)?;
             }
             x = x.saturating_add(cells);

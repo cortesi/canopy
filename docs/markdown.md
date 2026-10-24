@@ -117,9 +117,17 @@ The built-in search field matches case-sensitive literal text. A host with its
 own search field, such as fh, sets `external_search` and calls
 `set_search(query, regex)`: `true` matches a smart-case regular expression, and
 `false` a case-sensitive literal. Rendered searches readable text, including
-omitted code and table cells; Source searches raw Markdown. A new query or view
-does not jump until the reader activates a match. Local fragment and footnote
-jumps keep a return position.
+omitted code and table cells; Source searches raw Markdown. Rendered search
+follows the conventions of `canopy_widgets::view_search`, as the editor and the
+diff view do: when a new query's matches publish, the first match at or below
+the top of the view becomes current, and the reader centres it, unless the
+reader has moved or follows its tail since the query. `keep_search_position`
+cancels that reveal, for a host that restores its own position after a
+reload. The current match paints apart from the others, and the scrollbar
+marks every row that holds a match. A match in a code line or a table cell
+marks only the text it found, and a table inspector opened on a match shows
+the table's matches too. Source does not jump until the reader
+activates a match. Local fragment and footnote jumps keep a return position.
 
 Hosts with a separate search or status bar can set `publication_wake` to their
 node's wake handle. Accepted publications and view changes then refresh host

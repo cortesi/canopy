@@ -369,6 +369,7 @@ pub fn search_document(
                     .chain(table.rows.iter().map(|r| (Some(r.key), &r.cells)))
                 {
                     for cell in cells {
+                        // A cell's matches address bytes of its whole text.
                         if !run.lines(
                             &cell.text,
                             |_| SearchAddress::TableCell {
@@ -376,7 +377,7 @@ pub fn search_document(
                                 row_key,
                                 column_key: cell.key,
                             },
-                            false,
+                            true,
                             None,
                         ) {
                             break 'blocks;

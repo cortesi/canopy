@@ -155,6 +155,10 @@ impl Markdown {
     /// Enter object navigation without pausing follow until the cursor moves.
     pub fn interact(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Publish pending search results without revealing a match, as when a
+    /// host reloads the document and restores its own position.
+    pub fn keep_search_position(&mut self);
+
     /// Whether a local link to `destination` shows faint, because the host
     /// found nothing it names.
     #[must_use]
@@ -258,7 +262,10 @@ impl Markdown {
     /// Visit a retained match in the active representation.
     pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32) -> canopy::error::Result<()>;
 
-    /// One-based current match, or zero before explicit navigation.
+    /// Whether a query waits for its first matches in the active view.
+    pub fn search_pending(&self) -> bool;
+
+    /// One-based current match, or zero while there is none.
     pub fn search_position(&self) -> usize;
 
     /// Read a bounded page of matches in the active search projection.
@@ -278,8 +285,12 @@ impl Markdown {
     /// Enter or leave the rendered object-navigation mode.
     pub fn set_mode(&mut self, ctx: &mut dyn Context, mode: Mode) -> canopy::error::Result<()>;
 
-    /// Retain a literal or fh-compatible smart-case regex query without moving
-    /// the reader.
+    /// Retain a literal or fh-compatible smart-case regex query.
+    ///
+    /// Once the Rendered matches publish, the first match at or below the
+    /// top of the view becomes current and the reader reveals it, as a text
+    /// view does. Reader navigation before then, a followed tail, or
+    /// [`Self::keep_search_position`] leaves the reader where it is.
     pub fn set_search(
         &mut self,
         ctx: &mut dyn Context,
@@ -437,6 +448,9 @@ impl Markdown {
     pub fn call_search_next(delta: i32) -> CommandCall;
 
     /// Build a positional call with typed user arguments.
+    pub fn call_search_pending() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
     pub fn call_search_position() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
@@ -537,6 +551,9 @@ impl Markdown {
 
     /// Return the command spec for this command.
     pub fn spec_search_next() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_search_pending() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_search_position() -> &'static CommandSpec;
@@ -1775,8 +1792,11 @@ pub mod presentation {
     pub struct PaintOverlays {
         /// Current document selection in readable UTF-8 coordinates.
         pub selection: Option<ReadingRange>,
-        /// Retained matches in the rendered readable projection.
+        /// Retained matches in the rendered readable projection, in reading
+        /// order.
         pub search: Vec<ReadingRange>,
+        /// The index in `search` of the current match, if any.
+        pub search_current: Option<usize>,
         /// Current object cursor, independent of document selection.
         pub active_object: Option<u64>,
         /// Images the host supplied, which image blocks paint.

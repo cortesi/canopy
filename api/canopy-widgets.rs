@@ -27,7 +27,7 @@ use canopy::{
     ViewContext, Widget,
     commands::{CommandCall, CommandNode, CommandSpec, ToArgValue},
     input::{FrameworkBindingGroup, IntentName, ModalToken, mouse::MouseEvent},
-    layout::{Align, Edges, Layout, ScrollAxis, ScrollDirection},
+    layout::{Align, Edges, Layout, RevealAlign, ScrollAxis, ScrollDirection, ScrollMark},
     render::{Glyphs, Render, ScreenCapture},
     runtime::NodeWakeHandle,
     status::{StatusItem, StatusSpan},
@@ -3310,6 +3310,11 @@ impl TableView {
     /// Wake an owner whenever a complete host event enters the queue.
     pub fn set_event_wake(&mut self, wake: NodeWakeHandle);
 
+    /// Paint `overlay` over the table's own styles, such as the matches of a
+    /// search. Its marks address rows of the current publication, so a
+    /// publication drops them.
+    pub fn set_overlay(&mut self, overlay: TableOverlay);
+
     /// Show or hide the fixed row-number gutter.
     pub fn set_row_numbers(&mut self, show: bool);
 
@@ -5057,6 +5062,20 @@ pub mod table {
         pub column: TableKey,
     }
 
+    /// A role over a half-open UTF-8 byte range of one cell's text, such as a
+    /// search match.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct CellMark {
+        /// Body row index in the table data, or `None` for the header.
+        pub row: Option<usize>,
+        /// Column index in the table data.
+        pub column: usize,
+        /// Bytes of the full value.
+        pub bytes: Range<usize>,
+        /// Style role the bytes paint with, in place of the cell's style.
+        pub role: &'static str,
+    }
+
     /// Bounds of a flowed table.
     #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub struct FlowOptions {
@@ -5084,17 +5103,22 @@ pub mod table {
         pub fn height(&self) -> u32;
 
         /// Paint the lines from `offset.y` into `area`, starting `offset.x`
-        /// cells into the table.
+        /// cells into the table, with `overlay` over the table's own styles.
         pub fn paint(
             &self,
             render: &mut Render<'_>,
             area: Rect,
             offset: Point,
+            overlay: &TableOverlay,
         ) -> canopy::error::Result<()>;
 
         /// Fit the header and every body row to `options.width`, keeping the
         /// leading columns that fit when not all do.
         pub fn prepare(data: Arc<TableData>, options: FlowOptions) -> canopy::error::Result<Self>;
+
+        /// Return the first display line of a body row, or of the header for
+        /// `None`.
+        pub fn row_line(&self, row: Option<usize>) -> Option<u32>;
 
         /// Widths of the shown leading columns.
         pub fn widths(&self) -> &[u32];
@@ -5149,8 +5173,8 @@ pub mod table {
         /// prepared width otherwise.
         pub fn natural_width(&self) -> u32;
 
-        /// Paint only the visible row/column window. No per-cell nodes or hit
-        /// rectangles exist.
+        /// Paint only the visible row/column window, with `overlay` over the
+        /// table's own styles. No per-cell nodes or hit rectangles exist.
         pub fn paint(
             &self,
             render: &mut Render<'_>,
@@ -5158,6 +5182,7 @@ pub mod table {
             window: TableWindow,
             cursor: Option<&CellKey>,
             selection: &TableSelection,
+            overlay: &TableOverlay,
         ) -> canopy::error::Result<TablePaintStats>;
 
         /// Bytes inspected for automatic measurement.
@@ -5424,6 +5449,19 @@ pub mod table {
         pub wrap: bool,
     }
 
+    /// What a host paints over a table's own styles.
+    ///
+    /// A ground is a role that every part of the table takes, as when the whole
+    /// table is selected. Marks paint byte ranges of single cells in roles of
+    /// their own, over the ground, such as the matches of a search.
+    #[derive(Clone, Debug, Default)]
+    pub struct TableOverlay {/* private fields */}
+
+    impl TableOverlay {
+        /// Construct an overlay from a ground and marks in any order.
+        pub fn new(ground: Option<&'static str>, marks: Vec<CellMark>) -> Self;
+    }
+
     /// Visible-work counters returned by grid painting.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub struct TablePaintStats {
@@ -5572,4 +5610,60 @@ pub mod terminal {
             I: IntoIterator<Item = S>,
             S: Into<String>;
     }
+}
+
+pub mod view_search {
+    //! Conventions every searchable view shares: roles, steps, reveal, and marks.
+    //! What every searchable view shares, so a search reads the same in each.
+    //!
+    //! A view that highlights search matches, such as the
+    //! [`Editor`](crate::editor::Editor), the [`DiffView`](crate::DiffView), or a
+    //! rendered Markdown document, follows four conventions:
+    //!
+    //! - It paints the current match with [`CURRENT`] and every other match with
+    //!   [`MATCH`]. The theme gives both roles one hue, and the current match takes
+    //!   it at full strength.
+    //! - It moves between matches with [`step`], which wraps at either end.
+    //! - It reveals the current match with [`REVEAL`], so the match lands near the
+    //!   middle of the view with its surroundings on both sides.
+    //! - It reports one scrollbar mark per row that holds a match, through
+    //!   [`marks`], from its
+    //!   [`Widget::scroll_marks`](canopy::Widget::scroll_marks).
+
+    /// Style role of the current match.
+    pub const CURRENT: &str = "search/current";
+
+    /// Style role of a scrollbar mark beside a row that holds a match.
+    ///
+    /// The role carries the match colour as a foreground: a block thumb glyph
+    /// hides the background, so a mark that slides under the thumb shows its
+    /// colour only through the foreground.
+    pub const MARK: &str = "search/mark";
+
+    /// Glyph of a match mark on a scrollbar track.
+    ///
+    /// This is the thin track vertical, so a mark blends into the surrounding
+    /// divider or border and only its colour stands out.
+    pub const MARK_GLYPH: char = _;
+
+    /// Style role of a match that is not current.
+    pub const MATCH: &str = "search/match";
+
+    /// How a view reveals the current match: centred, so the text before and
+    /// after it both show.
+    pub const REVEAL: RevealAlign = RevealAlign::Center;
+
+    /// Return one scrollbar mark for each distinct row in `rows`.
+    ///
+    /// `rows` are canvas rows in ascending order, one per match. Matches that
+    /// share a row give one mark.
+    pub fn marks(rows: impl IntoIterator<Item = u32>) -> Vec<ScrollMark>;
+
+    /// Return the match `delta` steps from `current` among `count` matches,
+    /// wrapping at either end.
+    ///
+    /// With no current match, a forward step counts from before the first match
+    /// and a backward step from after the last, so `1` gives the first match
+    /// and `-1` the last. With no matches, there is no current match.
+    pub fn step(current: Option<usize>, count: usize, delta: i32) -> Option<usize>;
 }

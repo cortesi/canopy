@@ -18,7 +18,7 @@ use canopy::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::{TableCell, TableData, TableGlyphs, display_control};
+use super::{TableCell, TableData, TableGlyphs, TableOverlay, display_control};
 
 /// The widest word kept whole when columns are short of room; a longer word
 /// breaks between graphemes.
@@ -527,13 +527,27 @@ impl FlowTable {
     pub fn derived_bytes(&self) -> usize {
         self.derived_bytes
     }
+    /// Return the first display line of a body row, or of the header for
+    /// `None`.
+    pub fn row_line(&self, row: Option<usize>) -> Option<u32> {
+        self.lines
+            .iter()
+            .position(|line| matches!(line, FlowLine::Cells { row: at, .. } if *at == row))
+            .map(|line| line as u32)
+    }
     /// Paint the lines from `offset.y` into `area`, starting `offset.x`
-    /// cells into the table.
-    pub fn paint(&self, render: &mut Render, area: Rect, offset: Point) -> Result<()> {
+    /// cells into the table, with `overlay` over the table's own styles.
+    pub fn paint(
+        &self,
+        render: &mut Render,
+        area: Rect,
+        offset: Point,
+        overlay: &TableOverlay,
+    ) -> Result<()> {
         if area.w == 0 || area.h == 0 {
             return Ok(());
         }
-        render.fill("table", area, ' ')?;
+        render.fill(overlay.role("table"), area, ' ')?;
         let end = offset.x.saturating_add(area.w);
         let visible = |x: u32, w: u32| x >= offset.x && x.saturating_add(w) <= end;
         let at = |x: u32, y: u32| Point {
@@ -543,7 +557,11 @@ impl FlowTable {
         let mut glyph = [0; 4];
         let mut put = |render: &mut Render, path: &str, x: u32, y: u32, g: char| {
             if visible(x, 1) {
-                render.text(path, Line::new(at(x, y).x, y, 1), g.encode_utf8(&mut glyph))?;
+                render.text(
+                    overlay.role(path),
+                    Line::new(at(x, y).x, y, 1),
+                    g.encode_utf8(&mut glyph),
+                )?;
             }
             Ok::<_, Error>(())
         };
@@ -575,11 +593,11 @@ impl FlowTable {
                 }
                 FlowLine::Cells { row, fragments } => (row, fragments),
             };
-            let path = if row.is_some() {
+            let path = overlay.role(if row.is_some() {
                 "table/cell"
             } else {
                 "table/flow/header"
-            };
+            });
             if self.cut {
                 put(
                     render,
@@ -617,7 +635,7 @@ impl FlowTable {
                     let byte = fragment.bytes.start + i;
                     let w = cells(g);
                     if visible(x, w) {
-                        let style = cell.style_at(render, &base, byte);
+                        let style = overlay.style_at(render, (*row, column), cell, &base, byte);
                         let point = at(x, y);
                         let mut buf = [0; 4];
                         let g = self.glyphs.display(g, &mut buf);

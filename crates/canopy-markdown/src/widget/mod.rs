@@ -4,6 +4,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, VecDeque},
     fmt::Display,
+    mem,
     rc::Rc,
     result::Result as StdResult,
     sync::Arc,
@@ -34,14 +35,15 @@ use canopy_widgets::{
     editor::{Editor, LineNumbers, WrapMode},
     mosaic::{Tier, tier_for},
     scrollbar::Scrollbar,
-    table::{self, CellKey, PreparedTable, TableLayoutOptions},
+    table::{self, CellKey, PreparedTable, TableLayoutOptions, TableOverlay},
+    view_search,
 };
 
 use crate::{
     Follow, MarkdownOptions, Mode, ViewType,
     document::{
         BlockKind, DocumentSnapshot, Link, LocalLink, ObjectKind, ParseLimits, ReadingPosition,
-        ReadingRange, ResolvedLink, parse_document,
+        ReadingRange, ResolvedLink, cell_spans, parse_document,
     },
     executor::{
         CopyInput, PreparedView, SearchOutput, WorkHandle, WorkRequest, WorkResult, WorkSearch,
@@ -52,7 +54,10 @@ use crate::{
     },
     inspector::{Inspector, InspectorContent, InspectorEvent, InspectorHandle, InspectorOptions},
     presentation::{EmbedInfo, GeometryKey, Supplied},
-    search::{SearchAddress, SearchCase, SearchLimits, SearchMode, SearchQuery, SearchResults},
+    search::{
+        SearchAddress, SearchCase, SearchLimits, SearchMatch, SearchMode, SearchQuery,
+        SearchResults,
+    },
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, SourceAnchor, SourceMatches, SourceOptions},
     surface::{RenderedSurface, SurfaceState, nav_scroll},
@@ -167,7 +172,7 @@ pub struct Markdown {
     query_generation: u64,
     /// Bounded Rendered matches for one displayed revision.
     results: Option<SearchResults>,
-    /// Explicitly activated match, or None before navigation.
+    /// The current match, or None while there is none.
     search_index: Option<usize>,
     /// Exact Source match ranges for one displayed revision.
     source_results: Option<SourceMatches>,
@@ -457,6 +462,7 @@ impl Markdown {
         self.saved_source_selection = None;
         self.results = None;
         self.search_index = None;
+        self.shared.borrow_mut().overlays.search_current = None;
         self.saved = [None, None];
         self.return_position = None;
         self.jumps.clear();
@@ -585,7 +591,7 @@ impl Markdown {
         self.results = None;
         self.search_index = None;
         self.source_results = None;
-        self.shared.borrow_mut().overlays.search.clear();
+        self.clear_search_overlay();
         if let Some(nodes) = &self.nodes {
             ctx.set_hidden(nodes.rendered, view != ViewType::Rendered)?;
             if let Some(node) = nodes.source {
@@ -886,9 +892,11 @@ impl Markdown {
         if let Some(view) = ctx.view_of(node)
             && before != Some(view.scroll)
         {
-            self.shared.borrow_mut().navigation += 1;
+            let mut state = self.shared.borrow_mut();
+            state.navigation += 1;
+            state.search_reveal = false;
             if view.scroll.y.saturating_add(view.content.h) < view.canvas.h {
-                self.shared.borrow_mut().follow = Follow::Paused;
+                state.follow = Follow::Paused;
             }
         }
         self.update_chrome(ctx)
@@ -966,6 +974,7 @@ impl Markdown {
         if position.epoch != self.epoch() {
             return Err(invalid("Reading position belongs to a replaced document"));
         }
+        self.shared.borrow_mut().search_reveal = false;
         self.restore(ctx, position)
     }
     /// Restore a logical anchor through the target surface's prepared geometry.
@@ -1005,8 +1014,12 @@ impl Markdown {
         self.restoring = true;
         Ok(())
     }
-    /// Retain a literal or fh-compatible smart-case regex query without moving
-    /// the reader.
+    /// Retain a literal or fh-compatible smart-case regex query.
+    ///
+    /// Once the Rendered matches publish, the first match at or below the
+    /// top of the view becomes current and the reader reveals it, as a text
+    /// view does. Reader navigation before then, a followed tail, or
+    /// [`Self::keep_search_position`] leaves the reader where it is.
     pub fn set_search(&mut self, ctx: &mut dyn Context, query: String, regex: bool) -> Result<()> {
         if query.len() > self.options.query_limit {
             return Err(invalid("Search query exceeds the configured limit"));
@@ -1029,7 +1042,8 @@ impl Markdown {
         self.query_error = None;
         self.results = None;
         self.search_index = None;
-        self.shared.borrow_mut().overlays.search.clear();
+        self.shared.borrow_mut().search_reveal = !self.query.text.is_empty();
+        self.clear_search_overlay();
         if let Some(node) = self.nodes.as_ref().and_then(|nodes| nodes.source) {
             ctx.with_widget_mut(node, |source: &mut MarkdownSource, ctx| {
                 source.clear_search(ctx);
@@ -1082,10 +1096,25 @@ impl Markdown {
             self.source_results.as_ref().map_or(0, |r| r.ranges.len())
         }
     }
-    /// One-based current match, or zero before explicit navigation.
+    /// One-based current match, or zero while there is none.
     #[command]
     pub fn search_position(&self) -> usize {
         self.search_index.map_or(0, |i| i + 1)
+    }
+    /// Publish pending search results without revealing a match, as when a
+    /// host reloads the document and restores its own position.
+    pub fn keep_search_position(&mut self) {
+        self.shared.borrow_mut().search_reveal = false;
+    }
+    /// Whether a query waits for its first matches in the active view.
+    #[command]
+    pub fn search_pending(&self) -> bool {
+        !self.query.text.is_empty()
+            && self.query_error.is_none()
+            && match self.active {
+                ViewType::Rendered => self.results.is_none(),
+                ViewType::Source => self.source_results.is_none(),
+            }
     }
     /// The current query error without changing the retained query.
     pub fn search_error(&self) -> Option<&str> {
@@ -1094,62 +1123,25 @@ impl Markdown {
     /// Visit a retained match in the active representation.
     #[command]
     pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32) -> Result<()> {
-        let count = self.search_matches();
-        if count == 0 {
+        let Some(next) = view_search::step(self.search_index, self.search_matches(), delta) else {
             return Ok(());
-        }
+        };
+        self.shared.borrow_mut().search_reveal = false;
         {
             let mut state = self.shared.borrow_mut();
             state.follow = Follow::Paused;
             state.navigation += 1;
         }
-        let current = self
-            .search_index
-            .map(|i| i as i64)
-            .unwrap_or(if delta < 0 { 0 } else { -1 });
-        let next = (current + i64::from(delta)).rem_euclid(count as i64) as usize;
-        self.search_index = Some(next);
         if self.active == ViewType::Source {
+            self.search_index = Some(next);
             if let Some(node) = self.navigation_node() {
                 ctx.with_widget_mut(node, |source: &mut MarkdownSource, ctx| {
                     source.activate_match(ctx, next);
                     Ok(())
                 })?;
             }
-        } else if let Some(found) = self
-            .results
-            .as_ref()
-            .and_then(|r| r.matches.get(next))
-            .cloned()
-        {
-            let unit = found.address.unit_id();
-            let presentation = self.shared.borrow().presentation.clone();
-            if let Some(p) = presentation {
-                self.shared.borrow_mut().overlays.active_object = match found.address {
-                    SearchAddress::Unit { .. } => p.document.unit(unit).and_then(|unit| {
-                        unit.spans
-                            .iter()
-                            .filter(|span| {
-                                span.range.start < found.range.end
-                                    && found.range.start < span.range.end
-                            })
-                            .find_map(|span| span.object)
-                    }),
-                    _ => p
-                        .document
-                        .objects
-                        .iter()
-                        .find(|o| o.unit_id == unit)
-                        .map(|o| o.id),
-                };
-                if let Some(node) = self.navigation_node() {
-                    let row = p.row_for_unit(unit, found.range.start);
-                    ctx.with_widget_mut(node, |_: &mut RenderedSurface, ctx| {
-                        ctx.reveal_area(Rect::new(0, row, 1, 1), RevealAlign::Nearest);
-                        Ok(())
-                    })?;
-                }
-            }
+        } else {
+            self.reveal_rendered_match(ctx, next)?;
         }
         self.update_chrome(ctx)
     }
@@ -1265,6 +1257,14 @@ impl Markdown {
         };
         self.open_inspector(ctx, content, Some(object.id), p.document.source.revision)?;
         self.inspected_link = inspected;
+        // A table inspector shows the matches its preview shows.
+        if matches!(object.kind, ObjectKind::Table)
+            && let Some(open) = &self.inspector
+        {
+            let marks = p.table_search_marks(object.unit_id, &self.shared.borrow().overlays);
+            open.handle
+                .set_table_overlay(ctx, TableOverlay::new(None, marks))?;
+        }
         if let Some(found) = self
             .search_index
             .and_then(|i| self.results.as_ref()?.matches.get(i))
@@ -1470,6 +1470,7 @@ impl Markdown {
     fn go_to_source(&mut self, ctx: &mut dyn Context, byte: usize) -> Result<()> {
         self.shared.borrow_mut().follow = Follow::Paused;
         self.shared.borrow_mut().navigation += 1;
+        self.shared.borrow_mut().search_reveal = false;
         self.restore(
             ctx,
             ReaderPosition {
@@ -2130,6 +2131,7 @@ impl Markdown {
         if switched {
             self.results = None;
             self.search_index = None;
+            self.shared.borrow_mut().overlays.search_current = None;
             self.source_results = None;
             if was_focused && let Some(node) = self.navigation_node() {
                 ctx.set_focus(node)?;
@@ -2187,13 +2189,15 @@ impl Markdown {
                 self.results = None;
                 self.source_results = None;
                 self.search_index = None;
-                self.shared.borrow_mut().overlays.search.clear();
+                self.shared.borrow_mut().search_reveal = false;
+                self.clear_search_overlay();
                 return Ok(());
             }
         };
         self.query_error = None;
         match output {
             SearchOutput::Source(matches) => {
+                self.shared.borrow_mut().search_reveal = false;
                 let current = self
                     .search_index
                     .and_then(|i| self.source_results.as_ref()?.ranges.get(i));
@@ -2212,29 +2216,106 @@ impl Markdown {
                     .and_then(|i| self.results.as_ref()?.matches.get(i));
                 self.search_index = current
                     .and_then(|current| results.matches.iter().position(|found| found == current));
-                self.shared.borrow_mut().overlays.search = results
-                    .matches
-                    .iter()
-                    .filter_map(|found| {
-                        let unit_id = found.address.unit_id();
-                        let range = match found.address {
-                            SearchAddress::Unit { .. } => found.range.clone(),
-                            _ => 0..self.last_document.as_ref()?.unit(unit_id)?.text.len(),
-                        };
-                        Some(ReadingRange {
-                            start: ReadingPosition {
-                                unit_id,
-                                offset: range.start,
-                            },
-                            end: ReadingPosition {
-                                unit_id,
-                                offset: range.end,
-                            },
-                        })
-                    })
-                    .collect();
+                let ranges = reading_ranges(self.last_document.as_deref(), &results.matches);
+                {
+                    let mut state = self.shared.borrow_mut();
+                    state.overlays.search = ranges;
+                    state.overlays.search_current = self.search_index;
+                }
                 self.results = Some(results);
+                self.reveal_first_match(ctx)?;
             }
+        }
+        Ok(())
+    }
+    /// Drop the Rendered match highlights.
+    fn clear_search_overlay(&self) {
+        let mut state = self.shared.borrow_mut();
+        state.overlays.search.clear();
+        state.overlays.search_current = None;
+    }
+    /// Make the first Rendered match at or below the top of the view current
+    /// and reveal it, once for each new query. Reader input since the query,
+    /// or a followed tail, leaves the reader where it is.
+    fn reveal_first_match(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        let presentation = {
+            let mut state = self.shared.borrow_mut();
+            if !mem::take(&mut state.search_reveal) {
+                return Ok(());
+            }
+            state.presentation.clone()
+        };
+        if self.follow_state() == Follow::Following {
+            return Ok(());
+        }
+        let Some(p) = presentation else {
+            return Ok(());
+        };
+        let top = self
+            .nodes
+            .as_ref()
+            .and_then(|nodes| ctx.view_of(nodes.rendered))
+            .map_or(0, |view| view.scroll.y);
+        let first = {
+            let state = self.shared.borrow();
+            if state.overlays.search.is_empty() {
+                return Ok(());
+            }
+            state
+                .overlays
+                .search
+                .iter()
+                .position(|range| p.row_for_unit(range.start.unit_id, range.start.offset) >= top)
+                .unwrap_or(0)
+        };
+        self.shared.borrow_mut().navigation += 1;
+        self.reveal_rendered_match(ctx, first)
+    }
+    /// Make Rendered match `index` current, mark the object it lies in, and
+    /// reveal it as every searchable view does.
+    fn reveal_rendered_match(&mut self, ctx: &mut dyn Context, index: usize) -> Result<()> {
+        let Some(found) = self
+            .results
+            .as_ref()
+            .and_then(|r| r.matches.get(index))
+            .cloned()
+        else {
+            return Ok(());
+        };
+        self.search_index = Some(index);
+        let presentation = self.shared.borrow().presentation.clone();
+        let row = {
+            let mut state = self.shared.borrow_mut();
+            state.overlays.search_current = Some(index);
+            let Some(p) = presentation else {
+                return Ok(());
+            };
+            let unit = found.address.unit_id();
+            state.overlays.active_object = match found.address {
+                SearchAddress::Unit { .. } => p.document.unit(unit).and_then(|unit| {
+                    unit.spans
+                        .iter()
+                        .filter(|span| {
+                            span.range.start < found.range.end && found.range.start < span.range.end
+                        })
+                        .find_map(|span| span.object)
+                }),
+                _ => p
+                    .document
+                    .objects
+                    .iter()
+                    .find(|o| o.unit_id == unit)
+                    .map(|o| o.id),
+            };
+            state.overlays.search.get(index).map_or(0, |range| {
+                p.row_for_unit(range.start.unit_id, range.start.offset)
+            })
+        };
+        if let Some(node) = self.navigation_node() {
+            ctx.with_widget_mut(node, |_: &mut RenderedSurface, ctx| {
+                ctx.reveal_area(Rect::new(0, row, 1, 1), view_search::REVEAL);
+                Ok(())
+            })?;
         }
         Ok(())
     }
@@ -2462,6 +2543,100 @@ impl Markdown {
             vec![(node, Rect::new(x, y + view.content.h, view.content.w, 1))],
         )
     }
+}
+
+/// Map Rendered matches to the reading ranges they highlight, one per match
+/// and in the same order.
+///
+/// A match in a code or source line marks its own text, at its line's offset
+/// in the unit, and a match in a table cell at its cell's offset. Matches
+/// arrive in reading order, so each line offset resumes from the one before
+/// in the same unit, and the scan stays linear. A table's cell offsets are
+/// found once for all its matches.
+fn reading_ranges(
+    document: Option<&DocumentSnapshot>,
+    matches: &[SearchMatch],
+) -> Vec<ReadingRange> {
+    // The unit, line index, and byte offset of the last line found.
+    let mut cursor: Option<(u64, usize, usize)> = None;
+    // The unit of the last table found, and where each cell starts in it.
+    let mut table: Option<(u64, CellStarts)> = None;
+    matches
+        .iter()
+        .map(|found| {
+            let unit_id = found.address.unit_id();
+            let text = document
+                .and_then(|document| document.unit(unit_id))
+                .map_or("", |unit| unit.text.as_str());
+            let range = match found.address {
+                SearchAddress::Unit { .. } => found.range.clone(),
+                SearchAddress::CodeLine { line, .. }
+                | SearchAddress::SourceCardLine { line, .. } => {
+                    let (mut at_line, mut at) = match cursor {
+                        Some((unit, at_line, at)) if unit == unit_id && at_line <= line => {
+                            (at_line, at)
+                        }
+                        _ => (0, 0),
+                    };
+                    while at_line < line
+                        && let Some(end) = text[at..].find('\n')
+                    {
+                        at += end + 1;
+                        at_line += 1;
+                    }
+                    cursor = Some((unit_id, at_line, at));
+                    at + found.range.start..at + found.range.end
+                }
+                SearchAddress::TableCell {
+                    row_key,
+                    column_key,
+                    ..
+                } => {
+                    if table.as_ref().is_none_or(|(unit, _)| *unit != unit_id) {
+                        table = Some((unit_id, cell_starts(document, unit_id)));
+                    }
+                    let start = table
+                        .as_ref()
+                        .and_then(|(_, starts)| starts.get(&(row_key, column_key)).copied());
+                    match start {
+                        Some(start) => start + found.range.start..start + found.range.end,
+                        None => 0..text.len(),
+                    }
+                }
+            };
+            ReadingRange {
+                start: ReadingPosition {
+                    unit_id,
+                    offset: range.start,
+                },
+                end: ReadingPosition {
+                    unit_id,
+                    offset: range.end,
+                },
+            }
+        })
+        .collect()
+}
+
+/// Where each cell of a table starts in its unit's readable text, by row
+/// and cell key.
+type CellStarts = HashMap<(Option<u64>, u64), usize>;
+
+/// Return where each cell of the table in `unit_id` starts in the unit's
+/// readable text.
+fn cell_starts(document: Option<&DocumentSnapshot>, unit_id: u64) -> CellStarts {
+    document
+        .and_then(|document| document.blocks.iter().find(|b| b.unit_id == unit_id))
+        .and_then(|block| match &block.kind {
+            BlockKind::Table(table) => Some(
+                cell_spans(table)
+                    .into_iter()
+                    .map(|cell| ((cell.row_key, cell.key), cell.text.start))
+                    .collect(),
+            ),
+            _ => None,
+        })
+        .unwrap_or_default()
 }
 
 /// Lay out a previewed table for its inspector, which shows every value in

@@ -376,3 +376,59 @@ fn a_label_with_line_breaks_keeps_its_lines_at_every_width() {
         assert_eq!(table.fit(room).unwrap().header_lines(), 2, "at {room}");
     }
 }
+
+#[test]
+fn overlay_marks_find_their_cell_and_bytes() {
+    let mark = |row, column, bytes, role| CellMark {
+        row,
+        column,
+        bytes,
+        role,
+    };
+    // Marks arrive out of order and sort by cell, then by first byte.
+    let overlay = TableOverlay::new(
+        Some("ground"),
+        vec![
+            mark(Some(1), 0, 4..6, "late"),
+            mark(None, 1, 0..3, "header"),
+            mark(Some(1), 0, 0..2, "early"),
+            mark(Some(0), 1, 2..3, "other"),
+        ],
+    );
+    assert_eq!(overlay.role("table/cell"), "ground");
+    assert_eq!(TableOverlay::default().role("table/cell"), "table/cell");
+    assert_eq!(overlay.mark_at(None, 1, 2), Some("header"));
+    assert_eq!(overlay.mark_at(None, 0, 0), None);
+    assert_eq!(overlay.mark_at(Some(1), 0, 1), Some("early"));
+    assert_eq!(overlay.mark_at(Some(1), 0, 2), None);
+    assert_eq!(overlay.mark_at(Some(1), 0, 5), Some("late"));
+    assert_eq!(overlay.mark_at(Some(1), 0, 6), None);
+    assert_eq!(overlay.mark_at(Some(0), 1, 2), Some("other"));
+}
+
+#[test]
+fn a_flow_names_the_first_line_of_each_row() {
+    let data = Arc::new(
+        TableData::builder("d", 1, ["Key", "Value"])
+            .row("a", ["k", "a value long enough to wrap onto lines"])
+            .row("b", ["l", "short"])
+            .build()
+            .unwrap(),
+    );
+    let flow = FlowTable::prepare(
+        data,
+        FlowOptions {
+            width: 20,
+            cell_lines: 4,
+            glyphs: TableGlyphs::UNICODE,
+        },
+    )
+    .unwrap();
+    // The header, its rule, the wrapped first row, and a rule before the
+    // second row.
+    assert_eq!(flow.row_line(None), Some(0));
+    assert_eq!(flow.row_line(Some(0)), Some(2));
+    let second = flow.row_line(Some(1)).unwrap();
+    assert!(second > 3, "{second}");
+    assert_eq!(flow.row_line(Some(2)), None);
+}

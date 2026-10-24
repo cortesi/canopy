@@ -30,15 +30,17 @@ use canopy_widgets::{
     image_cells,
     mosaic::{Cell, Tier, tier_for},
     table::{
-        self, FlowOptions, FlowTable, PreparedTable, TableAlignment, TableCell, TableColumn,
-        TableData, TableGlyphs, TableLayoutOptions, TableRow, TableSelection, TableWindow,
+        self, CellMark, FlowOptions, FlowTable, PreparedTable, TableAlignment, TableCell,
+        TableColumn, TableData, TableGlyphs, TableLayoutOptions, TableOverlay, TableRow,
+        TableSelection, TableWindow,
     },
+    view_search,
 };
 use image::RgbaImage;
 
 use crate::document::{
-    AlertTone, Alignment, Block, BlockKind, CodeBlock, DocumentSnapshot, EmbedBlock, InlineRole,
-    ObjectKind, ReadingPosition, ReadingRange, ReadingUnit,
+    AlertTone, Alignment, Block, BlockKind, CellSpan, CodeBlock, DocumentSnapshot, EmbedBlock,
+    InlineRole, ObjectKind, ReadingPosition, ReadingRange, ReadingUnit, cell_spans,
 };
 
 /// Bounded row count for one derived presentation.
@@ -252,6 +254,8 @@ struct BlockLayout {
     source_text_start: Option<usize>,
     /// Where an image block draws its image.
     image: Option<ImagePlacement>,
+    /// Where each cell of a table block lies in the unit's readable text.
+    cells: Arc<[CellSpan]>,
 }
 
 /// Preparation evidence, independent of paint work.
@@ -286,8 +290,11 @@ pub struct PaintStats {
 pub struct PaintOverlays {
     /// Current document selection in readable UTF-8 coordinates.
     pub selection: Option<ReadingRange>,
-    /// Retained matches in the rendered readable projection.
+    /// Retained matches in the rendered readable projection, in reading
+    /// order.
     pub search: Vec<ReadingRange>,
+    /// The index in `search` of the current match, if any.
+    pub search_current: Option<usize>,
     /// Current object cursor, independent of document selection.
     pub active_object: Option<u64>,
     /// Images the host supplied, which image blocks paint.
@@ -516,6 +523,7 @@ impl PresentationSnapshot {
                     object: old.object,
                     source_text_start: old.source_text_start,
                     image: old.image.clone(),
+                    cells: old.cells.clone(),
                 }
             } else {
                 result.stats.prepared_blocks += 1;
@@ -743,6 +751,9 @@ impl PresentationSnapshot {
             return 0;
         };
         let b = &self.blocks[index];
+        if let Some(line) = table_line(b, offset) {
+            return b.start + b.table_start + line;
+        }
         let row = b
             .rows
             .iter()
@@ -858,6 +869,10 @@ impl PresentationSnapshot {
             .iter()
             .filter_map(|s| self.reading_span(s))
             .collect::<Vec<_>>();
+        let current = overlays
+            .search_current
+            .and_then(|i| overlays.search.get(i))
+            .and_then(|s| self.reading_span(s));
         let mut row_search = Vec::new();
         let end = visible.tl.y.saturating_add(visible.h).min(self.height);
         let text_bg = render.resolve_style("markdown/text").bg;
@@ -871,10 +886,19 @@ impl PresentationSnapshot {
                 index.is_some_and(|i| overlaps(span, i, bytes))
             };
             let row_selection = selection.as_ref().filter(|s| marks(s, &WHOLE_UNIT));
+            let row_current = current.as_ref().filter(|s| marks(s, &WHOLE_UNIT));
             row_search.clear();
             row_search.extend(search.iter().filter(|s| marks(s, &WHOLE_UNIT)));
+            // Selection takes an atomic card whole. A match marks it whole
+            // only where it covers the whole unit, such as a table cell's;
+            // a match in a code line marks just its own text.
+            let length = self.document.unit(row.unit_id).map_or(0, |u| u.text.len());
+            let covers = |span: &Range<ReadingKey>| {
+                index.is_some_and(|i| span.start <= (i, 0) && span.end >= (i, length))
+            };
             let whole_selected = row.atomic && row_selection.is_some();
-            let whole_search = row.atomic && !row_search.is_empty();
+            let whole_current = row.atomic && row_current.is_some_and(covers);
+            let whole_search = row.atomic && row_search.iter().any(|s| covers(s));
             let active = |object: Option<u64>| object.is_some() && object == overlays.active_object;
             // An active card takes the object ground across its full width,
             // blank code lines and table preview rows included.
@@ -889,8 +913,10 @@ impl PresentationSnapshot {
                 || active(block.object) && block.image.is_some();
             let ground = if whole_selected {
                 "markdown/selection"
+            } else if whole_current {
+                view_search::CURRENT
             } else if whole_search {
-                "markdown/search"
+                view_search::MATCH
             } else if active_card {
                 "markdown/object"
             } else {
@@ -906,13 +932,10 @@ impl PresentationSnapshot {
             fill_ground(render, row, ground, visible.tl.x, local_y, span)?;
             for run in &row.runs {
                 stats.runs += 1;
-                let (whole_selected, whole_search, ground_bg) = cell_ground(
-                    run.x,
-                    row,
-                    (whole_selected, whole_search),
-                    &ground_bg,
-                    &text_bg,
-                );
+                let (grounded, ground_bg) = cell_ground(run.x, row, &ground_bg, &text_bg);
+                let whole_selected = grounded && whole_selected;
+                let whole_current = grounded && whole_current;
+                let whole_search = grounded && whole_search;
                 let mut x = run.x;
                 for (byte, g) in text::grapheme_indices(&run.text) {
                     let width = text::grapheme_width(g) as u32;
@@ -929,19 +952,18 @@ impl PresentationSnapshot {
                             r.clone()
                         }
                     });
-                    let selected = whole_selected
-                        || bytes
-                            .as_ref()
-                            .is_some_and(|r| row_selection.is_some_and(|s| marks(s, r)));
-                    let search = whole_search
-                        || bytes
-                            .as_ref()
-                            .is_some_and(|r| row_search.iter().any(|s| marks(s, r)));
+                    let covered =
+                        |s: &Range<ReadingKey>| bytes.as_ref().is_some_and(|r| marks(s, r));
+                    let selected = whole_selected || row_selection.is_some_and(covered);
+                    let current = whole_current || row_current.is_some_and(covered);
+                    let search = current || whole_search || row_search.iter().any(|s| covered(s));
                     let object = active(run.object);
                     let role = if selected {
                         "markdown/selection"
+                    } else if current {
+                        view_search::CURRENT
                     } else if search {
-                        "markdown/search"
+                        view_search::MATCH
                     } else if object {
                         "markdown/object"
                     } else {
@@ -981,7 +1003,7 @@ impl PresentationSnapshot {
             let margin_x = self.geometry.margin();
             let margin = Rect::new(margin_x, y, 1, 1);
             if active_row && block.inset > margin_x && visible.contains_rect(margin) {
-                let (_, _, bg) = cell_ground(margin_x, row, (false, false), &ground_bg, &text_bg);
+                let (_, bg) = cell_ground(margin_x, row, &ground_bg, &text_bg);
                 let at = Point {
                     x: margin_x - visible.tl.x,
                     y: local_y,
@@ -991,6 +1013,12 @@ impl PresentationSnapshot {
         }
         // A table that fits flows into the body width; one that does not
         // clips the same prepared grid as its inspector.
+        let marks = Marks {
+            selection: &selection,
+            current: &current,
+            search: &search,
+            active_object: overlays.active_object,
+        };
         let first = self
             .blocks
             .partition_point(|b| b.start.saturating_add(b.rows.len() as u32) <= visible.tl.y);
@@ -998,72 +1026,189 @@ impl PresentationSnapshot {
             if let Some(image) = &b.image {
                 paint_image(render, b.start, image, visible, &overlays.images)?;
             }
-            let Some(table) = &b.table else {
-                continue;
-            };
-            let area = Rect::new(
-                b.inset,
-                b.start + b.table_start,
-                self.geometry.width.saturating_sub(b.inset + 1),
-                b.table_height,
-            );
-            let Some(clip) = area.intersect(visible) else {
-                continue;
-            };
-            let local_area = Rect::new(
-                clip.tl.x - visible.tl.x,
-                clip.tl.y - visible.tl.y,
-                clip.w,
-                clip.h,
-            );
-            if let Some(flow) = &b.flow {
-                flow.paint(
-                    render,
-                    local_area,
-                    Point {
-                        x: clip.tl.x - area.tl.x,
-                        y: clip.tl.y - area.tl.y,
-                    },
-                )?;
-            } else {
-                table.paint(
-                    render,
-                    local_area,
-                    TableWindow {
-                        offset: Point {
-                            x: clip.tl.x - area.tl.x,
-                            y: clip.tl.y.saturating_sub(area.tl.y + 1),
-                        },
-                        header: clip.tl.y == area.tl.y,
-                        row_numbers: false,
-                    },
-                    None,
-                    &TableSelection::default(),
-                )?;
-            }
-            stats.tables += 1;
-            let index = b.rows.first().and_then(|row| self.unit_index(row.unit_id));
-            let marked =
-                |span: &Range<ReadingKey>| index.is_some_and(|i| overlaps(span, i, &WHOLE_UNIT));
-            let role = if selection.as_ref().is_some_and(marked) {
-                Some("markdown/selection")
-            } else if search.iter().any(marked) {
-                Some("markdown/search")
-            } else if b.object.is_some() && b.object == overlays.active_object {
-                Some("markdown/object")
-            } else {
-                None
-            };
-            if let Some(role) = role {
-                for y in local_area.tl.y..local_area.tl.y + local_area.h {
-                    for x in local_area.tl.x..local_area.tl.x + local_area.w {
-                        render.restyle(role, Point { x, y });
-                    }
-                }
+            if self.paint_table(render, b, visible, &marks)? {
+                stats.tables += 1;
             }
         }
         Ok(stats)
     }
+
+    /// Paint the table preview of `b` within `visible`, restyled whole as
+    /// the overlays mark its unit. Returns whether any of it showed.
+    fn paint_table(
+        &self,
+        render: &mut Render<'_>,
+        b: &BlockLayout,
+        visible: Rect,
+        marks: &Marks<'_>,
+    ) -> Result<bool> {
+        let Some(table) = &b.table else {
+            return Ok(false);
+        };
+        let area = Rect::new(
+            b.inset,
+            b.start + b.table_start,
+            self.geometry.width.saturating_sub(b.inset + 1),
+            b.table_height,
+        );
+        let Some(clip) = area.intersect(visible) else {
+            return Ok(false);
+        };
+        let overlay = self.table_overlay(b, marks);
+        let local_area = Rect::new(
+            clip.tl.x - visible.tl.x,
+            clip.tl.y - visible.tl.y,
+            clip.w,
+            clip.h,
+        );
+        if let Some(flow) = &b.flow {
+            flow.paint(
+                render,
+                local_area,
+                Point {
+                    x: clip.tl.x - area.tl.x,
+                    y: clip.tl.y - area.tl.y,
+                },
+                &overlay,
+            )?;
+        } else {
+            table.paint(
+                render,
+                local_area,
+                TableWindow {
+                    offset: Point {
+                        x: clip.tl.x - area.tl.x,
+                        y: clip.tl.y.saturating_sub(area.tl.y + 1),
+                    },
+                    header: clip.tl.y == area.tl.y,
+                    row_numbers: false,
+                },
+                None,
+                &TableSelection::default(),
+                &overlay,
+            )?;
+        }
+        Ok(true)
+    }
+    /// What paints over the table preview of `b`: the selection or the
+    /// object cursor as a ground across the whole table, and each search
+    /// match over the text it found in its cell.
+    fn table_overlay(&self, b: &BlockLayout, marks: &Marks<'_>) -> TableOverlay {
+        let Some(index) = b.rows.first().and_then(|row| self.unit_index(row.unit_id)) else {
+            return TableOverlay::default();
+        };
+        let marked = |span: &Range<ReadingKey>| overlaps(span, index, &WHOLE_UNIT);
+        // A selection takes the table whole, as it copies.
+        if marks.selection.as_ref().is_some_and(marked) {
+            return TableOverlay::new(Some("markdown/selection"), Vec::new());
+        }
+        let ground =
+            (b.object.is_some() && b.object == marks.active_object).then_some("markdown/object");
+        TableOverlay::new(
+            ground,
+            cell_marks(b, index, marks.search, marks.current.as_ref()),
+        )
+    }
+    /// Return the search matches in the table of `unit_id` as marks over its
+    /// cells, the current match apart, for a table inspector to show.
+    pub(crate) fn table_search_marks(
+        &self,
+        unit_id: u64,
+        overlays: &PaintOverlays,
+    ) -> Vec<CellMark> {
+        let (Some(b), Some(index)) = (
+            self.unit_blocks.get(&unit_id).map(|&i| &self.blocks[i]),
+            self.unit_index(unit_id),
+        ) else {
+            return Vec::new();
+        };
+        let search = overlays
+            .search
+            .iter()
+            .filter_map(|s| self.reading_span(s))
+            .collect::<Vec<_>>();
+        let current = overlays
+            .search_current
+            .and_then(|i| overlays.search.get(i))
+            .and_then(|s| self.reading_span(s));
+        cell_marks(b, index, &search, current.as_ref())
+    }
+}
+
+/// Return a mark over each cell's share of the `search` spans that cover the
+/// table of `b`, the unit at reading index `index`. The `current` span takes
+/// the current role, and the others the match role.
+fn cell_marks(
+    b: &BlockLayout,
+    index: usize,
+    search: &[Range<ReadingKey>],
+    current: Option<&Range<ReadingKey>>,
+) -> Vec<CellMark> {
+    let mut marks = Vec::new();
+    for span in search
+        .iter()
+        .filter(|span| overlaps(span, index, &WHOLE_UNIT))
+    {
+        let role = if current == Some(span) {
+            view_search::CURRENT
+        } else {
+            view_search::MATCH
+        };
+        // The span's bytes within this unit.
+        let start = if span.start.0 == index {
+            span.start.1
+        } else {
+            0
+        };
+        let end = if span.end.0 == index {
+            span.end.1
+        } else {
+            usize::MAX
+        };
+        for cell in b.cells.iter() {
+            let (from, to) = (start.max(cell.text.start), end.min(cell.text.end));
+            if from < to {
+                marks.push(CellMark {
+                    row: cell.row,
+                    column: cell.column,
+                    bytes: from - cell.text.start..to - cell.text.start,
+                    role,
+                });
+            }
+        }
+    }
+    marks
+}
+
+/// Return the line of the table preview of `b` that shows the cell holding
+/// `offset` of the unit's readable text, or `None` for a block that is not a
+/// table.
+fn table_line(b: &BlockLayout, offset: usize) -> Option<u32> {
+    let table = b.table.as_ref()?;
+    // A tab or newline between cells belongs to the cell before it.
+    let cell = b
+        .cells
+        .iter()
+        .take_while(|cell| cell.text.start <= offset)
+        .last()?;
+    let line = match (&b.flow, cell.row) {
+        (Some(flow), row) => flow.row_line(row)?,
+        (None, None) => 0,
+        (None, Some(row)) => table.header_lines() + table.cell_rect(row, cell.column)?.tl.y,
+    };
+    Some(line)
+}
+
+/// The overlays one paint marks with, as reading-key spans.
+struct Marks<'a> {
+    /// The document selection.
+    selection: &'a Option<Range<ReadingKey>>,
+    /// The current search match.
+    current: &'a Option<Range<ReadingKey>>,
+    /// Every search match.
+    search: &'a [Range<ReadingKey>],
+    /// The object cursor.
+    active_object: Option<u64>,
 }
 
 /// Whether a reading-key span covers any of `bytes` in the unit at `index`.
@@ -1515,6 +1660,16 @@ fn prepare_block(
         object,
         source_text_start: None,
         image: image_placement,
+        cells: table_cells(block),
+    }
+}
+
+/// Return where each cell of a table block lies in its unit's readable
+/// text, or nothing for another block.
+fn table_cells(block: &Block) -> Arc<[CellSpan]> {
+    match &block.kind {
+        BlockKind::Table(data) => cell_spans(data).into(),
+        _ => Arc::from([]),
     }
 }
 
@@ -1995,19 +2150,19 @@ fn frame(
     }
 }
 
-/// Return the whole-unit selection and search marks and the ground at column
-/// `x` of `row`. Rails before a card's ground keep the text ground and no mark.
+/// Return whether column `x` of `row` lies on the row's ground, and the
+/// ground there. Rails before a card's ground keep the text ground, and no
+/// whole-unit mark covers them.
 fn cell_ground<'a>(
     x: u32,
     row: &PreparedRow,
-    marks: (bool, bool),
     ground: &'a Paint,
     text: &'a Paint,
-) -> (bool, bool, &'a Paint) {
+) -> (bool, &'a Paint) {
     if x < row.ground_x {
-        (false, false, text)
+        (false, text)
     } else {
-        (marks.0, marks.1, ground)
+        (true, ground)
     }
 }
 
@@ -2492,8 +2647,6 @@ pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
         .bg("markdown/inline-code", palette.panel_bg)
         .bg("markdown/selection", palette.selection_bg)
         .fg("markdown/selection", palette.fg)
-        .bg("markdown/search", palette.accent)
-        .fg("markdown/search", palette.bg)
         .bg(
             "markdown/object",
             palette.bg.mix(palette.accent, OBJECT_TINT, Mix::Rgb),

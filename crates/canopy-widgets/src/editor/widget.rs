@@ -30,18 +30,9 @@ use crate::{
     click::ClickTracker,
     highlight::{HighlightSpan, Highlighter},
     register_clear_intent, run_paint,
-    scrollbar::ScrollbarGlyphs,
     text_buffer::{Selection, TextBuffer, TextPosition, TextRange, single_line},
+    view_search,
 };
-
-/// Rows of context kept above a revealed search match, when space allows.
-const SEARCH_MATCH_TOP_CONTEXT: u32 = 3;
-
-/// Glyph of a search-match mark on a scrollbar track.
-///
-/// This is the shared thin track vertical, so a mark blends into the
-/// surrounding divider or border and only its color stands out.
-const SEARCH_MARK: char = ScrollbarGlyphs::THIN.track_vertical;
 
 /// One text-entry action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -223,8 +214,8 @@ impl<'a, 'b> RenderLineContext<'a, 'b> {
         let styles = CellStyles {
             text: r.resolve_style("text"),
             selection: r.resolve_style("selection"),
-            search_current: r.resolve_style("search/current"),
-            search_match: r.resolve_style("search/match"),
+            search_current: r.resolve_style(view_search::CURRENT),
+            search_match: r.resolve_style(view_search::MATCH),
         };
         Self {
             r,
@@ -1348,17 +1339,17 @@ impl Editor {
 
     /// Put the cursor on the current search match and scroll it into view.
     ///
-    /// The match lands [`SEARCH_MATCH_TOP_CONTEXT`] rows below the top of the
-    /// view when space allows, so its surroundings read above it; near the
-    /// start or end of the text the view clamps to its edge instead. The
-    /// reveal queues behind layout, so it resolves against settled geometry.
+    /// The match lands near the middle of the view, as
+    /// [`view_search::REVEAL`] places it; near the start or end of the text
+    /// the view clamps to its edge instead. The reveal queues behind layout,
+    /// so it resolves against settled geometry.
     fn reveal_search_match(&mut self, ctx: &mut dyn Context) {
         let Some(range) = self.search.current_match() else {
             return;
         };
         self.buffer.set_cursor(range.start);
         self.update_preferred_column();
-        ctx.reveal_anchor(RevealAlign::Top(SEARCH_MATCH_TOP_CONTEXT));
+        ctx.reveal_anchor(view_search::REVEAL);
     }
 }
 
@@ -1462,18 +1453,7 @@ impl Widget for Editor {
             return Vec::new();
         }
         // Matches never span lines, so each one marks a single display row.
-        // The mark style carries the match color as a foreground: text
-        // match styles put it in the background, which a block thumb glyph
-        // would hide on scroll-over.
-        self.match_rows(content)
-            .into_iter()
-            .map(|row| ScrollMark {
-                start: row,
-                end: row.saturating_add(1),
-                style: "editor/search/mark",
-                glyph: SEARCH_MARK,
-            })
-            .collect()
+        view_search::marks(self.match_rows(content))
     }
 
     fn canvas(&self, view: Size, _ctx: &CanvasContext) -> Size {

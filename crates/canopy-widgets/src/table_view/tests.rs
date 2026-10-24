@@ -364,6 +364,7 @@ impl Widget for Preview {
             },
             None,
             &TableSelection::default(),
+            &TableOverlay::default(),
         )?;
         Ok(())
     }
@@ -431,6 +432,7 @@ impl Widget for ScalePreview {
             self.window,
             None,
             &TableSelection::default(),
+            &TableOverlay::default(),
         )?;
         Ok(())
     }
@@ -711,6 +713,7 @@ impl Widget for ClippedPreview {
             },
             None,
             &TableSelection::default(),
+            &TableOverlay::default(),
         )?;
         Ok(())
     }
@@ -921,5 +924,48 @@ fn a_fitted_header_never_overlaps_the_body() -> Result<()> {
         h.canopy.turn(TurnInput::Prepare)?;
         check(&h, width);
     }
+    Ok(())
+}
+
+#[test]
+fn an_overlay_marks_cell_bytes_until_the_next_publication() -> Result<()> {
+    use canopy::style::PartialStyle;
+
+    use crate::{table::CellMark, view_search};
+
+    let mut h = harness(4, 30, 6)?;
+    with(&mut h, |v, _| {
+        v.set_overlay(TableOverlay::new(
+            None,
+            vec![
+                CellMark {
+                    row: None,
+                    column: 1,
+                    bytes: 0..2,
+                    role: view_search::CURRENT,
+                },
+                CellMark {
+                    row: Some(2),
+                    column: 1,
+                    bytes: 1..2,
+                    role: view_search::MATCH,
+                },
+            ],
+        ));
+        Ok(())
+    })?;
+    h.render()?;
+    let ground = |h: &Harness, role| PartialStyle::new().bg(h.canopy.style().resolve(role).bg);
+    let (current, other) = (
+        ground(&h, view_search::CURRENT),
+        ground(&h, view_search::MATCH),
+    );
+    assert!(h.tbuf().contains_text_style("Be", &current));
+    assert!(!h.tbuf().contains_text_style("ta", &current));
+    assert!(h.tbuf().contains_text_style("2", &other));
+    assert!(!h.tbuf().contains_text_style("b", &other));
+    with(&mut h, |v, c| v.publish(c, table("d", 2, 4)))?;
+    h.render()?;
+    assert!(!h.tbuf().contains_text_style("Be", &current));
     Ok(())
 }

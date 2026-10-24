@@ -23,7 +23,7 @@ use canopy::{
 use canopy_widgets::{
     Container, TableView, Text,
     editor::{LineNumbers, WrapMode},
-    table::{CellKey, PreparedTable, TableEvent, TableViewOptions},
+    table::{CellKey, PreparedTable, TableEvent, TableOverlay, TableViewOptions},
 };
 
 use crate::{
@@ -299,6 +299,18 @@ impl InspectorHandle {
             if let Some(Reader::Table(table)) = inspector.reader {
                 ctx.with_widget_mut(table, |table: &mut TableView, ctx| {
                     table.set_cursor(ctx, cell)
+                })?;
+            }
+            Ok(())
+        })
+    }
+    /// Paint `overlay` over the table the inspector shows, if it shows one.
+    pub fn set_table_overlay(&self, ctx: &mut dyn Context, overlay: TableOverlay) -> Result<()> {
+        ctx.with_widget_mut(self.node, |inspector: &mut Inspector, ctx| {
+            if let Some(Reader::Table(table)) = inspector.reader {
+                ctx.with_widget_mut(table, |table: &mut TableView, _| {
+                    table.set_overlay(overlay);
+                    Ok(())
                 })?;
             }
             Ok(())
