@@ -31,7 +31,7 @@ use canopy_widgets::{highlight::palette_style_rules, table};
 pub use options::{Follow, MarkdownOptions, Mode, ViewType};
 pub use source_store::{DocumentInput, FinishOutcome};
 pub use source_view::MarkdownSource;
-pub use widget::{Markdown, ReaderPosition};
+pub use widget::{Markdown, MatchPlace, ReaderPosition};
 
 /// Register the styles that prepared documents paint with: the Markdown roles,
 /// the colors of syntax highlighting, and tables. A host that paints documents

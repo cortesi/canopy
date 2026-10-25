@@ -333,3 +333,90 @@ fn a_selection_in_a_cut_column_pages_the_columns_to_it() {
     assert_eq!(with(&mut h, |reader, _| reader.cursor()), Some((2, 0)));
     assert_eq!(with(&mut h, |reader, _| reader.first_column()), 0);
 }
+
+/// A table whose first column wraps prose over several lines a row, beside
+/// short columns.
+fn wrapped(rows: usize) -> Arc<TableData> {
+    let columns = ["Notes", "B", "C", "D", "E", "F", "G", "H"];
+    Arc::new(
+        TableData::new(
+            "t",
+            1,
+            columns
+                .iter()
+                .map(|label| TableColumn::new(*label, *label))
+                .collect(),
+            (0..rows)
+                .map(|row| {
+                    let mut cells = vec![format!("row {row} has a long note that wraps").into()];
+                    cells.extend(
+                        columns[1..]
+                            .iter()
+                            .map(|label| format!("{label}{row}").into()),
+                    );
+                    TableRow::new(row.to_string(), cells)
+                })
+                .collect(),
+        )
+        .unwrap(),
+    )
+}
+
+#[test]
+fn a_sideways_step_keeps_the_top_row() {
+    let mut h = harness(wrapped(60), 30, 12);
+    h.render().unwrap();
+    // Scroll a few rows down, to the top of a row.
+    let line = with(&mut h, |reader, ctx| {
+        let laid = reader.laid(ctx.view().content.w);
+        laid.flow.row_line(Some(10)).unwrap() - laid.body_start()
+    });
+    with(&mut h, |reader, ctx| {
+        reader.scroll(ctx, ScrollOp::To(Point::new(0, line)))
+    });
+    h.render().unwrap();
+    assert!(h.tbuf().contains_text("B10"));
+    with(&mut h, |reader, ctx| reader.shift_columns(ctx, 1));
+    h.render().unwrap();
+    let lines = h.tbuf().lines();
+    let body = lines
+        .iter()
+        .skip(3)
+        .find(|line| !line.trim().is_empty())
+        .unwrap();
+    assert!(body.contains("B10"), "{lines:?}");
+}
+
+#[test]
+fn a_revealed_match_shows_beneath_the_pinned_rows() {
+    let columns = ["Alpha", "Bravo", "Charlie", "Delta", "Echo"];
+    // Five rows: the label, the header, its rule, and two body rows.
+    let mut h = harness(data(&columns, 40), 24, 5);
+    search(&mut h, "Alpha30");
+    assert!(h.tbuf().contains_text("Alpha30"), "{:?}", h.tbuf().lines());
+}
+
+#[test]
+fn a_table_without_columns_selects_no_cell() {
+    let empty =
+        Arc::new(TableData::new("t", 1, Vec::new(), vec![TableRow::new("0", Vec::new())]).unwrap());
+    let mut h = harness(empty, 24, 5);
+    h.render().unwrap();
+    with(&mut h, |reader, ctx| {
+        reader.interact(ctx);
+        reader.set_cursor(Some((0, 0)));
+    });
+    assert_eq!(with(&mut h, |reader, _| reader.selected_text()), None);
+}
+
+#[test]
+fn a_header_match_selects_a_cell_in_its_column() {
+    let mut h = harness(data(&["Key", "Value"], 5), 30, 10);
+    h.render().unwrap();
+    with(&mut h, |reader, ctx| {
+        reader.interact(ctx);
+        reader.move_cursor(ctx, 2, 0);
+    });
+    search(&mut h, "Value$");
+    assert_eq!(with(&mut h, |reader, _| reader.cursor()), Some((2, 1)));
+}

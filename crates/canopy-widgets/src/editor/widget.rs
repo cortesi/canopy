@@ -1241,15 +1241,11 @@ impl Editor {
     /// Highlight precomputed match ranges without moving the view, as when
     /// the text reloads beneath a held search.
     ///
-    /// The first match at or after `current`, the start of the match that
-    /// was current before, becomes current; with no `current`, no match is.
-    /// Ranges arrive as for [`Self::set_matches`].
-    pub fn restore_matches(&mut self, matches: Vec<TextRange>, current: Option<TextPosition>) {
-        if matches.is_empty() {
-            self.search = SearchState::new();
-            return;
-        }
-        let from = current.unwrap_or(TextPosition::new(0, 0));
+    /// The first match at or after `current`, the match that was current
+    /// before, becomes current, or the first match when none follows; with
+    /// no `current`, no match is. Ranges arrive as for [`Self::set_matches`].
+    pub fn restore_matches(&mut self, matches: Vec<TextRange>, current: Option<TextRange>) {
+        let from = current.map_or(TextPosition::new(0, 0), |range| range.start);
         self.search.set_matches(&self.buffer, matches, from);
         if current.is_none() {
             self.search.set_current(None);

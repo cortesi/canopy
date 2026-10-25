@@ -3227,7 +3227,8 @@ impl TableReader {
     /// Highlight `matches`, which arrive as for [`Self::set_matches`],
     /// without moving the view, as when the table reloads beneath a held
     /// search. The first match at or after `current`, the match that was
-    /// current before, becomes current; with no `current`, no match is.
+    /// current before, becomes current, or the first match when none
+    /// follows; with no `current`, no match is.
     pub fn restore_matches(&mut self, matches: Vec<CellRange>, current: Option<&CellRange>);
 
     /// Scroll the rows by `op`. A page is the height of the rows that show
@@ -4149,10 +4150,10 @@ pub mod editor {
         /// Highlight precomputed match ranges without moving the view, as when
         /// the text reloads beneath a held search.
         ///
-        /// The first match at or after `current`, the start of the match that
-        /// was current before, becomes current; with no `current`, no match is.
-        /// Ranges arrive as for [`Self::set_matches`].
-        pub fn restore_matches(&mut self, matches: Vec<TextRange>, current: Option<TextPosition>);
+        /// The first match at or after `current`, the match that was current
+        /// before, becomes current, or the first match when none follows; with
+        /// no `current`, no match is. Ranges arrive as for [`Self::set_matches`].
+        pub fn restore_matches(&mut self, matches: Vec<TextRange>, current: Option<TextRange>);
 
         /// Search the text and highlight every match.
         ///

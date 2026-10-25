@@ -125,8 +125,10 @@ diff view do: when a new query's matches publish, the first match at or below
 the top of the view becomes current, and the reader centres it, unless the
 reader has moved or follows its tail since the query. `keep_search_position`
 cancels that reveal, for a host that restores its own position after a
-reload, and keeps current the match at the row `search_row` gave before it.
-The editor and `TableReader` take the same place through `restore_matches`.
+reload. It takes the `MatchPlace` that `search_place` gave before the reload,
+shifted through the edit as a `ReaderPosition` is, and makes that match, or
+the next one, current. The editor and `TableReader` keep their current match
+through `restore_matches`.
 The current match paints apart from the others, and the scrollbar
 marks every row that holds a match. A match in a code line or a table cell
 marks only the text it found, a match in a column the preview cuts marks the

@@ -1811,7 +1811,7 @@ fn restored_matches_keep_the_view_and_the_current_match() {
     // The reloaded text has one more line above the match.
     let reloaded = format!("new\n{text}");
     let (matches, position, after) = run_search(&mut harness, |editor, ctx| {
-        let current = editor.current_match().map(|range| range.start);
+        let current = editor.current_match();
         editor.set_text(reloaded.clone());
         ctx.scroll(ScrollOp::To(Point::new(0, top)));
         editor.restore_matches(found(&reloaded), current);

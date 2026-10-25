@@ -524,7 +524,7 @@ fn a_kept_position_keeps_the_current_match_through_a_reload() {
     service(&mut harness);
     let row = harness.with_root_widget(|reader: &mut Markdown| {
         assert_eq!(reader.search_position(), 2);
-        reader.search_row()
+        reader.search_place()
     });
     assert!(row.is_some());
     harness
@@ -532,6 +532,47 @@ fn a_kept_position_keeps_the_current_match_through_a_reload() {
             reader.replace(ctx, DocumentInput::Complete(text.clone()))?;
             reader.set_search(ctx, "needle".into(), false)?;
             reader.keep_search_position(row);
+            Ok(())
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    harness.with_root_widget(|reader: &mut Markdown| {
+        assert_eq!((reader.search_matches(), reader.search_position()), (2, 2));
+    });
+}
+
+#[test]
+fn a_kept_position_keeps_a_table_match_among_its_neighbours_through_an_edit() {
+    let table = "| a | b |\n| - | - |\n| needle | needle |\n";
+    let text = format!("Intro.\n\n{table}");
+    let (mut harness, manual) = fixture(&text, ViewType::Rendered, false, false, false);
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_search(ctx, "needle".into(), false)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.search_next(ctx, 1))
+        .unwrap();
+    service(&mut harness);
+    let place = harness.with_root_widget(|reader: &mut Markdown| {
+        assert_eq!(reader.search_position(), 2);
+        reader.search_place()
+    });
+    assert_eq!(place.map(|place| place.rank), Some(1));
+    // A paragraph lands above the table, and the host shifts the place.
+    let added = "Added.\n\n";
+    let place = place.map(|place| MatchPlace {
+        source_byte: place.source_byte + added.len(),
+        ..place
+    });
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.replace(ctx, DocumentInput::Complete(format!("{added}{text}")))?;
+            reader.set_search(ctx, "needle".into(), false)?;
+            reader.keep_search_position(place);
             Ok(())
         })
         .unwrap();

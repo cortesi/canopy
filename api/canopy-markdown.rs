@@ -156,11 +156,14 @@ impl Markdown {
     pub fn interact(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Cancel the reveal that the held query's next matches would make, as
-    /// when a host reloads the document and restores its own position. The
-    /// first of those matches at or below `row`, the row [`Self::search_row`]
-    /// gave of the match current before, becomes current without a reveal;
-    /// with no `row`, none is.
-    pub fn keep_search_position(&mut self, row: Option<u32>);
+    /// when a host reloads the document and restores its own position. Call
+    /// it after [`Self::set_search`], which drops a kept place.
+    ///
+    /// The next Rendered matches make current the match at `place`, which
+    /// [`Self::search_place`] gave before the reload: the match of that rank
+    /// among those at its byte, or else the first after it, or the first
+    /// match when none follows. With no `place`, no match is current.
+    pub fn keep_search_position(&mut self, place: Option<MatchPlace>);
 
     /// Whether a local link to `destination` shows faint, because the host
     /// found nothing it names.
@@ -268,12 +271,13 @@ impl Markdown {
     /// Whether a query waits for its first matches in the active view.
     pub fn search_pending(&self) -> bool;
 
+    /// Return where the current Rendered match lies, for
+    /// [`Self::keep_search_position`]. Source keeps no place, so a reload
+    /// leaves no Source match current.
+    pub fn search_place(&self) -> Option<MatchPlace>;
+
     /// One-based current match, or zero while there is none.
     pub fn search_position(&self) -> usize;
-
-    /// Return the rendered row of the current match, for
-    /// [`Self::keep_search_position`].
-    pub fn search_row(&self) -> Option<u32>;
 
     /// Read a bounded page of matches in the active search projection.
     pub fn search_window(&self, offset: usize, limit: usize) -> ArgValue;
@@ -832,6 +836,20 @@ impl Widget for MarkdownSource {}
 
 impl !Send for MarkdownSource {}
 impl !Sync for MarkdownSource {}
+
+/// Where a Rendered search match lies, so a reload of the document can
+/// make the same match current again.
+///
+/// A host that edits the source between taking and keeping a place shifts
+/// `source_byte` through the edit, as it shifts a [`ReaderPosition`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MatchPlace {
+    /// The source byte the match maps to. Matches in a block without exact
+    /// source offsets, such as a table's cells, share the block's start.
+    pub source_byte: usize,
+    /// How many earlier matches map to the same byte.
+    pub rank: usize,
+}
 
 /// Interaction within the rendered representation.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

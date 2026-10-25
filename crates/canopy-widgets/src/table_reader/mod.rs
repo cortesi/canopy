@@ -11,8 +11,8 @@
 //! [`view_search`](crate::view_search): the host installs the matches that
 //! its matcher finds in the cells, with
 //! [`cell_matches`](crate::regex_search::cell_matches), and the reader marks
-//! them, steps between them, centres the current one, and marks their rows
-//! on a scrollbar.
+//! them, steps between them, centres the current one beneath the pinned
+//! rows, and marks their rows on a scrollbar.
 //!
 //! In interact mode the reader selects one cell, and the navigation intents
 //! move the selection instead of the rows: a cell at a time, a page of rows
@@ -58,6 +58,14 @@ fn inner(width: u32) -> u32 {
     }
 }
 
+/// Return whether `matches` lie in reading order: by cell, then by first
+/// byte.
+fn in_reading_order(matches: &[CellRange]) -> bool {
+    matches
+        .windows(2)
+        .all(|pair| (pair[0].cell(), pair[0].bytes.start) <= (pair[1].cell(), pair[1].bytes.start))
+}
+
 /// A flowed table laid out for one width and first column.
 struct Laid {
     /// The width the flow fits.
@@ -65,7 +73,7 @@ struct Laid {
     /// The first column the flow shows.
     first: usize,
     /// The flow.
-    flow: Arc<FlowTable>,
+    flow: FlowTable,
     /// The label that names the columns shown, when the flow cuts any.
     label: Option<String>,
 }
@@ -76,10 +84,30 @@ impl Laid {
         u32::from(self.label.is_some())
     }
 
+    /// The flow line of the first body row: the lines of the header and its
+    /// rule.
+    fn body_start(&self) -> u32 {
+        self.flow.row_line(Some(0)).unwrap_or(0)
+    }
+
     /// Rows that stay at the top while the body scrolls: the label, the
     /// header, and its rule.
     fn pinned(&self) -> u32 {
-        self.label_rows() + self.flow.row_line(Some(0)).unwrap_or(0)
+        self.label_rows() + self.body_start()
+    }
+
+    /// Rows of a view `height` rows high that show the body, beneath the
+    /// pinned rows.
+    fn body_rows(&self, height: u32) -> u32 {
+        height.saturating_sub(self.pinned())
+    }
+
+    /// Return the rectangle that shows canvas rows `top..end` beneath the
+    /// pinned rows, which cover the top of the view: it reaches above `top`
+    /// by them.
+    fn beneath_pinned(&self, top: u32, end: u32) -> Rect {
+        let pinned = self.pinned();
+        Rect::new(0, top - pinned, 1, end - top + pinned)
     }
 
     /// Return the canvas row of the first line of a body row, or of the
@@ -92,10 +120,12 @@ impl Laid {
 /// What a reveal of the reader shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Reveal {
-    /// The current search match, centred.
+    /// The current search match, centred in the body.
     Match,
     /// The selected cell's row, beneath the pinned rows.
     Cursor,
+    /// A body row, at the top of the body.
+    Row(usize),
 }
 
 /// Style role of the selected cell.
@@ -169,11 +199,22 @@ impl TableReader {
     pub fn shift_columns(&mut self, ctx: &mut dyn Context, delta: i32) {
         // The layout settles any column waiting to show before the shift.
         // A shift past the last column the view needs shows nothing new.
-        if !self.laid(ctx.view().content.w).flow.cut() && delta > 0 {
-            return;
-        }
+        let view = ctx.view();
+        let top = {
+            let laid = self.laid(view.content.w);
+            if !laid.flow.cut() && delta > 0 {
+                return;
+            }
+            laid.flow.row_at(laid.body_start() + view.scroll.y)
+        };
         let first = self.first.get().saturating_add_signed(delta as isize);
         self.set_first_column(first);
+        // Rows wrap anew in the new columns, so the row at the top of the
+        // body stays there rather than its line.
+        if let Some(row) = top.filter(|_| view.scroll.y > 0) {
+            self.reveal.set(Reveal::Row(row));
+            ctx.reveal_anchor(RevealAlign::Top(0));
+        }
     }
 
     /// Scroll the rows by `op`. A page is the height of the rows that show
@@ -182,10 +223,7 @@ impl TableReader {
         let view = ctx.view();
         let op = match op {
             ScrollOp::Pages(direction, count) => {
-                let body = view
-                    .content
-                    .h
-                    .saturating_sub(self.laid(view.content.w).pinned());
+                let body = self.laid(view.content.w).body_rows(view.content.h);
                 ScrollOp::Lines(direction, body.saturating_sub(1).max(1) * count)
             }
             op => op,
@@ -198,6 +236,10 @@ impl TableReader {
     /// or below the top of the rows becomes current, and the reader reveals
     /// it.
     pub fn set_matches(&mut self, ctx: &mut dyn Context, matches: Vec<CellRange>) {
+        debug_assert!(
+            in_reading_order(&matches),
+            "matches arrive in reading order"
+        );
         self.matches = matches;
         let view = ctx.view();
         self.current = {
@@ -219,8 +261,13 @@ impl TableReader {
     /// Highlight `matches`, which arrive as for [`Self::set_matches`],
     /// without moving the view, as when the table reloads beneath a held
     /// search. The first match at or after `current`, the match that was
-    /// current before, becomes current; with no `current`, no match is.
+    /// current before, becomes current, or the first match when none
+    /// follows; with no `current`, no match is.
     pub fn restore_matches(&mut self, matches: Vec<CellRange>, current: Option<&CellRange>) {
+        debug_assert!(
+            in_reading_order(&matches),
+            "matches arrive in reading order"
+        );
         self.current = current.and_then(|current| {
             let at = (current.cell(), current.bytes.start);
             let index = matches.partition_point(|found| (found.cell(), found.bytes.start) < at);
@@ -256,7 +303,7 @@ impl TableReader {
     /// table with no rows has no cell to select.
     #[command]
     pub fn interact(&mut self, ctx: &mut dyn Context) {
-        if self.cursor.is_some() || self.data.rows().is_empty() {
+        if self.cursor.is_some() || !self.has_cells() {
             return;
         }
         let cell = {
@@ -264,8 +311,8 @@ impl TableReader {
             let laid = self.laid(view.content.w);
             // The rows show from the first whose top lies beneath the pinned
             // rows.
-            let top = laid.flow.row_line(Some(0)).unwrap_or(0) + view.scroll.y;
-            let bottom = top + view.content.h.saturating_sub(laid.pinned());
+            let top = laid.body_start() + view.scroll.y;
+            let bottom = top + laid.body_rows(view.content.h);
             // Before layout gives the view a height, every row past the top
             // counts as in view.
             let shows = |row: usize| {
@@ -312,8 +359,13 @@ impl TableReader {
     /// selection of a reloaded table.
     pub fn set_cursor(&mut self, cell: Option<(usize, usize)>) {
         self.cursor = cell
-            .filter(|_| !self.data.rows().is_empty())
+            .filter(|_| self.has_cells())
             .map(|cell| self.clamp(cell));
+    }
+
+    /// Return whether the table has a body cell to select.
+    fn has_cells(&self) -> bool {
+        !self.data.rows().is_empty() && !self.data.columns().is_empty()
     }
 
     /// Return the text of the selected cell.
@@ -378,10 +430,10 @@ impl TableReader {
         let target = {
             let view = ctx.view();
             let laid = self.laid(view.content.w);
-            let page = view.content.h.saturating_sub(laid.pinned());
+            let page = laid.body_rows(view.content.h);
             let page = i64::from(page.saturating_sub(1).max(1));
             let line = i64::from(laid.flow.row_line(Some(row)).unwrap_or(0));
-            let first = i64::from(laid.flow.row_line(Some(0)).unwrap_or(0));
+            let first = i64::from(laid.body_start());
             let line = (line + page * i64::from(pages)).max(first);
             laid.flow.row_at(u32::try_from(line).unwrap_or(u32::MAX))
         };
@@ -454,11 +506,12 @@ impl TableReader {
         };
         let (row, column) = (found.row, found.column);
         self.show_column.set(Some(column));
+        // A header match selects a cell in its column, in the selected row.
+        if let Some((selected, _)) = self.cursor {
+            self.cursor = Some((row.unwrap_or(selected), column));
+        }
         // The header stays in view, so only a body row scrolls to show.
-        if let Some(row) = row {
-            if self.cursor.is_some() {
-                self.cursor = Some((row, column));
-            }
+        if row.is_some() {
             self.reveal.set(Reveal::Match);
             ctx.reveal_anchor(view_search::REVEAL);
         }
@@ -535,7 +588,7 @@ impl TableReader {
             self.laid.replace(Some(Laid {
                 width,
                 first,
-                flow: Arc::new(flow),
+                flow,
                 label,
             }));
         }
@@ -609,7 +662,7 @@ impl Widget for TableReader {
         )?;
         let body = label + header;
         if body < area.h {
-            let top = laid.flow.row_line(Some(0)).unwrap_or(0) + view.scroll.y;
+            let top = laid.body_start() + view.scroll.y;
             laid.flow
                 .paint(render, at(body), Point::new(0, top), &overlay)?;
         }
@@ -621,8 +674,8 @@ impl Widget for TableReader {
         match self.reveal.get() {
             Reveal::Match => {
                 let found = self.current_match()?;
-                found.row?;
-                Some(Rect::new(0, laid.row(found.row), 1, 1))
+                let top = laid.row(Some(found.row?));
+                Some(laid.beneath_pinned(top, top + 1))
             }
             Reveal::Cursor => {
                 let (row, _) = self.cursor?;
@@ -632,10 +685,11 @@ impl Widget for TableReader {
                 } else {
                     laid.label_rows() + laid.flow.height()
                 };
-                // The pinned rows cover the top of the view, so the row
-                // shows only as far below the top as they reach.
-                let pinned = laid.pinned();
-                Some(Rect::new(0, top - pinned, 1, end - top + pinned))
+                Some(laid.beneath_pinned(top, end))
+            }
+            Reveal::Row(row) => {
+                let top = laid.row(Some(row));
+                Some(laid.beneath_pinned(top, top + 1))
             }
         }
     }

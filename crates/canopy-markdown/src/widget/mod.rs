@@ -79,6 +79,20 @@ pub struct ReaderPosition {
     pub horizontal: u32,
 }
 
+/// Where a Rendered search match lies, so a reload of the document can
+/// make the same match current again.
+///
+/// A host that edits the source between taking and keeping a place shifts
+/// `source_byte` through the edit, as it shifts a [`ReaderPosition`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MatchPlace {
+    /// The source byte the match maps to. Matches in a block without exact
+    /// source offsets, such as a table's cells, share the block's start.
+    pub source_byte: usize,
+    /// How many earlier matches map to the same byte.
+    pub rank: usize,
+}
+
 /// Nodes mounted under one persistent reader root.
 struct Nodes {
     /// Stack that holds the reader column and, over it, an open inspector.
@@ -173,9 +187,9 @@ pub struct Markdown {
     results: Option<SearchResults>,
     /// The current match, or None while there is none.
     search_index: Option<usize>,
-    /// The rendered row at or below which the next published matches make
-    /// one current without a reveal, for a host that keeps its place.
-    kept_search_row: Option<u32>,
+    /// Where the match lies that the next Rendered matches make current
+    /// without a reveal, for a host that keeps its place.
+    kept_match: Option<MatchPlace>,
     /// Exact Source match ranges for one displayed revision.
     source_results: Option<SourceMatches>,
     /// Current compile or scan failure, without discarding query text.
@@ -393,7 +407,7 @@ impl Markdown {
             query_generation: 0,
             results: None,
             search_index: None,
-            kept_search_row: None,
+            kept_match: None,
             source_results: None,
             query_error: None,
             inspector: None,
@@ -465,6 +479,7 @@ impl Markdown {
         self.saved_source_selection = None;
         self.results = None;
         self.search_index = None;
+        self.kept_match = None;
         self.shared.borrow_mut().overlays.search_current = None;
         self.saved = [None, None];
         self.return_position = None;
@@ -1047,7 +1062,7 @@ impl Markdown {
         self.query_error = None;
         self.results = None;
         self.search_index = None;
-        self.kept_search_row = None;
+        self.kept_match = None;
         self.shared.borrow_mut().search_reveal = !self.query.text.is_empty();
         self.clear_search_overlay();
         if let Some(node) = self.nodes.as_ref().and_then(|nodes| nodes.source) {
@@ -1107,26 +1122,35 @@ impl Markdown {
     pub fn search_position(&self) -> usize {
         self.search_index.map_or(0, |i| i + 1)
     }
-    /// Return the rendered row of the current match, for
-    /// [`Self::keep_search_position`].
-    pub fn search_row(&self) -> Option<u32> {
+    /// Return where the current Rendered match lies, for
+    /// [`Self::keep_search_position`]. Source keeps no place, so a reload
+    /// leaves no Source match current.
+    pub fn search_place(&self) -> Option<MatchPlace> {
         if self.active != ViewType::Rendered {
             return None;
         }
         let index = self.search_index?;
         let state = self.shared.borrow();
-        let p = state.presentation.as_ref()?;
-        let range = state.overlays.search.get(index)?;
-        Some(p.row_for_unit(range.start.unit_id, range.start.offset))
+        let bytes = match_bytes(&state);
+        let source_byte = *bytes.get(index)?;
+        let rank = bytes[..index]
+            .iter()
+            .rev()
+            .take_while(|&&byte| byte == source_byte)
+            .count();
+        Some(MatchPlace { source_byte, rank })
     }
     /// Cancel the reveal that the held query's next matches would make, as
-    /// when a host reloads the document and restores its own position. The
-    /// first of those matches at or below `row`, the row [`Self::search_row`]
-    /// gave of the match current before, becomes current without a reveal;
-    /// with no `row`, none is.
-    pub fn keep_search_position(&mut self, row: Option<u32>) {
+    /// when a host reloads the document and restores its own position. Call
+    /// it after [`Self::set_search`], which drops a kept place.
+    ///
+    /// The next Rendered matches make current the match at `place`, which
+    /// [`Self::search_place`] gave before the reload: the match of that rank
+    /// among those at its byte, or else the first after it, or the first
+    /// match when none follows. With no `place`, no match is current.
+    pub fn keep_search_position(&mut self, place: Option<MatchPlace>) {
         self.shared.borrow_mut().search_reveal = false;
-        self.kept_search_row = row;
+        self.kept_match = place;
     }
     /// Whether a query waits for its first matches in the active view.
     #[command]
@@ -2230,6 +2254,9 @@ impl Markdown {
         ctx: &mut dyn Context,
         search: StdResult<SearchOutput, String>,
     ) -> Result<()> {
+        // A kept place applies to the first matches that publish, whatever
+        // they hold.
+        let kept = self.kept_match.take();
         let output = match search {
             Ok(output) => output,
             Err(error) => {
@@ -2271,6 +2298,9 @@ impl Markdown {
                     state.overlays.search_current = self.search_index;
                 }
                 self.results = Some(results);
+                if let Some(place) = kept {
+                    self.restore_kept_match(place);
+                }
                 self.reveal_first_match(ctx)?;
             }
         }
@@ -2286,7 +2316,6 @@ impl Markdown {
     /// and reveal it, once for each new query. Reader input since the query,
     /// or a followed tail, leaves the reader where it is.
     fn reveal_first_match(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        self.restore_kept_match();
         if self.follow_state() == Follow::Following {
             self.shared.borrow_mut().search_reveal = false;
             return Ok(());
@@ -2323,27 +2352,22 @@ impl Markdown {
         }
         self.reveal_rendered_match(ctx, first)
     }
-    /// Make the first Rendered match at or below the kept row current, once
-    /// matches publish, without a reveal.
-    fn restore_kept_match(&mut self) {
-        let Some(row) = self.kept_search_row else {
-            return;
-        };
+    /// Make the Rendered match at `place` current, without a reveal, as
+    /// [`Self::keep_search_position`] describes.
+    fn restore_kept_match(&mut self, place: MatchPlace) {
         let mut state = self.shared.borrow_mut();
-        let Some(p) = state.presentation.as_ref() else {
+        let bytes = match_bytes(&state);
+        if bytes.is_empty() {
             return;
-        };
-        let rows = state
-            .overlays
-            .search
+        }
+        let first = bytes.partition_point(|&byte| byte < place.source_byte);
+        let same = bytes[first..]
             .iter()
-            .map(|range| p.row_for_unit(range.start.unit_id, range.start.offset));
-        let Some(first) = view_search::first_at_or_below(rows, row) else {
-            return;
-        };
-        state.overlays.search_current = Some(first);
-        self.search_index = Some(first);
-        self.kept_search_row = None;
+            .take_while(|&&byte| byte == place.source_byte)
+            .count();
+        let index = (first + place.rank.min(same)) % bytes.len();
+        state.overlays.search_current = Some(index);
+        self.search_index = Some(index);
     }
     /// Make Rendered match `index` current, mark the object it lies in, and
     /// reveal it as every searchable view does.
@@ -3099,6 +3123,19 @@ impl Widget for Markdown {
     fn name(&self) -> NodeName {
         NodeName::convert("markdown")
     }
+}
+
+/// Return the source byte of each Rendered match, in order.
+fn match_bytes(state: &SurfaceState) -> Vec<usize> {
+    let Some(p) = state.presentation.as_ref() else {
+        return Vec::new();
+    };
+    state
+        .overlays
+        .search
+        .iter()
+        .map(|range| p.source_at_reading(range.start).unwrap_or(0))
+        .collect()
 }
 
 /// The action status after the host performs an action.
