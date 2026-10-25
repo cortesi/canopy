@@ -1637,7 +1637,6 @@ fn count_cells(node: &Node) -> usize {
     usize::from(matches!(node.tag, Some(Tag::TableCell)))
         + node.children.iter().map(count_cells).sum::<usize>()
 }
-/// Join normalized cell values using tabs and logical LF rows.
 /// Where one table cell's text lies in its table's readable text.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CellSpan {
@@ -1931,6 +1930,32 @@ mod tests {
         }
         out
     }
+    #[test]
+    fn cell_spans_place_each_cell_in_its_tables_text() {
+        let doc = complete(
+            "---\ntitle: A\nnote: B b\n---\n\n| H1 | H2 |\n| - | - |\n| a | bb |\n|  | c\tc |\n",
+        );
+        let mut tables = 0;
+        for block in &doc.blocks {
+            let BlockKind::Table(table) = &block.kind else {
+                continue;
+            };
+            tables += 1;
+            let text = &doc.unit(block.unit_id).unwrap().text;
+            assert_eq!(text, &table_text(table));
+            let cells = iter::once(&table.headers)
+                .chain(table.rows.iter().map(|row| &row.cells))
+                .flatten();
+            let spans = cell_spans(table);
+            assert_eq!(spans.len(), cells.clone().count());
+            for (span, cell) in spans.iter().zip(cells) {
+                assert_eq!(&text[span.text.clone()], cell.text, "{span:?}");
+                assert_eq!(span.key, cell.key);
+            }
+        }
+        assert_eq!(tables, 2, "front matter and a pipe table");
+    }
+
     #[test]
     fn an_inline_footnote_reads_as_a_footnote() {
         let doc = complete("Text^[an inline note].\n\nAfter.\n");

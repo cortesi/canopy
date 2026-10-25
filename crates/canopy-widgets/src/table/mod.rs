@@ -16,6 +16,8 @@ use canopy::{
     text,
 };
 
+use crate::view_search;
+
 mod flow;
 pub use flow::{FlowOptions, FlowTable};
 
@@ -37,16 +39,28 @@ pub struct TableSpan {
     pub style: Style,
 }
 
-/// A role over a half-open UTF-8 byte range of one cell's text, such as a
-/// search match.
+/// A half-open UTF-8 byte range of one cell's text, such as a search match.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CellMark {
+pub struct CellRange {
     /// Body row index in the table data, or `None` for the header.
     pub row: Option<usize>,
     /// Column index in the table data.
     pub column: usize,
     /// Bytes of the full value.
     pub bytes: Range<usize>,
+}
+impl CellRange {
+    /// The row and column of the cell, in reading order.
+    pub(crate) fn cell(&self) -> (Option<usize>, usize) {
+        (self.row, self.column)
+    }
+}
+
+/// A role over a cell range, such as a search match.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CellMark {
+    /// The bytes marked.
+    pub range: CellRange,
     /// Style role the bytes paint with, in place of the cell's style.
     pub role: &'static str,
 }
@@ -54,36 +68,77 @@ pub struct CellMark {
 /// What a host paints over a table's own styles.
 ///
 /// A ground is a role that every part of the table takes, as when the whole
-/// table is selected. Marks paint byte ranges of single cells in roles of
-/// their own, over the ground, such as the matches of a search.
+/// table is selected. One cell can take a ground of its own over the table's,
+/// as a cursor does. Marks paint byte ranges of single cells in roles of
+/// their own, over the grounds, such as the matches of a search.
 #[derive(Clone, Debug, Default)]
 pub struct TableOverlay {
     /// The role every part of the table takes in place of its own.
     ground: Option<&'static str>,
+    /// The cell, by row and column, that takes a role of its own, and the
+    /// role.
+    cell: Option<((Option<usize>, usize), &'static str)>,
     /// Marks ordered by cell, then by first byte.
     marks: Vec<CellMark>,
 }
 impl TableOverlay {
     /// Construct an overlay from a ground and marks in any order.
     pub fn new(ground: Option<&'static str>, mut marks: Vec<CellMark>) -> Self {
-        marks.sort_by_key(|mark| (mark.row, mark.column, mark.bytes.start));
-        Self { ground, marks }
+        marks.sort_by_key(|mark| (mark.range.cell(), mark.range.bytes.start));
+        Self {
+            ground,
+            cell: None,
+            marks,
+        }
+    }
+    /// Give the cell at body row `row`, or the header for `None`, and data
+    /// column `column` the ground `role` over its whole extent.
+    #[must_use]
+    pub fn with_cell(mut self, row: Option<usize>, column: usize, role: &'static str) -> Self {
+        self.cell = Some(((row, column), role));
+        self
     }
     /// Return the role a table part painted as `path` takes.
     fn role<'a>(&self, path: &'a str) -> &'a str {
         self.ground.unwrap_or(path)
     }
-    /// Return the role of the mark over `byte` of a cell, if any.
-    fn mark_at(&self, row: Option<usize>, column: usize, byte: usize) -> Option<&'static str> {
-        let cell = (row, column);
+    /// Return the ground of the cell at `(row, column)`, when it has one of
+    /// its own.
+    fn cell_role(&self, row: Option<usize>, column: usize) -> Option<&'static str> {
+        self.cell
+            .filter(|&(cell, _)| cell == (row, column))
+            .map(|(_, role)| role)
+    }
+    /// Return the marks from cell `(row, column)` on, in order.
+    fn marks_from(&self, row: Option<usize>, column: usize) -> &[CellMark] {
         let start = self
             .marks
-            .partition_point(|mark| (mark.row, mark.column) < cell);
-        self.marks[start..]
+            .partition_point(|mark| mark.range.cell() < (row, column));
+        &self.marks[start..]
+    }
+    /// Return the role of the mark over `byte` of a cell, if any.
+    fn mark_at(&self, row: Option<usize>, column: usize, byte: usize) -> Option<&'static str> {
+        self.marks_from(row, column)
             .iter()
-            .take_while(|mark| (mark.row, mark.column) == cell && mark.bytes.start <= byte)
-            .find(|mark| mark.bytes.contains(&byte))
+            .take_while(|mark| mark.range.cell() == (row, column) && mark.range.bytes.start <= byte)
+            .find(|mark| mark.range.bytes.contains(&byte))
             .map(|mark| mark.role)
+    }
+    /// Return the role of a mark in `row` within `columns`, the current
+    /// search match's before any other, for a margin that stands for the
+    /// columns a flow cuts.
+    fn mark_among(&self, row: Option<usize>, columns: Range<usize>) -> Option<&'static str> {
+        let mut roles = self
+            .marks_from(row, columns.start)
+            .iter()
+            .take_while(|mark| mark.range.row == row && mark.range.column < columns.end)
+            .map(|mark| mark.role);
+        let first = roles.next()?;
+        Some(if roles.any(|role| role == view_search::CURRENT) {
+            view_search::CURRENT
+        } else {
+            first
+        })
     }
     /// Return the style of `byte` of `cell`, whose own style is `base`.
     fn style_at(
@@ -507,6 +562,9 @@ pub struct TableGlyphs {
     pub header_cross: char,
     /// Broken right margin of a flowed table with columns cut.
     pub more: char,
+    /// Broken left margin of a flowed table that starts past its first
+    /// column.
+    pub more_before: char,
 }
 impl TableGlyphs {
     /// Thin Unicode separators and visible whitespace substitutions.
@@ -521,6 +579,7 @@ impl TableGlyphs {
         header_rule: '━',
         header_cross: '┿',
         more: '›',
+        more_before: '‹',
     };
     /// Portable ASCII substitutions.
     pub const ASCII: Self = Self {
@@ -534,6 +593,7 @@ impl TableGlyphs {
         header_rule: '=',
         header_cross: '+',
         more: '>',
+        more_before: '<',
     };
     /// The one-cell display form of a grapheme: controls take their visible
     /// substitutes.
@@ -562,6 +622,7 @@ impl TableGlyphs {
             self.header_rule,
             self.header_cross,
             self.more,
+            self.more_before,
         ] {
             if text::width(&glyph.to_string()) != 1 || glyph.is_control() {
                 return Err(Error::Invalid(
@@ -1554,6 +1615,8 @@ pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
         .fg("table/flow/header", palette.accent)
         .attr("table/flow/header", Attr::Bold)
         .fg("table/more", palette.faint_fg)
+        // A reader's label names the columns it shows, quietly, above them.
+        .fg("table/label", palette.faint_fg)
         // Row numbers take the editor's line-number colour, a step below the
         // cells, so they read as an index rather than as data.
         .fg("table/gutter", palette.line_number)

@@ -5,8 +5,10 @@
 //! columns, such as keys, states, and dates, keep their full widths, and prose
 //! columns give up room and wrap at word boundaries. Prose never narrows below
 //! a readable width: when the columns cannot all fit, the flow keeps the
-//! leading columns that do, and marks its broken right margin. Once any row
-//! wraps, rules separate the rows, so each stays distinct from its neighbours.
+//! leading columns that do, and marks its broken right margin. A flow can
+//! start past the first column, to show the columns that follow, and then
+//! marks its broken left margin too. Once any row wraps, rules separate the
+//! rows, so each stays distinct from its neighbours.
 
 use std::{iter, mem::size_of, ops::Range, sync::Arc};
 
@@ -48,6 +50,9 @@ pub struct FlowOptions {
     pub cell_lines: u32,
     /// Separator, rule, and substitution glyphs.
     pub glyphs: TableGlyphs,
+    /// The first column shown. The columns before it are cut at a marked
+    /// left margin.
+    pub first_column: usize,
 }
 
 /// One line of a wrapped value.
@@ -86,7 +91,12 @@ pub struct FlowTable {
     data: Arc<TableData>,
     /// Glyphs used for separators, rules, and substitutions.
     glyphs: TableGlyphs,
-    /// Widths of the shown leading columns.
+    /// The first column shown.
+    first: usize,
+    /// Cells of the left margin, which marks the columns cut before the
+    /// first shown.
+    lead: u32,
+    /// Widths of the shown columns.
     widths: Vec<u32>,
     /// First cell of each shown column.
     starts: Vec<u32>,
@@ -96,6 +106,8 @@ pub struct FlowTable {
     cut: bool,
     /// Display lines, header first.
     lines: Vec<FlowLine>,
+    /// The first display line of the header, then of each body row.
+    row_lines: Vec<u32>,
     /// Conservative owned bytes of this layout.
     derived_bytes: usize,
 }
@@ -407,15 +419,22 @@ impl FlowTable {
     pub fn prepare(data: Arc<TableData>, options: FlowOptions) -> Result<Self> {
         options.glyphs.validate()?;
         let count = data.columns.len();
+        let first = options.first_column.min(count.saturating_sub(1));
+        let lead = if first > 0 { MARGIN } else { 0 };
+        let remaining = count - first;
         let cell = |row: Option<usize>, column: usize| match row {
-            None => &data.columns[column].label,
-            Some(row) => &data.rows[row].cells[column],
+            None => &data.columns[first + column].label,
+            Some(row) => &data.rows[row].cells[first + column],
         };
         let grid: Vec<Vec<Measure>> = iter::once(None)
             .chain((0..data.rows.len()).map(Some))
-            .map(|row| (0..count).map(|c| measure(&cell(row, c).text)).collect())
+            .map(|row| {
+                (0..remaining)
+                    .map(|c| measure(&cell(row, c).text))
+                    .collect()
+            })
             .collect();
-        let bounds: Vec<Column> = (0..count)
+        let bounds: Vec<Column> = (0..remaining)
             .map(|c| {
                 let column = || grid.iter().map(|line| &line[c]);
                 let natural = column().map(|m| m.natural).max().unwrap_or(0).max(1);
@@ -434,27 +453,30 @@ impl FlowTable {
             .collect();
         // Keep the most leading columns that fit sensibly; a lone column
         // that cannot fit breaks its words.
-        let widths = (1..=count)
+        let widths = (1..=remaining)
             .rev()
             .find_map(|shown| {
-                let margin = if shown < count { MARGIN } else { 0 };
+                let margin = if shown < remaining { MARGIN } else { 0 };
                 let room = options
                     .width
-                    .checked_sub((shown as u32 - 1) * GAP + margin)?;
+                    .checked_sub((shown as u32 - 1) * GAP + margin + lead)?;
                 fit(&bounds[..shown], room)
             })
             .unwrap_or_else(|| {
                 bounds
                     .first()
                     .map(|c| {
-                        let margin = if count > 1 { MARGIN } else { 0 };
-                        vec![c.natural.min(options.width.saturating_sub(margin).max(1))]
+                        let margin = if remaining > 1 { MARGIN } else { 0 };
+                        vec![
+                            c.natural
+                                .min(options.width.saturating_sub(margin + lead).max(1)),
+                        ]
                     })
                     .unwrap_or_default()
             });
         let shown = widths.len();
         let mut starts = Vec::with_capacity(shown);
-        let mut width = 0;
+        let mut width = lead;
         for (i, w) in widths.iter().enumerate() {
             if i > 0 {
                 width += GAP;
@@ -479,11 +501,13 @@ impl FlowTable {
             |fragments: &[Vec<Fragment>]| fragments.iter().map(Vec::len).max().unwrap_or(0).max(1);
         let ruled = blocks[1..].iter().any(|(_, f)| height(f) > 1);
         let mut lines = Vec::new();
+        let mut row_lines = Vec::with_capacity(blocks.len());
         for (row, fragments) in blocks {
             // Rules separate body rows once any of them wraps.
             if ruled && row.is_some_and(|row| row > 0) {
                 lines.push(FlowLine::Rule);
             }
+            row_lines.push(lines.len() as u32);
             for line in 0..height(&fragments) {
                 lines.push(FlowLine::Cells {
                     row,
@@ -499,15 +523,19 @@ impl FlowTable {
         let derived_bytes = size_of::<Self>()
             .saturating_add(lines.capacity() * size_of::<FlowLine>())
             .saturating_add(lines.len() * shown * size_of::<Option<Fragment>>())
+            .saturating_add(row_lines.capacity() * size_of::<u32>())
             .saturating_add((widths.capacity() + starts.capacity()) * size_of::<u32>());
         Ok(Self {
             data,
             glyphs: options.glyphs,
+            first,
+            lead,
             widths,
             starts,
             width,
-            cut: shown < count,
+            cut: shown < remaining,
             lines,
+            row_lines,
             derived_bytes,
         })
     }
@@ -515,13 +543,29 @@ impl FlowTable {
     pub fn height(&self) -> u32 {
         self.lines.len() as u32
     }
-    /// Widths of the shown leading columns.
+    /// Widths of the shown columns.
     pub fn widths(&self) -> &[u32] {
         &self.widths
+    }
+    /// The data columns shown, in order.
+    pub(crate) fn columns(&self) -> Range<usize> {
+        self.first..self.first + self.widths.len()
     }
     /// Whether trailing columns are cut at the right margin.
     pub fn cut(&self) -> bool {
         self.cut
+    }
+    /// Name the columns a flow shows when it cuts any, such as `2 of 5
+    /// columns`, or `columns 3–4 of 5` past the first.
+    pub fn label(&self) -> Option<String> {
+        let count = self.data.columns.len();
+        let shown = self.columns();
+        match (shown.start, self.cut) {
+            (0, false) => None,
+            (0, true) => Some(format!("{} of {count} columns", shown.len())),
+            (start, _) if shown.len() == 1 => Some(format!("column {} of {count}", start + 1)),
+            (start, _) => Some(format!("columns {}–{} of {count}", start + 1, shown.end)),
+        }
     }
     /// Conservative owned bytes, excluding the shared snapshot.
     pub fn derived_bytes(&self) -> usize {
@@ -530,10 +574,13 @@ impl FlowTable {
     /// Return the first display line of a body row, or of the header for
     /// `None`.
     pub fn row_line(&self, row: Option<usize>) -> Option<u32> {
-        self.lines
-            .iter()
-            .position(|line| matches!(line, FlowLine::Cells { row: at, .. } if *at == row))
-            .map(|line| line as u32)
+        self.row_lines.get(row.map_or(0, |row| row + 1)).copied()
+    }
+    /// Return the body row that display line `line` shows, or `None` for
+    /// the header's lines. A line past the end belongs to the last row.
+    pub(crate) fn row_at(&self, line: u32) -> Option<usize> {
+        let index = self.row_lines.partition_point(|&start| start <= line);
+        index.checked_sub(2)
     }
     /// Paint the lines from `offset.y` into `area`, starting `offset.x`
     /// cells into the table, with `overlay` over the table's own styles.
@@ -557,11 +604,7 @@ impl FlowTable {
         let mut glyph = [0; 4];
         let mut put = |render: &mut Render, path: &str, x: u32, y: u32, g: char| {
             if visible(x, 1) {
-                render.text(
-                    overlay.role(path),
-                    Line::new(at(x, y).x, y, 1),
-                    g.encode_utf8(&mut glyph),
-                )?;
+                render.text(path, Line::new(at(x, y).x, y, 1), g.encode_utf8(&mut glyph))?;
             }
             Ok::<_, Error>(())
         };
@@ -581,13 +624,18 @@ impl FlowTable {
                     } else {
                         (self.glyphs.rule, self.glyphs.cross)
                     };
-                    for x in offset.x..self.width.min(end) {
-                        let g = if self.starts.contains(&(x + GAP - 1)) {
+                    for x in offset.x.max(self.lead)..self.width.min(end) {
+                        let g = if self
+                            .starts
+                            .get(1..)
+                            .unwrap_or_default()
+                            .contains(&(x + GAP - 1))
+                        {
                             cross
                         } else {
                             rule
                         };
-                        put(render, "table/separator", x, y, g)?;
+                        put(render, overlay.role("table/separator"), x, y, g)?;
                     }
                     continue;
                 }
@@ -598,27 +646,44 @@ impl FlowTable {
             } else {
                 "table/flow/header"
             });
+            // A margin stands for the columns it cuts, so a mark in them
+            // marks the margin.
+            let count = self.data.columns.len();
             if self.cut {
-                put(
-                    render,
-                    "table/more",
-                    self.width + MARGIN - 1,
-                    y,
-                    self.glyphs.more,
-                )?;
+                let role = overlay
+                    .mark_among(*row, self.columns().end..count)
+                    .unwrap_or_else(|| overlay.role("table/more"));
+                put(render, role, self.width + MARGIN - 1, y, self.glyphs.more)?;
+            }
+            if self.lead > 0 {
+                let role = overlay
+                    .mark_among(*row, 0..self.first)
+                    .unwrap_or_else(|| overlay.role("table/more"));
+                put(render, role, 0, y, self.glyphs.more_before)?;
             }
             for (column, fragment) in fragments.iter().enumerate() {
                 let (start, width) = (self.starts[column], self.widths[column]);
                 if column > 0 {
                     put(
                         render,
-                        "table/separator",
+                        overlay.role("table/separator"),
                         start - 2,
                         y,
                         self.glyphs.separator,
                     )?;
                 }
                 let (left, right) = (start.max(offset.x), (start + width).min(end));
+                let column = self.first + column;
+                // A cell with a ground of its own takes it on every line of
+                // its row, with a cell of room on either side.
+                let ground = overlay.cell_role(*row, column);
+                if let Some(role) = ground {
+                    let from = start.saturating_sub(1).max(offset.x);
+                    let to = (start + width + 1).min(self.width + 1).min(end);
+                    if to > from {
+                        render.fill(role, Rect::new(at(from, y).x, y, to - from, 1), ' ')?;
+                    }
+                }
                 let Some(fragment) = fragment.as_ref().filter(|_| right > left) else {
                     continue;
                 };
@@ -629,7 +694,7 @@ impl FlowTable {
                 };
                 let used = fragment.width + u32::from(fragment.cut);
                 let padding = self.data.columns[column].alignment.padding(width, used);
-                let base = render.resolve_style(path);
+                let base = render.resolve_style(ground.unwrap_or(path));
                 let mut x = start + padding;
                 for (i, g) in text::grapheme_indices(&cell.text[fragment.bytes.clone()]) {
                     let byte = fragment.bytes.start + i;
@@ -685,6 +750,7 @@ mod tests {
                 width,
                 cell_lines: 3,
                 glyphs: TableGlyphs::UNICODE,
+                first_column: 0,
             },
         )
         .unwrap()
@@ -701,8 +767,8 @@ mod tests {
                     .enumerate()
                     .map(|(c, f)| {
                         let cell = match row {
-                            None => &flow.data.columns[c].label,
-                            Some(r) => &flow.data.rows[*r].cells[c],
+                            None => &flow.data.columns[flow.first + c].label,
+                            Some(r) => &flow.data.rows[*r].cells[flow.first + c],
                         };
                         f.as_ref().map_or(String::new(), |f| {
                             let mut s = cell.text[f.bytes.clone()].to_string();

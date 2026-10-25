@@ -155,9 +155,12 @@ impl Markdown {
     /// Enter object navigation without pausing follow until the cursor moves.
     pub fn interact(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
-    /// Publish pending search results without revealing a match, as when a
-    /// host reloads the document and restores its own position.
-    pub fn keep_search_position(&mut self);
+    /// Cancel the reveal that the held query's next matches would make, as
+    /// when a host reloads the document and restores its own position. The
+    /// first of those matches at or below `row`, the row [`Self::search_row`]
+    /// gave of the match current before, becomes current without a reveal;
+    /// with no `row`, none is.
+    pub fn keep_search_position(&mut self, row: Option<u32>);
 
     /// Whether a local link to `destination` shows faint, because the host
     /// found nothing it names.
@@ -268,6 +271,10 @@ impl Markdown {
     /// One-based current match, or zero while there is none.
     pub fn search_position(&self) -> usize;
 
+    /// Return the rendered row of the current match, for
+    /// [`Self::keep_search_position`].
+    pub fn search_row(&self) -> Option<u32>;
+
     /// Read a bounded page of matches in the active search projection.
     pub fn search_window(&self, offset: usize, limit: usize) -> ArgValue;
 
@@ -290,7 +297,9 @@ impl Markdown {
     /// Once the Rendered matches publish, the first match at or below the
     /// top of the view becomes current and the reader reveals it, as a text
     /// view does. Reader navigation before then, a followed tail, or
-    /// [`Self::keep_search_position`] leaves the reader where it is.
+    /// [`Self::keep_search_position`] leaves the reader where it is. Then no
+    /// match is current until the next step, except the one that a kept
+    /// position names.
     pub fn set_search(
         &mut self,
         ctx: &mut dyn Context,

@@ -25,6 +25,7 @@ use super::{
 use crate::{
     editor::{EditMode, Editor, EditorConfig, Interaction, LineNumbers, WrapMode},
     highlight::{HighlightSpan, Highlighter},
+    regex_search::{match_ranges, smart_matcher},
     scrollbar::ScrollbarGlyphs,
     text_buffer::{Selection, TextPosition, TextRange},
     view_search,
@@ -1789,6 +1790,40 @@ fn revealed_search_match_sits_near_the_middle_of_the_view() {
     });
     assert_eq!((matches, position), (1, 1));
     assert_eq!(top, 32, "matches near the end clamp to the edge");
+}
+
+#[test]
+fn restored_matches_keep_the_view_and_the_current_match() {
+    let text = (0..40)
+        .map(|line| format!("line {line} target"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let config = EditorConfig::new()
+        .with_interaction(Interaction::Display)
+        .with_wrap(WrapMode::None);
+    let mut harness = build_harness(&text, config, 24, 8);
+    let found = |text: &str| match_ranges(&smart_matcher("target").unwrap(), text);
+    let (_, position, top) = run_search(&mut harness, |editor, ctx| {
+        editor.set_matches(ctx, found(&text));
+        editor.search_next(ctx, 20);
+    });
+    assert_eq!(position, 21);
+    // The reloaded text has one more line above the match.
+    let reloaded = format!("new\n{text}");
+    let (matches, position, after) = run_search(&mut harness, |editor, ctx| {
+        let current = editor.current_match().map(|range| range.start);
+        editor.set_text(reloaded.clone());
+        ctx.scroll(ScrollOp::To(Point::new(0, top)));
+        editor.restore_matches(found(&reloaded), current);
+    });
+    assert_eq!((matches, position, after), (40, 20, top));
+    // With none current, none is, and a step goes to the first match.
+    let (_, position, _) = run_search(&mut harness, |editor, _| {
+        editor.restore_matches(found(&reloaded), None);
+    });
+    assert_eq!(position, 0);
+    let (_, position, _) = run_search(&mut harness, |editor, ctx| editor.search_next(ctx, 1));
+    assert_eq!(position, 1);
 }
 
 #[test]

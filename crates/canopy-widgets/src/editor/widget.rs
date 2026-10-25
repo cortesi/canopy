@@ -1238,6 +1238,29 @@ impl Editor {
         self.reveal_search_match(ctx);
     }
 
+    /// Highlight precomputed match ranges without moving the view, as when
+    /// the text reloads beneath a held search.
+    ///
+    /// The first match at or after `current`, the start of the match that
+    /// was current before, becomes current; with no `current`, no match is.
+    /// Ranges arrive as for [`Self::set_matches`].
+    pub fn restore_matches(&mut self, matches: Vec<TextRange>, current: Option<TextPosition>) {
+        if matches.is_empty() {
+            self.search = SearchState::new();
+            return;
+        }
+        let from = current.unwrap_or(TextPosition::new(0, 0));
+        self.search.set_matches(&self.buffer, matches, from);
+        if current.is_none() {
+            self.search.set_current(None);
+        }
+    }
+
+    /// Return the current search match.
+    pub fn current_match(&self) -> Option<TextRange> {
+        self.search.current_match()
+    }
+
     /// Make another search match current and scroll to it.
     /// @param delta Matches to move; negative values move backward.
     #[command]
@@ -1246,8 +1269,13 @@ impl Editor {
         if count == 0 {
             return;
         }
-        for _ in 0..(delta.unsigned_abs() as usize % count) {
-            self.search.move_next(&self.buffer, delta < 0);
+        if self.search.current_index().is_none() {
+            self.search
+                .set_current(view_search::step(None, count, delta));
+        } else {
+            for _ in 0..(delta.unsigned_abs() as usize % count) {
+                self.search.move_next(&self.buffer, delta < 0);
+            }
         }
         self.reveal_search_match(ctx);
     }

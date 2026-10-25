@@ -23,11 +23,13 @@ use std::{
 };
 
 use canopy::{
-    Canopy, Context, EventOutcome, Line, NodeId, Point, Rect, Register, Setup, Size, TypedId,
-    ViewContext, Widget,
+    Canopy, ChangeOutcome, Context, EventOutcome, Line, NodeId, Point, Rect, Register, Setup, Size,
+    TypedId, ViewContext, Widget,
     commands::{CommandCall, CommandNode, CommandSpec, ToArgValue},
-    input::{FrameworkBindingGroup, IntentName, ModalToken, mouse::MouseEvent},
-    layout::{Align, Edges, Layout, RevealAlign, ScrollAxis, ScrollDirection, ScrollMark},
+    input::{FrameworkBindingGroup, IntentName, ModalToken, NavIntent, mouse::MouseEvent},
+    layout::{
+        Align, Edges, Layout, RevealAlign, ScrollAxis, ScrollDirection, ScrollMark, ScrollOp,
+    },
     render::{Glyphs, Render, ScreenCapture},
     runtime::NodeWakeHandle,
     status::{StatusItem, StatusSpan},
@@ -3115,6 +3117,172 @@ impl TabBar {
 
 impl Widget for TabBar {}
 
+/// A read-only, searchable table that flows into its width.
+pub struct TableReader {/* private fields */}
+
+impl TableReader {
+    /// Build a positional call with typed user arguments.
+    pub fn call_clear_search() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_interact() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_interacting() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_leave_interact() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_move_cursor(rows: i32, columns: i32) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_search_matches() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_search_next(delta: i32) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_search_position() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_selected_text() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_shift_columns(delta: i32) -> CommandCall;
+
+    /// Return the command spec for this command.
+    pub fn spec_clear_search() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_interact() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_interacting() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_leave_interact() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_move_cursor() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_search_matches() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_search_next() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_search_position() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_selected_text() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_shift_columns() -> &'static CommandSpec;
+}
+
+impl TableReader {
+    /// Remove the search and its highlights.
+    pub fn clear_search(&mut self, _ctx: &mut dyn Context);
+
+    /// Return the current search match.
+    pub fn current_match(&self) -> Option<&CellRange>;
+
+    /// Return the selected cell, by body row and data column.
+    pub fn cursor(&self) -> Option<(usize, usize)>;
+
+    /// Return the table shown.
+    pub fn data(&self) -> &Arc<TableData>;
+
+    /// Return the first column shown.
+    pub fn first_column(&self) -> usize;
+
+    /// Select a cell, so the navigation intents move the selection instead
+    /// of the rows. The selection starts at the current search match's cell
+    /// when it shows in the rows, and otherwise at the first cell in view. A
+    /// table with no rows has no cell to select.
+    pub fn interact(&mut self, ctx: &mut dyn Context);
+
+    /// Return whether the reader selects a cell.
+    pub fn interacting(&self) -> bool;
+
+    /// Stop selecting a cell, so the navigation intents move the rows again.
+    pub fn leave_interact(&mut self, _ctx: &mut dyn Context);
+
+    /// Move the selected cell `rows` rows down and `columns` columns right,
+    /// within the table.
+    /// @param rows Rows to move; negative values move up.
+    /// @param columns Columns to move; negative values move left.
+    pub fn move_cursor(&mut self, ctx: &mut dyn Context, rows: i32, columns: i32);
+
+    /// Move by `nav`, as the reader's navigation intents do: the selected
+    /// cell while the reader selects one, and otherwise the rows, or the
+    /// columns sideways.
+    pub fn navigate(&mut self, ctx: &mut dyn Context, nav: NavIntent);
+
+    /// Construct a reader of `data`.
+    pub fn new(data: Arc<TableData>) -> Self;
+
+    /// Highlight `matches`, which arrive as for [`Self::set_matches`],
+    /// without moving the view, as when the table reloads beneath a held
+    /// search. The first match at or after `current`, the match that was
+    /// current before, becomes current; with no `current`, no match is.
+    pub fn restore_matches(&mut self, matches: Vec<CellRange>, current: Option<&CellRange>);
+
+    /// Scroll the rows by `op`. A page is the height of the rows that show
+    /// beneath the pinned label and header, less one row.
+    pub fn scroll(&mut self, ctx: &mut dyn Context, op: ScrollOp) -> ChangeOutcome;
+
+    /// Return the number of search matches.
+    pub fn search_matches(&self) -> usize;
+
+    /// Make another search match current and reveal it. While the reader
+    /// selects a cell, a match in the rows selects its cell.
+    /// @param delta Matches to move; negative values move backward.
+    pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32);
+
+    /// Return the one-based position of the current search match.
+    /// @return The position, or 0 when there is no current match.
+    pub fn search_position(&self) -> usize;
+
+    /// Return the text of the selected cell.
+    pub fn selected_text(&self) -> Option<String>;
+
+    /// Select `cell`, by body row and data column, within the table, or stop
+    /// selecting with `None`. Nothing scrolls, as when a host restores the
+    /// selection of a reloaded table.
+    pub fn set_cursor(&mut self, cell: Option<(usize, usize)>);
+
+    /// Show `data` from its first column, dropping the search matches and
+    /// the selected cell, which address the table they were found in. The
+    /// scroll offset stays, so a host that shows a new table scrolls to its
+    /// top.
+    pub fn set_data(&mut self, data: Arc<TableData>);
+
+    /// Show the columns from `first`, within the table.
+    pub fn set_first_column(&mut self, first: usize);
+
+    /// Highlight `matches`, which arrive in reading order: header cells
+    /// first, then each row's cells from left to right. The first match at
+    /// or below the top of the rows becomes current, and the reader reveals
+    /// it.
+    pub fn set_matches(&mut self, ctx: &mut dyn Context, matches: Vec<CellRange>);
+
+    /// Show the columns from `delta` columns past the first one shown,
+    /// within the table.
+    /// @param delta Columns to move; negative values move left.
+    pub fn shift_columns(&mut self, ctx: &mut dyn Context, delta: i32);
+}
+
+impl CommandNode for TableReader {}
+
+impl Register for TableReader {}
+
+impl Widget for TableReader {}
+
+impl !Sync for TableReader {}
+
 /// A reusable read-only spreadsheet surface. Its body owns both runtime scroll
 /// offsets. Header, gutter, and tracks stay outside that body's canvas.
 pub struct TableView {/* private fields */}
@@ -3925,6 +4093,9 @@ pub mod editor {
         /// Return the current editor configuration.
         pub fn config(&self) -> &EditorConfig;
 
+        /// Return the current search match.
+        pub fn current_match(&self) -> Option<TextRange>;
+
         /// Return the cursor position.
         pub fn cursor(&self) -> TextPosition;
 
@@ -3974,6 +4145,14 @@ pub mod editor {
 
         /// Redo the last undone edit.
         pub fn redo(&mut self, _ctx: &mut dyn Context);
+
+        /// Highlight precomputed match ranges without moving the view, as when
+        /// the text reloads beneath a held search.
+        ///
+        /// The first match at or after `current`, the start of the match that
+        /// was current before, becomes current; with no `current`, no match is.
+        /// Ranges arrive as for [`Self::set_matches`].
+        pub fn restore_matches(&mut self, matches: Vec<TextRange>, current: Option<TextPosition>);
 
         /// Search the text and highlight every match.
         ///
@@ -4875,6 +5054,14 @@ pub mod regex_search {
     //! [`Editor::set_matches`](crate::editor::Editor::set_matches) takes.
 
     pub use grep_regex::{Error, RegexMatcher};
+    /// Return the matches of `matcher` in the cells of `data`, in reading order:
+    /// the header's cells, then each row's, from left to right.
+    ///
+    /// A value matches one line at a time, as text does, and empty matches are
+    /// skipped. Each match names its cell and its bytes in the cell's value, as
+    /// a [`TableReader`](crate::TableReader) takes them.
+    pub fn cell_matches(matcher: &RegexMatcher, data: &TableData) -> Vec<CellRange>;
+
     /// Return the ranges of the matches of `matcher` in `text`, one line at a
     /// time.
     ///
@@ -5062,18 +5249,24 @@ pub mod table {
         pub column: TableKey,
     }
 
-    /// A role over a half-open UTF-8 byte range of one cell's text, such as a
-    /// search match.
+    /// A role over a cell range, such as a search match.
     #[derive(Clone, Debug, Eq, PartialEq)]
     pub struct CellMark {
+        /// The bytes marked.
+        pub range: CellRange,
+        /// Style role the bytes paint with, in place of the cell's style.
+        pub role: &'static str,
+    }
+
+    /// A half-open UTF-8 byte range of one cell's text, such as a search match.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct CellRange {
         /// Body row index in the table data, or `None` for the header.
         pub row: Option<usize>,
         /// Column index in the table data.
         pub column: usize,
         /// Bytes of the full value.
         pub bytes: Range<usize>,
-        /// Style role the bytes paint with, in place of the cell's style.
-        pub role: &'static str,
     }
 
     /// Bounds of a flowed table.
@@ -5085,6 +5278,9 @@ pub mod table {
         pub cell_lines: u32,
         /// Separator, rule, and substitution glyphs.
         pub glyphs: TableGlyphs,
+        /// The first column shown. The columns before it are cut at a marked
+        /// left margin.
+        pub first_column: usize,
     }
 
     /// A table fitted to a width, with its values wrapped into lines. The flow
@@ -5101,6 +5297,10 @@ pub mod table {
 
         /// Display lines, header and rules included.
         pub fn height(&self) -> u32;
+
+        /// Name the columns a flow shows when it cuts any, such as `2 of 5
+        /// columns`, or `columns 3–4 of 5` past the first.
+        pub fn label(&self) -> Option<String>;
 
         /// Paint the lines from `offset.y` into `area`, starting `offset.x`
         /// cells into the table, with `overlay` over the table's own styles.
@@ -5120,7 +5320,7 @@ pub mod table {
         /// `None`.
         pub fn row_line(&self, row: Option<usize>) -> Option<u32>;
 
-        /// Widths of the shown leading columns.
+        /// Widths of the shown columns.
         pub fn widths(&self) -> &[u32];
     }
 
@@ -5391,6 +5591,9 @@ pub mod table {
         pub header_cross: char,
         /// Broken right margin of a flowed table with columns cut.
         pub more: char,
+        /// Broken left margin of a flowed table that starts past its first
+        /// column.
+        pub more_before: char,
     }
 
     impl TableGlyphs {
@@ -5452,14 +5655,20 @@ pub mod table {
     /// What a host paints over a table's own styles.
     ///
     /// A ground is a role that every part of the table takes, as when the whole
-    /// table is selected. Marks paint byte ranges of single cells in roles of
-    /// their own, over the ground, such as the matches of a search.
+    /// table is selected. One cell can take a ground of its own over the table's,
+    /// as a cursor does. Marks paint byte ranges of single cells in roles of
+    /// their own, over the grounds, such as the matches of a search.
     #[derive(Clone, Debug, Default)]
     pub struct TableOverlay {/* private fields */}
 
     impl TableOverlay {
         /// Construct an overlay from a ground and marks in any order.
         pub fn new(ground: Option<&'static str>, marks: Vec<CellMark>) -> Self;
+
+        /// Give the cell at body row `row`, or the header for `None`, and data
+        /// column `column` the ground `role` over its whole extent.
+        #[must_use]
+        pub fn with_cell(self, row: Option<usize>, column: usize, role: &'static str) -> Self;
     }
 
     /// Visible-work counters returned by grid painting.
@@ -5623,7 +5832,9 @@ pub mod view_search {
     //! - It paints the current match with [`CURRENT`] and every other match with
     //!   [`MATCH`]. The theme gives both roles one hue, and the current match takes
     //!   it at full strength.
-    //! - It moves between matches with [`step`], which wraps at either end.
+    //! - A new set of matches makes the first one at or below the top of the view
+    //!   current, as [`first_at_or_below`] finds it.
+    //! - It moves between matches as [`step`] does, wrapping at either end.
     //! - It reveals the current match with [`REVEAL`], so the match lands near the
     //!   middle of the view with its surroundings on both sides.
     //! - It reports one scrollbar mark per row that holds a match, through
@@ -5640,18 +5851,17 @@ pub mod view_search {
     /// colour only through the foreground.
     pub const MARK: &str = "search/mark";
 
-    /// Glyph of a match mark on a scrollbar track.
-    ///
-    /// This is the thin track vertical, so a mark blends into the surrounding
-    /// divider or border and only its colour stands out.
-    pub const MARK_GLYPH: char = _;
-
     /// Style role of a match that is not current.
     pub const MATCH: &str = "search/match";
 
     /// How a view reveals the current match: centred, so the text before and
     /// after it both show.
     pub const REVEAL: RevealAlign = RevealAlign::Center;
+
+    /// Return the index of the first match at or below the view's `top` row,
+    /// from the canvas rows of the matches in order, or the first match when
+    /// none lies below. With no matches, there is none.
+    pub fn first_at_or_below(rows: impl IntoIterator<Item = u32>, top: u32) -> Option<usize>;
 
     /// Return one scrollbar mark for each distinct row in `rows`.
     ///

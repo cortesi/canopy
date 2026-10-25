@@ -102,6 +102,8 @@ mod status_bar;
 mod status_line;
 /// Immutable keyed tables, grid preparation, and viewer events.
 pub mod table;
+/// Read-only searchable table that flows into its width.
+mod table_reader;
 /// Interactive spreadsheet-style table surface.
 mod table_view;
 /// Tabbed pages beneath a tab bar.
@@ -149,6 +151,7 @@ pub use sparkline::Sparkline;
 pub use spinner::Spinner;
 pub use status_bar::{KeyHint, StatusBar};
 pub use status_line::StatusLine;
+pub use table_reader::TableReader;
 pub use table_view::TableView;
 pub use tabs::{TabBar, Tabs, TabsLook};
 pub use text::{CanvasWidth, Text};

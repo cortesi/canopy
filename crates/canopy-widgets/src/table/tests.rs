@@ -380,9 +380,7 @@ fn a_label_with_line_breaks_keeps_its_lines_at_every_width() {
 #[test]
 fn overlay_marks_find_their_cell_and_bytes() {
     let mark = |row, column, bytes, role| CellMark {
-        row,
-        column,
-        bytes,
+        range: CellRange { row, column, bytes },
         role,
     };
     // Marks arrive out of order and sort by cell, then by first byte.
@@ -404,6 +402,22 @@ fn overlay_marks_find_their_cell_and_bytes() {
     assert_eq!(overlay.mark_at(Some(1), 0, 5), Some("late"));
     assert_eq!(overlay.mark_at(Some(1), 0, 6), None);
     assert_eq!(overlay.mark_at(Some(0), 1, 2), Some("other"));
+    // A margin takes the role of a mark among the columns it stands for.
+    assert_eq!(overlay.mark_among(Some(1), 0..1), Some("early"));
+    assert_eq!(overlay.mark_among(Some(1), 1..5), None);
+    assert_eq!(overlay.mark_among(Some(0), 0..5), Some("other"));
+    let current = TableOverlay::new(
+        None,
+        vec![
+            mark(Some(0), 1, 0..1, "other"),
+            mark(Some(0), 2, 0..1, view_search::CURRENT),
+        ],
+    );
+    assert_eq!(
+        current.mark_among(Some(0), 1..3),
+        Some(view_search::CURRENT),
+        "the current match wins the margin"
+    );
 }
 
 #[test]
@@ -421,6 +435,7 @@ fn a_flow_names_the_first_line_of_each_row() {
             width: 20,
             cell_lines: 4,
             glyphs: TableGlyphs::UNICODE,
+            first_column: 0,
         },
     )
     .unwrap();

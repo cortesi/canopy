@@ -424,15 +424,13 @@ impl DiffView {
                     .push(index);
             }
         }
-        let top = ctx.view().view_rect().tl.y as usize;
-        self.current_match = (!self.matches.is_empty()).then(|| {
+        let view = ctx.view().view_rect();
+        self.current_match = view_search::first_at_or_below(
             self.matches
                 .iter()
-                .position(|found| {
-                    self.match_area(found, ctx.view().view_rect().w).tl.y as usize >= top
-                })
-                .unwrap_or(0)
-        });
+                .map(|found| self.match_area(found, view.w).tl.y),
+            view.tl.y,
+        );
         self.reveal_match(ctx);
     }
 

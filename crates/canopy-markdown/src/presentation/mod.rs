@@ -30,8 +30,8 @@ use canopy_widgets::{
     image_cells,
     mosaic::{Cell, Tier, tier_for},
     table::{
-        self, CellMark, FlowOptions, FlowTable, PreparedTable, TableAlignment, TableCell,
-        TableColumn, TableData, TableGlyphs, TableLayoutOptions, TableOverlay, TableRow,
+        self, CellMark, CellRange, FlowOptions, FlowTable, PreparedTable, TableAlignment,
+        TableCell, TableColumn, TableData, TableGlyphs, TableLayoutOptions, TableOverlay, TableRow,
         TableSelection, TableWindow,
     },
     view_search,
@@ -644,6 +644,11 @@ impl PresentationSnapshot {
                     .saturating_add(2 * size_of::<usize>())
                     .saturating_add(flow.derived_bytes());
             }
+            if tables.insert(Arc::as_ptr(&block.cells) as *const () as usize) {
+                bytes = bytes
+                    .saturating_add(2 * size_of::<usize>())
+                    .saturating_add(block.cells.len().saturating_mul(size_of::<CellSpan>()));
+            }
         }
         bytes
     }
@@ -1138,16 +1143,21 @@ impl PresentationSnapshot {
 /// Return a mark over each cell's share of the `search` spans that cover the
 /// table of `b`, the unit at reading index `index`. The `current` span takes
 /// the current role, and the others the match role.
+///
+/// The spans and the cells both run in reading order, so each search finds
+/// its first span and cell by bisection, and the work follows the matches in
+/// the table rather than every match or every cell.
 fn cell_marks(
     b: &BlockLayout,
     index: usize,
     search: &[Range<ReadingKey>],
     current: Option<&Range<ReadingKey>>,
 ) -> Vec<CellMark> {
+    let first = search.partition_point(|span| span.end <= (index, 0));
     let mut marks = Vec::new();
-    for span in search
+    for span in search[first..]
         .iter()
-        .filter(|span| overlaps(span, index, &WHOLE_UNIT))
+        .take_while(|span| span.start < (index, usize::MAX))
     {
         let role = if current == Some(span) {
             view_search::CURRENT
@@ -1165,13 +1175,19 @@ fn cell_marks(
         } else {
             usize::MAX
         };
-        for cell in b.cells.iter() {
+        let cell = b.cells.partition_point(|cell| cell.text.end <= start);
+        for cell in b.cells[cell..]
+            .iter()
+            .take_while(|cell| cell.text.start < end)
+        {
             let (from, to) = (start.max(cell.text.start), end.min(cell.text.end));
             if from < to {
                 marks.push(CellMark {
-                    row: cell.row,
-                    column: cell.column,
-                    bytes: from - cell.text.start..to - cell.text.start,
+                    range: CellRange {
+                        row: cell.row,
+                        column: cell.column,
+                        bytes: from - cell.text.start..to - cell.text.start,
+                    },
                     role,
                 });
             }
@@ -1186,11 +1202,10 @@ fn cell_marks(
 fn table_line(b: &BlockLayout, offset: usize) -> Option<u32> {
     let table = b.table.as_ref()?;
     // A tab or newline between cells belongs to the cell before it.
-    let cell = b
+    let cell = &b.cells[b
         .cells
-        .iter()
-        .take_while(|cell| cell.text.start <= offset)
-        .last()?;
+        .partition_point(|cell| cell.text.start <= offset)
+        .checked_sub(1)?];
     let line = match (&b.flow, cell.row) {
         (Some(flow), row) => flow.row_line(row)?,
         (None, None) => 0,
@@ -1397,6 +1412,7 @@ fn prepare_block(
                         // takes the lines it needs.
                         cell_lines: u32::MAX,
                         glyphs,
+                        first_column: 0,
                     },
                 )
                 .ok()
@@ -1404,13 +1420,12 @@ fn prepare_block(
                 if let Ok(prepared) = table::prepare(data, options) {
                     // The grid shows that it is a table; a label says only
                     // which columns the preview leaves out.
-                    let columns = prepared.data().columns().len();
-                    if let Some(flow) = flow.as_ref().filter(|flow| flow.cut()) {
+                    if let Some(label) = flow.as_ref().and_then(|flow| flow.label()) {
                         let mut row = make_row();
                         decoration(
                             &mut row,
                             card_inset,
-                            &format!("{} of {columns} columns", flow.widths().len()),
+                            &label,
                             card_body,
                             "markdown/card/label",
                             object,

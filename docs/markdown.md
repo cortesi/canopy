@@ -1,7 +1,9 @@
 # Markdown and source readers
 
 `canopy-markdown` provides a terminal Markdown reader with Rendered and Source
-views. Its table inspector, `canopy_widgets::TableView`, also works on its own.
+views. Its table inspector, `canopy_widgets::TableView`, also works on its own,
+and `canopy_widgets::TableReader` shows a standalone table in the layout the
+reader gives an embedded one, with the same search.
 Run the examples with `cargo run -p gyms -- markdown` and
 `cargo run -p gyms -- table`.
 
@@ -123,9 +125,12 @@ diff view do: when a new query's matches publish, the first match at or below
 the top of the view becomes current, and the reader centres it, unless the
 reader has moved or follows its tail since the query. `keep_search_position`
 cancels that reveal, for a host that restores its own position after a
-reload. The current match paints apart from the others, and the scrollbar
+reload, and keeps current the match at the row `search_row` gave before it.
+The editor and `TableReader` take the same place through `restore_matches`.
+The current match paints apart from the others, and the scrollbar
 marks every row that holds a match. A match in a code line or a table cell
-marks only the text it found, and a table inspector opened on a match shows
+marks only the text it found, a match in a column the preview cuts marks the
+margin that stands for it, and a table inspector opened on a match shows
 the table's matches too. Source does not jump until the reader
 activates a match. Local fragment and footnote jumps keep a return position.
 

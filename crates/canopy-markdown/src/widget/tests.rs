@@ -394,13 +394,20 @@ fn rendered_search_publication_reveals_its_first_match_once() {
         row.abs_diff(offset + height / 2) <= 1,
         "{row} in {offset}+{height}"
     );
-    // A later publication of the same query leaves the reader in place.
+    // A later publication of the same query, as of the document's next
+    // revision, leaves the reader in place.
     harness
         .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            reader.scroll_view(ctx, ScrollOp::To(Point::ZERO))
+            reader.scroll_view(ctx, ScrollOp::To(Point::ZERO))?;
+            reader
+                .replace(ctx, DocumentInput::Complete(text.clone()))
+                .map(|_| ())
         })
         .unwrap();
     settle(&mut harness, &manual);
+    harness.with_root_widget(|reader: &mut Markdown| {
+        assert_eq!((reader.search_matches(), reader.search_position()), (2, 0));
+    });
     harness
         .with_root_widget_context(|reader: &mut Markdown, ctx| {
             assert_eq!(reader.view_offset(ctx), 0);
@@ -410,7 +417,7 @@ fn rendered_search_publication_reveals_its_first_match_once() {
     service(&mut harness);
     harness
         .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            assert_eq!(reader.search_position(), 2);
+            assert_eq!(reader.search_position(), 1);
             assert!(reader.view_offset(ctx) > 0);
             Ok(())
         })
@@ -476,7 +483,7 @@ fn reader_navigation_or_a_kept_position_cancels_the_search_reveal() {
             .with_root_widget_context(|reader: &mut Markdown, ctx| {
                 reader.set_search(ctx, "needle".into(), false)?;
                 if keep {
-                    reader.keep_search_position();
+                    reader.keep_search_position(None);
                     Ok(())
                 } else {
                     reader.scroll_view(ctx, ScrollOp::By(0, 2))
@@ -494,6 +501,44 @@ fn reader_navigation_or_a_kept_position_cancels_the_search_reveal() {
             })
             .unwrap();
     }
+}
+
+#[test]
+fn a_kept_position_keeps_the_current_match_through_a_reload() {
+    let text = format!(
+        "{}needle first\n\nneedle second\n{}",
+        "Filler paragraph.\n\n".repeat(20),
+        "More filler.\n\n".repeat(20)
+    );
+    let (mut harness, manual) = fixture(&text, ViewType::Rendered, false, false, false);
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_search(ctx, "needle".into(), false)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.search_next(ctx, 1))
+        .unwrap();
+    service(&mut harness);
+    let row = harness.with_root_widget(|reader: &mut Markdown| {
+        assert_eq!(reader.search_position(), 2);
+        reader.search_row()
+    });
+    assert!(row.is_some());
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.replace(ctx, DocumentInput::Complete(text.clone()))?;
+            reader.set_search(ctx, "needle".into(), false)?;
+            reader.keep_search_position(row);
+            Ok(())
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    harness.with_root_widget(|reader: &mut Markdown| {
+        assert_eq!((reader.search_matches(), reader.search_position()), (2, 2));
+    });
 }
 
 #[test]
@@ -2805,6 +2850,15 @@ fn table_matches_mark_their_words_and_rows_beside_the_object_ground() {
         assert!(!buffer.contains_text_style(text, &current), "{text}");
         assert!(!buffer.contains_text_style(text, &other), "{text}");
     }
+    let object = style("markdown/object");
+    assert!(
+        buffer.contains_text_style("Basics", &object),
+        "the object's ground"
+    );
+    assert!(
+        !buffer.contains_text_style("plain", &object),
+        "only the object's"
+    );
     // Each match maps to the row of its own cell, not its table's top.
     let lines = buffer.lines();
     for (row, needle) in rows.iter().zip(["YAML front", "front row"]) {
@@ -2814,4 +2868,87 @@ fn table_matches_mark_their_words_and_rows_beside_the_object_ground() {
             .unwrap();
         assert_eq!(*row, top + y as u32, "{needle}");
     }
+}
+
+#[test]
+fn a_table_inspector_keeps_the_matches_across_publications() {
+    use canopy::style::PartialStyle;
+
+    let text = "intro\n\n| Key | Value |\n| --- | --- |\n| a | needle here |\n| b | plain |\n";
+    let (mut harness, manual) = fixture(text, ViewType::Rendered, false, false, false);
+    harness.canopy.set_screen_size(Size::new(60, 20)).unwrap();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_search(ctx, "needle".into(), false)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.activate(ctx))
+        .unwrap();
+    service(&mut harness);
+    let current = PartialStyle::new().bg(harness.canopy.style().resolve(view_search::CURRENT).bg);
+    assert!(harness.with_root_widget(|reader: &mut Markdown| reader.inspector.is_some()));
+    assert!(harness.tbuf().contains_text_style("needle", &current));
+    // A new width republishes the table, and its matches show again.
+    harness.canopy.set_screen_size(Size::new(50, 20)).unwrap();
+    settle(&mut harness, &manual);
+    assert!(harness.with_root_widget(|reader: &mut Markdown| reader.inspector.is_some()));
+    assert!(harness.tbuf().contains_text_style("needle", &current));
+}
+
+#[test]
+fn a_match_in_a_cut_column_marks_the_margin_of_its_row() {
+    // Single-word labels keep their widths, so the columns cannot all fit.
+    let header = (1..=8).map(|c| format!("Column_{c}")).collect::<Vec<_>>();
+    let mut text = format!("| {} |\n|{}\n", header.join(" | "), "---|".repeat(8));
+    for row in 0..3 {
+        let cells = (1..=8)
+            .map(|c| {
+                if row == 1 && c == 8 {
+                    "needle".to_owned()
+                } else {
+                    format!("r{row}c{c}")
+                }
+            })
+            .collect::<Vec<_>>();
+        text += &format!("| {} |\n", cells.join(" | "));
+    }
+    let (mut harness, manual) = fixture(&text, ViewType::Rendered, false, false, false);
+    harness.canopy.set_screen_size(Size::new(40, 20)).unwrap();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_search(ctx, "needle".into(), false)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    let lines = harness.tbuf().lines();
+    assert!(
+        !lines.iter().any(|line| line.contains("needle")),
+        "the column is cut"
+    );
+    let (y, line) = lines
+        .iter()
+        .enumerate()
+        .find(|(_, line)| line.contains("r1c1"))
+        .unwrap();
+    let x = line.chars().position(|c| c == '›').unwrap() as u32;
+    let bg = harness.buf().get(Point::new(x, y as u32)).unwrap().style.bg;
+    let current = harness.canopy.style().resolve(view_search::CURRENT).bg;
+    assert_eq!(
+        Some(bg),
+        current.solid_color(),
+        "the margin marks the match"
+    );
+    // The rows without a match keep the margin's own style.
+    let (y, line) = lines
+        .iter()
+        .enumerate()
+        .find(|(_, line)| line.contains("r0c1"))
+        .unwrap();
+    let x = line.chars().position(|c| c == '›').unwrap() as u32;
+    let bg = harness.buf().get(Point::new(x, y as u32)).unwrap().style.bg;
+    assert_ne!(Some(bg), current.solid_color());
 }

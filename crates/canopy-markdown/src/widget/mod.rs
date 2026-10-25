@@ -4,7 +4,6 @@ use std::{
     cell::RefCell,
     collections::{HashMap, VecDeque},
     fmt::Display,
-    mem,
     rc::Rc,
     result::Result as StdResult,
     sync::Arc,
@@ -174,6 +173,9 @@ pub struct Markdown {
     results: Option<SearchResults>,
     /// The current match, or None while there is none.
     search_index: Option<usize>,
+    /// The rendered row at or below which the next published matches make
+    /// one current without a reveal, for a host that keeps its place.
+    kept_search_row: Option<u32>,
     /// Exact Source match ranges for one displayed revision.
     source_results: Option<SourceMatches>,
     /// Current compile or scan failure, without discarding query text.
@@ -391,6 +393,7 @@ impl Markdown {
             query_generation: 0,
             results: None,
             search_index: None,
+            kept_search_row: None,
             source_results: None,
             query_error: None,
             inspector: None,
@@ -1019,7 +1022,9 @@ impl Markdown {
     /// Once the Rendered matches publish, the first match at or below the
     /// top of the view becomes current and the reader reveals it, as a text
     /// view does. Reader navigation before then, a followed tail, or
-    /// [`Self::keep_search_position`] leaves the reader where it is.
+    /// [`Self::keep_search_position`] leaves the reader where it is. Then no
+    /// match is current until the next step, except the one that a kept
+    /// position names.
     pub fn set_search(&mut self, ctx: &mut dyn Context, query: String, regex: bool) -> Result<()> {
         if query.len() > self.options.query_limit {
             return Err(invalid("Search query exceeds the configured limit"));
@@ -1042,6 +1047,7 @@ impl Markdown {
         self.query_error = None;
         self.results = None;
         self.search_index = None;
+        self.kept_search_row = None;
         self.shared.borrow_mut().search_reveal = !self.query.text.is_empty();
         self.clear_search_overlay();
         if let Some(node) = self.nodes.as_ref().and_then(|nodes| nodes.source) {
@@ -1101,10 +1107,26 @@ impl Markdown {
     pub fn search_position(&self) -> usize {
         self.search_index.map_or(0, |i| i + 1)
     }
-    /// Publish pending search results without revealing a match, as when a
-    /// host reloads the document and restores its own position.
-    pub fn keep_search_position(&mut self) {
+    /// Return the rendered row of the current match, for
+    /// [`Self::keep_search_position`].
+    pub fn search_row(&self) -> Option<u32> {
+        if self.active != ViewType::Rendered {
+            return None;
+        }
+        let index = self.search_index?;
+        let state = self.shared.borrow();
+        let p = state.presentation.as_ref()?;
+        let range = state.overlays.search.get(index)?;
+        Some(p.row_for_unit(range.start.unit_id, range.start.offset))
+    }
+    /// Cancel the reveal that the held query's next matches would make, as
+    /// when a host reloads the document and restores its own position. The
+    /// first of those matches at or below `row`, the row [`Self::search_row`]
+    /// gave of the match current before, becomes current without a reveal;
+    /// with no `row`, none is.
+    pub fn keep_search_position(&mut self, row: Option<u32>) {
         self.shared.borrow_mut().search_reveal = false;
+        self.kept_search_row = row;
     }
     /// Whether a query waits for its first matches in the active view.
     #[command]
@@ -1257,14 +1279,7 @@ impl Markdown {
         };
         self.open_inspector(ctx, content, Some(object.id), p.document.source.revision)?;
         self.inspected_link = inspected;
-        // A table inspector shows the matches its preview shows.
-        if matches!(object.kind, ObjectKind::Table)
-            && let Some(open) = &self.inspector
-        {
-            let marks = p.table_search_marks(object.unit_id, &self.shared.borrow().overlays);
-            open.handle
-                .set_table_overlay(ctx, TableOverlay::new(None, marks))?;
-        }
+        self.sync_inspector_marks(ctx)?;
         if let Some(found) = self
             .search_index
             .and_then(|i| self.results.as_ref()?.matches.get(i))
@@ -2162,9 +2177,39 @@ impl Markdown {
             self.dirty = true;
             self.last_submitted = None;
         }
+        // A republished table drops its marks, which the matches of this
+        // publication replace.
+        self.sync_inspector_marks(ctx)?;
         self.trim_cache(ctx)?;
         self.update_chrome(ctx)?;
         self.wake_publication_host()
+    }
+    /// Show the Rendered matches in an open table inspector, as the table's
+    /// preview shows them.
+    fn sync_inspector_marks(&self, ctx: &mut dyn Context) -> Result<()> {
+        let Some((open, id)) = self
+            .inspector
+            .as_ref()
+            .and_then(|open| Some((open, open.object?)))
+        else {
+            return Ok(());
+        };
+        let state = self.shared.borrow();
+        let Some(p) = state.presentation.as_ref() else {
+            return Ok(());
+        };
+        let Some(object) = p
+            .document
+            .objects
+            .iter()
+            .find(|o| o.id == id && matches!(o.kind, ObjectKind::Table))
+        else {
+            return Ok(());
+        };
+        let marks = p.table_search_marks(object.unit_id, &state.overlays);
+        drop(state);
+        open.handle
+            .set_table_overlay(ctx, TableOverlay::new(None, marks))
     }
     /// Signal the host after publication has accepted a result or changed the
     /// displayed view or failure state, and when a host request is ready, so
@@ -2176,7 +2221,10 @@ impl Markdown {
         Ok(())
     }
     /// Install bounded matches or a query error in place of all prior match
-    /// state, without moving the reader or stealing prompt focus.
+    /// state, without stealing prompt focus. A new query's first Rendered
+    /// matches reveal the first one at or below the top, as
+    /// [`Self::set_search`] describes; later publications keep the current
+    /// match where it still is.
     fn apply_search(
         &mut self,
         ctx: &mut dyn Context,
@@ -2238,19 +2286,11 @@ impl Markdown {
     /// and reveal it, once for each new query. Reader input since the query,
     /// or a followed tail, leaves the reader where it is.
     fn reveal_first_match(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let presentation = {
-            let mut state = self.shared.borrow_mut();
-            if !mem::take(&mut state.search_reveal) {
-                return Ok(());
-            }
-            state.presentation.clone()
-        };
+        self.restore_kept_match();
         if self.follow_state() == Follow::Following {
+            self.shared.borrow_mut().search_reveal = false;
             return Ok(());
         }
-        let Some(p) = presentation else {
-            return Ok(());
-        };
         let top = self
             .nodes
             .as_ref()
@@ -2258,18 +2298,52 @@ impl Markdown {
             .map_or(0, |view| view.scroll.y);
         let first = {
             let state = self.shared.borrow();
-            if state.overlays.search.is_empty() {
+            if !state.search_reveal {
                 return Ok(());
             }
-            state
+            // A publication without matches, as of a document still
+            // arriving, leaves the reveal for the matches to come.
+            let Some(p) = state.presentation.as_ref() else {
+                return Ok(());
+            };
+            let rows = state
                 .overlays
                 .search
                 .iter()
-                .position(|range| p.row_for_unit(range.start.unit_id, range.start.offset) >= top)
-                .unwrap_or(0)
+                .map(|range| p.row_for_unit(range.start.unit_id, range.start.offset));
+            let Some(first) = view_search::first_at_or_below(rows, top) else {
+                return Ok(());
+            };
+            first
         };
-        self.shared.borrow_mut().navigation += 1;
+        {
+            let mut state = self.shared.borrow_mut();
+            state.search_reveal = false;
+            state.navigation += 1;
+        }
         self.reveal_rendered_match(ctx, first)
+    }
+    /// Make the first Rendered match at or below the kept row current, once
+    /// matches publish, without a reveal.
+    fn restore_kept_match(&mut self) {
+        let Some(row) = self.kept_search_row else {
+            return;
+        };
+        let mut state = self.shared.borrow_mut();
+        let Some(p) = state.presentation.as_ref() else {
+            return;
+        };
+        let rows = state
+            .overlays
+            .search
+            .iter()
+            .map(|range| p.row_for_unit(range.start.unit_id, range.start.offset));
+        let Some(first) = view_search::first_at_or_below(rows, row) else {
+            return;
+        };
+        state.overlays.search_current = Some(first);
+        self.search_index = Some(first);
+        self.kept_search_row = None;
     }
     /// Make Rendered match `index` current, mark the object it lies in, and
     /// reveal it as every searchable view does.

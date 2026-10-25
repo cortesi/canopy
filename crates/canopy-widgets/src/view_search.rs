@@ -7,7 +7,9 @@
 //! - It paints the current match with [`CURRENT`] and every other match with
 //!   [`MATCH`]. The theme gives both roles one hue, and the current match takes
 //!   it at full strength.
-//! - It moves between matches with [`step`], which wraps at either end.
+//! - A new set of matches makes the first one at or below the top of the view
+//!   current, as [`first_at_or_below`] finds it.
+//! - It moves between matches as [`step`] does, wrapping at either end.
 //! - It reveals the current match with [`REVEAL`], so the match lands near the
 //!   middle of the view with its surroundings on both sides.
 //! - It reports one scrollbar mark per row that holds a match, through
@@ -35,7 +37,7 @@ pub const MARK: &str = "search/mark";
 ///
 /// This is the thin track vertical, so a mark blends into the surrounding
 /// divider or border and only its colour stands out.
-pub const MARK_GLYPH: char = ScrollbarGlyphs::THIN.track_vertical;
+pub(crate) const MARK_GLYPH: char = ScrollbarGlyphs::THIN.track_vertical;
 
 /// How a view reveals the current match: centred, so the text before and
 /// after it both show.
@@ -54,6 +56,20 @@ pub fn step(current: Option<usize>, count: usize, delta: i32) -> Option<usize> {
     let count = count as i64;
     let from = current.map_or(if delta < 0 { count } else { -1 }, |index| index as i64);
     Some((from + i64::from(delta)).rem_euclid(count) as usize)
+}
+
+/// Return the index of the first match at or below the view's `top` row,
+/// from the canvas rows of the matches in order, or the first match when
+/// none lies below. With no matches, there is none.
+pub fn first_at_or_below(rows: impl IntoIterator<Item = u32>, top: u32) -> Option<usize> {
+    let mut any = false;
+    for (index, row) in rows.into_iter().enumerate() {
+        if row >= top {
+            return Some(index);
+        }
+        any = true;
+    }
+    any.then_some(0)
 }
 
 /// Return one scrollbar mark for each distinct row in `rows`.
@@ -89,6 +105,14 @@ mod tests {
         assert_eq!(step(Some(1), 3, 7), Some(2));
         assert_eq!(step(Some(1), 3, 0), Some(1));
         assert_eq!(step(None, 0, 1), None);
+    }
+
+    #[test]
+    fn the_first_match_at_or_below_the_top_wraps_to_the_first() {
+        assert_eq!(first_at_or_below([2, 5, 9], 0), Some(0));
+        assert_eq!(first_at_or_below([2, 5, 9], 5), Some(1));
+        assert_eq!(first_at_or_below([2, 5, 9], 10), Some(0));
+        assert_eq!(first_at_or_below([], 3), None);
     }
 
     #[test]

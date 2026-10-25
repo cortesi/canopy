@@ -931,7 +931,10 @@ fn a_fitted_header_never_overlaps_the_body() -> Result<()> {
 fn an_overlay_marks_cell_bytes_until_the_next_publication() -> Result<()> {
     use canopy::style::PartialStyle;
 
-    use crate::{table::CellMark, view_search};
+    use crate::{
+        table::{CellMark, CellRange},
+        view_search,
+    };
 
     let mut h = harness(4, 30, 6)?;
     with(&mut h, |v, _| {
@@ -939,15 +942,19 @@ fn an_overlay_marks_cell_bytes_until_the_next_publication() -> Result<()> {
             None,
             vec![
                 CellMark {
-                    row: None,
-                    column: 1,
-                    bytes: 0..2,
+                    range: CellRange {
+                        row: None,
+                        column: 1,
+                        bytes: 0..2,
+                    },
                     role: view_search::CURRENT,
                 },
                 CellMark {
-                    row: Some(2),
-                    column: 1,
-                    bytes: 1..2,
+                    range: CellRange {
+                        row: Some(2),
+                        column: 1,
+                        bytes: 1..2,
+                    },
                     role: view_search::MATCH,
                 },
             ],

@@ -148,6 +148,11 @@ impl SearchState {
         self.current
     }
 
+    /// Make match `index` current, or none.
+    pub fn set_current(&mut self, index: Option<usize>) {
+        self.current = index.filter(|&index| index < self.matches.len());
+    }
+
     /// Update match cache if the buffer changed.
     pub fn update(&mut self, buffer: &TextBuffer) {
         if self.query.is_empty() {
