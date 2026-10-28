@@ -62,6 +62,8 @@ pub mod termbuf;
 pub mod text;
 /// Lifetime-bound worker notifications.
 pub mod wake;
+/// Shared values that wake their readers.
+pub mod watch;
 /// Widget slot borrowing and extraction guards.
 mod widget_access;
 /// World state and layout integration.

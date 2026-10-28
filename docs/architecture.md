@@ -26,7 +26,7 @@ The root holds the application, the widget, the contexts, and node handles:
 | `canopy::tree` | `ChildSlot`, `NodeIdentity`, `FocusDirection`, `FocusScope` |
 | `canopy::layout` | Layout, `View`, scrolling (`ScrollOp`, `ScrollDirection`, `ScrollAxis`, `ScrollMark`), and `RevealAlign` |
 | `canopy::render` | `Render` (including `Render::runs`), `RenderBackend`, `NopBackend`, `TermBuf`, `Cell`, `RenderLimits`, and `cursor` |
-| `canopy::runtime` | `TurnInput`, `TurnOutcome`, published frames (`FrameId`, `FrameSnapshot`, `NodeSnapshot`, `WidgetSemantics`), polls and wakes (`PollLifetime`, `NodeWakeHandle`, `wake_channel`), and notices |
+| `canopy::runtime` | `TurnInput`, `TurnOutcome`, published frames (`FrameId`, `FrameSnapshot`, `NodeSnapshot`, `WidgetSemantics`), polls and wakes (`PollLifetime`, `NodeWakeHandle`), background work (`Watch`, `wake_channel`), and notices |
 | `canopy::script` | Evaluation (`EvalRequest`, `EvalTicket`, `EvalOutcome`), automation, the script journal, trust, and fixtures |
 | `canopy::commands` | Command metadata, calls (`CommandCall::with_arg`), and arguments |
 | `canopy::style` | Style maps, `PartialStyle`, colors, effects, shared part `roles`, and `themes` with its `Palette` |
@@ -209,6 +209,27 @@ Provisional registrations allow workers started by mount hooks to wake before
 commit. Rollback removes provisional registrations and preserves valid earlier
 wakes. Successful edits also retire modals whose owner or modal widget is
 detached or replaced.
+
+## Background Work and Wakes
+
+A widget hands slow work to a thread and hears of its results through a wake,
+never a timer. The thread holds a `NodeWakeHandle` or a type that holds one.
+Each wake queues one poll of the widget, which reads the results in
+`Widget::poll`. Choose the type by what the widget needs from the results:
+
+- `Watch<T>` holds one value and its revision, for state where only the latest
+  value matters, such as a loaded page or a status. `update` changes the value,
+  advances the revision, and wakes each watcher after it releases the lock.
+  `drain` changes the value with no new revision and no wake, so a reader can
+  take part of it. A widget calls `watch(handle)` in `on_mount` and keeps the
+  revision it returns. The value, the revision, and the watchers share one
+  lock, so no update falls between that revision and the registration. In
+  `poll`, `changed(&mut seen)` says whether the value moved. Clones share the
+  value. A second `watch` from the same widget replaces its first handle, and
+  expired handles go on the next `update` or `watch`.
+- `wake_channel(handle, capacity)` is a bounded queue, for a stream of results
+  that each matter, such as the batches of a search. Each send wakes the owner,
+  and the owner drains the receiver.
 
 ## Invariants
 

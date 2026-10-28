@@ -4831,6 +4831,44 @@ pub mod runtime {
         pub fn try_send(&self, value: T) -> Result<(), TrySendError<T>>;
     }
 
+    /// A shared value with a revision. Each update wakes the widgets that watch it.
+    ///
+    /// A producer, often a background thread, changes the value with
+    /// [`update`](Self::update). A widget calls [`watch`](Self::watch) in
+    /// `on_mount`, keeps the revision it returns, and compares it with
+    /// [`changed`](Self::changed) in `poll`. Only the latest value matters: two
+    /// updates between polls wake the widget once, and it reads the second value.
+    #[derive(Clone, Debug, Default)]
+    pub struct Watch<T> {/* private fields */}
+
+    impl<T> Watch<T> {
+        /// Return whether the revision moved past `seen`, and set `seen` to it.
+        pub fn changed(&self, seen: &mut u64) -> bool;
+
+        /// Change the value without a new revision or a wake, as a reader that
+        /// drains part of it.
+        pub fn drain<R>(&self, f: impl FnOnce(&mut T) -> R) -> R;
+
+        /// Hold `value` at revision 0, with no watchers.
+        pub fn new(value: T) -> Self;
+
+        /// Read the value.
+        pub fn read<R>(&self, f: impl FnOnce(&T) -> R) -> R;
+
+        /// Return the current revision.
+        pub fn revision(&self) -> u64;
+
+        /// Change the value, advance the revision, and wake each watcher.
+        pub fn update<R>(&self, f: impl FnOnce(&mut T) -> R) -> R;
+
+        /// Wake `handle` on each update, and return the current revision. A second
+        /// handle for the same widget replaces the first.
+        ///
+        /// The revision comes from the same lock as the registration, so an update
+        /// either shows in the returned revision or wakes `handle`.
+        pub fn watch(&self, handle: NodeWakeHandle) -> u64;
+    }
+
     /// Optional application observations, without arbitrary widget serialization.
     #[derive(Clone, Debug, Default, PartialEq)]
     pub struct WidgetSemantics {

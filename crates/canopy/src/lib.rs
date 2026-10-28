@@ -83,6 +83,7 @@ pub mod runtime {
         },
         snapshot::{FrameSnapshot, NodeSnapshot, WidgetSemantics},
         wake::{NodeWakeHandle, PollLifetime, WakeOutcome, WakeSender, wake_channel},
+        watch::Watch,
     };
 }
 

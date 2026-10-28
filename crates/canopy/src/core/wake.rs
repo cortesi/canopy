@@ -94,6 +94,18 @@ impl NodeWakeHandle {
         self.stamp
     }
 
+    /// Return whether the registered lifetime of this handle has ended. A
+    /// poisoned registry counts as ended: its application has panicked.
+    pub(crate) fn is_expired(&self) -> bool {
+        let Some(shared) = self.shared.upgrade() else {
+            return true;
+        };
+        shared
+            .state
+            .lock()
+            .map_or(true, |state| !state.registrations.contains_key(&self.stamp))
+    }
+
     /// Queue one owner poll, coalesce with existing work, or report expiration.
     pub fn wake(&self) -> Result<WakeOutcome> {
         let Some(shared) = self.shared.upgrade() else {
