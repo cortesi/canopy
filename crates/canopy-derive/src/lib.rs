@@ -19,8 +19,11 @@ use syn::{Attribute, Fields, ItemImpl, Result, parse_macro_input, parse_quote};
 /// builder with typed user parameters. Both have the method's visibility.
 /// Builders omit context and injected parameters.
 /// `#[command(enabled = "method")]` adds a read-only eligibility hook. The
-/// method takes `&self` and `&dyn canopy::ViewContext` and returns
-/// `canopy::error::Result<canopy::commands::CommandStatus>`.
+/// method takes `&self` and `&dyn canopy::ViewContext`, then either nothing or
+/// every user parameter of the command in order, and returns
+/// `canopy::error::Result<canopy::commands::CommandStatus>`. A hook that takes
+/// the parameters judges each call by its arguments; arguments that do not
+/// decode disable the call.
 /// `#[command(ignore_result)]` declares that a non-unit return value is
 /// intentionally discarded instead of published in command metadata.
 ///

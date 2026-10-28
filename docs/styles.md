@@ -428,9 +428,14 @@ face, and its key keeps the key colour.
 
 `Confirm`, `Picker`, and the help overlay are dialogs. `Confirm` also pushes
 `confirm` around its dialog, and its question paints `message`, which resolves
-`confirm/message`. `Picker` pushes `picker` on its body, inside the dialog, so
-its list and filter keep the `picker/*` paths while its frame takes the shared
-dialog rules.
+`confirm/message`. Its answers are an `Answers` row: a centred row of buttons,
+which take the `dialog/button/...` paths. A question in `Tone::Error` pushes
+`error` after `confirm`, so its frame resolves `error/dialog/frame`,
+`error/dialog/frame/focused`, and `error/dialog/frame/title`. The built-in
+themes give all three the red of the palette on the panel, and make the title
+bold. `Picker` pushes `picker` on its body, inside the dialog, so its list and
+filter keep the `picker/*` paths while its frame takes the shared dialog
+rules.
 
 ## Columns
 

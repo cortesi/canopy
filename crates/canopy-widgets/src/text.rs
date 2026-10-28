@@ -95,6 +95,12 @@ impl Text {
         self
     }
 
+    /// Replace the fixed width for wrapping.
+    pub fn set_wrap_width(&mut self, width: u32) {
+        self.wrap_width = Some(width);
+        self.wrap_cache.borrow_mut().take();
+    }
+
     /// Wrap the text as `options` say, in place of `textwrap`'s defaults.
     #[must_use]
     pub fn with_wrap_options(mut self, options: WrapOptions) -> Self {

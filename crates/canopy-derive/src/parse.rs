@@ -325,6 +325,7 @@ pub fn parse_command_method(owner: &str, method: &ImplItemFn) -> Result<Option<C
         params,
         ignore_result: macro_args.ignore_result,
         enabled: macro_args.enabled,
+        enabled_params: false,
         ret,
         doc,
     }))

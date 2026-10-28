@@ -801,13 +801,16 @@ the global tier and the listed intents after its framework groups, and only whil
 the modal accepts them.
 
 A widget that runs inside modals ships a framework group from its `Register`
-impl: `Confirm::BINDINGS`, `Picker::BINDINGS`, and `List::BINDINGS` (installed
-with `List::register_bindings`). A host admits its own group plus the groups
-of the widgets inside the modal, so it never re-declares their keys. An inline
+impl: `Confirm::BINDINGS`, `Answers::BINDINGS`, `Picker::BINDINGS`, and
+`List::BINDINGS` (installed with `List::register_bindings`). A host admits its
+own group plus the groups of the widgets inside the modal, so it never
+re-declares their keys. An inline
 widget, such as Button or Root, keeps a default-binding script at the
-application tier instead. `Confirm::open` asks a question in a modal that
-admits `Confirm::BINDINGS`, and `Picker::set_commands` names what the picker's
-Enter and Esc run.
+application tier instead. `Confirm::open` asks a question in a modal of a named
+owner that admits `Confirm::BINDINGS` and `Answers::BINDINGS`, and
+`Picker::set_commands` names what the picker's Enter and Esc run. The keys of
+the answers of an `Answers` row depend on their labels, so the row takes them in
+`on_event` rather than as bindings, and help does not list them.
 
 Core registers the navigation intents (`input::NavIntent`) in every catalog.
 A node accepts one when its widget does, or when its view can move that way:
@@ -913,7 +916,7 @@ anywhere on a button resolves to it. The records are
 ordinary application bindings that a configuration can replace or unbind.
 `root.default_bindings()` installs them. A modal that admits only framework
 groups admits none of them, so a widget used there ships activation in its own
-group, as Confirm does.
+group, as `Answers` does.
 
 A modal normally opens inside its owner. A modal in the overlay layer, a
 child of the root that `ContextExt::add_modal` adds hidden, may instead open

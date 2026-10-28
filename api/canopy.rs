@@ -1998,7 +1998,15 @@ pub mod commands {
     }
 
     /// Read-only, erased command eligibility hook.
-    pub type StatusFn = fn(_: &dyn Any, _: &dyn ViewContext) -> crate::error::Result<CommandStatus>;
+    ///
+    /// The hook gets the arguments of the call it judges. A hook that reads them
+    /// decodes them as the command does; the arguments of a listing that names no
+    /// call are empty.
+    pub type StatusFn = fn(
+        _: &dyn Any,
+        _: &dyn ViewContext,
+        _: &CommandArgs,
+    ) -> crate::error::Result<CommandStatus>;
 
     /// Normalize named argument keys for lookup.
     #[doc(hidden)]

@@ -783,7 +783,11 @@ impl CommandStatus {
 }
 
 /// Read-only, erased command eligibility hook.
-pub type StatusFn = fn(&dyn Any, &dyn ViewContext) -> CoreResult<CommandStatus>;
+///
+/// The hook gets the arguments of the call it judges. A hook that reads them
+/// decodes them as the command does; the arguments of a listing that names no
+/// call are empty.
+pub type StatusFn = fn(&dyn Any, &dyn ViewContext, &CommandArgs) -> CoreResult<CommandStatus>;
 
 /// Policy for resolving a command owner.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1016,23 +1020,27 @@ impl<'a> CommandResolver<'a> {
         None
     }
 
-    /// Return availability for every registered command.
+    /// Return availability for every registered command, judged with no
+    /// arguments.
     pub(crate) fn availability(&self) -> CoreResult<Vec<CommandAvailability>> {
+        let args = CommandArgs::Positional(Vec::new());
         self.core
             .commands
             .iter()
-            .map(|(_, spec)| self.availability_for(spec))
+            .map(|(_, spec)| self.availability_for(spec, &args))
             .collect()
     }
 
-    /// Inspect one command using the same resolution and eligibility rules.
+    /// Inspect one command, judged with `args`, using the same resolution and
+    /// eligibility rules.
     pub(crate) fn availability_for(
         &self,
         spec: &'static CommandSpec,
+        args: &CommandArgs,
     ) -> CoreResult<CommandAvailability> {
         let resolution = self.resolve(spec);
         let status = match resolution {
-            Some(resolution) => Some(status_at(self.core, spec, resolution)?),
+            Some(resolution) => Some(status_at(self.core, spec, resolution, args)?),
             None => None,
         };
         Ok(CommandAvailability {
@@ -1532,14 +1540,16 @@ pub(crate) fn command_status(
         Ok(resolution) => resolution,
         Err(error) => return Ok(CommandStatus::Disabled(error.to_string())),
     };
-    status_at(core, spec, resolution)
+    status_at(core, spec, resolution, &call.args)
 }
 
-/// Run the optional read-only hook on a resolved owner.
+/// Run the optional read-only hook on a resolved owner, for a call with
+/// `args`.
 fn status_at(
     core: &Core,
     spec: &CommandSpec,
     resolution: CommandResolution,
+    args: &CommandArgs,
 ) -> CoreResult<CommandStatus> {
     let Some(status) = spec.status else {
         return Ok(CommandStatus::Enabled);
@@ -1548,7 +1558,7 @@ fn status_at(
     core.with_widget(
         node,
         WidgetOperation::access("command status"),
-        |widget, core| status(widget as &dyn Any, &CoreViewContext::new(core, node)),
+        |widget, core| status(widget as &dyn Any, &CoreViewContext::new(core, node), args),
     )?
 }
 
@@ -1583,7 +1593,7 @@ fn dispatch_on_node(
     core.with_widget_ctx(node_id, |widget, ctx| {
         if let Some(status) = spec.status
             && let CommandStatus::Disabled(reason) =
-                status(widget as &dyn Any, ctx).map_err(CommandError::execution)?
+                status(widget as &dyn Any, ctx, args).map_err(CommandError::execution)?
         {
             return Err(CommandError::Disabled {
                 id: spec.id.0.to_string(),
@@ -1650,7 +1660,11 @@ mod tests {
     }
 
     /// Fail inside eligibility to distinguish callback errors from resolution.
-    fn failed_status(_widget: &dyn Any, _view: &dyn ViewContext) -> CoreResult<CommandStatus> {
+    fn failed_status(
+        _widget: &dyn Any,
+        _view: &dyn ViewContext,
+        _args: &CommandArgs,
+    ) -> CoreResult<CommandStatus> {
         Err(Error::Invalid("eligibility hook failed".into()))
     }
 

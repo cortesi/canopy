@@ -235,7 +235,7 @@ impl Core {
                     .get(call.id.0)
                     .map(|spec| {
                         CommandResolver::for_target(self, call.target_or(node))
-                            .availability_for(spec)
+                            .availability_for(spec, &call.args)
                     })
                     .transpose()?;
                 Some(BindingCommand {

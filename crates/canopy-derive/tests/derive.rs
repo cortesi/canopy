@@ -291,18 +291,78 @@ mod tests {
     #[test]
     fn status_shim_checks_target_and_reads_current_eligibility() -> Result<()> {
         let status = Eligible::spec_update().status.expect("eligibility hook");
+        let args = CommandArgs::Positional(Vec::new());
         let mut target = Eligible { enabled: false };
         assert_eq!(
-            with_view(|ctx| status(&target, ctx))?,
+            with_view(|ctx| status(&target, ctx, &args))?,
             CommandStatus::Disabled("no selection".into())
         );
         target.enabled = true;
         assert_eq!(
-            with_view(|ctx| status(&target, ctx))?,
+            with_view(|ctx| status(&target, ctx, &args))?,
             CommandStatus::Enabled
         );
-        assert!(with_view(|ctx| status(&Collision, ctx)).is_err());
+        assert!(with_view(|ctx| status(&Collision, ctx, &args)).is_err());
         assert!(Foo::spec_a().status.is_none());
+        Ok(())
+    }
+
+    /// A list whose rows are each enabled or not.
+    struct Rows {
+        /// Whether each row can be picked.
+        enabled: Vec<bool>,
+    }
+
+    #[derive_commands]
+    impl Rows {
+        fn can_pick(
+            &self,
+            _ctx: &dyn canopy::ViewContext,
+            index: usize,
+            _label: Option<String>,
+        ) -> Result<CommandStatus> {
+            Ok(if self.enabled.get(index).copied().unwrap_or(false) {
+                CommandStatus::Enabled
+            } else {
+                CommandStatus::Disabled(format!("row {index} is off"))
+            })
+        }
+
+        #[command(enabled = "can_pick")]
+        fn pick(&self, _ctx: &mut dyn canopy::Context, index: usize, label: Option<String>) {
+            let _ = (index, label);
+        }
+    }
+
+    #[test]
+    fn a_status_hook_can_judge_the_arguments_of_the_call() -> Result<()> {
+        let status = Rows::spec_pick().status.expect("eligibility hook");
+        let target = Rows {
+            enabled: vec![false, true],
+        };
+        assert_eq!(
+            with_view(|ctx| status(&target, ctx, &Rows::call_pick(1, None).args))?,
+            CommandStatus::Enabled
+        );
+        assert_eq!(
+            with_view(|ctx| status(&target, ctx, &Rows::call_pick(0, None).args))?,
+            CommandStatus::Disabled("row 0 is off".into())
+        );
+        let named = CommandArgs::Named(
+            [("index".to_string(), ArgValue::Int(1))]
+                .into_iter()
+                .collect(),
+        );
+        assert_eq!(
+            with_view(|ctx| status(&target, ctx, &named))?,
+            CommandStatus::Enabled
+        );
+        // Arguments that do not decode disable the call rather than fail.
+        let empty = CommandArgs::Positional(Vec::new());
+        assert!(matches!(
+            with_view(|ctx| status(&target, ctx, &empty))?,
+            CommandStatus::Disabled(_)
+        ));
         Ok(())
     }
 

@@ -442,6 +442,19 @@ impl Palette {
                 ],
                 PartialStyle::new().bg(p.panel_bg),
             )
+            // A question that reports a failure pushes `error`, and its frame
+            // and title take the red of the palette.
+            .style_all(
+                &["/error/dialog/frame", "/error/dialog/frame/focused"],
+                PartialStyle::new().fg(p.red).bg(p.panel_bg),
+            )
+            .style(
+                "/error/dialog/frame/title",
+                PartialStyle::new()
+                    .fg(p.red)
+                    .bg(p.panel_bg)
+                    .attrs(AttrSet::new(Attr::Bold)),
+            )
             // An answer keeps the panel ground and its key colour whether or
             // not it has focus, so every key stays visible. An unfocused answer
             // is framed like an unfocused frame, and the focused answer takes

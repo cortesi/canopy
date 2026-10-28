@@ -10,23 +10,26 @@ use crate::{
 };
 
 /// Validate enabled hooks at their declarations so failures point to the
-/// method that must change instead of generated adapter code.
-fn validate_enabled_hooks(input: &ItemImpl, commands: &[CommandMeta]) -> syn::Result<()> {
+/// method that must change instead of generated adapter code, and record
+/// which hooks take the command's user parameters.
+fn validate_enabled_hooks(input: &ItemImpl, commands: &mut [CommandMeta]) -> syn::Result<()> {
     for command in commands {
+        let Some(enabled) = &command.enabled else {
+            continue;
+        };
+        let method = input.items.iter().find_map(|item| match item {
+            ImplItem::Fn(method) if method.sig.ident == *enabled => Some(method),
+            _ => None,
+        });
         // The proc macro runs before cfg expansion, so a disabled command can
         // legitimately name a hook (and types) that do not exist in this
         // build. Active conditional commands are still checked by the
         // generated status adapter.
         if !command.cfg_attrs.is_empty() {
+            command.enabled_params = method.is_some_and(|method| method.sig.inputs.len() > 2);
             continue;
         }
-        let Some(enabled) = &command.enabled else {
-            continue;
-        };
-        let Some(method) = input.items.iter().find_map(|item| match item {
-            ImplItem::Fn(method) if method.sig.ident == *enabled => Some(method),
-            _ => None,
-        }) else {
+        let Some(method) = method else {
             return Err(syn::Error::new_spanned(
                 enabled,
                 "enabled hook must name a method in the same impl",
@@ -52,12 +55,22 @@ fn validate_enabled_hooks(input: &ItemImpl, commands: &[CommandMeta]) -> syn::Re
                 "enabled hook must take &dyn ViewContext after &self",
             ));
         };
-        if inputs.next().is_some() || is_context_ref(&context.ty, "ViewContext") != Some(false) {
+        if is_context_ref(&context.ty, "ViewContext") != Some(false) {
             return Err(syn::Error::new_spanned(
                 context,
                 "enabled hook must take exactly one &dyn ViewContext argument",
             ));
         }
+        // After the context, a hook takes nothing, or every user parameter of
+        // the command in order, so its answer can depend on the arguments.
+        let params = inputs.count();
+        if params != 0 && params != command.user_params().len() {
+            return Err(syn::Error::new_spanned(
+                &method.sig.inputs,
+                "enabled hook must take no parameters after the context, or the command's parameters",
+            ));
+        }
+        command.enabled_params = params != 0;
         if !is_command_status_result(&method.sig.output) {
             return Err(syn::Error::new_spanned(
                 &method.sig.output,
@@ -687,15 +700,60 @@ impl CommandMeta {
     }
 
     /// Render the checked immutable target adapter for an eligibility method.
+    ///
+    /// A hook that takes the command's user parameters gets them decoded from
+    /// the call, as the invoke shim decodes them. Arguments that do not decode
+    /// disable the call, with the decoding error as the reason.
     fn status_tokens(&self) -> proc_macro2::TokenStream {
         let Some(method) = &self.enabled else {
             return quote! {};
         };
         let status_ident = self.status_ident();
+        let call = if self.enabled_params {
+            let names_const_ident = self.names_const_ident();
+            let positional_bindings = self.positional_bindings();
+            let named_bindings = self.named_bindings();
+            let arity_check = self.arity_check_tokens();
+            let params = self.user_params();
+            let idents: Vec<&syn::Ident> = params.iter().map(|param| &param.ident).collect();
+            let types = params.iter().map(|param| &param.ty);
+            quote! {
+                let decoded = (|| -> ::std::result::Result<
+                    (#(#types,)*),
+                    canopy::commands::CommandError,
+                > {
+                    match args {
+                        canopy::commands::CommandArgs::Positional(values) => {
+                            #arity_check
+                            #(#positional_bindings)*
+                            Ok((#(#idents,)*))
+                        }
+                        canopy::commands::CommandArgs::Named(values) => {
+                            let normalized = canopy::commands::normalize_named_args(
+                                values,
+                                Self::#names_const_ident,
+                            )?;
+                            #(#named_bindings)*
+                            Ok((#(#idents,)*))
+                        }
+                    }
+                })();
+                match decoded {
+                    Ok((#(#idents,)*)) => target.#method(ctx, #(#idents),*),
+                    Err(error) => Ok(canopy::commands::CommandStatus::Disabled(error.to_string())),
+                }
+            }
+        } else {
+            quote! {
+                let _ = args;
+                target.#method(ctx)
+            }
+        };
         quote! {
             fn #status_ident(
                 target: &dyn ::std::any::Any,
                 ctx: &dyn canopy::ViewContext,
+                args: &canopy::commands::CommandArgs,
             ) -> canopy::error::Result<canopy::commands::CommandStatus>
             where
                 Self: 'static,
@@ -703,7 +761,7 @@ impl CommandMeta {
                 let target = target.downcast_ref::<Self>().ok_or_else(|| {
                     canopy::error::Error::Invalid("command status target type mismatch".into())
                 })?;
-                target.#method(ctx)
+                #call
             }
         }
     }
@@ -744,7 +802,7 @@ pub fn expand_derive_commands(input: &ItemImpl) -> syn::Result<proc_macro2::Toke
             commands.push(command);
         }
     }
-    validate_enabled_hooks(input, &commands)?;
+    validate_enabled_hooks(input, &mut commands)?;
 
     let mut generated = proc_macro2::TokenStream::new();
     let mut spec_refs = Vec::new();

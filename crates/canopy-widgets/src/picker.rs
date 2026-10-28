@@ -1084,16 +1084,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use canopy::{
-        commands::CommandTarget,
-        geom::Size,
-        input::{ModalBindings, ModalOptions},
-        render::cursor,
-        testing::harness::Harness,
-    };
+    use canopy::{commands::CommandTarget, geom::Size, render::cursor, testing::harness::Harness};
 
     use super::*;
-    use crate::Confirm;
+    use crate::{Confirm, ConfirmRequest};
 
     /// Build a picker showing `items`, rendered once.
     fn picker(items: &[&str], width: u32, height: u32) -> Result<Harness> {
@@ -1993,24 +1987,9 @@ mod tests {
         let items: Vec<String> = (0..8).map(|row| format!("/tmp/entry-{row}")).collect();
         let borrowed: Vec<&str> = items.iter().map(String::as_str).collect();
         let mut harness = picker(&borrowed, 40, 12)?;
-        let (overlay, focus) =
-            harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
-                let _ = picker;
-                let overlay = context.add_modal(Confirm::new())?;
-                let focus =
-                    context.with_widget_mut(overlay, |confirm: &mut Confirm, context| {
-                        confirm.ask(context, "Delete", "/tmp/entry-1")?;
-                        // An answer takes focus only once it has something to
-                        // run, as it would in a host.
-                        confirm.set_commands(
-                            context,
-                            PickerList::<String>::call_clear_filter(),
-                            PickerList::<String>::call_clear_filter(),
-                        )?;
-                        confirm.initial_focus()
-                    })?;
-                Ok((overlay, focus))
-            })?;
+        let overlay = harness.with_root_widget_context(|_: &mut Picker<String>, context| {
+            context.add_modal(Confirm::new())
+        })?;
         harness.render()?;
         assert!(
             !harness.tbuf().contains_text("Delete"),
@@ -2029,13 +2008,18 @@ mod tests {
         })?;
 
         let token = harness.with_root_widget_context(|_: &mut Picker<String>, context| {
-            context.open_modal(ModalOptions {
-                owner: context.node_id(),
-                modal: overlay.into(),
-                initial_focus: focus,
-                dim_target: None,
-                bindings: ModalBindings::Application,
-            })
+            let owner = context.node_id();
+            Confirm::open(
+                context,
+                overlay,
+                owner,
+                ConfirmRequest::yes_no(
+                    "Delete",
+                    "/tmp/entry-1",
+                    PickerList::<String>::call_clear_filter(),
+                    PickerList::<String>::call_clear_filter(),
+                ),
+            )
         })?;
         harness.render()?;
         assert!(
@@ -2046,9 +2030,11 @@ mod tests {
             harness.tbuf().contains_text("Bookmarks"),
             "the dialog stays under the overlay"
         );
-        assert_eq!(
-            focused(&harness),
-            Some(focus),
+        assert!(
+            harness
+                .canopy
+                .with_root_view(|context| context.focused_within(overlay.into()))
+                .is_some(),
             "the overlay takes the keyboard"
         );
 

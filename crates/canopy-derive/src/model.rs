@@ -87,6 +87,8 @@ pub struct CommandMeta {
     pub(crate) ignore_result: bool,
     /// Read-only command eligibility method.
     pub(crate) enabled: Option<syn::Ident>,
+    /// Whether the eligibility method takes the command's user parameters.
+    pub(crate) enabled_params: bool,
     /// Return type metadata.
     pub(crate) ret: ReturnMeta,
     /// Command documentation, taken from the method's doc comment.

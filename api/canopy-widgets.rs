@@ -106,15 +106,116 @@ pub trait Selectable: Widget {
     fn set_selected(&mut self, selected: bool);
 }
 
-/// One of the two answers a question takes.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum Answer {
-    /// Agree to the question.
-    Yes,
-    /// Decline it, which is where a dialog opens unless a host says otherwise.
-    #[default]
-    No,
+/// One answer of a row: a label, the key that gives it, and the call it posts.
+#[derive(Clone, Debug)]
+pub struct Answer {/* private fields */}
+
+impl Answer {
+    /// Return the call that the answer posts.
+    pub fn call(&self) -> &CommandCall;
+
+    /// Return the key that gives the answer, in ASCII lower case.
+    pub fn key(&self) -> Option<char>;
+
+    /// Return the label of the button.
+    pub fn label(&self) -> &str;
+
+    /// An answer whose key is the first character of `label`, in ASCII lower
+    /// case. A label that is empty, or that starts with a character that is
+    /// not ASCII alphanumeric, gives no key.
+    pub fn new(label: impl Into<String>, call: CommandCall) -> Self;
+
+    /// Replace the key, or remove it with `None`. The key is stored in ASCII
+    /// lower case.
+    #[must_use]
+    pub fn with_key(self, key: Option<char>) -> Self;
 }
+
+/// A centred row of buttons, one for each answer.
+///
+/// Each button posts [`Answers::give`] with its index, aimed at the row, and
+/// the row posts the call of the answer. The key of each answer gives it too:
+/// the row takes a plain character that names an answer. These keys depend on
+/// the labels, so they are not bindings, and help does not list them. Each
+/// button marks its key in its label.
+///
+/// [`Answers::arm_after`] makes the row ignore every answer for a while, so a
+/// key pressed for the view below does not answer a question that has just
+/// opened. Until then the buttons show as disabled, and the row takes a key
+/// that names an answer and does nothing with it.
+///
+/// The row measures to the width of its buttons and the height of one button,
+/// and fills the width it is given, with the buttons centred as a group.
+#[derive(Default)]
+pub struct Answers {/* private fields */}
+
+impl Answers {
+    /// Build a positional call with typed user arguments.
+    pub fn call_focus(direction: FocusDirection) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_give(index: usize) -> CommandCall;
+
+    /// Return the command spec for this command.
+    pub fn spec_focus() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_give() -> &'static CommandSpec;
+}
+
+impl Answers {
+    /// The framework group of a row of answers: Enter, Space, and a click give
+    /// the focused answer, and the arrows move between answers. A dialog
+    /// admits it beside its own group.
+    pub const BINDINGS: FrameworkBindingGroup = _;
+    /// Ignore every answer for `delay` from now. `ctx` is the context of the
+    /// row. The buttons show as disabled until then.
+    pub fn arm_after(
+        &mut self,
+        ctx: &mut dyn Context,
+        delay: Duration,
+    ) -> canopy::error::Result<()>;
+
+    /// Return the button of the answer at `index`.
+    pub fn button(&self, index: usize) -> Option<NodeId>;
+
+    /// Move focus among the answers.
+    ///
+    /// The scope is the row, so focus never leaves it.
+    /// @param direction Which way to move.
+    pub fn focus(
+        &self,
+        ctx: &mut dyn Context,
+        direction: FocusDirection,
+    ) -> canopy::error::Result<()>;
+
+    /// Give the answer at `index`: post its call, when the row is armed and
+    /// the call is enabled.
+    /// @param index Position of the answer, from the left.
+    pub fn give(&mut self, ctx: &mut dyn Context, index: usize) -> canopy::error::Result<()>;
+
+    /// Build an empty row of solid buttons.
+    pub fn new() -> Self;
+
+    /// Show `answers`, left to right, in place of the current ones. `ctx` is
+    /// the context of the row. The row is armed until
+    /// [`Answers::arm_after`] says otherwise.
+    ///
+    /// Two answers with the same key are refused, and the row keeps its
+    /// current answers.
+    pub fn set(&mut self, ctx: &mut dyn Context, answers: Vec<Answer>)
+    -> canopy::error::Result<()>;
+
+    /// Draw each button in `look`.
+    #[must_use]
+    pub fn with_look(self, look: ButtonLook) -> Self;
+}
+
+impl CommandNode for Answers {}
+
+impl Register for Answers {}
+
+impl Widget for Answers {}
 
 /// A face of the big text ladder, smallest first.
 ///
@@ -507,6 +608,17 @@ pub enum CanvasWidth {
     Fixed(u32),
 }
 
+/// Who closes the dialog when an answer is given.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum Closing {
+    /// The call of the answer closes the dialog. A call that fails leaves the
+    /// question open.
+    #[default]
+    ByCall,
+    /// The dialog closes, then posts the call of the answer.
+    BeforeCall,
+}
+
 /// Stacked columns above and below one axis.
 ///
 /// Each [`Column`] has a stack that grows up from the axis on the upper scale
@@ -758,107 +870,81 @@ impl CommandNode for Columns {}
 
 impl Widget for Columns {}
 
-/// A centred modal asking a yes or no question.
+/// A centred modal that asks a question and offers labelled answers.
 ///
 /// The dialog centres a titled frame over whatever it covers, states its
-/// question, and offers it as two buttons. It holds no answer: a host supplies
-/// the command each button runs, and keeps whatever agreeing to it does,
-/// including closing the dialog.
+/// question, and offers its answers as a row of [`Answers`]. The key of each
+/// answer gives it, Esc gives the declining answer, and the declining answer
+/// has focus when the dialog opens. A host opens it with [`Confirm::open`].
 ///
-/// Open it inside a modal with [`Confirm::initial_focus`] as the initial
-/// focus, and the scope dims what the dialog covers and gives it the keyboard.
+/// Each answer posts its call. Under [`Closing::ByCall`] that call closes the
+/// dialog; under [`Closing::BeforeCall`] the dialog closes first.
 #[derive(Default)]
 pub struct Confirm {/* private fields */}
 
 impl Confirm {
     /// Build a positional call with typed user arguments.
+    pub fn call_answer(index: usize) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_decline() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
     pub fn call_focus(direction: FocusDirection) -> CommandCall;
 
-    /// Build a positional call with typed user arguments.
-    pub fn call_no() -> CommandCall;
+    /// Return the command spec for this command.
+    pub fn spec_answer() -> &'static CommandSpec;
 
-    /// Build a positional call with typed user arguments.
-    pub fn call_yes() -> CommandCall;
+    /// Return the command spec for this command.
+    pub fn spec_decline() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_focus() -> &'static CommandSpec;
-
-    /// Return the command spec for this command.
-    pub fn spec_no() -> &'static CommandSpec;
-
-    /// Return the command spec for this command.
-    pub fn spec_yes() -> &'static CommandSpec;
 }
 
 impl Confirm {
-    /// The framework group a question admits while it is open.
-    ///
-    /// `y` and `n` answer whichever button holds focus, because an accelerator
-    /// names an answer rather than a focus, and Esc declines. Enter, Space, and
-    /// a click give the focused answer, and the arrows and tabs move between
-    /// the answers inside the dialog alone.
+    /// The framework group of the dialog: Esc gives the declining answer, and
+    /// Tab and Shift-Tab move focus inside the dialog. [`Confirm::open`]
+    /// admits it with [`Answers::BINDINGS`].
     pub const BINDINGS: FrameworkBindingGroup = _;
-    /// Ask `message` under `title`.
-    pub fn ask(
-        &mut self,
-        context: &mut dyn Context,
-        title: &str,
-        message: &str,
-    ) -> canopy::error::Result<()>;
+    /// Give the answer at `index`, as the request's `closing` says.
+    /// @param index Position of the answer, from the left.
+    pub fn answer(&mut self, ctx: &mut dyn Context, index: usize) -> canopy::error::Result<()>;
 
-    /// Move focus between the answers.
+    /// Give the declining answer, through the same check as every other
+    /// answer.
+    pub fn decline(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Move focus inside the dialog.
     ///
     /// The scope is the dialog, so focus never leaves it for the application
     /// the dialog covers.
     /// @param direction Which way to move.
     pub fn focus(
-        &mut self,
-        context: &mut dyn Context,
+        &self,
+        ctx: &mut dyn Context,
         direction: FocusDirection,
     ) -> canopy::error::Result<()>;
 
-    /// Return the answer that takes the keyboard when the dialog opens, or an
-    /// error before it mounts.
-    pub fn initial_focus(&self) -> canopy::error::Result<NodeId>;
+    /// Return whether the dialog is open. A dialog that a call closed reads as
+    /// closed.
+    pub fn is_open(&self, ctx: &dyn ViewContext) -> bool;
 
     /// Build an empty dialog.
     pub fn new() -> Self;
 
-    /// Give the negative answer, whichever answer holds focus.
-    pub fn no(&mut self, context: &mut dyn Context) -> canopy::error::Result<()>;
-
-    /// Ask `request` in `confirm` as a modal owned by the calling node, and
-    /// return its token.
+    /// Open `request` in `confirm`, as a modal of `owner`, and return its
+    /// token. A host that asks over another modal names that modal's node as
+    /// the owner.
     ///
-    /// The modal admits [`Confirm::BINDINGS`] alone, so the question stands
-    /// until it is answered. Closing it is part of what each answer's call
-    /// does.
+    /// A request with no answers, a `decline` out of range, or two answers with
+    /// one key is refused, as is a request while the dialog is open.
     pub fn open(
-        context: &mut dyn Context,
+        ctx: &mut dyn Context,
         confirm: TypedId<Self>,
+        owner: NodeId,
         request: ConfirmRequest,
     ) -> canopy::error::Result<ModalToken>;
-
-    /// Set what each answer does, before the dialog opens.
-    ///
-    /// Each command is stored on its own button, so a click, a key, and an
-    /// accelerator all run the same one. The dialog decides nothing: closing it
-    /// is part of what a host's answer command does.
-    pub fn set_commands(
-        &mut self,
-        context: &mut dyn Context,
-        yes: CommandCall,
-        no: CommandCall,
-    ) -> canopy::error::Result<()>;
-
-    /// Choose the answer that takes focus each time the dialog opens.
-    ///
-    /// Declining is the default, because a question worth asking is one whose
-    /// affirmative answer should not be reached by accident.
-    pub fn set_default_answer(&mut self, answer: Answer);
-
-    /// Give the affirmative answer, whichever answer holds focus.
-    pub fn yes(&mut self, context: &mut dyn Context) -> canopy::error::Result<()>;
 }
 
 impl CommandNode for Confirm {}
@@ -867,19 +953,72 @@ impl Register for Confirm {}
 
 impl Widget for Confirm {}
 
-/// What a dialog asks, and what each answer runs.
+/// What a dialog asks, and its answers.
 #[derive(Clone, Debug)]
 pub struct ConfirmRequest {
     /// Title on the dialog's frame.
     pub title: String,
-    /// The question.
+    /// The question. Each line starts a paragraph, and a paragraph wraps to
+    /// `message_width`.
     pub message: String,
-    /// Call the affirmative answer runs.
-    pub yes: CommandCall,
-    /// Call the negative answer, and Esc, run.
-    pub no: CommandCall,
+    /// The answers, left to right.
+    pub answers: Vec<Answer>,
+    /// The answer that Esc gives and that has focus at first. It declines.
+    pub decline: usize,
+    /// How the dialog shows.
+    pub tone: Tone,
+    /// Who closes the dialog when an answer is given.
+    pub closing: Closing,
+    /// Ignore the answers for this long after the dialog opens.
+    pub arm_after: Option<Duration>,
+    /// Widest message, in columns. The message wraps to it.
+    pub message_width: u32,
     /// Node dimmed while the dialog is open.
     pub dim_target: Option<NodeId>,
+}
+
+impl ConfirmRequest {
+    /// Add an answer at the right.
+    #[must_use]
+    pub fn answer(self, answer: Answer) -> Self;
+
+    /// Ignore the answers for `delay` after the dialog opens.
+    #[must_use]
+    pub fn arm_after(self, delay: Duration) -> Self;
+
+    /// Let `closing` say who closes the dialog.
+    #[must_use]
+    pub fn closing(self, closing: Closing) -> Self;
+
+    /// Add the answer that declines, at the right, and make it the `decline`
+    /// answer.
+    #[must_use]
+    pub fn declining(self, answer: Answer) -> Self;
+
+    /// Dim `target` while the dialog is open.
+    #[must_use]
+    pub fn dim(self, target: NodeId) -> Self;
+
+    /// Wrap the message to at most `columns`.
+    #[must_use]
+    pub fn message_width(self, columns: u32) -> Self;
+
+    /// A question with no answers yet, in the plain tone, closed by its calls,
+    /// with a message width of 64. Until [`ConfirmRequest::declining`] names
+    /// another, the first answer declines.
+    pub fn new(title: impl Into<String>, message: impl Into<String>) -> Self;
+
+    /// Show the dialog in `tone`.
+    #[must_use]
+    pub fn tone(self, tone: Tone) -> Self;
+
+    /// A `yes` and a `no` answer, where `no` declines.
+    pub fn yes_no(
+        title: impl Into<String>,
+        message: impl Into<String>,
+        yes: CommandCall,
+        no: CommandCall,
+    ) -> Self;
 }
 
 /// A widget that lays out its children and has no other behavior.
@@ -3656,6 +3795,9 @@ impl Text {
     /// Replace the raw text content.
     pub fn set_text(&mut self, raw: impl Into<String>);
 
+    /// Replace the fixed width for wrapping.
+    pub fn set_wrap_width(&mut self, width: u32);
+
     /// Configure the canvas width behavior.
     #[must_use]
     pub fn with_canvas_width(self, width: CanvasWidth) -> Self;
@@ -3697,6 +3839,18 @@ impl Selectable for Text {}
 impl Widget for Text {}
 
 impl !Sync for Text {}
+
+/// How a question shows: plain, or as a failure, with the frame and the title
+/// in the error color.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum Tone {
+    /// The plain dialog.
+    #[default]
+    Plain,
+    /// A failure: the dialog pushes the `error` layer, and the theme draws its
+    /// frame and title in red.
+    Error,
+}
 
 /// Policy for publishing an input value in semantic snapshots.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

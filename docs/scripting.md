@@ -123,7 +123,9 @@ replacement target.
 
 Discovery reports resolution, eligibility, disabled reason, and missing event
 requirements separately. Dispatch rechecks eligibility before invoking the
-command. Disabled state is not authorization and cannot guarantee that an
+command. An eligibility hook can judge the arguments of a call, as a row of
+answers judges each answer by its index. `canopy.commands()` names no call, so
+it judges such a command with no arguments, and reports it disabled. Disabled state is not authorization and cannot guarantee that an
 external operation will succeed.
 
 Injected Rust parameters, such as context and events, are not supplied by

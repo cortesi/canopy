@@ -3,6 +3,8 @@
 //! This crate provides a collection of reusable widgets for building terminal
 //! user interfaces with canopy.
 
+/// A centred row of buttons, each of which gives one answer.
+mod answers;
 /// Large text in a built-in pixel font.
 mod big_text;
 /// Border widget with customizable glyphs.
@@ -17,7 +19,7 @@ mod click;
 mod column_chart;
 /// Panes side by side with scroll position dividers.
 mod columns;
-/// Modal yes or no question.
+/// Modal question with labelled answers.
 mod confirm;
 /// Layout-only container.
 mod container;
@@ -122,12 +124,13 @@ mod toast;
 /// Conventions every searchable view shares: roles, steps, reveal, and marks.
 pub mod view_search;
 
+pub use answers::{Answer, Answers};
 pub use big_text::{BigFace, BigGrid, BigSize, BigText, BigWeight};
 pub use border::{Border, BoxGlyphs};
 pub use button::{Button, ButtonLook};
 pub use column_chart::ColumnChart;
 pub use columns::Columns;
-pub use confirm::{Answer, Confirm, ConfirmRequest};
+pub use confirm::{Closing, Confirm, ConfirmRequest, Tone};
 pub use container::Container;
 pub use dialog::Dialog;
 pub use diff_view::DiffView;
