@@ -81,6 +81,7 @@ pub mod runtime {
             Failure, Notice, NoticeId, NoticeLevel, NoticeLog, NoticePost, NoticeSource,
             TOAST_LIMIT,
         },
+        slot::{CancelToken, Job, SlotClosed, SlotReceiver, SlotSender, request_slot},
         snapshot::{FrameSnapshot, NodeSnapshot, WidgetSemantics},
         wake::{NodeWakeHandle, PollLifetime, WakeOutcome, WakeSender, wake_channel},
         watch::Watch,

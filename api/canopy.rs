@@ -41,6 +41,7 @@ use std::{
     str::FromStr,
     sync::{
         Arc,
+        atomic::AtomicBool,
         mpmc::{RecvError, SendError, TrySendError},
     },
     time::{Duration, Instant},
@@ -4560,6 +4561,19 @@ pub mod runtime {
     /// Maximum toasts that show at once. A newer toast ends the oldest early.
     pub const TOAST_LIMIT: usize = 4;
 
+    /// Tells a worker that a newer request or a cancel replaced its job.
+    #[derive(Clone, Debug)]
+    pub struct CancelToken {/* private fields */}
+
+    impl CancelToken {
+        /// Return the flag under the token, for an API that takes an
+        /// `Arc<AtomicBool>`.
+        pub fn flag(&self) -> Arc<AtomicBool>;
+
+        /// Return whether a newer request or a cancel replaced the job.
+        pub fn is_cancelled(&self) -> bool;
+    }
+
     /// What the runtime knows about a failure it caught.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub struct Failure {
@@ -4593,6 +4607,17 @@ pub mod runtime {
     impl FrameSnapshot {
         /// Return the screen size: the dimensions of the rendered buffer.
         pub fn size(&self) -> Size;
+    }
+
+    /// A request that a worker took from a [`request_slot`].
+    #[derive(Debug)]
+    pub struct Job<T> {
+        /// The request.
+        pub request: T,
+        /// The generation that [`SlotSender::send`] returned for the request.
+        pub generation: u64,
+        /// Set when a newer request or a cancel replaces the job.
+        pub cancel: CancelToken,
     }
 
     /// Owned identity, geometry, and semantics for one live arena node.
@@ -4771,6 +4796,47 @@ pub mod runtime {
         Attachment,
     }
 
+    /// The receiver has gone, so the slot takes no request.
+    #[derive(Clone, Copy, Debug, Display, Eq, PartialEq, std::error::Error)]
+    pub struct SlotClosed;
+
+    /// The receiving half of a [`request_slot`], which a worker thread holds.
+    ///
+    /// Dropping the receiver cancels the running job, and each later
+    /// [`SlotSender::send`] fails.
+    #[derive(Debug)]
+    pub struct SlotReceiver<T> {/* private fields */}
+
+    impl<T> SlotReceiver<T> {
+        /// Wait for the next request. Return `None` when every sender is gone.
+        pub fn recv(&self) -> Option<Job<T>>;
+    }
+
+    impl<T> Drop for SlotReceiver<T> {}
+
+    /// The sending half of a [`request_slot`].
+    ///
+    /// Dropping the last sender cancels the running job and ends the worker's
+    /// [`SlotReceiver::recv`].
+    #[derive(Clone, Debug)]
+    pub struct SlotSender<T> {/* private fields */}
+
+    impl<T> SlotSender<T> {
+        /// Drop the waiting request, cancel the running job, and advance the
+        /// generation, so a late result of the running job is no longer current.
+        /// Return the new generation.
+        pub fn cancel(&self) -> u64;
+
+        /// Return the current generation.
+        pub fn generation(&self) -> u64;
+
+        /// Put `request` in the box, cancel the running job, and return the
+        /// generation of the new request.
+        pub fn send(&self, request: T) -> Result<u64, SlotClosed>;
+    }
+
+    impl<T> Drop for SlotSender<T> {}
+
     /// One runtime input.
     pub enum TurnInput {
         /// Deliver input events that arrived together, in order.
@@ -4892,6 +4958,15 @@ pub mod runtime {
         /// Availability of the widget's activation command.
         pub activation_status: Option<CommandStatus>,
     }
+
+    /// Create a request box that holds at most one request: a new request
+    /// replaces a waiting one and cancels a running one.
+    ///
+    /// A widget keeps the sender and a worker thread loops on
+    /// [`SlotReceiver::recv`]. Each send and cancel advances the generation, so a
+    /// result is current only while its job's generation equals
+    /// [`SlotSender::generation`].
+    pub fn request_slot<T>() -> (SlotSender<T>, SlotReceiver<T>);
 
     /// Create a bounded channel whose sends poll the owner of `handle`.
     ///

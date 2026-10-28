@@ -26,7 +26,7 @@ The root holds the application, the widget, the contexts, and node handles:
 | `canopy::tree` | `ChildSlot`, `NodeIdentity`, `FocusDirection`, `FocusScope` |
 | `canopy::layout` | Layout, `View`, scrolling (`ScrollOp`, `ScrollDirection`, `ScrollAxis`, `ScrollMark`), and `RevealAlign` |
 | `canopy::render` | `Render` (including `Render::runs`), `RenderBackend`, `NopBackend`, `TermBuf`, `Cell`, `RenderLimits`, and `cursor` |
-| `canopy::runtime` | `TurnInput`, `TurnOutcome`, published frames (`FrameId`, `FrameSnapshot`, `NodeSnapshot`, `WidgetSemantics`), polls and wakes (`PollLifetime`, `NodeWakeHandle`), background work (`Watch`, `wake_channel`), and notices |
+| `canopy::runtime` | `TurnInput`, `TurnOutcome`, published frames (`FrameId`, `FrameSnapshot`, `NodeSnapshot`, `WidgetSemantics`), polls and wakes (`PollLifetime`, `NodeWakeHandle`), background work (`Watch`, `wake_channel`, `request_slot`), and notices |
 | `canopy::script` | Evaluation (`EvalRequest`, `EvalTicket`, `EvalOutcome`), automation, the script journal, trust, and fixtures |
 | `canopy::commands` | Command metadata, calls (`CommandCall::with_arg`), and arguments |
 | `canopy::style` | Style maps, `PartialStyle`, colors, effects, shared part `roles`, and `themes` with its `Palette` |
@@ -230,6 +230,28 @@ Each wake queues one poll of the widget, which reads the results in
 - `wake_channel(handle, capacity)` is a bounded queue, for a stream of results
   that each matter, such as the batches of a search. Each send wakes the owner,
   and the owner drains the receiver.
+
+The requests to a worker take one of two forms:
+
+- `request_slot()` is a box that holds at most one request, for a worker where
+  only the newest request matters, such as a page load that a new selection
+  replaces. The widget keeps the `SlotSender`, and the worker thread loops on
+  `SlotReceiver::recv`, which returns a `Job` with the request, its generation,
+  and a `CancelToken`. `send` replaces a waiting request and cancels the
+  running job. `cancel` drops the waiting request and cancels the running job
+  with no new request. Each `send` and `cancel` advances the generation, so a
+  result is current only while its job's generation equals
+  `SlotSender::generation`. A worker that ignores its token still cannot
+  publish a stale result. Dropping the last sender cancels the running job and
+  makes `recv` return `None`, so the thread ends. Dropping the receiver makes
+  each later `send` fail with `SlotClosed`. `CancelToken::flag` hands the flag
+  to an API that takes an `Arc<AtomicBool>`.
+- A queue of its own, such as a `std::sync::mpsc` channel, for a worker that
+  must run each request, or that weighs several kinds of request against each
+  other.
+
+A worker often pairs the two sides: a request slot for its requests, and a
+`Watch` or a `wake_channel` for its results.
 
 ## Invariants
 

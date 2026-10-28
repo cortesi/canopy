@@ -56,6 +56,8 @@ pub mod keyroute;
 pub mod poll;
 /// Consumer-aware binding selection.
 mod select;
+/// Single-slot request boxes for workers.
+pub mod slot;
 /// Terminal buffer types.
 pub mod termbuf;
 /// Text utilities.
