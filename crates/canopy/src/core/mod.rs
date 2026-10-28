@@ -44,6 +44,7 @@ pub mod canopy;
 pub mod change;
 /// Core context traits and implementations.
 pub mod context;
+pub mod format;
 /// Help snapshot API.
 pub mod help;
 /// Node ID types.

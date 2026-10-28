@@ -2359,6 +2359,114 @@ pub mod error {
     impl JsonSchema for ScriptErrorKind {}
 }
 
+pub mod format {
+    //! Formats of values for display: ages, counts, sizes, durations, and paths
+    //! below a home directory.
+    //!
+    //! Each function is pure and holds no widget state. A month is 30 days and a
+    //! year is 365 days.
+
+    /// How an age reads. Each field is public, so a host builds the form it
+    /// needs.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct AgeFormat {
+        /// Unit names.
+        pub units: AgeUnits,
+        /// Show seconds below one minute, such as `45s`. Else an age below one
+        /// minute is `now`.
+        pub seconds: bool,
+        /// Use weeks between one week and one month. Only `Long` units have
+        /// weeks.
+        pub weeks: bool,
+        /// Text for an age below one minute when `seconds` is off.
+        pub now: &'static str,
+        /// Text after every age that is not `now`, such as ` ago`.
+        pub suffix: &'static str,
+    }
+
+    impl AgeFormat {
+        /// `now`, `5m`, `3h`, `2d`, `4mo`, `1y`: the ages of file listings.
+        pub const COMPACT: Self = _;
+        /// `just now`, `12 min ago`, `1 hour ago`, `2 weeks ago`: ages in prose.
+        pub const PROSE: Self = _;
+        /// `59s`, `1m`, `1h`, `1d`, `4mo`: the ages of the notice log.
+        pub const SECONDS: Self = _;
+        /// Format `age`.
+        #[must_use]
+        pub fn format(&self, age: Duration) -> String;
+
+        /// Return the time until the text of `age` changes, so a view repaints
+        /// only then.
+        #[must_use]
+        pub fn next_change(&self, age: Duration) -> Duration;
+
+        /// Return this form with `suffix`, such as
+        /// `AgeFormat::COMPACT.with_suffix(" ago")`.
+        #[must_use]
+        pub const fn with_suffix(self, suffix: &'static str) -> Self;
+    }
+
+    /// Unit names of an age.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum AgeUnits {
+        /// `45s`, `5m`, `3h`, `2d`, `4mo`, `1y`.
+        Short,
+        /// `45 seconds`, `12 min`, `1 hour`, `3 days`, `2 weeks`, `4 months`,
+        /// `1 year`. Every unit except `min` takes a plural `s`.
+        Long,
+    }
+
+    /// A home directory, for showing paths below it with `~`.
+    ///
+    /// A home matches both its path as given and its canonical form, so a path
+    /// through a symbolic link to the home shows with `~` too.
+    #[derive(Clone, Debug)]
+    pub struct Home {/* private fields */}
+
+    impl Home {
+        /// The home of the `HOME` variable, or a home that matches nothing.
+        #[must_use]
+        pub fn from_env() -> Self;
+
+        /// Use `path` as the home. It resolves the canonical form once, here. A
+        /// relative path, or `/`, gives a home that matches nothing.
+        pub fn new(path: impl Into<PathBuf>) -> Self;
+
+        /// Return `path` with the home as `~`, such as `~/src/fh`.
+        #[must_use]
+        pub fn path(&self, path: &std::path::Path) -> String;
+
+        /// Return `text` with each path below the home shown with `~`, at path
+        /// boundaries only.
+        ///
+        /// A path of the home starts at the start of the text or after a
+        /// character that ends a path, and it continues with `/` or ends. ANSI
+        /// control sequences, as in colored command-line output, count as no
+        /// characters and stay in the text.
+        #[must_use]
+        pub fn text(&self, text: &str) -> String;
+    }
+
+    /// Return a size in units of 1024, with one decimal below ten: `812`, `3.4k`,
+    /// `12k`, `1.0m`, `2.0g`. The text never exceeds five columns.
+    #[must_use]
+    pub fn bytes(n: u64) -> String;
+
+    /// Return a count with three significant digits, in units of 1000: `987`,
+    /// `1.23k`, `12.3k`, `123k`, `1.00M`.
+    #[must_use]
+    pub fn count(n: u64) -> String;
+
+    /// Return a duration in its largest units: `850 ms`, `7.2 s`, `48 s`,
+    /// `1 min 42 s`, `1 h 12 min`.
+    #[must_use]
+    pub fn duration(d: Duration) -> String;
+
+    /// Return every digit of `n`, in groups of three: `3,084,112`.
+    #[must_use]
+    pub fn grouped(n: u64) -> String;
+}
+
 pub mod input {
     //! Input: events, bindings and their tiers, intents, modals, and what the
     //! route does with a key.

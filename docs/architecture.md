@@ -31,6 +31,7 @@ The root holds the application, the widget, the contexts, and node handles:
 | `canopy::commands` | Command metadata, calls (`CommandCall::with_arg`), and arguments |
 | `canopy::style` | Style maps, `PartialStyle`, colors, effects, shared part `roles`, and `themes` with its `Palette` |
 | `canopy::text` | `width`, `cell_width`, truncation (`Truncate`), word wrapping (`wrap`, `wrap_with`, `WrapOptions`), grapheme slicing, and grapheme iteration (`graphemes`, `grapheme_indices`), which skips Unicode segmentation between ASCII characters |
+| `canopy::format` | Formats of values for display: ages (`AgeFormat`, `AgeUnits`), counts (`count`, `grouped`), sizes (`bytes`), durations (`duration`), and paths below a home directory (`Home`) |
 | `canopy::geom`, `canopy::path`, `canopy::error` | Geometry, node paths, and errors |
 | `canopy::terminal` | The Crossterm run loop |
 

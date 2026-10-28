@@ -1,16 +1,12 @@
 //! The options panel: a modal dialog built from the schema, which shows each
 //! value with a control for its kind.
 
-use std::{
-    env, mem,
-    path::{Path, PathBuf},
-    rc::Rc,
-    result::Result as StdResult,
-};
+use std::{mem, path::Path, rc::Rc, result::Result as StdResult};
 
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, Setup, TypedId, ViewContext, Widget,
     error::{Error, Result},
+    format::Home,
     geom::{Line, Rect, Size},
     input::{
         BindingAction, BindingOptions, BindingTier, Event, FrameworkBindingGroup, IntentName,
@@ -1437,14 +1433,7 @@ fn control(leaf: &Leaf, value: &Value) -> (String, bool) {
 
 /// Return `path` for display, with the home directory as `~`.
 fn display_path(path: &Path) -> String {
-    let home = env::var_os("HOME").map(PathBuf::from);
-    match home
-        .as_deref()
-        .and_then(|home| path.strip_prefix(home).ok())
-    {
-        Some(rest) => format!("~/{}", rest.display()),
-        None => path.display().to_string(),
-    }
+    Home::from_env().path(path)
 }
 
 impl Widget for PanelBody {

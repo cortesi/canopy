@@ -11,6 +11,7 @@ use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, TypedId, ViewContext, ViewContextExt,
     Widget,
     error::{Error, Result},
+    format::AgeFormat,
     geom::{Line, Size},
     input::Event,
     layout::{
@@ -23,7 +24,7 @@ use canopy::{
 
 use crate::Dialog;
 
-/// Columns the age takes, right-aligned, such as "12s" or "59m".
+/// Columns the age takes, right-aligned, such as "12s", "59m", or "11mo".
 const AGE_WIDTH: usize = 4;
 /// Blank columns between the age and the message.
 const AGE_GAP: usize = 2;
@@ -133,32 +134,6 @@ pub fn rows(context: &dyn ViewContext) -> Vec<LogRow> {
         .collect()
 }
 
-/// Return how long ago `at` was, as the panel shows it.
-fn age(at: Instant, now: Instant) -> String {
-    let seconds = now.saturating_duration_since(at).as_secs();
-    match seconds {
-        0..60 => format!("{seconds}s"),
-        60..3600 => format!("{}m", seconds / 60),
-        3600..86_400 => format!("{}h", seconds / 3600),
-        _ => format!("{}d", seconds / 86_400),
-    }
-}
-
-/// Return how long until the age of `at` next changes its label.
-fn next_label(at: Instant, now: Instant) -> Duration {
-    let elapsed = now.saturating_duration_since(at);
-    let unit = match elapsed.as_secs() {
-        0..60 => 1,
-        60..3600 => 60,
-        3600..86_400 => 3600,
-        _ => 86_400,
-    };
-    let unit = Duration::from_secs(unit);
-    let into =
-        Duration::from_nanos(u64::try_from(elapsed.as_nanos() % unit.as_nanos()).unwrap_or(0));
-    unit - into
-}
-
 /// The scrolling list inside the panel.
 #[derive(Default)]
 pub struct NoticeList {
@@ -234,7 +209,8 @@ impl Widget for NoticeList {
             .enumerate()
         {
             let y = content.tl.y + u32::try_from(offset).unwrap_or(u32::MAX);
-            let age = format!("{:>AGE_WIDTH$}", age(row.at, now));
+            let age = AgeFormat::SECONDS.format(now.saturating_duration_since(row.at));
+            let age = format!("{age:>AGE_WIDTH$}");
             render.text("age", Line::new(content.tl.x, y, content.w), &age)?;
             let lead = AGE_WIDTH + AGE_GAP;
             let budget = width.saturating_sub(lead);
@@ -266,7 +242,11 @@ impl Widget for NoticeList {
             return Ok(None);
         }
         let now = context.now();
-        Ok(self.rows.iter().map(|row| next_label(row.at, now)).min())
+        Ok(self
+            .rows
+            .iter()
+            .map(|row| AgeFormat::SECONDS.next_change(now.saturating_duration_since(row.at)))
+            .min())
     }
 
     fn name(&self) -> NodeName {
@@ -407,25 +387,5 @@ mod tests {
         harness.render()?;
         assert!(!open(&harness), "closing the owner closes the panel");
         Ok(())
-    }
-
-    #[test]
-    fn ages_read_in_their_largest_whole_unit() {
-        let at = Instant::now();
-        let after = |seconds| at + Duration::from_secs(seconds);
-        assert_eq!(age(at, after(0)), "0s");
-        assert_eq!(age(at, after(59)), "59s");
-        assert_eq!(age(at, after(60)), "1m");
-        assert_eq!(age(at, after(3599)), "59m");
-        assert_eq!(age(at, after(3600)), "1h");
-        assert_eq!(age(at, after(90_000)), "1d");
-    }
-
-    #[test]
-    fn the_next_label_falls_on_the_unit_boundary() {
-        let at = Instant::now();
-        let after = |millis| at + Duration::from_millis(millis);
-        assert_eq!(next_label(at, after(250)), Duration::from_millis(750));
-        assert_eq!(next_label(at, after(61_000)), Duration::from_secs(59));
     }
 }
