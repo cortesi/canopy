@@ -351,8 +351,19 @@ max, flex weights must be non-zero, and padding arithmetic must not overflow.
 The engine still uses saturating arithmetic internally so invalid or extreme
 geometry does not panic.
 
-Fixed outer sizes use `fixed_width()` and `fixed_height()`, which encode fixed
-size as equal min and max constraints. There is no separate fixed-size enum.
+Fixed outer sizes use `fixed_width()` and `fixed_height()`. Each sets equal min
+and max bounds on its axis, and sets the axis to `Sizing::Measure`. A fixed axis
+is never a flex axis, so a flex parent gives the child exactly its size. There is
+no separate fixed-size enum.
+
+A row or a column first sizes its measured children. Its flex children then
+share the space that remains by weight, within the min and max bounds of each
+child on the main axis. A `max_width_fraction` bound counts as a max. A share
+that a bound clamps stays at the bound, and the other flex children share the
+rest by weight again, until no share changes. A child with a max below its share
+thus frees the rest for its siblings, as in CSS flexbox. When the minimums alone
+exceed the space, each child takes its minimum, and the children overflow. A
+measurement of the row and its final layout use the same allocation.
 
 `Layout::max_width_fraction()` bounds an outer width by a `Fraction` of the
 parent's width budget: the parent's content width, less the gaps between its

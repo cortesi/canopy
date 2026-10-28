@@ -3394,11 +3394,19 @@ pub mod layout {
         /// Fill available space with flex sizing on both axes.
         pub fn fill() -> Self;
 
-        /// Convenience: fixed outer height without a `Fixed` enum.
+        /// Fix the outer height at `n`: set both height bounds, and measure the
+        /// height.
+        ///
+        /// A fixed axis is never a flex axis, so a flex parent gives it exactly
+        /// `n`.
         #[must_use]
         pub fn fixed_height(self, n: u32) -> Self;
 
-        /// Convenience: fixed outer width without a `Fixed` enum.
+        /// Fix the outer width at `n`: set both width bounds, and measure the
+        /// width.
+        ///
+        /// A fixed axis is never a flex axis, so a flex parent gives it exactly
+        /// `n`.
         #[must_use]
         pub fn fixed_width(self, n: u32) -> Self;
 
@@ -3506,11 +3514,19 @@ pub mod layout {
         /// Apply constraints and validate both the widget and resulting layout.
         pub fn apply(self, base: Layout) -> Result<Layout, LayoutValidationError>;
 
-        /// Set both outer height bounds.
+        /// Fix the outer height at `value`: set both height bounds, and measure the
+        /// height.
+        ///
+        /// A fixed axis is never a flex axis, so a flex parent gives it exactly
+        /// `value`.
         #[must_use]
         pub fn fixed_height(self, value: u32) -> Self;
 
-        /// Set both outer width bounds.
+        /// Fix the outer width at `value`: set both width bounds, and measure the
+        /// width.
+        ///
+        /// A fixed axis is never a flex axis, so a flex parent gives it exactly
+        /// `value`.
         #[must_use]
         pub fn fixed_width(self, value: u32) -> Self;
 

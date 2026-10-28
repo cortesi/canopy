@@ -397,16 +397,26 @@ impl LayoutOverride {
         self.height = Some(Sizing::Flex(weight));
         self
     }
-    /// Set both outer width bounds.
+    /// Fix the outer width at `value`: set both width bounds, and measure the
+    /// width.
+    ///
+    /// A fixed axis is never a flex axis, so a flex parent gives it exactly
+    /// `value`.
     #[must_use]
     pub fn fixed_width(mut self, value: u32) -> Self {
+        self.width = Some(Sizing::Measure);
         self.min_width = Some(Some(value));
         self.max_width = Some(Some(value));
         self
     }
-    /// Set both outer height bounds.
+    /// Fix the outer height at `value`: set both height bounds, and measure the
+    /// height.
+    ///
+    /// A fixed axis is never a flex axis, so a flex parent gives it exactly
+    /// `value`.
     #[must_use]
     pub fn fixed_height(mut self, value: u32) -> Self {
+        self.height = Some(Sizing::Measure);
         self.min_height = Some(Some(value));
         self.max_height = Some(Some(value));
         self
@@ -554,16 +564,24 @@ impl Layout {
         self.overflow_y = self.overflow_y.resolve(y);
     }
 
-    /// Convenience: fixed outer width without a `Fixed` enum.
+    /// Fix the outer width at `n`: set both width bounds, and measure the
+    /// width.
+    ///
+    /// A fixed axis is never a flex axis, so a flex parent gives it exactly
+    /// `n`.
     #[must_use]
     pub fn fixed_width(self, n: u32) -> Self {
-        self.min_width(n).max_width(n)
+        self.width(Sizing::Measure).min_width(n).max_width(n)
     }
 
-    /// Convenience: fixed outer height without a `Fixed` enum.
+    /// Fix the outer height at `n`: set both height bounds, and measure the
+    /// height.
+    ///
+    /// A fixed axis is never a flex axis, so a flex parent gives it exactly
+    /// `n`.
     #[must_use]
     pub fn fixed_height(self, n: u32) -> Self {
-        self.min_height(n).max_height(n)
+        self.height(Sizing::Measure).min_height(n).max_height(n)
     }
 
     /// Set padding edges.
@@ -909,7 +927,8 @@ mod tests {
             .apply(base)
             .expect("valid override");
         assert_eq!(layout.width, Sizing::Flex(2));
-        assert_eq!(layout.height, Sizing::Flex(3));
+        // A fixed axis is measured, whatever came before.
+        assert_eq!(layout.height, Sizing::Measure);
         assert_eq!((layout.min_height, layout.max_height), (Some(4), Some(4)));
         assert_eq!((layout.padding, layout.gap), (base.padding, base.gap));
         assert!(matches!(

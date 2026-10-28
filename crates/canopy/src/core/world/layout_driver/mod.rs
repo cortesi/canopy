@@ -412,7 +412,7 @@ impl<'a> LayoutPass<'a> {
 
         let budget = measured_width_budget(layout, constraints, children.len());
         let mut fixed_main_total = 0u32;
-        let mut flex_children: Vec<(usize, u32, Layout)> = Vec::new();
+        let mut flex_children: Vec<(usize, FlexItem, Layout)> = Vec::new();
         let mut child_sizes = vec![Size::ZERO; children.len()];
 
         for (i, child) in children.iter().enumerate() {
@@ -431,9 +431,8 @@ impl<'a> LayoutPass<'a> {
 
             effective.inherit_overflow(layout.overflow_x, layout.overflow_y);
 
-            let eff_main = main_sizing(effective, layout.direction);
-            if let Sizing::Flex(w) = eff_main {
-                flex_children.push((i, w, effective));
+            if let Some(item) = FlexItem::of(effective, layout.direction) {
+                flex_children.push((i, item, effective));
                 continue;
             }
 
@@ -448,8 +447,8 @@ impl<'a> LayoutPass<'a> {
         let remaining = avail_main.saturating_sub(fixed_main_total.saturating_add(gap_total));
 
         if main_fixed && !flex_children.is_empty() {
-            let weights: Vec<u32> = flex_children.iter().map(|(_, w, _)| *w).collect();
-            let shares = allocate_flex_shares(remaining, &weights);
+            let items: Vec<FlexItem> = flex_children.iter().map(|(_, item, _)| *item).collect();
+            let shares = allocate_flex(remaining, &items);
             for (idx, (child_index, _, effective)) in flex_children.iter().enumerate() {
                 let child_available = layout
                     .direction
@@ -575,24 +574,23 @@ impl<'a> LayoutPass<'a> {
         // so a child's reduced share never shrinks its fraction bound again.
         let budget = Some(width_budget(layout, content.w, children.len()));
         let mut fixed_main_total = 0u32;
-        let mut flex_weights: Vec<u32> = Vec::new();
-        let mut pre_sizes = vec![Size::ZERO; children.len()];
+        let mut flex_items: Vec<FlexItem> = Vec::new();
+        // The main size of each measured child, or `None` for a flex child.
+        let mut measured_main = vec![None; children.len()];
 
         for (i, child) in children.iter().enumerate() {
             let child_layout = self.node_layout_snapshot(*child)?.0;
-            let main = main_sizing(child_layout, layout.direction);
-            if let Sizing::Flex(w) = main {
-                flex_weights.push(w);
+            let mut effective = bound_width(child_layout, budget);
+            if let Some(item) = FlexItem::of(effective, layout.direction) {
+                flex_items.push(item);
                 continue;
             }
-
-            let mut effective = bound_width(child_layout, budget);
             effective.inherit_overflow(parent_overflow.x, parent_overflow.y);
 
-            let child_available = content;
-            let size = self.resolve_outer_size_with_layout(*child, effective, child_available)?;
-            pre_sizes[i] = size;
-            fixed_main_total = fixed_main_total.saturating_add(layout.direction.main_size(size));
+            let size = self.resolve_outer_size_with_layout(*child, effective, content)?;
+            let main = layout.direction.main_size(size);
+            measured_main[i] = Some(main);
+            fixed_main_total = fixed_main_total.saturating_add(main);
         }
 
         let gap_total = layout
@@ -603,23 +601,11 @@ impl<'a> LayoutPass<'a> {
             .main_size(content)
             .saturating_sub(fixed_main_total.saturating_add(gap_total));
 
-        let shares = allocate_flex_shares(remaining, &flex_weights);
-
-        let mut flex_idx = 0usize;
+        let mut shares = allocate_flex(remaining, &flex_items).into_iter();
         let mut actual_sizes = Vec::with_capacity(children.len());
         let mut natural_offsets = Vec::with_capacity(children.len());
-        for (i, child) in children.iter().enumerate() {
-            let child_layout = self.node_layout_snapshot(*child)?.0;
-
-            let main = match main_sizing(child_layout, layout.direction) {
-                Sizing::Flex(_) => {
-                    let share = shares[flex_idx];
-                    flex_idx += 1;
-                    share
-                }
-                Sizing::Measure => layout.direction.main_size(pre_sizes[i]),
-            };
-
+        for (child, measured) in children.iter().zip(measured_main) {
+            let main = measured.or_else(|| shares.next()).unwrap_or_default();
             let mut child_available = layout
                 .direction
                 .size_from_main_cross(main, layout.direction.cross_size(content));
@@ -918,8 +904,87 @@ pub fn clamp_scroll(scroll: &mut Point, view: Size, canvas: Size) {
     scroll.y = scroll.y.min(max_y);
 }
 
-/// Allocate remaining space proportionally across flex weights.
-fn allocate_flex_shares(remaining: u32, weights: &[u32]) -> Vec<u32> {
+/// One flex child of a row or column: its weight, and the bounds of its
+/// effective layout on the main axis.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct FlexItem {
+    /// Flex weight.
+    weight: u32,
+    /// Minimum outer size on the main axis.
+    min: Option<u32>,
+    /// Maximum outer size on the main axis.
+    max: Option<u32>,
+}
+
+impl FlexItem {
+    /// Return the flex item of `layout` along `direction`, or `None` when that
+    /// axis is measured.
+    fn of(layout: Layout, direction: LayoutDirection) -> Option<Self> {
+        let Sizing::Flex(weight) = main_sizing(layout, direction) else {
+            return None;
+        };
+        let (min, max) = match direction {
+            LayoutDirection::Row => (layout.min_width, layout.max_width),
+            LayoutDirection::Column | LayoutDirection::Stack => {
+                (layout.min_height, layout.max_height)
+            }
+        };
+        Some(Self { weight, min, max })
+    }
+
+    /// Clamp `share` to the bounds of this item.
+    fn clamp(self, share: u32) -> u32 {
+        clamp_axis(share, self.min, self.max)
+    }
+}
+
+/// Share `remaining` among flex items by weight, within the bounds of each item.
+///
+/// Each item takes its weighted share, clamped to its bounds. When the clamps take more space
+/// than the shares, the items that a minimum raised keep their minimum. When the clamps free
+/// space, the items that a maximum lowered keep their maximum. The other items share what is
+/// left by weight again, until no share changes. When the minimums alone exceed `remaining`,
+/// each item takes its minimum and the total overflows.
+fn allocate_flex(remaining: u32, items: &[FlexItem]) -> Vec<u32> {
+    let mut frozen: Vec<Option<u32>> = vec![None; items.len()];
+    loop {
+        let open: Vec<usize> = (0..items.len()).filter(|i| frozen[*i].is_none()).collect();
+        let used = frozen
+            .iter()
+            .flatten()
+            .fold(0u32, |sum, n| sum.saturating_add(*n));
+        let weights: Vec<u32> = open.iter().map(|i| items[*i].weight).collect();
+        let shares = weighted_shares(remaining.saturating_sub(used), &weights);
+
+        let clamped: Vec<u32> = open
+            .iter()
+            .zip(&shares)
+            .map(|(index, share)| items[*index].clamp(*share))
+            .collect();
+        let violation: i64 = clamped
+            .iter()
+            .zip(&shares)
+            .map(|(clamped, share)| i64::from(*clamped) - i64::from(*share))
+            .sum();
+        for ((index, clamped), share) in open.iter().zip(clamped).zip(shares) {
+            let freeze = match violation {
+                0 => true,
+                1.. => clamped > share,
+                _ => clamped < share,
+            };
+            if freeze {
+                frozen[*index] = Some(clamped);
+            }
+        }
+        if violation == 0 {
+            return frozen.into_iter().map(Option::unwrap_or_default).collect();
+        }
+    }
+}
+
+/// Split `remaining` across `weights` in proportion, giving every cell to some
+/// weight.
+fn weighted_shares(remaining: u32, weights: &[u32]) -> Vec<u32> {
     if remaining == 0 || weights.is_empty() {
         return vec![0; weights.len()];
     }
@@ -1060,6 +1125,9 @@ fn pointer_acceptance(core: &Core, node_id: NodeId) -> bool {
         .accept_pointer(&CoreViewContext::new(core, node_id))
 }
 
+/// Bounded flex allocation tests.
+#[cfg(test)]
+mod flex_tests;
 /// Width fraction layout tests.
 #[cfg(test)]
 mod fraction_tests;

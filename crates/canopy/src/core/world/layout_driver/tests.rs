@@ -9,7 +9,7 @@ use proptest::prelude::*;
 use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 use super::{
-    LayoutPass, align_offset, allocate_flex_shares, clamp_outer, clamp_scroll, constraint_for_axis,
+    LayoutPass, align_offset, clamp_outer, clamp_scroll, constraint_for_axis, weighted_shares,
 };
 use crate::{
     Context, NodeId,
@@ -312,20 +312,20 @@ fn wrap_gap_counts_only_visible_children() -> Result<()> {
 
 #[test]
 fn flex_shares_sum_equals_remaining() {
-    let shares = allocate_flex_shares(17, &[1, 2, 3, 4]);
+    let shares = weighted_shares(17, &[1, 2, 3, 4]);
     let sum: u32 = shares.iter().sum();
     assert_eq!(sum, 17);
 }
 
 #[test]
 fn flex_shares_proportional_sanity() {
-    let shares = allocate_flex_shares(5, &[3, 7]);
+    let shares = weighted_shares(5, &[3, 7]);
     assert_eq!(shares, vec![2, 3]);
 }
 
 #[test]
 fn flex_shares_stable_tie_break() {
-    let shares = allocate_flex_shares(2, &[1, 1, 1]);
+    let shares = weighted_shares(2, &[1, 1, 1]);
     assert_eq!(shares, vec![1, 1, 0]);
 }
 
@@ -343,7 +343,7 @@ fn boundary_layout_u32() -> impl Strategy<Value = u32> {
 proptest! {
     #[test]
     fn flex_shares_preserve_remaining_space(remaining in 0u32..1000, weights in prop::collection::vec(1u32..20, 0..12)) {
-        let shares = allocate_flex_shares(remaining, &weights);
+        let shares = weighted_shares(remaining, &weights);
         prop_assert_eq!(shares.len(), weights.len());
         let expected = if weights.is_empty() { 0 } else { remaining };
         prop_assert_eq!(shares.iter().sum::<u32>(), expected);
@@ -1143,7 +1143,7 @@ fn canvas_errors_include_operation_node_and_path() -> Result<()> {
 #[test]
 fn flex_shares_keep_large_remainders() {
     assert_eq!(
-        allocate_flex_shares(2, &[3_000_000_000, 4_000_000_000, 4_000_000_000]),
+        weighted_shares(2, &[3_000_000_000, 4_000_000_000, 4_000_000_000]),
         [0, 1, 1]
     );
 }
