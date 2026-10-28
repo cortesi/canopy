@@ -969,7 +969,7 @@ impl LuauHost {
         let prepared = match prepared {
             Some(prepared) => prepared,
             None => runtime
-                .prepare_ready(source, PrepareOptions::new())
+                .prepare_graph_ready(source, PrepareOptions::new())
                 .map_err(|error| prepare_graph_error_to_canopy(&error))?,
         };
         let root = runtime.load_prepared(&prepared).map_err(|error| {
