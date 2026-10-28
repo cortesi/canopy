@@ -7,7 +7,10 @@
 
 use std::{collections::BTreeMap, fmt};
 
-use crate::error::{Error, Result};
+use crate::{
+    error::{Error, Result},
+    layout::{ScrollDirection, ScrollOp},
+};
 
 /// Validated name of a bindable intent.
 ///
@@ -133,6 +136,26 @@ impl NavIntent {
             Self::PageDown => "canopy.nav.page_down",
             Self::First => "canopy.nav.first",
             Self::Last => "canopy.nav.last",
+        }
+    }
+
+    /// Return the scroll this intent makes in a view that does not hold a
+    /// cursor.
+    ///
+    /// `Up`, `Down`, `Left`, and `Right` scroll one line, `PageUp` and
+    /// `PageDown` one page, and `First` and `Last` to the top and the
+    /// bottom.
+    #[must_use]
+    pub const fn scroll_op(self) -> ScrollOp {
+        match self {
+            Self::Up => ScrollOp::Lines(ScrollDirection::Up, 1),
+            Self::Down => ScrollOp::Lines(ScrollDirection::Down, 1),
+            Self::Left => ScrollOp::Lines(ScrollDirection::Left, 1),
+            Self::Right => ScrollOp::Lines(ScrollDirection::Right, 1),
+            Self::PageUp => ScrollOp::Pages(ScrollDirection::Up, 1),
+            Self::PageDown => ScrollOp::Pages(ScrollDirection::Down, 1),
+            Self::First => ScrollOp::Top,
+            Self::Last => ScrollOp::Bottom,
         }
     }
 

@@ -6,11 +6,11 @@ use std::{
 };
 
 use crate::{
-    Context, NodeName,
+    Context, NodeId, NodeName,
     core::context::ViewContext,
     error::Result,
     geom::{Rect, Size},
-    input::{Event, key::Key},
+    input::{Event, NavIntent, key::Key},
     layout::{CanvasContext, Layout, MeasureConstraints, Measurement},
     render::Render,
     runtime::{PollLifetime, WidgetSemantics},
@@ -139,6 +139,17 @@ pub trait Widget: Any {
     /// returns [`EventOutcome::Ignore`].
     fn on_intent(&mut self, _intent: &str, _ctx: &mut dyn Context) -> Result<EventOutcome> {
         Ok(EventOutcome::Ignore)
+    }
+
+    /// Return the node whose view `nav` scrolls in place of this node's view,
+    /// when this widget declines `nav`.
+    ///
+    /// `None`, the default, scrolls this node's own view. A pane that holds
+    /// the keyboard can name a scrolling view inside it. The intent is a
+    /// parameter, so a pane can forward some intents and keep others. When
+    /// the target cannot move, the route offers the intent to the next node.
+    fn scroll_target(&self, _nav: NavIntent, _ctx: &dyn ViewContext) -> Option<NodeId> {
+        None
     }
 
     /// Attempt to focus this widget.

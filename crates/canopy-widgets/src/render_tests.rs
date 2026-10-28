@@ -3,11 +3,12 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        CanopyBuilder, Context, ContextExt, NodeName, Register, ViewContextExt, Widget, buf,
+        CanopyBuilder, Context, ContextExt, NodeId, NodeName, Register, ViewContext,
+        ViewContextExt, Widget, buf,
         commands::{CommandNode, CommandSpec},
         error::Result,
         geom::{Point, PointI32, Size},
-        input::{Event, key, mouse},
+        input::{Event, NavIntent, key, mouse},
         layout::{Edges, Layout, ScrollOp},
         testing::harness::Harness,
     };
@@ -487,6 +488,93 @@ mod tests {
         harness.key('j')?;
         assert_eq!(scroll_y(&harness), 7, "a view at its end declines");
         Ok(())
+    }
+
+    /// A focusable pane over a text view. Vertical navigation scrolls the
+    /// text, and the rest scrolls the pane.
+    struct ForwardingPane {
+        /// The text view, once mounted.
+        text: Option<NodeId>,
+    }
+
+    impl Widget for ForwardingPane {
+        fn layout(&self) -> Layout {
+            Layout::fill()
+        }
+
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+            true
+        }
+
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            let lines = (0..10)
+                .map(|n| format!("line {n}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let text = ctx.add_child(ctx.node_id(), Text::new(lines))?;
+            self.text = Some(text.into());
+            Ok(())
+        }
+
+        fn scroll_target(&self, nav: NavIntent, _ctx: &dyn ViewContext) -> Option<NodeId> {
+            (!matches!(nav, NavIntent::Left | NavIntent::Right))
+                .then_some(self.text)
+                .flatten()
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("forwarding_pane")
+        }
+    }
+
+    #[test]
+    fn a_scroll_target_takes_the_navigation_its_pane_declines() -> Result<()> {
+        let mut harness = Harness::builder(SnapshotRoot::new(ForwardingPane { text: None }))
+            .script(
+                "nav",
+                r#"canopy.keymap({
+                    { key = "j", description = "Down", action = "canopy.nav.down" },
+                    { key = "G", description = "Last", action = "canopy.nav.last" },
+                    { key = "g", description = "First", action = "canopy.nav.first" },
+                })"#,
+            )
+            .size(10, 3)
+            .build()?;
+        harness.render()?;
+        let pane = harness.find_nodes("**/forwarding_pane")?[0];
+        let scroll_y = |harness: &Harness, node: NodeId| {
+            harness
+                .canopy
+                .with_root_view(|ctx| ctx.view_of(node).expect("view").scroll.y)
+        };
+        let text = harness.find_nodes("**/forwarding_pane/text")?[0];
+        harness.key('j')?;
+        assert_eq!(scroll_y(&harness, text), 1, "the pane scrolls its text");
+        assert_eq!(scroll_y(&harness, pane), 0, "the pane's own view stays");
+        harness.key('G')?;
+        assert_eq!(scroll_y(&harness, text), 7);
+        harness.key('g')?;
+        assert_eq!(scroll_y(&harness, text), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn navigation_intents_map_to_scrolls() {
+        use canopy::layout::ScrollDirection;
+        assert_eq!(
+            NavIntent::Up.scroll_op(),
+            ScrollOp::Lines(ScrollDirection::Up, 1)
+        );
+        assert_eq!(
+            NavIntent::Right.scroll_op(),
+            ScrollOp::Lines(ScrollDirection::Right, 1)
+        );
+        assert_eq!(
+            NavIntent::PageDown.scroll_op(),
+            ScrollOp::Pages(ScrollDirection::Down, 1)
+        );
+        assert_eq!(NavIntent::First.scroll_op(), ScrollOp::Top);
+        assert_eq!(NavIntent::Last.scroll_op(), ScrollOp::Bottom);
     }
 
     #[test]

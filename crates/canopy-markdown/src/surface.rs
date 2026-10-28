@@ -323,7 +323,7 @@ impl RenderedSurface {
             (state.claims(intent), state.overlays.selection.is_some())
         };
         if !claimed {
-            return self.scroll(ctx, nav_scroll(intent));
+            return self.scroll(ctx, intent.scroll_op());
         }
         if selection {
             return self.move_selection(ctx, intent);
@@ -798,7 +798,7 @@ impl Widget for RenderedSurface {
     fn accepts_intent(&self, intent: &str, ctx: &dyn ViewContext) -> bool {
         NavIntent::from_name(intent).is_some_and(|nav| {
             self.state.borrow().claims(nav)
-                || ctx.scroll_outcome(ctx.node_id(), nav_scroll(nav))
+                || ctx.scroll_outcome(ctx.node_id(), nav.scroll_op())
                     == Some(ChangeOutcome::Changed)
         })
     }
@@ -849,20 +849,6 @@ impl Widget for RenderedSurface {
         state.dragging = false;
         state.drag_anchor = None;
         drop(ctx.release_mouse());
-    }
-}
-
-/// Translate navigation into explicit local viewport operations.
-pub fn nav_scroll(intent: NavIntent) -> ScrollOp {
-    match intent {
-        NavIntent::Up => ScrollOp::By(0, -1),
-        NavIntent::Down => ScrollOp::By(0, 1),
-        NavIntent::Left => ScrollOp::By(-1, 0),
-        NavIntent::Right => ScrollOp::By(1, 0),
-        NavIntent::PageUp => ScrollOp::pages(-1),
-        NavIntent::PageDown => ScrollOp::pages(1),
-        NavIntent::First => ScrollOp::To(Point::ZERO),
-        NavIntent::Last => ScrollOp::To(Point { x: 0, y: u32::MAX }),
     }
 }
 

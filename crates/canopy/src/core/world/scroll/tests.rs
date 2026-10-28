@@ -584,3 +584,13 @@ fn readonly_scroll_outcome_matches_the_mutating_scroll() -> Result<()> {
     assert_eq!(core.scroll_outcome(missing, ScrollOp::By(0, 1)), None);
     Ok(())
 }
+
+#[test]
+fn top_and_bottom_keep_the_horizontal_offset() {
+    let scroll = Point { x: 3, y: 5 };
+    assert_eq!(ScrollOp::Top.target(scroll, SCREEN), Point { x: 3, y: 0 });
+    assert_eq!(
+        ScrollOp::Bottom.target(scroll, SCREEN),
+        Point { x: 3, y: u32::MAX }
+    );
+}

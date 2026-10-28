@@ -484,6 +484,10 @@ pub enum ScrollOp {
     /// that axis less one line, so consecutive pages keep one line of
     /// overlap.
     Pages(ScrollDirection, u32),
+    /// Scroll to the top of the canvas, and keep the horizontal offset.
+    Top,
+    /// Scroll to the bottom of the canvas, and keep the horizontal offset.
+    Bottom,
 }
 
 impl ScrollOp {
@@ -513,6 +517,11 @@ impl ScrollOp {
                 let page = extent.saturating_sub(1).max(1);
                 direction.step(scroll, page.saturating_mul(count))
             }
+            Self::Top => Point { x: scroll.x, y: 0 },
+            Self::Bottom => Point {
+                x: scroll.x,
+                y: u32::MAX,
+            },
         }
     }
 }

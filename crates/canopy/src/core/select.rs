@@ -126,7 +126,26 @@ impl Core {
     /// this test, so an unreadable widget never becomes an action consumer.
     pub(crate) fn node_accepts_intent(&self, node: NodeId, action: &str, focus: NodeId) -> bool {
         self.widget_accepts_intent(node, action, focus)
-            || NavIntent::from_name(action).is_some_and(|nav| self.nav_scroll(node, nav).is_some())
+            || NavIntent::from_name(action).is_some_and(|nav| {
+                self.nav_scroll(self.nav_scroll_target(node, nav, focus), nav)
+                    .is_some()
+            })
+    }
+
+    /// Return the node whose view a declined `nav` at `node` scrolls: the
+    /// widget's scroll target, or else the node itself.
+    ///
+    /// A widget that cannot be read names no target.
+    fn nav_scroll_target(&self, node: NodeId, nav: NavIntent, focus: NodeId) -> NodeId {
+        let context = CoreViewContext::with_focus(self, node, focus);
+        self.with_widget(
+            node,
+            WidgetOperation::access("scroll target"),
+            |widget, _| widget.scroll_target(nav, &context),
+        )
+        .ok()
+        .flatten()
+        .unwrap_or(node)
     }
 
     /// Return whether the widget at `node` itself accepts `action`.
@@ -148,14 +167,16 @@ impl Core {
         event: &Event,
     ) -> Result<EventOutcome> {
         // A navigation intent the widget declines is the runtime's default:
-        // it scrolls the node's view.
+        // it scrolls the widget's scroll target, or else the node's view.
         let focus = self.focus.unwrap_or(self.root);
         if let Some(nav) = NavIntent::from_name(action)
             && !self.widget_accepts_intent(node, action, focus)
-            && let Some(op) = self.nav_scroll(node, nav)
         {
-            self.scroll(node, op);
-            return Ok(EventOutcome::Handle);
+            let target = self.nav_scroll_target(node, nav, focus);
+            if let Some(op) = self.nav_scroll(target, nav) {
+                self.scroll(target, op);
+                return Ok(EventOutcome::Handle);
+            }
         }
         let depth = self.push_event_scope(event);
         let outcome =

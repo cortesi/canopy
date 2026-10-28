@@ -59,7 +59,7 @@ use crate::{
     },
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, SourceAnchor, SourceMatches, SourceOptions},
-    surface::{RenderedSurface, SurfaceState, nav_scroll},
+    surface::{RenderedSurface, SurfaceState},
 };
 
 /// A view-independent persisted reading location within one document epoch.
@@ -3072,7 +3072,7 @@ impl Widget for Markdown {
             return true;
         }
         self.navigation_node()
-            .and_then(|node| ctx.scroll_outcome(node, nav_scroll(nav)))
+            .and_then(|node| ctx.scroll_outcome(node, nav.scroll_op()))
             .is_some_and(|outcome| outcome == canopy::ChangeOutcome::Changed)
     }
     fn on_intent(&mut self, intent: &str, ctx: &mut dyn Context) -> Result<EventOutcome> {
@@ -3101,7 +3101,7 @@ impl Widget for Markdown {
                 })?;
             }
         } else {
-            self.scroll_view(ctx, nav_scroll(nav))?;
+            self.scroll_view(ctx, nav.scroll_op())?;
         }
         Ok(EventOutcome::Handle)
     }

@@ -12,7 +12,7 @@ use crate::{
     error::Result,
     geom::{Point, PointI32, Rect},
     input::NavIntent,
-    layout::{RevealAlign, ScrollDirection, ScrollOp},
+    layout::{RevealAlign, ScrollOp},
     runtime::PollLifetime,
 };
 
@@ -90,19 +90,7 @@ impl Core {
     pub(crate) fn nav_scroll(&self, node_id: NodeId, nav: NavIntent) -> Option<ScrollOp> {
         let node = self.nodes.get(node_id)?;
         let before = node.scroll;
-        let op = match nav {
-            NavIntent::Up => ScrollOp::Lines(ScrollDirection::Up, 1),
-            NavIntent::Down => ScrollOp::Lines(ScrollDirection::Down, 1),
-            NavIntent::Left => ScrollOp::Lines(ScrollDirection::Left, 1),
-            NavIntent::Right => ScrollOp::Lines(ScrollDirection::Right, 1),
-            NavIntent::PageUp => ScrollOp::Pages(ScrollDirection::Up, 1),
-            NavIntent::PageDown => ScrollOp::Pages(ScrollDirection::Down, 1),
-            NavIntent::First => ScrollOp::To(Point { x: before.x, y: 0 }),
-            NavIntent::Last => ScrollOp::To(Point {
-                x: before.x,
-                y: u32::MAX,
-            }),
-        };
+        let op = nav.scroll_op();
         let mut target = op.target(before, node.content_size);
         clamp_scroll(&mut target, node.content_size, node.canvas);
         (target != before).then_some(op)

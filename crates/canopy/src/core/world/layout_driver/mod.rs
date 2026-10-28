@@ -938,13 +938,15 @@ impl FlexItem {
     }
 }
 
-/// Share `remaining` among flex items by weight, within the bounds of each item.
+/// Share `remaining` among flex items by weight, within the bounds of each
+/// item.
 ///
-/// Each item takes its weighted share, clamped to its bounds. When the clamps take more space
-/// than the shares, the items that a minimum raised keep their minimum. When the clamps free
-/// space, the items that a maximum lowered keep their maximum. The other items share what is
-/// left by weight again, until no share changes. When the minimums alone exceed `remaining`,
-/// each item takes its minimum and the total overflows.
+/// Each item takes its weighted share, clamped to its bounds. When the clamps
+/// take more space than the shares, the items that a minimum raised keep their
+/// minimum. When the clamps free space, the items that a maximum lowered keep
+/// their maximum. The other items share what is left by weight again, until no
+/// share changes. When the minimums alone exceed `remaining`, each item takes
+/// its minimum and the total overflows.
 fn allocate_flex(remaining: u32, items: &[FlexItem]) -> Vec<u32> {
     let mut frozen: Vec<Option<u32>> = vec![None; items.len()];
     loop {

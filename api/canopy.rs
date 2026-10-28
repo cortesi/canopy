@@ -806,6 +806,15 @@ pub trait Widget: Any {
     /// marks.
     fn scroll_marks(&self, _axis: ScrollAxis, _content: Size) -> Vec<ScrollMark> {}
 
+    /// Return the node whose view `nav` scrolls in place of this node's view,
+    /// when this widget declines `nav`.
+    ///
+    /// `None`, the default, scrolls this node's own view. A pane that holds
+    /// the keyboard can name a scrolling view inside it. The intent is a
+    /// parameter, so a pane can forward some intents and keep others. When
+    /// the target cannot move, the route offers the intent to the next node.
+    fn scroll_target(&self, _nav: NavIntent, _ctx: &dyn ViewContext) -> Option<NodeId> {}
+
     /// Describe application semantics for one publication through read-only
     /// access. Sensitive values must be omitted; this hook does not
     /// serialize widget state.
@@ -2796,6 +2805,15 @@ pub mod input {
         /// Return the intent name, such as `canopy.nav.up`.
         #[must_use]
         pub const fn name(self) -> &'static str;
+
+        /// Return the scroll this intent makes in a view that does not hold a
+        /// cursor.
+        ///
+        /// `Up`, `Down`, `Left`, and `Right` scroll one line, `PageUp` and
+        /// `PageDown` one page, and `First` and `Last` to the top and the
+        /// bottom.
+        #[must_use]
+        pub const fn scroll_op(self) -> ScrollOp;
     }
 
     /// What would act first on a key.
@@ -3730,6 +3748,10 @@ pub mod layout {
         /// that axis less one line, so consecutive pages keep one line of
         /// overlap.
         Pages(ScrollDirection, u32),
+        /// Scroll to the top of the canvas, and keep the horizontal offset.
+        Top,
+        /// Scroll to the bottom of the canvas, and keep the horizontal offset.
+        Bottom,
     }
 
     impl ScrollOp {

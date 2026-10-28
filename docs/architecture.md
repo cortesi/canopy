@@ -768,7 +768,15 @@ Enter and Esc run.
 Core registers the navigation intents (`input::NavIntent`) in every catalog.
 A node accepts one when its widget does, or when its view can move that way:
 the runtime then applies the scroll itself, as it does for the wheel, so
-widgets need no scroll or page commands of their own.
+widgets need no scroll or page commands of their own. `NavIntent::scroll_op`
+gives that scroll: a line, a page, or the top or the bottom of the canvas,
+which keep the horizontal offset.
+
+A widget that declines a navigation intent can name another node to scroll
+with `Widget::scroll_target`. A pane that holds the keyboard then scrolls the
+view inside it. The intent is a parameter, so a pane can forward the vertical
+intents alone. When the target cannot move, the route offers the intent to the
+next node.
 
 Every widget predicts its keys. `Widget::key_outcome` returns the
 `EventOutcome` that `on_event` would return for the same key and pre-event
