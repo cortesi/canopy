@@ -27,8 +27,6 @@ use crate::{Answer, Answers, ButtonLook, Dialog, Text, frame::Frame};
 const SIDE_PADDING: u32 = 1;
 /// Rows between the message and the answers.
 const MESSAGE_GAP_ROWS: u32 = 1;
-/// Rows the answers take.
-const ANSWER_ROWS: u32 = ButtonLook::Solid.rows();
 /// Widest message, in columns, unless a request says otherwise.
 const MESSAGE_WIDTH: u32 = 64;
 /// Tab stop of the message.
@@ -195,6 +193,8 @@ pub struct Confirm {
     tone: Tone,
     /// The modal of the open question.
     token: Option<ModalToken>,
+    /// How each answer draws.
+    look: ButtonLook,
 }
 
 impl Default for Confirm {
@@ -222,7 +222,17 @@ impl Confirm {
             closing: Closing::ByCall,
             tone: Tone::Plain,
             token: None,
+            look: ButtonLook::Solid,
         }
+    }
+
+    /// Draw each answer in `look`, in place of [`ButtonLook::Solid`]. The
+    /// dialog takes the rows that the look needs. Set it before the dialog
+    /// mounts.
+    #[must_use]
+    pub fn with_look(mut self, look: ButtonLook) -> Self {
+        self.look = look;
+        self
     }
 
     /// Open `request` in `confirm`, as a modal of `owner`, and return its
@@ -443,7 +453,7 @@ impl Widget for Confirm {
         let root = ctx.node_id();
         // The dialog fits the question, so it is only as large as what it
         // asks.
-        let (dialog, body) = Dialog::new().add(ctx, root, ConfirmBody::new())?;
+        let (dialog, body) = Dialog::new().add(ctx, root, ConfirmBody::new(self.look.rows()))?;
         let message = ctx.add_child(
             body,
             Text::new("")
@@ -453,7 +463,7 @@ impl Widget for Confirm {
                 .with_wrap_options(WrapOptions::PROSE)
                 .with_fit(true),
         )?;
-        let row = ctx.add_child(body, Answers::new())?;
+        let row = ctx.add_child(body, Answers::new().with_look(self.look))?;
         self.dialog = Some(dialog.into());
         self.body = Some(body);
         self.message = Some(message);
@@ -477,15 +487,18 @@ struct ConfirmBody {
     message_width: u32,
     /// Columns the answers take.
     row_width: u32,
+    /// Rows the answers take.
+    row_rows: u32,
 }
 
 impl ConfirmBody {
-    /// Build an empty body.
-    fn new() -> Self {
+    /// Build an empty body, above answers that take `row_rows` rows.
+    fn new(row_rows: u32) -> Self {
         Self {
             message: String::new(),
             message_width: MESSAGE_WIDTH,
             row_width: 0,
+            row_rows,
         }
     }
 
@@ -551,7 +564,7 @@ impl Widget for ConfirmBody {
         let rows = u32::try_from(lines.len())
             .unwrap_or(u32::MAX)
             .saturating_add(MESSAGE_GAP_ROWS)
-            .saturating_add(ANSWER_ROWS);
+            .saturating_add(self.row_rows);
         Measurement::Fixed(Size::new(width, c.clamp_size(Size::new(width, rows)).h))
     }
 
@@ -595,6 +608,8 @@ mod tests {
         answered: Vec<String>,
         /// Answers whose calls are disabled.
         disabled: Vec<String>,
+        /// How the dialog draws its answers.
+        look: ButtonLook,
     }
 
     #[derive_commands]
@@ -647,7 +662,7 @@ mod tests {
         }
 
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-            let dialog = ctx.add_child(ctx.node_id(), Confirm::new())?;
+            let dialog = ctx.add_child(ctx.node_id(), Confirm::new().with_look(self.look))?;
             ctx.set_hidden(dialog.into(), true)?;
             self.dialog = Some(dialog);
             Ok(())
@@ -667,7 +682,12 @@ mod tests {
 
     /// Build a host with its dialog mounted and closed, on `clock`.
     fn host_on(width: u32, height: u32, clock: Arc<ManualClock>) -> Result<Harness> {
-        let mut harness = Harness::builder(Host::default())
+        host_with(Host::default(), width, height, clock)
+    }
+
+    /// Build `host` with its dialog mounted and closed, on `clock`.
+    fn host_with(host: Host, width: u32, height: u32, clock: Arc<ManualClock>) -> Result<Harness> {
+        let mut harness = Harness::builder(host)
             .register::<Host>()
             .size(width, height)
             .clock(clock)
@@ -873,6 +893,41 @@ mod tests {
                 "the answers are centred, asking {message:?} in {width}"
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn a_dialog_draws_its_answers_in_its_look_and_fits_their_rows() -> Result<()> {
+        let host = Host {
+            look: ButtonLook::Inset,
+            ..Host::default()
+        };
+        let mut harness = host_with(host, 50, 16, Arc::new(ManualClock::new()))?;
+        ask(&mut harness, "/tmp/alpha/notes.txt")?;
+        let frame = harness
+            .find_nodes("**/confirm/**/frame")?
+            .first()
+            .copied()
+            .expect("the dialog is framed");
+        let yes = answer_node(&mut harness, 0)?;
+        let (frame_bottom, yes_outer) = harness.canopy.with_root_view(|ctx| {
+            let frame = ctx.view_of(frame).expect("live node").outer;
+            let yes = ctx.view_of(yes).expect("live node").outer;
+            (frame.tl.y + i32::try_from(frame.h).unwrap_or(0), yes)
+        });
+        assert_eq!(yes_outer.h, ButtonLook::Inset.rows(), "an inset answer");
+        assert_eq!(
+            yes_outer.tl.y + i32::try_from(yes_outer.h).unwrap_or(0),
+            frame_bottom - 1,
+            "the dialog takes the rows of its answers, and no more"
+        );
+        // An inset button draws its edges in half blocks around its label.
+        let screen = screen(&harness).join("\n");
+        assert!(screen.contains("yes"), "{screen}");
+        assert!(
+            screen.contains('\u{2584}'),
+            "the inset look draws, got {screen}"
+        );
         Ok(())
     }
 

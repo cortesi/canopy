@@ -945,6 +945,12 @@ impl Confirm {
         owner: NodeId,
         request: ConfirmRequest,
     ) -> canopy::error::Result<ModalToken>;
+
+    /// Draw each answer in `look`, in place of [`ButtonLook::Solid`]. The
+    /// dialog takes the rows that the look needs. Set it before the dialog
+    /// mounts.
+    #[must_use]
+    pub fn with_look(self, look: ButtonLook) -> Self;
 }
 
 impl CommandNode for Confirm {}

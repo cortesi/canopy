@@ -429,7 +429,9 @@ face, and its key keeps the key colour.
 `Confirm`, `Picker`, and the help overlay are dialogs. `Confirm` also pushes
 `confirm` around its dialog, and its question paints `message`, which resolves
 `confirm/message`. Its answers are an `Answers` row: a centred row of buttons,
-which take the `dialog/button/...` paths. A question in `Tone::Error` pushes
+which take the `dialog/button/...` paths. They are solid buttons, unless
+`Confirm::with_look` gives another look; the dialog then takes the rows of that
+look. A question in `Tone::Error` pushes
 `error` after `confirm`, so its frame resolves `error/dialog/frame`,
 `error/dialog/frame/focused`, and `error/dialog/frame/title`. The built-in
 themes give all three the red of the palette on the panel, and make the title
