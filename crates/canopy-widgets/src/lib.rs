@@ -71,6 +71,8 @@ mod notice_log;
 mod notice_test_support;
 /// Provider-ordered paging and selection state for custom list renderers.
 pub mod paged;
+/// A column that paints the ground of a pane.
+mod pane;
 /// Modal filtered list of items.
 mod picker;
 /// Regular expressions that match as ripgrep does, and their ranges in text.
@@ -141,6 +143,7 @@ pub use label::{ItemLabel, ItemVisibility};
 pub use list_view::{List, Selectable};
 pub use menu::{Menu, MenuItem, MenuList, MenuRow};
 pub use meter::Meter;
+pub use pane::{Pane, PaneKeys, pane_has_keys};
 pub use picker::{Picker, PickerList};
 pub use root::Root;
 pub use scroll::Scroll;

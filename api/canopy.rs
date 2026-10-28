@@ -3640,6 +3640,11 @@ pub mod layout {
         /// Apply constraints and validate both the widget and resulting layout.
         pub fn apply(self, base: Layout) -> Result<Layout, LayoutValidationError>;
 
+        /// Set whether each child starts where its natural width would sit
+        /// centered, as [`Layout::center_natural`] does.
+        #[must_use]
+        pub fn center_natural(self, center: bool) -> Self;
+
         /// Fix the outer height at `value`: set both height bounds, and measure the
         /// height.
         ///

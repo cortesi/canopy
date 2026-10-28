@@ -688,8 +688,9 @@ impl !Sync for ColumnChart {}
 ///
 /// A framed row also draws a rule above and below the panes and a border
 /// left of the first, so each pane sits in a box that shares its sides with
-/// its neighbours. The box of the pane that holds focus draws with its own
-/// glyphs and `columns/divider/focused`, whatever the pane paints inside it.
+/// its neighbours. The box of the [marked pane](Columns::marked_pane) draws
+/// with its own glyphs and `columns/divider/focused`. A [`Pane`](crate::Pane)
+/// paints the same ground inside it.
 ///
 /// `Columns` owns the scrollbars of its panes, so an enclosing frame draws none
 /// for them. Dividers use `columns/divider`, thumbs `columns/thumb`, and a
@@ -714,6 +715,14 @@ impl Columns {
     /// pane do nothing.
     /// @param delta Panes to move; negative values move left.
     pub fn focus_column(&mut self, c: &mut dyn Context, delta: i32) -> canopy::error::Result<()>;
+
+    /// Return the pane that the columns at `columns` mark, as their frame
+    /// does: the displayed pane on the focus path, or the first displayed home
+    /// pane while focus is on the columns or an ancestor.
+    ///
+    /// Return `None` when no pane is marked, or when `columns` is not a
+    /// `Columns`.
+    pub fn marked_pane(ctx: &dyn ViewContext, columns: NodeId) -> Option<NodeId>;
 
     /// Construct columns with no panes.
     pub fn new() -> Self;
@@ -2180,6 +2189,49 @@ impl Meter {
 }
 
 impl Widget for Meter {}
+
+/// A column that paints the ground of a pane.
+///
+/// The pane pushes `pane`, and `focused` while it has the keys, and fills
+/// `background`. The built-in themes give `pane/focused/background` the focus
+/// ground, which the box of a framed [`Columns`] shares. Then the pane pushes
+/// its name, and `focused` again while it has the keys. Descendants resolve
+/// their styles under these layers, so a rule such as
+/// `app_pane/focused/editor/text` gives a child that paints its own ground the
+/// focus ground.
+pub struct Pane {/* private fields */}
+
+impl Pane {
+    /// Hold focus, as `Container::focusable` does, so children can swap
+    /// without moving focus.
+    #[must_use]
+    pub fn focusable(self) -> Self;
+
+    /// Return whether this pane has the keys. `ctx` is the context of this
+    /// pane.
+    pub fn has_keys(&self, ctx: &dyn ViewContext) -> bool;
+
+    /// Construct a pane named `name`, with the keys while its `Columns` marks
+    /// it.
+    pub fn new(name: &'static str) -> Self;
+
+    /// Build a pane whose keys follow `keys`.
+    #[must_use]
+    pub fn with_keys(self, keys: PaneKeys) -> Self;
+}
+
+impl Widget for Pane {}
+
+/// Which focus gives a pane its keys.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PaneKeys {
+    /// The pane that its `Columns` marks: the pane on the focus path, or the
+    /// home pane while focus is on the columns or above them. Outside
+    /// `Columns`, focus within the pane.
+    Marked,
+    /// Focus within the given node, such as a region inside the pane.
+    Within(NodeId),
+}
 
 /// A centred modal holding a filtered list of items.
 ///
@@ -3668,6 +3720,15 @@ pub fn image_cells(
     ground: [u8; 3],
     tier: Tier,
 ) -> Vec<Cell<[u8; 3]>>;
+
+/// Return whether `node` has the keys under `keys`, for a widget that is its
+/// own pane.
+///
+/// For [`PaneKeys::Marked`], the pane that holds `node` is `node` itself or
+/// its ancestor that is a child of a `Columns`. The node has the keys while
+/// those columns mark that pane. A node outside `Columns` has the keys while
+/// focus is within it.
+pub fn pane_has_keys(ctx: &dyn ViewContext, node: NodeId, keys: &PaneKeys) -> bool;
 
 /// Decode the image at `path` as a preview that fits `bounds` pixels, under
 /// the same bounds as [`ImageView::set_preview_path`]: at most 32 * 1024 *

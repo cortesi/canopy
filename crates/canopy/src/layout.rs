@@ -421,6 +421,13 @@ impl LayoutOverride {
         self.max_height = Some(Some(value));
         self
     }
+    /// Set whether each child starts where its natural width would sit
+    /// centered, as [`Layout::center_natural`] does.
+    #[must_use]
+    pub fn center_natural(mut self, center: bool) -> Self {
+        self.center_natural = Some(center);
+        self
+    }
 }
 
 impl From<Layout> for LayoutOverride {

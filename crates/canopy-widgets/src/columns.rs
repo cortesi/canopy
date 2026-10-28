@@ -2,7 +2,7 @@
 //! an optional frame that marks the pane with focus.
 
 use canopy::{
-    Context, EventOutcome, NodeId, NodeName, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeId, NodeName, ViewContext, ViewContextExt, Widget, derive_commands,
     error::Result,
     geom::Rect,
     input::Event,
@@ -29,8 +29,9 @@ use crate::{
 ///
 /// A framed row also draws a rule above and below the panes and a border
 /// left of the first, so each pane sits in a box that shares its sides with
-/// its neighbours. The box of the pane that holds focus draws with its own
-/// glyphs and `columns/divider/focused`, whatever the pane paints inside it.
+/// its neighbours. The box of the [marked pane](Columns::marked_pane) draws
+/// with its own glyphs and `columns/divider/focused`. A [`Pane`](crate::Pane)
+/// paints the same ground inside it.
 ///
 /// `Columns` owns the scrollbars of its panes, so an enclosing frame draws none
 /// for them. Dividers use `columns/divider`, thumbs `columns/thumb`, and a
@@ -116,7 +117,7 @@ impl Columns {
     /// @param delta Panes to move; negative values move left.
     #[command]
     pub fn focus_column(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
-        let panes = Self::panes(c);
+        let panes = Self::panes(c, c.node_id());
         if panes.is_empty() {
             return Ok(());
         }
@@ -131,9 +132,23 @@ impl Columns {
         Ok(())
     }
 
-    /// Return the displayed panes in order.
-    fn panes(ctx: &dyn ViewContext) -> Vec<NodeId> {
-        ctx.children_of(ctx.node_id())
+    /// Return the pane that the columns at `columns` mark, as their frame
+    /// does: the displayed pane on the focus path, or the first displayed home
+    /// pane while focus is on the columns or an ancestor.
+    ///
+    /// Return `None` when no pane is marked, or when `columns` is not a
+    /// `Columns`.
+    pub fn marked_pane(ctx: &dyn ViewContext, columns: NodeId) -> Option<NodeId> {
+        ctx.with_widget(columns, |row: &Self| {
+            Ok(row.marked(ctx, columns, &Self::panes(ctx, columns)))
+        })
+        .ok()
+        .flatten()
+    }
+
+    /// Return the displayed panes of the columns at `columns` in order.
+    fn panes(ctx: &dyn ViewContext, columns: NodeId) -> Vec<NodeId> {
+        ctx.children_of(columns)
             .into_iter()
             .filter(|pane| ctx.view_of(*pane).is_some_and(|view| !view.is_empty()))
             .collect()
@@ -149,15 +164,14 @@ impl Columns {
         (x < own.w && y < own.h).then(|| Rect::new(x, y, 1, pane.h.min(own.h - y)))
     }
 
-    /// Return the displayed pane the frame marks: the pane on the focus path,
-    /// or the first displayed home pane while focus is on this widget or an
-    /// ancestor.
-    fn focused_pane(&self, ctx: &dyn ViewContext, panes: &[NodeId]) -> Option<NodeId> {
+    /// Return the marked pane of `panes`, the displayed panes of these
+    /// columns at `columns`.
+    fn marked(&self, ctx: &dyn ViewContext, columns: NodeId, panes: &[NodeId]) -> Option<NodeId> {
         if let Some(pane) = panes.iter().find(|pane| ctx.is_on_focus_path(**pane)) {
             return Some(*pane);
         }
         let focused = ctx.focused_node()?;
-        let mut node = Some(ctx.node_id());
+        let mut node = Some(columns);
         while let Some(current) = node {
             if current == focused {
                 return self.home.iter().find(|pane| panes.contains(pane)).copied();
@@ -180,7 +194,7 @@ impl Columns {
         if own.h < 2 {
             return Ok(());
         }
-        let focus = self.focused_pane(ctx, panes);
+        let focus = self.marked(ctx, ctx.node_id(), panes);
         // Each displayed pane's columns, in this widget's outer coordinates,
         // and whether it holds focus.
         let spans: Vec<(u32, u32, bool)> = panes
@@ -236,7 +250,7 @@ impl Columns {
     fn tracks(ctx: &dyn ViewContext) -> Result<Vec<(NodeId, Rect)>> {
         let owner = ctx.node_id();
         let mut tracks = Vec::new();
-        for pane in Self::panes(ctx) {
+        for pane in Self::panes(ctx, owner) {
             let Some(divider) = Self::divider(ctx, pane) else {
                 continue;
             };
@@ -285,7 +299,7 @@ impl Widget for Columns {
     }
 
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        let panes = Self::panes(ctx);
+        let panes = Self::panes(ctx, ctx.node_id());
         if let Some(frame) = self.frame {
             self.render_frame(rndr, ctx, &panes, frame)?;
         } else {

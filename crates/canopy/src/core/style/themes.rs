@@ -125,6 +125,8 @@ impl Palette {
                 "/columns/divider/focused",
                 PartialStyle::new().fg(p.focus).bg(p.focus_bg()),
             )
+            // A pane paints that ground inside the box of the marked pane.
+            .bg("/pane/focused/background", p.focus_bg())
             .fg("/columns/thumb", thumb)
             .fg("/columns/thumb/active", p.accent)
             // A diff reads changed rows by their colour, and its chrome stays

@@ -442,10 +442,22 @@ The trailing column after the last pane shows only a track. The built-in themes
 define all three paths.
 
 A framed row, built with `Columns::with_frame`, boxes each pane, and the
-dividers become the boxes' shared sides. The box of the pane that holds focus
-uses `columns/divider/focused`. The built-in themes draw it in the palette's
-`focus` colour on `Palette::focus_bg`, the ground a host gives the focused pane,
-so the box and the pane read as one.
+dividers become the boxes' shared sides. The box of the marked pane uses
+`columns/divider/focused`. `Columns::marked_pane` names that pane: the pane on
+the focus path, or the home pane while focus is on the columns or above them.
+The built-in themes draw the box in the palette's `focus` colour on
+`Palette::focus_bg`.
+
+`Pane` paints the same ground inside the box. It pushes `pane`, and `focused`
+while it has the keys, and fills `background`. The built-in themes give
+`pane/focused/background` the focus ground, so the box and the pane read as
+one. Then the pane pushes its name, and `focused` again while it has the keys,
+so its descendants resolve under `<name>/focused`. A child that paints its own
+ground takes the focus ground through a rule such as
+`app_pane/focused/editor/text`. A pane has the keys by `PaneKeys`: `Marked`
+follows `Columns::marked_pane`, and `Within(node)` follows focus within a
+region. `pane_has_keys` gives the same answer to a widget that paints its own
+ground in place of a `Pane`.
 
 ## States and fallback
 
