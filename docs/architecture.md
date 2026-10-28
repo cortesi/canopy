@@ -30,7 +30,7 @@ The root holds the application, the widget, the contexts, and node handles:
 | `canopy::script` | Evaluation (`EvalRequest`, `EvalTicket`, `EvalOutcome`), automation, the script journal, trust, and fixtures |
 | `canopy::commands` | Command metadata, calls (`CommandCall::with_arg`), and arguments |
 | `canopy::style` | Style maps, `PartialStyle`, colors, effects, shared part `roles`, and `themes` with its `Palette` |
-| `canopy::text` | `width`, `cell_width`, truncation (`Truncate`), grapheme slicing, and grapheme iteration (`graphemes`, `grapheme_indices`), which skips Unicode segmentation between ASCII characters |
+| `canopy::text` | `width`, `cell_width`, truncation (`Truncate`), word wrapping (`wrap`, `wrap_with`, `WrapOptions`), grapheme slicing, and grapheme iteration (`graphemes`, `grapheme_indices`), which skips Unicode segmentation between ASCII characters |
 | `canopy::geom`, `canopy::path`, `canopy::error` | Geometry, node paths, and errors |
 | `canopy::terminal` | The Crossterm run loop |
 

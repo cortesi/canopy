@@ -5920,6 +5920,25 @@ pub mod text {
         pub fn apply(self, s: &str, budget: usize) -> Cow<'_, str>;
     }
 
+    /// How [`wrap_with`] breaks text into lines.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct WrapOptions {
+        /// Break a word at its hyphens, as `textwrap` does by default.
+        pub break_hyphens: bool,
+        /// Wrap each line of the text as its own paragraph, so a line break
+        /// always starts a new line, and a blank line gives an empty line.
+        pub paragraphs: bool,
+        /// At most this many lines. The last line of a text that does not fit
+        /// ends with ` …`.
+        pub max_lines: Option<usize>,
+    }
+
+    impl WrapOptions {
+        /// Paragraphs, no hyphen breaks, and no line limit: the form of prose in
+        /// a view.
+        pub const PROSE: Self = _;
+    }
+
     /// Return the cells one grapheme occupies at `column`, expanding a tab to the
     /// next multiple of `tab_stop`.
     pub fn cell_width(grapheme: &str, column: usize, tab_stop: usize) -> usize;
@@ -5991,6 +6010,19 @@ pub mod text {
     /// This is the one width measure: layout, measurement, and painting agree on
     /// it because it counts grapheme widths as rendering does.
     pub fn width(s: &str) -> u32;
+
+    /// Wrap `s` with [`WrapOptions::PROSE`].
+    #[must_use]
+    pub fn wrap(s: &str, width: u32) -> Vec<String>;
+
+    /// Wrap `s` at word boundaries to lines of at most `width` columns, as
+    /// `options` says.
+    ///
+    /// A `width` of zero counts as one. A word wider than `width` breaks across
+    /// lines. An empty text gives one empty line, and a trailing line break adds
+    /// no line. The function does not expand tabs.
+    #[must_use]
+    pub fn wrap_with(s: &str, width: u32, options: WrapOptions) -> Vec<String>;
 }
 
 pub mod tree {

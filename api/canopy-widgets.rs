@@ -34,7 +34,7 @@ use canopy::{
     runtime::NodeWakeHandle,
     status::{StatusItem, StatusSpan},
     style::{Style, StyleRules, themes::Palette},
-    text::Truncate,
+    text::{Truncate, WrapOptions},
     tree::FocusDirection,
 };
 use canopy_mosaic::{Cell, Tier};
@@ -3598,12 +3598,22 @@ impl Text {
     /// Construct a text widget with raw content.
     pub fn new(raw: impl Into<String>) -> Self;
 
+    /// Replace the style of the text.
+    pub fn set_style(&mut self, style: impl Into<String>);
+
     /// Replace the raw text content.
     pub fn set_text(&mut self, raw: impl Into<String>);
 
     /// Configure the canvas width behavior.
     #[must_use]
     pub fn with_canvas_width(self, width: CanvasWidth) -> Self;
+
+    /// Measure as wide as the widest wrapped line, not as the width offered.
+    ///
+    /// The text then wraps at the narrower of its view and its wrap width, so
+    /// a short text takes a narrow view.
+    #[must_use]
+    pub fn with_fit(self, fit: bool) -> Self;
 
     /// Take focus, so the navigation intents scroll this text.
     #[must_use]
@@ -3620,6 +3630,10 @@ impl Text {
     /// Set the tab stop width for tab expansion.
     #[must_use]
     pub fn with_tab_stop(self, tab_stop: usize) -> Self;
+
+    /// Wrap the text as `options` say, in place of `textwrap`'s defaults.
+    #[must_use]
+    pub fn with_wrap_options(self, options: WrapOptions) -> Self;
 
     /// Add a fixed width for wrapping.
     #[must_use]

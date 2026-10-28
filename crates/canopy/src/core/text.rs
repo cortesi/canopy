@@ -309,6 +309,95 @@ pub fn truncate_end(s: &str, budget: usize) -> Cow<'_, str> {
     }
 }
 
+/// How [`wrap_with`] breaks text into lines.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WrapOptions {
+    /// Break a word at its hyphens, as `textwrap` does by default.
+    pub break_hyphens: bool,
+    /// Wrap each line of the text as its own paragraph, so a line break
+    /// always starts a new line, and a blank line gives an empty line.
+    pub paragraphs: bool,
+    /// At most this many lines. The last line of a text that does not fit
+    /// ends with ` …`.
+    pub max_lines: Option<usize>,
+}
+
+impl WrapOptions {
+    /// Paragraphs, no hyphen breaks, and no line limit: the form of prose in
+    /// a view.
+    pub const PROSE: Self = Self {
+        break_hyphens: false,
+        paragraphs: true,
+        max_lines: None,
+    };
+}
+
+/// Wrap `s` at word boundaries to lines of at most `width` columns, as
+/// `options` says.
+///
+/// A `width` of zero counts as one. A word wider than `width` breaks across
+/// lines. An empty text gives one empty line, and a trailing line break adds
+/// no line. The function does not expand tabs.
+#[must_use]
+pub fn wrap_with(s: &str, width: u32, options: WrapOptions) -> Vec<String> {
+    let width = usize::try_from(width.max(1)).unwrap_or(usize::MAX);
+    let splitter = if options.break_hyphens {
+        textwrap::WordSplitter::HyphenSplitter
+    } else {
+        textwrap::WordSplitter::NoHyphenation
+    };
+    let wrap_options = textwrap::Options::new(width).word_splitter(splitter);
+    let wrap = |text: &str| -> Vec<String> {
+        textwrap::wrap(text, &wrap_options)
+            .into_iter()
+            .map(Cow::into_owned)
+            .collect()
+    };
+    let mut lines: Vec<String> = if options.paragraphs {
+        s.lines()
+            .flat_map(|line| -> Vec<String> {
+                if line.trim().is_empty() {
+                    vec![String::new()]
+                } else {
+                    wrap(line)
+                }
+            })
+            .collect()
+    } else {
+        // `textwrap` reads a trailing line break as the start of an empty line.
+        wrap(s.strip_suffix('\n').unwrap_or(s))
+    };
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    if let Some(max) = options.max_lines
+        && lines.len() > max
+    {
+        lines.truncate(max);
+        if let Some(last) = lines.last_mut() {
+            *last = mark_cut(last, width);
+        }
+    }
+    lines
+}
+
+/// Wrap `s` with [`WrapOptions::PROSE`].
+#[must_use]
+pub fn wrap(s: &str, width: u32) -> Vec<String> {
+    wrap_with(s, width, WrapOptions::PROSE)
+}
+
+/// End `line` with ` …` within `width` columns. A line too narrow for the
+/// mark shows as much of `…` as fits.
+fn mark_cut(line: &str, width: usize) -> String {
+    let mark = cells(END_MARKER);
+    if width < mark {
+        return ELLIPSIS.to_owned();
+    }
+    let (head, _) = slice_by_columns(line, 0, width - mark);
+    format!("{head}{END_MARKER}")
+}
+
 #[cfg(test)]
 mod tests {
     use std::str;
@@ -475,5 +564,78 @@ mod tests {
         // and a result narrower than its budget is what the budget promises.
         assert_eq!(truncate_start("a界b界c", 4), "… c");
         assert_eq!(truncate_end("a界b界c", 4), "a …");
+    }
+
+    #[test]
+    fn prose_wraps_at_words_and_keeps_its_paragraphs() {
+        assert_eq!(
+            wrap("the store needs a reset\n\nreset it", 12),
+            ["the store", "needs a", "reset", "", "reset it"]
+        );
+        // A path breaks after a slash, and a word wider than the width
+        // breaks inside the word.
+        assert_eq!(wrap("/a/very/long/path", 8), ["/a/very/", "long/", "path"]);
+        assert_eq!(wrap("abcdefghij", 4), ["abcd", "efgh", "ij"]);
+        // A hyphen is no break point unless the word is too wide.
+        assert_eq!(
+            wrap("verber-store.v31 is old", 18),
+            ["verber-store.v31", "is old"]
+        );
+        assert_eq!(wrap("", 10), [""]);
+    }
+
+    #[test]
+    fn a_line_limit_ends_a_cut_text_with_a_mark() {
+        let limit = |max| WrapOptions {
+            max_lines: Some(max),
+            ..WrapOptions::PROSE
+        };
+        assert_eq!(wrap_with("short", 10, limit(3)), ["short"]);
+        assert_eq!(
+            wrap_with("one two three four", 9, limit(3)),
+            ["one two", "three", "four"]
+        );
+        assert_eq!(
+            wrap_with("one two three four five six", 9, limit(2)),
+            ["one two", "three …"]
+        );
+        assert_eq!(
+            wrap_with("abcdefghijkl", 5, limit(3)),
+            ["abcde", "fghij", "kl"]
+        );
+        assert_eq!(wrap_with("", 5, limit(3)), [""]);
+        assert_eq!(wrap_with("one two", 5, limit(0)), [] as [String; 0]);
+        // A full last line gives up its tail to the mark.
+        assert_eq!(wrap_with("abcdefghij", 5, limit(1)), ["abc …"]);
+        // A line too narrow for the mark shows the ellipsis alone.
+        assert_eq!(wrap_with("abc", 1, limit(1)), ["…"]);
+    }
+
+    #[test]
+    fn edge_widths_and_line_breaks() {
+        assert_eq!(wrap("ab", 0), ["a", "b"], "a zero width counts as one");
+        assert_eq!(wrap("one\n", 10), ["one"], "a trailing break adds no line");
+        assert_eq!(wrap("one\n\n", 10), ["one", ""]);
+        assert_eq!(wrap("one\n  \ntwo", 10), ["one", "", "two"]);
+        let text = WrapOptions {
+            break_hyphens: true,
+            paragraphs: false,
+            max_lines: None,
+        };
+        assert_eq!(wrap_with("one\n", 10, text), ["one"]);
+        assert_eq!(wrap_with("one\n\n", 10, text), ["one", ""]);
+        assert_eq!(wrap_with("", 10, text), [""]);
+        assert_eq!(wrap_with("well-known", 6, text), ["well-", "known"]);
+    }
+
+    #[test]
+    fn wide_characters_wrap_by_cells() {
+        assert_eq!(wrap("日本語 です", 6), ["日本語", "です"]);
+        assert_eq!(wrap("日本語", 4), ["日本", "語"]);
+        let limit = WrapOptions {
+            max_lines: Some(1),
+            ..WrapOptions::PROSE
+        };
+        assert_eq!(wrap_with("日本語 です", 6, limit), ["日本 …"]);
     }
 }

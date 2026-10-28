@@ -19,6 +19,7 @@ canopy-derive.workspace = true
 slotmap = "1.1.1"
 unicode-segmentation.workspace = true
 unicode-width.workspace = true
+textwrap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 schemars.workspace = true

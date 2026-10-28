@@ -6,7 +6,7 @@ use canopy::{
     geom::{Line, Size},
     layout::{Constraint, MeasureConstraints, Measurement},
     render::Render,
-    text,
+    text::{self, WrapOptions},
 };
 
 use crate::Selectable;
@@ -22,12 +22,24 @@ pub enum CanvasWidth {
     Fixed(u32),
 }
 
+/// How `Text` wraps unless a host chooses: `textwrap`'s defaults, with hyphen
+/// breaks and no paragraphs.
+const TEXT_WRAP: WrapOptions = WrapOptions {
+    break_hyphens: true,
+    paragraphs: false,
+    max_lines: None,
+};
+
 /// Multiline text widget with wrapping and scrolling.
 pub struct Text {
     /// Raw text content.
     raw: String,
     /// Optional fixed width for wrapping.
     wrap_width: Option<u32>,
+    /// How the text breaks into lines.
+    wrap_options: WrapOptions,
+    /// Whether the text measures as wide as its widest wrapped line.
+    fit: bool,
     /// Canvas width behavior.
     canvas_width: CanvasWidth,
     /// Style path for text rendering.
@@ -56,6 +68,8 @@ impl Text {
         Self {
             raw: raw.into(),
             wrap_width: None,
+            wrap_options: TEXT_WRAP,
+            fit: false,
             canvas_width: CanvasWidth::View,
             style: String::from("text"),
             selected_style: None,
@@ -81,6 +95,24 @@ impl Text {
         self
     }
 
+    /// Wrap the text as `options` say, in place of `textwrap`'s defaults.
+    #[must_use]
+    pub fn with_wrap_options(mut self, options: WrapOptions) -> Self {
+        self.wrap_options = options;
+        self.wrap_cache.borrow_mut().take();
+        self
+    }
+
+    /// Measure as wide as the widest wrapped line, not as the width offered.
+    ///
+    /// The text then wraps at the narrower of its view and its wrap width, so
+    /// a short text takes a narrow view.
+    #[must_use]
+    pub fn with_fit(mut self, fit: bool) -> Self {
+        self.fit = fit;
+        self
+    }
+
     /// Configure the canvas width behavior.
     #[must_use]
     pub fn with_canvas_width(mut self, width: CanvasWidth) -> Self {
@@ -93,6 +125,11 @@ impl Text {
     pub fn with_style(mut self, style: impl Into<String>) -> Self {
         self.style = style.into();
         self
+    }
+
+    /// Replace the style of the text.
+    pub fn set_style(&mut self, style: impl Into<String>) {
+        self.style = style.into();
     }
 
     /// Set the text rendering style when selected.
@@ -127,8 +164,12 @@ impl Text {
 
     /// Determine the wrapping width for the given available space.
     fn wrap_width_for(&self, available_width: u32) -> usize {
-        let width = self.wrap_width.unwrap_or(available_width).max(1);
-        width as usize
+        let width = match self.wrap_width {
+            Some(wrap) if self.fit => wrap.min(available_width),
+            Some(wrap) => wrap,
+            None => available_width,
+        };
+        width.max(1) as usize
     }
 
     /// Access cached wrapped lines for the provided width.
@@ -137,10 +178,8 @@ impl Text {
         let rebuild = cache.as_ref().is_none_or(|cached| cached.width != width);
         if rebuild {
             let expanded = text::expand_tabs(&self.raw, self.tab_stop);
-            let lines = textwrap::wrap(&expanded, width)
-                .into_iter()
-                .map(|line| line.to_string())
-                .collect::<Vec<_>>();
+            let columns = u32::try_from(width).unwrap_or(u32::MAX);
+            let lines = text::wrap_with(&expanded, columns, self.wrap_options);
             let max_width = lines
                 .iter()
                 .map(|line| text::width(line))
@@ -210,8 +249,11 @@ impl Widget for Text {
         }
         .max(1);
 
-        let height = self.with_wrap_cache(wrap_width as usize, |cache| cache.lines.len() as u32);
-        c.clamp(Size::new(wrap_width, height))
+        let (widest, height) = self.with_wrap_cache(wrap_width as usize, |cache| {
+            (cache.max_width, cache.lines.len() as u32)
+        });
+        let width = if self.fit { widest } else { wrap_width };
+        c.clamp(Size::new(width, height))
     }
 
     fn canvas(&self, view: Size, _ctx: &canopy::layout::CanvasContext) -> Size {
@@ -230,5 +272,72 @@ impl Widget for Text {
 
     fn name(&self) -> NodeName {
         NodeName::convert("text")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use canopy::{
+        layout::{Constraint, MeasureConstraints, Measurement},
+        testing::harness::Harness,
+    };
+
+    use super::*;
+
+    /// Return the size `text` measures to in at most `width` columns.
+    fn measured(text: &Text, width: u32) -> (u32, u32) {
+        match text.measure(MeasureConstraints::new(
+            Constraint::AtMost(width),
+            Constraint::Unbounded,
+        )) {
+            Measurement::Fixed(size) => (size.w, size.h),
+            Measurement::Wrap => (0, 0),
+        }
+    }
+
+    /// Text that fits its widest line, wraps at `columns`, and reads as prose.
+    fn prose(text: &str, columns: u32) -> Text {
+        Text::new(text)
+            .with_wrap_width(columns)
+            .with_wrap_options(WrapOptions::PROSE)
+            .with_fit(true)
+    }
+
+    #[test]
+    fn fitted_text_measures_its_widest_line() {
+        assert_eq!(measured(&prose("reset it", 40), 80), (8, 1));
+        let long = prose(&"word ".repeat(30), 40);
+        let (width, height) = measured(&long, 80);
+        assert!(width <= 40 && height == 4, "{width} x {height}");
+        let (width, height) = measured(&long, 20);
+        assert!(width <= 20 && height > 4, "{width} x {height}");
+        // Without fit, text takes the width it wraps at.
+        assert_eq!(
+            measured(&Text::new("reset it").with_wrap_width(40), 80),
+            (40, 1)
+        );
+    }
+
+    #[test]
+    fn fitted_text_wraps_at_its_limit_in_a_wide_view() -> Result<()> {
+        let mut harness = Harness::builder(prose("one two three four\n\nfive six", 10))
+            .size(20, 6)
+            .build()?;
+        harness.render()?;
+        let lines = harness.tbuf().lines();
+        assert_eq!(lines[0].trim_end(), "one two");
+        assert_eq!(lines[1].trim_end(), "three four");
+        assert_eq!(lines[2].trim_end(), "");
+        assert_eq!(lines[3].trim_end(), "five six");
+        Ok(())
+    }
+
+    #[test]
+    fn set_text_and_set_style_replace_the_text() {
+        let mut text = prose("one", 10);
+        text.set_text("one two three");
+        text.set_style("note");
+        assert_eq!(measured(&text, 80), (7, 2));
+        assert_eq!(text.style, "note");
     }
 }
