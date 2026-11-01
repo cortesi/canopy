@@ -19,6 +19,7 @@
 //!   and the evaluation all come from it.
 //! - [`symbols`] holds the families, the tiers, and the compiled sets.
 //! - [`rgb_into`], [`coverage_into`], and [`fixed_into`] match a raster.
+//!   [`clear_into`] matches a raster with alpha against a clear ground.
 //! - [`raster`] prepares an image's raster: resampling in linear light, and
 //!   compositing over the ground of each cell.
 
@@ -177,6 +178,20 @@ impl Tier {
     #[must_use]
     pub fn next(self) -> Self;
 }
+
+/// Match each cell of `raster`, in linear light with premultiplied alpha,
+/// against a clear ground. Writes the cells row by row into `out`, replacing
+/// what it held.
+///
+/// A cell with no ink is clear on both pens. A cell with ink in every pixel
+/// matches as [`rgb_into`] does, with two color pens. In any other cell, the
+/// alpha of the pixels chooses the character, the ink takes the mean color
+/// of its pixels, and the other pen is clear.
+///
+/// # Panics
+///
+/// Panics when the width or the height of `raster` is not a multiple of 8.
+pub fn clear_into(raster: &LinearRaster, set: &SymbolSet, out: &mut Vec<Cell<Option<[u8; 3]>>>);
 
 /// Match each cell of a coverage raster, where 0 is ground and 255 is full
 /// ink. Pens are coverages, the rounded means of the two parts.

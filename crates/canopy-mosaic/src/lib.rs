@@ -13,14 +13,18 @@
 //!   and the evaluation all come from it.
 //! - [`symbols`] holds the families, the tiers, and the compiled sets.
 //! - [`rgb_into`], [`coverage_into`], and [`fixed_into`] match a raster.
+//!   [`clear_into`] matches a raster with alpha against a clear ground.
 //! - [`raster`] prepares an image's raster: resampling in linear light, and
 //!   compositing over the ground of each cell.
 
+/// Matching against a clear ground.
+mod clear;
 pub mod geometry;
 /// Matching cells to symbols.
 mod matcher;
 pub mod raster;
 pub mod symbols;
 
+pub use clear::clear_into;
 pub use matcher::{Cell, RasterError, RasterView, coverage_into, fixed_into, rgb_into};
 pub use symbols::{Family, SymbolSet, Tier};

@@ -160,7 +160,7 @@ fn decode_table() -> &'static [f32; 256] {
 }
 
 /// sRGB channel values for each 16-bit linear value.
-fn encode_table() -> &'static [u8] {
+pub(crate) fn encode_table() -> &'static [u8] {
     static TABLE: OnceLock<Vec<u8>> = OnceLock::new();
     TABLE.get_or_init(|| {
         (0..=u16::MAX)
@@ -178,7 +178,7 @@ fn encode_table() -> &'static [u8] {
 }
 
 /// A linear value in 0 to 1 as 16 bits.
-fn to_u16(value: f32) -> u16 {
+pub(crate) fn to_u16(value: f32) -> u16 {
     (value * f32::from(u16::MAX))
         .round()
         .clamp(0.0, f32::from(u16::MAX)) as u16
