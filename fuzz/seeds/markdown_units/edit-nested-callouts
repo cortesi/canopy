@@ -1,0 +1,3 @@
+> [!note] aa ^[an inline note] aaa aaa
+> > [!note] [link](https://example.test) aaaaa
+> > ![alt](image.png)

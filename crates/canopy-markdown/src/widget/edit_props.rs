@@ -16,7 +16,7 @@ use super::{
 };
 use crate::{
     executor::{ExecutorOptions, MarkdownExecutor},
-    testing::{self, Schedule, document, hostile_text, schedule},
+    testing::{self, EditCheck, Schedule, check_apply_edit, document, hostile_text, schedule},
     units::{line_terminator, parse_units, unit_at},
 };
 
@@ -571,5 +571,29 @@ proptest! {
                 .unwrap();
             prop_assert_eq!(shown, Some(epoch));
         }
+    }
+}
+
+/// The checks of a direct edit that the `markdown_edit` fuzz target makes,
+/// on ranges the reader takes and ranges it refuses, in fresh readers and in
+/// one reader that takes each text in turn.
+#[test]
+fn direct_edits_keep_their_checks() {
+    let mut reused = EditCheck::new().unwrap();
+    for (text, from, to, replacement) in [
+        ("# One\n\npara\n", 7, 11, "new\n\n- list"),
+        ("# One\n\npara\n", 0, 0, "```"),
+        ("# One\n\npara\n", 12, 12, "end"),
+        ("", 0, 0, "first"),
+        ("a\r\nb\r\n", 0, 1, "x\ny"),
+        // Refused: reversed, past the end, inside "é", and inside CRLF.
+        ("aé\r\nb", 2, 1, "x"),
+        ("aé\r\nb", 0, 9, "x"),
+        ("aé\r\nb", 2, 3, "x"),
+        ("aé\r\nb", 4, 4, "x"),
+    ] {
+        check_apply_edit(text, from, to, replacement)
+            .and_then(|()| reused.check(text, from, to, replacement))
+            .unwrap_or_else(|error| panic!("{text:?} {from}..{to} {replacement:?}: {error}"));
     }
 }

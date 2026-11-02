@@ -1,0 +1,8 @@
+[^1]: footnote definition text
+
+<!-- -->
+
+    // indented code block
+    fn main() {
+        println!("hello world!");
+    }

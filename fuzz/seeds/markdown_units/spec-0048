@@ -1,0 +1,8 @@
+::: spoiler Is this expandable?
+Is this collapsable?
+> Is this **bold**?
+> Is this **bold**?
+> ::: spoiler Is this expandable?
+> Is this inside?
+> :::
+:::

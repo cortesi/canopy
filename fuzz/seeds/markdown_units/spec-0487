@@ -1,0 +1,9 @@
+[a](https://example.com"test")
+[a](<https://example.com>"test")
+[a](https://example.com(test))
+[a](<https://example.com>(test))
+
+[a](https://example.com "test")
+[a](<https://example.com> "test")
+[a](https://example.com (test))
+[a](<https://example.com> (test))

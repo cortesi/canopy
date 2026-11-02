@@ -317,7 +317,11 @@ source payload. The `fh-markdown` browser server and fh's `F m` action remain in
 The `testing` feature shares Proptest strategies with other tests: a grammar
 of documents, hostile edits, and the parser's spec examples. Its `check_units`
 and `check_edit` check the invariants of edit units against a slow reference,
-as a fuzz target can. Its `Schedule` drives a harness with the manual
+and `EditCheck` checks a direct edit through a reader: its refusals, its new
+text, the edit it records, and the block cursor's new place. The fuzz
+targets `markdown_units` and `markdown_edit` run these checks on any text,
+with `cargo xtask fuzz TARGET`, from seeds of the spec examples and of the
+regressions of the property tests. Its `Schedule` drives a harness with the manual
 executor and a manual clock: `schedule` generates steps that run turns,
 start, finish, or reject held work, and advance the clock, and `pump`
 finishes all work until each reader shows its current text. Routine runs

@@ -1,0 +1,3 @@
+apple
+
+:   red fruit

@@ -15,6 +15,7 @@ cargo-fuzz = true
 
 [dependencies]
 canopy = { path = "../crates/canopy" }
+canopy-markdown = { path = "../crates/canopy-markdown", default-features = false, features = ["testing"] }
 canopy-widgets = { path = "../crates/canopy-widgets", default-features = false }
 libfuzzer-sys = "0.4.13"
 unicode-segmentation = "1.13.3"
@@ -22,6 +23,20 @@ unicode-segmentation = "1.13.3"
 [[bin]]
 name = "vi_keys"
 path = "fuzz_targets/vi_keys.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "markdown_units"
+path = "fuzz_targets/markdown_units.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "markdown_edit"
+path = "fuzz_targets/markdown_edit.rs"
 test = false
 doc = false
 bench = false

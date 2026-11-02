@@ -1,0 +1,2 @@
+> [!CAUTION]
+> Caution blockquote

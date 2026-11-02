@@ -1,0 +1,2 @@
+> [!IMPORTANT]
+> Important blockquote

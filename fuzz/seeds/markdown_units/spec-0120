@@ -1,0 +1,21 @@
+Songs that simply loop are a popular way to annoy people. [^examples]
+
+[^examples]: * [The song that never ends](https://www.youtube.com/watch?v=0U2zJOryHKQ)
+* [I know a song that gets on everybody's nerves](https://www.youtube.com/watch?v=TehWI09qxls)
+* [Ninety-nine bottles of beer on the wall](https://www.youtube.com/watch?v=qVjCag8XoHQ)
+
+
+Songs that simply loop are a popular way to annoy people. [^examples2]
+
+[^examples2]: * [The song that never ends](https://www.youtube.com/watch?v=0U2zJOryHKQ) 2
+    * [I know a song that gets on everybody's nerves](https://www.youtube.com/watch?v=TehWI09qxls) 2
+    - [Ninety-nine bottles of beer on the wall](https://www.youtube.com/watch?v=qVjCag8XoHQ) 2
+
+
+Songs that simply loop are a popular way to annoy people. [^examples3]
+
+[^examples3]: * [The song that never ends](https://www.youtube.com/watch?v=0U2zJOryHKQ) 3
+
+    * [I know a song that gets on everybody's nerves](https://www.youtube.com/watch?v=TehWI09qxls) 3
+
+    * [Ninety-nine bottles of beer on the wall](https://www.youtube.com/watch?v=qVjCag8XoHQ) 3

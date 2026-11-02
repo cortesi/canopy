@@ -9,7 +9,7 @@
 use std::{env, fs, io, ops::Range, path::Path, sync::Arc, time::Duration};
 
 use canopy::{
-    NodeId, ViewContextExt,
+    Context, NodeId, ViewContextExt,
     error::Result as CanopyResult,
     runtime::TurnInput,
     testing::{ManualClock, harness::Harness},
@@ -21,9 +21,9 @@ use proptest::{
 };
 
 use crate::{
-    Markdown,
+    BlockEdit, DocumentInput, Markdown, MarkdownOptions, Mode,
     document::{DocumentSnapshot, ParseLimits, parse_document},
-    executor::{HeldWork, ManualExecutor},
+    executor::{ExecutorOptions, HeldWork, ManualExecutor, MarkdownExecutor},
     source_store::SourceStore,
     units::{EditKind, EditUnit, edit_units, parse_units, replace_own_text, unit_at},
 };
@@ -669,6 +669,170 @@ fn edit(
         ));
     }
     Ok(())
+}
+
+/// Check one edit of `text` through a reader, as `Markdown::apply_edit` makes
+/// it: `replacement` in place of bytes `from..to`. Return a description of
+/// the first failure. [`EditCheck::check`] says what it checks.
+pub fn check_apply_edit(
+    text: &str,
+    from: usize,
+    to: usize,
+    replacement: &str,
+) -> Result<(), String> {
+    EditCheck::new()?.check(text, from, to, replacement)
+}
+
+/// A reader in a harness that checks direct edits, one text after another.
+/// Each check puts its text in the reader as a new document, so the checks
+/// of one reader give the results of fresh ones, and a fuzz target pays for
+/// the application once.
+pub struct EditCheck {
+    /// The harness, whose root is the reader.
+    harness: Harness,
+    /// The reader's preparation work.
+    work: Schedule,
+    /// The reader's node.
+    reader: NodeId,
+}
+
+impl EditCheck {
+    /// Make a reader that rests in the block cursor, with a manual executor
+    /// and a manual clock.
+    pub fn new() -> Result<Self, String> {
+        let (executor, manual) = MarkdownExecutor::manual(ExecutorOptions {
+            worker_count: 1,
+            ..ExecutorOptions::default()
+        });
+        let options = MarkdownOptions {
+            executor,
+            resting_mode: Mode::Interact,
+            status_row: false,
+            coalesce: Duration::ZERO,
+            ..MarkdownOptions::default()
+        };
+        let reader = Markdown::new(String::new(), options).map_err(|error| error.to_string())?;
+        let clock = Arc::new(ManualClock::new());
+        let harness = Harness::builder(reader)
+            .register::<Markdown>()
+            .clock(clock.clone())
+            .size(40, 12)
+            .build()
+            .map_err(|error| error.to_string())?;
+        let reader = harness
+            .find_nodes("**/markdown")
+            .map_err(|error| error.to_string())?[0];
+        Ok(Self {
+            harness,
+            work: Schedule::new(manual, clock),
+            reader,
+        })
+    }
+
+    /// Run the reader's work until it shows its text.
+    fn settle(&mut self, what: &str) -> Result<(), String> {
+        if self
+            .work
+            .pump(&mut self.harness, &[self.reader])
+            .map_err(|error| error.to_string())?
+        {
+            Ok(())
+        } else {
+            Err(format!("the reader did not show {what}"))
+        }
+    }
+
+    /// Run `f` on the reader.
+    fn reader<R>(
+        &mut self,
+        f: impl FnOnce(&mut Markdown, &mut dyn Context) -> CanopyResult<R>,
+    ) -> Result<R, String> {
+        self.harness
+            .with_root_widget_context(f)
+            .map_err(|error| error.to_string())
+    }
+
+    /// Check one edit of `text`: `replacement` in place of bytes `from..to`.
+    /// Return a description of the first failure.
+    ///
+    /// The reader refuses an edit of another epoch, and a range that is
+    /// reversed, past the end, off character boundaries, or across a CRLF
+    /// pair, and keeps its text. It takes any other edit: its text becomes
+    /// the splice, and it records the edit for the host. Once the new text
+    /// shows, the block cursor marks the unit that holds `from`, or none in a
+    /// text without units. The units of the new text keep their invariants.
+    pub fn check(
+        &mut self,
+        text: &str,
+        from: usize,
+        to: usize,
+        replacement: &str,
+    ) -> Result<(), String> {
+        self.reader(|reader, ctx| {
+            reader.take_edits();
+            reader
+                .replace(ctx, DocumentInput::Complete(text.to_owned()))
+                .map(|_| ())
+        })?;
+        self.settle("the text")?;
+        let edit = |check: &mut Self, epoch: u64| {
+            check.reader(|reader, ctx| {
+                Ok(reader.apply_edit(ctx, epoch, from, to, replacement.to_owned()))
+            })
+        };
+        let epoch = self.reader(|reader, _| Ok(reader.epoch()))?;
+        if edit(self, epoch + 1)?.is_ok() {
+            return Err("the reader took an edit of another epoch".into());
+        }
+        let splits = |at: usize| {
+            at > 0
+                && text.as_bytes().get(at - 1) == Some(&b'\r')
+                && text.as_bytes().get(at) == Some(&b'\n')
+        };
+        let valid = from <= to
+            && text.is_char_boundary(from)
+            && text.is_char_boundary(to)
+            && !splits(from)
+            && !splits(to);
+        let taken = edit(self, epoch)?;
+        let (source, edits) =
+            self.reader(|reader, _| Ok((reader.accepted_source(), reader.take_edits())))?;
+        if !valid {
+            if taken.is_ok() {
+                return Err(format!("the reader took the range {from}..{to}"));
+            }
+            if *source != *text || !edits.is_empty() {
+                return Err(format!("a refused edit of {from}..{to} changed the text"));
+            }
+            return Ok(());
+        }
+        taken.map_err(|error| format!("the reader refused {from}..{to}: {error}"))?;
+        let mut expected = text.to_owned();
+        expected.replace_range(from..to, replacement);
+        if *source != *expected {
+            return Err(format!("the text is {source:?}, not {expected:?}"));
+        }
+        let recorded = BlockEdit {
+            epoch,
+            range: from..to,
+            text: replacement.to_owned(),
+        };
+        if edits != [recorded] {
+            return Err(format!("the reader recorded {edits:?}"));
+        }
+        self.settle("the edited text")?;
+        let units = parse_units(&expected);
+        let wanted = unit_at(&units, from).map(|index| units[index].range.clone());
+        let marked = self
+            .reader(|reader, _| Ok(reader.selected_block()))?
+            .map(|unit| unit.range);
+        if marked != wanted {
+            return Err(format!(
+                "the cursor marks {marked:?}, not the unit {wanted:?} that holds byte {from}"
+            ));
+        }
+        check_units(&expected).map_err(|error| format!("after the edit to {expected:?}: {error}"))
+    }
 }
 
 /// One step of the preparation work of the readers in a harness, which share

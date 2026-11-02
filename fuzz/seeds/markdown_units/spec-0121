@@ -1,0 +1,19 @@
+My [cmark-gfm][^c].
+
+My [cmark-gfm][cmark-gfm][^c].
+
+My [cmark-gfm][][^c].
+
+My [cmark-gfm] [^c].
+
+My [cmark-gfm[^c]].
+
+[cmark-gfm]: https://github.com/github/cmark-gfm/blob/1e230827a584ebc9938c3eadc5059c55ef3c9abf/test/extensions.txt#L702
+
+[^c]: cmark-gfm is under the MIT license, so incorporating parts of its
+    test suite into pulldown-cmark should be fine.
+
+
+My [otherlink[^c]].
+
+[otherlink[^c]]: https://github.com/github/cmark-gfm/blob/1e230827a584ebc9938c3eadc5059c55ef3c9abf/test/extensions.txt#L702

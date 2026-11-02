@@ -105,7 +105,7 @@ enum Task {
     /// the nightly toolchain. New inputs go to `fuzz/corpus/TARGET`, and the
     /// checked-in seeds of `fuzz/seeds/TARGET` start the run.
     Fuzz {
-        /// The fuzz target, such as `vi_keys`.
+        /// The fuzz target: `markdown_units`, `markdown_edit`, or `vi_keys`.
         target: String,
         /// How long to run, in seconds.
         #[arg(long, default_value_t = 60)]
@@ -330,8 +330,15 @@ fn run_vim_diff(workspace_root: &Path, cases: u64, seed: Option<u64>) -> bool {
     )
 }
 
+/// The targets of `fuzz/`.
+const FUZZ_TARGETS: [&str; 3] = ["markdown_units", "markdown_edit", "vi_keys"];
+
 /// Run the fuzz target `target` for `seconds` seconds.
 fn run_fuzz(workspace_root: &Path, target: &str, seconds: u64) -> bool {
+    if !FUZZ_TARGETS.contains(&target) {
+        eprintln!("unknown fuzz target {target:?}; the targets are {FUZZ_TARGETS:?}");
+        return false;
+    }
     let fuzz = workspace_root.join("fuzz");
     let corpus = fuzz.join("corpus").join(target);
     if let Err(error) = fs::create_dir_all(&corpus) {
