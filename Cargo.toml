@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "examples/*", "xtask"]
+# The fuzz targets build with a nightly toolchain: `cargo xtask fuzz`.
+exclude = ["fuzz"]
 
 [workspace.metadata.nanocode]
 schema-version = 1

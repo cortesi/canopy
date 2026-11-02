@@ -101,6 +101,16 @@ enum Task {
         #[arg(long)]
         seed: Option<u64>,
     },
+    /// Run a fuzz target of `fuzz/` for a fixed time, with `cargo fuzz` on
+    /// the nightly toolchain. New inputs go to `fuzz/corpus/TARGET`, and the
+    /// checked-in seeds of `fuzz/seeds/TARGET` start the run.
+    Fuzz {
+        /// The fuzz target, such as `vi_keys`.
+        target: String,
+        /// How long to run, in seconds.
+        #[arg(long, default_value_t = 60)]
+        seconds: u64,
+    },
 }
 
 /// Run the `cargo xtask` entry point.
@@ -121,6 +131,7 @@ fn main() -> ExitCode {
             seed,
         } => soak::run(&root, &suites, cases, seed),
         Task::VimDiff { cases, seed } => run_vim_diff(&root, cases, seed),
+        Task::Fuzz { target, seconds } => run_fuzz(&root, &target, seconds),
         Task::Score { args } => {
             let mut command = vec!["run", "--quiet", "-p", "mosaic-score", "--"];
             command.extend(args.iter().map(String::as_str));
@@ -317,6 +328,49 @@ fn run_vim_diff(workspace_root: &Path, cases: u64, seed: Option<u64>) -> bool {
         command.current_dir(workspace_root),
         "cargo test --test vim_diff",
     )
+}
+
+/// Run the fuzz target `target` for `seconds` seconds.
+fn run_fuzz(workspace_root: &Path, target: &str, seconds: u64) -> bool {
+    let fuzz = workspace_root.join("fuzz");
+    let corpus = fuzz.join("corpus").join(target);
+    if let Err(error) = fs::create_dir_all(&corpus) {
+        eprintln!("Failed to create {}: {error}", corpus.display());
+        return false;
+    }
+    // Name the target: `cargo fuzz` otherwise builds for the triple it was
+    // built for, which can differ from the host.
+    let Some(host) = nightly_host() else {
+        eprintln!("Failed to read the host of the nightly toolchain");
+        return false;
+    };
+    let mut command = cargo_env::command("rustup");
+    command
+        .args([
+            "run", "nightly", "cargo", "fuzz", "run", "--target", &host, target,
+        ])
+        .arg(&corpus);
+    let seeds = fuzz.join("seeds").join(target);
+    if seeds.is_dir() {
+        command.arg(&seeds);
+    }
+    command.arg("--").arg(format!("-max_total_time={seconds}"));
+    run_command(
+        command.current_dir(workspace_root),
+        &format!("cargo fuzz run {target}"),
+    )
+}
+
+/// Return the host triple of the nightly toolchain.
+fn nightly_host() -> Option<String> {
+    let output = cargo_env::command("rustup")
+        .args(["run", "nightly", "rustc", "-vV"])
+        .output()
+        .ok()?;
+    let text = String::from_utf8(output.stdout).ok()?;
+    text.lines()
+        .find_map(|line| line.strip_prefix("host: "))
+        .map(str::to_string)
 }
 
 /// Run `command`, which `label` names in messages, with inherited output.

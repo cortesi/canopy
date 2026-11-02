@@ -1,0 +1,27 @@
+[package]
+name = "canopy-fuzz"
+version = "0.0.0"
+authors = ["Aldo Cortesi <aldo@corte.si>"]
+edition = "2024"
+license = "MIT"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+# The fuzz targets build with a nightly toolchain and sanitizers, so they stay
+# out of the main workspace. Run them with `cargo xtask fuzz TARGET`.
+[workspace]
+
+[dependencies]
+canopy = { path = "../crates/canopy" }
+canopy-widgets = { path = "../crates/canopy-widgets", default-features = false }
+libfuzzer-sys = "0.4.13"
+unicode-segmentation = "1.13.3"
+
+[[bin]]
+name = "vi_keys"
+path = "fuzz_targets/vi_keys.rs"
+test = false
+doc = false
+bench = false
