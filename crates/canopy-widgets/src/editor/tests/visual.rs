@@ -389,6 +389,22 @@ fn word_motions_cross_line_ends_indents_and_empty_lines() {
 }
 
 #[test]
+fn objects_grow_to_the_start_of_the_text_and_stop_at_empty_lines() {
+    // The outcomes are Neovim's.
+    let chars = VisualMode::Character;
+    assert_selects("   x", (0, 3), "vhiw", chars, ((0, 1), (0, 4)), (0, 1));
+    assert_selects("   x y", (0, 3), "vhaw", chars, ((0, 0), (0, 4)), (0, 0));
+    let text = "a.\n\n  b. c";
+    assert_selects(text, (2, 0), "vis", chars, ((2, 2), (2, 4)), (2, 3));
+    assert_selects(text, (2, 0), "vas", chars, ((2, 2), (2, 5)), (2, 4));
+    assert_selects(text, (2, 1), "vis", chars, ((2, 2), (2, 4)), (2, 3));
+    assert_selects(text, (2, 3), "vhis", chars, ((2, 0), (2, 4)), (2, 0));
+    assert_selects(text, (2, 2), "vhas", chars, ((2, 0), (2, 3)), (2, 0));
+    let text = "x y.\n\n  b. c";
+    assert_selects(text, (2, 1), "vhis", chars, ((2, 1), (2, 3)), (2, 2));
+}
+
+#[test]
 fn words_and_sentences_cross_into_the_last_lines() {
     // The outcomes are Neovim's.
     let chars = VisualMode::Character;
