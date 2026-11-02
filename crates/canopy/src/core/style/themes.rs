@@ -250,12 +250,13 @@ impl Palette {
             // foreground would turn the mark dark just when it slides under.
             .fg("/search/mark", p.yellow)
             // A host marks text that it put in place, or is about to change,
-            // in the hue of the accent, faded as far as other matches.
+            // in green, faded as far as other matches, so a mark never reads
+            // as the selection.
             .style(
                 "/editor/mark",
                 PartialStyle::new()
                     .fg(p.fg)
-                    .bg(p.accent.mix(p.bg, MATCH_FADE, Mix::Rgb)),
+                    .bg(p.green.mix(p.bg, MATCH_FADE, Mix::Rgb)),
             )
             .fg("/editor/line-number", p.line_number)
             .fg("/editor/line-number/current", p.accent)
