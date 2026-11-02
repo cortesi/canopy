@@ -8,7 +8,9 @@
 //! An input is a flags byte, the text, a zero byte, and the keys, so seeds
 //! are easy to write by hand. The text and the keys decode as lossy UTF-8.
 //! Each char of the keys is one key, and control chars name the keys that
-//! are not chars: see [`key_for`].
+//! are not chars: see [`key_for`]. The keys leave out `R`, whose prompt can
+//! replace every match in one key, so that each key adds at most one undo
+//! step.
 
 #![no_main]
 
@@ -27,6 +29,10 @@ const MAX_KEYS: usize = 256;
 
 /// The longest text of one input, in chars.
 const MAX_TEXT: usize = 512;
+
+/// The text, in bytes, past which a run takes no more keys. Yanks and puts
+/// can grow a text without bound, and each key costs time in its length.
+const MAX_GROWN_TEXT: usize = 1 << 16;
 
 thread_local! {
     /// One application gives the context for every run.
@@ -128,6 +134,7 @@ fuzz_target!(|data: &[u8]| {
         .collect();
     let keys: Vec<key::Key> = String::from_utf8_lossy(rest.get(split + 1..).unwrap_or_default())
         .chars()
+        .filter(|&c| c != 'R')
         .take(MAX_KEYS)
         .map(key_for)
         .collect();
@@ -146,8 +153,12 @@ fuzz_target!(|data: &[u8]| {
         app.borrow_mut()
             .with_root_context(|ctx| {
                 check(&editor);
-                let mut longest = text.chars().count();
+                let mut taken = 0;
                 for &key in &keys {
+                    if editor.text().len() > MAX_GROWN_TEXT {
+                        break;
+                    }
+                    taken += 1;
                     let predicted = editor.key_outcome(key, ctx);
                     let outcome = editor.on_event(&Event::Key(key), ctx)?;
                     assert_eq!(
@@ -158,17 +169,11 @@ fuzz_target!(|data: &[u8]| {
                     if read_only {
                         assert_eq!(editor.text(), text, "a read-only editor keeps its text");
                     }
-                    longest = longest.max(editor.text().chars().count());
                 }
                 editor.set_vi_mode(ViMode::Normal);
                 check(&editor);
-                // Each key adds at most one undo step, but an answer of `a` to
-                // a replace prompt adds one for each match.
-                let answers = keys
-                    .iter()
-                    .filter(|key| key.key == key::KeyCode::Char('a'))
-                    .count();
-                for _ in 0..=keys.len() + answers * (longest + 1) {
+                // Each key adds at most one undo step.
+                for _ in 0..=taken {
                     editor.undo(ctx);
                 }
                 assert_eq!(editor.text(), text, "undo restores the text");
