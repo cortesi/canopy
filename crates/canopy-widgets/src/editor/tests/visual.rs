@@ -206,6 +206,45 @@ fn horizontal_motions_stay_in_the_line_and_reach_its_end() {
 }
 
 #[test]
+fn a_failed_h_or_l_keeps_the_column_of_vertical_moves() {
+    // The outcomes are Neovim's: after `$`, a step that cannot move leaves
+    // vertical moves at the ends of lines.
+    let chars = VisualMode::Character;
+    assert_selects(
+        "abcdef\n\nab",
+        (0, 5),
+        "v$jhj",
+        chars,
+        ((0, 5), (2, 2)),
+        (2, 2),
+    );
+    assert_selects(
+        "ab\nabcdef",
+        (0, 0),
+        "v$lj",
+        chars,
+        ((0, 0), (1, 6)),
+        (1, 6),
+    );
+}
+
+#[test]
+fn normal_mode_h_and_l_cross_line_breaks() {
+    // Unlike Vim's, the editor's normal-mode `h` and `l` cross lines, and
+    // stop at the ends of the text.
+    assert_eq!(run("ab\ncd", (1, 0), "h").cursor(), TextPosition::new(0, 2));
+    assert_eq!(
+        run("ab\ncd", (0, 1), "ll").cursor(),
+        TextPosition::new(1, 0)
+    );
+    assert_eq!(run("ab\ncd", (0, 0), "h").cursor(), TextPosition::new(0, 0));
+    assert_eq!(
+        run("ab\ncd", (1, 1), "ll").cursor(),
+        TextPosition::new(1, 2)
+    );
+}
+
+#[test]
 fn vertical_motions_keep_their_column() {
     let chars = VisualMode::Character;
     assert_selects("abcdef\nde", (0, 5), "vj", chars, ((0, 5), (1, 2)), (1, 2));
@@ -729,6 +768,24 @@ fn set_selection_round_trips_in_visual_mode() {
             "{keys} on {text:?}"
         );
     }
+    // A range that ends at the start of a line holds the line break.
+    let mut editor = run("abc\ndef", (0, 0), "v");
+    editor.set_selection(Selection::new(
+        TextPosition::new(0, 1),
+        TextPosition::new(1, 0),
+    ));
+    assert_eq!(
+        state(&editor),
+        (range((0, 1), (1, 0)), TextPosition::new(0, 3))
+    );
+    editor.set_selection(Selection::new(
+        TextPosition::new(1, 0),
+        TextPosition::new(0, 1),
+    ));
+    assert_eq!(
+        state(&editor),
+        (range((0, 1), (1, 0)), TextPosition::new(0, 1))
+    );
     // A range sets the ends of a character selection, in either direction.
     let mut editor = run("abc def", (0, 0), "v");
     editor.set_selection(Selection::new(
