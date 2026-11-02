@@ -59,10 +59,50 @@ and selection are the reader's.
 
 ## Reading and actions
 
-Scroll mode moves the document. Interact mode adds an object cursor and readable
-text selection. The cursor gives its object one accent-tinted ground, which spans
-the full width of a card or table, and a bar in the left margin marks each of its
-rows. Links open an inspector first; a separate Open action requests a
+The rendered view has two modes. Scroll moves the document. Interact is the
+block cursor. A bar in the left margin, in the style `markdown/block/bar`,
+marks each content row of one edit unit. At a width of three columns or less,
+blocks have no margin. The unit's rows then take the cursor's ground,
+`markdown/block`, instead.
+
+`i` enters the block cursor. It marks the unit it marked before, if that unit
+still shows, or else the first unit with a row in view. `j` and `k` move to the
+next or previous unit, and `g` and `G` to the first or last. A unit that fits
+in the view scrolls into view by the smallest move. A taller unit entered going
+down shows its top at the top of the view. Entered going up, it shows its
+bottom at the bottom of the view.
+
+While the marked unit continues past the view, `j` or `k` scrolls and the
+cursor stays. The step is a page less two rows, and at least one row. Page
+keys, `Space`, and the wheel scroll freely. When the marked unit leaves the
+view, the cursor marks the first unit with a row in view. A resize keeps the
+marked unit in view. A click on a unit, and a search match that becomes
+current, move the cursor to that unit.
+
+`MarkdownOptions::resting_mode` sets where the view rests. With Scroll, the
+default, `Esc` leaves the block cursor. With Interact, a new document opens in
+the block cursor, and `Esc` keeps it.
+
+`select_block_at` marks the unit that `units::unit_at` finds for a source
+byte. A host uses it to restore a place after a reload. Before the document
+shows, the reader marks the unit once it does. `selected_block` returns the
+marked unit.
+
+The object cursor works inside the block cursor. `Tab` and `shift-Tab` move
+it through the links, cards, and tables of the document, in source order. The
+block cursor follows to the object's unit, and a move to another unit drops
+the object. The active object takes an accent-tinted ground, which spans the
+full width of a card or table.
+
+`Enter` opens the active object. With none, it opens the marked unit's own
+card, such as its code or table, or else the first object in the unit. `y`
+and `Markdown::copy_item` copy the text selection, else the active object,
+else the marked unit's exact source. `v` starts a text selection at the active
+object, or else at the start of the marked unit. `Esc` clears the text
+selection first, and then the active object. It then leaves the block cursor
+if the view rests in Scroll.
+
+Links open an inspector first; a separate Open action requests a
 browser launch. The rendered view never cuts content vertically. Code and
 source cards show every line; a line wider than its card clips at the card's
 edge, and the pinned code inspector shows it whole. A table preview shows
@@ -99,9 +139,9 @@ to it, so a host can take the key; its other keys belong to its framework
 group. A menu the host opens over it shows its keys as it does over the
 reader. A table numbers its rows while source shows line numbers, so one
 preference toggles both. `Markdown::has_item` reports whether the reader has
-an item to copy: its text selection, the object Interact selected, or what an
-open inspector selects, such as a table's cells. `Markdown::copy_item` copies
-it.
+an item to copy: its text selection, the active object, the unit the block
+cursor marks, or what an open inspector selects, such as a table's cells.
+`Markdown::copy_item` copies it.
 
 Source preserves Markdown syntax, tabs, CRLF, and final-newline bytes. Its display
 substitutes unsafe terminal controls, but exact copy uses accepted source ranges.
@@ -140,6 +180,49 @@ Hosts with a separate search or status bar can set `publication_wake` to their
 node's wake handle. Accepted publications and view changes then refresh host
 state without a polling delay. Read-only queries do not generate wakes.
 
+## Edit units
+
+`canopy_markdown::units` divides a document into edit units for editing a
+block at a time. An edit unit is the whole source lines of one block of a
+`DocumentSnapshot`. So it keeps the markers of the block's quotes and lists.
+Blocks whose lines overlap make one unit of kind `Merged`. Text with no block,
+such as a link reference definition or a lone block id, has no unit.
+
+Units come from the document alone, not from its layout. `edit_units` reads
+them from a document. `parse_units` parses raw text into them, as for an
+editor's text.
+
+A unit's range starts at the start of its first line. It ends at the end of
+the text of its last line, before that line's terminator. So a splice of a unit
+never splits a CRLF pair, and the terminators inside the unit are part of it.
+`unit_at` returns the unit that holds a byte, or else the next unit, or else
+the one before. The end of a unit's last line counts as inside it. `unit_at`
+returns none only for text with no units.
+
+Each unit has a kind and its own text: the bytes that a spoken replace
+changes. `replace_own_text` builds the splice that replaces them, and keeps the
+structure of the block:
+
+| Kind | Own text | A replacement |
+| --- | --- | --- |
+| Paragraph, list item, footnote | The text after the markers of the first line | New lines take the prefix of continuation lines |
+| ATX heading | The text between the `#` marks and any closing marks | Line breaks become spaces |
+| Setext heading | The text lines, without the underline | Line breaks become spaces |
+| Callout of only its title | The title | Line breaks become spaces |
+| Fenced code | The lines between the fences | New lines take the prefix of code lines |
+| Indented code | The code lines | New lines take the indent |
+
+The prefix of continuation lines keeps quote markers. It turns a list marker,
+a task box, or a footnote label into blanks, so each column stays where it
+was. Line breaks take the unit's terminator, and line breaks at the end of a
+replacement go, except in code. Tables, rules, HTML blocks, front matter,
+images and embeds alone in their paragraphs, source cards, and merged units
+have no own text. An edit of the whole unit still works on them.
+
+Markdown is not local, so an edit can change the kinds of the units before
+it. For example, a `===` line under a paragraph makes it a heading. The bytes before the edited
+unit do not change.
+
 ## Bounds and automation
 
 Options bound accepted source, semantic nodes/depth/table cells, automatic syntax
@@ -150,8 +233,10 @@ Editor buffers, in-flight jobs, inspectors, and host payloads.
 
 `state`, `object_window`, and `search_window` expose bounded,
 revision-addressed automation data. Collection windows cap their item count and
-text length. State includes publication, follow, inspector readiness, search
-coverage, and conservative resource categories. It never returns the full source.
+text length. State includes publication, follow, the marked unit, inspector
+readiness, search coverage, and conservative resource categories. The marked
+unit gives its range, own text, kind, and rows. It never returns the full
+source. The `select_block_at` command marks a unit from a script.
 
 The default crate feature enables syntax highlighting. With default features
 removed, both views retain reading, search, selection, and copy. The crate does
@@ -168,6 +253,13 @@ fh owns file loading, raw input limits, its held regex query and focus policy, a
 clipboard/browser services. It retains the pane's preferred Markdown view during
 the session. Partial files use Source with truncation metadata outside the exact
 source payload. The `fh-markdown` browser server and fh's `F m` action remain in fh.
+
+The `testing` feature shares Proptest strategies with other tests: a grammar
+of documents, hostile edits, and the parser's spec examples. Its `check_units`
+and `check_edit` check the invariants of edit units against a slow reference,
+as a fuzz target can. Routine runs use a fixed seed. `cargo xtask soak` runs
+the property tests with many cases and random seeds, and keeps each failure in
+the test's `proptest-regressions` file.
 
 The tracked gym smoke suites live in `examples/gyms/markdown-smoke` and
 `examples/gyms/table-smoke`. Gallery scripts cover both representations, inspectors,

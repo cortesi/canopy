@@ -63,6 +63,7 @@ canopy.keymap({
     mode = "presentation",
     { key = "t", description = "Light / dark theme", action = command.markdown_gym.theme() },
     { key = "g", description = "ASCII / Unicode glyphs", action = command.markdown_gym.glyphs() },
+    { key = "b", description = "Rest in the block cursor", action = command.markdown_gym.block_cursor() },
 })
 "#;
 /// Host requests drained and acknowledged per collection.
@@ -90,6 +91,8 @@ pub struct MarkdownGym {
     ascii: bool,
     /// Whether the live palette uses the light theme.
     light: bool,
+    /// Whether the rendered view rests in the block cursor.
+    blocks: bool,
     /// Recorded host requests, retained without external side effects.
     requests: Vec<HostRequest>,
 }
@@ -109,6 +112,7 @@ impl MarkdownGym {
             state: "complete fixture".into(),
             ascii: false,
             light: false,
+            blocks: false,
             requests: Vec::new(),
         }
     }
@@ -127,15 +131,21 @@ impl MarkdownGym {
                 GlyphPreset::Unicode
             },
             coalesce: Duration::ZERO,
+            resting_mode: if self.blocks {
+                Mode::Interact
+            } else {
+                Mode::Scroll
+            },
             ..Default::default()
         }
     }
     /// Publish lifecycle and host-action counts to the fixed status line.
     fn show_status(&self, ctx: &mut dyn Context) -> Result<()> {
         let text = format!(
-            "Markdown · {} · {} · recording host: {} actions",
+            "Markdown · {} · {}{} · recording host: {} actions",
             self.state,
             if self.ascii { "ASCII" } else { "Unicode" },
+            if self.blocks { " · block cursor" } else { "" },
             self.requests.len()
         );
         ctx.with_slot::<StatusSlot, _>(ctx.node_id(), |status, _| {
@@ -375,6 +385,18 @@ impl MarkdownGym {
     #[command]
     pub fn glyphs(&mut self, ctx: &mut dyn Context) -> Result<()> {
         self.ascii = !self.ascii;
+        self.remount(ctx)
+    }
+    /// Reset the fixture in a reader that rests in the block cursor, or
+    /// back in one that rests in Scroll. Focus moves to the new reader when
+    /// the old one held it.
+    #[command]
+    pub fn block_cursor(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        self.blocks = !self.blocks;
+        self.remount(ctx)
+    }
+    /// Mount a new reader over the complete fixture with the current options.
+    fn remount(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let focused = self.focused(ctx)?;
         if let Some(node) = ctx.child_slot_of(ctx.node_id(), <ReaderSlot as ChildSlot>::KEY) {
             ctx.remove_subtree(node)?;
@@ -392,9 +414,19 @@ impl MarkdownGym {
         reader(ctx, |md, ctx| md.set_search(ctx, query, false))
     }
     #[command]
-    /// Enter object interaction mode through the public controller.
+    /// Enter the block cursor through the public controller.
     pub fn interact(&self, ctx: &mut dyn Context) -> Result<()> {
         reader(ctx, |md, ctx| md.set_mode(ctx, Mode::Interact))
+    }
+    #[command]
+    /// The source range of the unit that the block cursor marks, as
+    /// `start..end`, or an empty string outside the block cursor.
+    pub fn block(&self, ctx: &mut dyn Context) -> Result<String> {
+        reader(ctx, |md, _| {
+            Ok(md.selected_block().map_or(String::new(), |unit| {
+                format!("{}..{}", unit.range.start, unit.range.end)
+            }))
+        })
     }
     #[command]
     /// Retained match count for the active presentation.

@@ -1,6 +1,6 @@
 {
   "title": "Canopy widgets",
-  "generated": 1793163694,
+  "generated": 1793610358,
   "font_size": 14.0,
   "scale": 2.0,
   "sizes": [
@@ -58,6 +58,105 @@
         {
           "size": "110x36",
           "file": "big-halves-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "block-cursor",
+      "title": "Block cursor",
+      "caption": "A bar in the left margin marks every row of one edit unit: here the title.",
+      "script": "blocks.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "block-cursor-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界",
+            "👩",
+            "💻"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "block-cursor-paragraph",
+      "title": "Next unit",
+      "caption": "j and k move the cursor a unit at a time; a paragraph is all its source lines.",
+      "script": "blocks.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "block-cursor-paragraph-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界",
+            "👩",
+            "💻"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "block-cursor-object",
+      "title": "Object in a unit",
+      "caption": "Tab moves the object cursor inside the block cursor, which follows to the object's unit.",
+      "script": "blocks.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "block-cursor-object-110x36.png",
+          "width": 1870,
+          "height": 1332,
+          "missing": [
+            "界",
+            "👩",
+            "💻"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "block-cursor-list",
+      "title": "List items",
+      "caption": "Each list item is a unit of its own, nested items included.",
+      "script": "blocks.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "block-cursor-list-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "block-cursor-tall",
+      "title": "Tall unit",
+      "caption": "A unit taller than the view shows its top as the cursor enters it.",
+      "script": "blocks.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "block-cursor-tall-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "block-cursor-tall-paged",
+      "title": "Paging a tall unit",
+      "caption": "Inside a tall unit, j scrolls a page less two rows and the cursor stays.",
+      "script": "blocks.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "block-cursor-tall-paged-110x36.png",
           "width": 1870,
           "height": 1332
         }
@@ -746,6 +845,11 @@
       "script": "big.luau",
       "title": "Big",
       "summary": "The big text gym: the text fitted to the whole stage, then to a smaller area in the middle with a gradient, and its ladder of every face."
+    },
+    {
+      "script": "blocks.luau",
+      "title": "Blocks",
+      "summary": "The block cursor: the Markdown gym's reader, resting in Interact."
     },
     {
       "script": "cedit.luau",
