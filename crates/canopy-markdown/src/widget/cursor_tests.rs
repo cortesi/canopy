@@ -844,6 +844,12 @@ fn step(
         }
         Action::Click(row) => {
             let row = *row % height.max(1);
+            // A press on the active object activates it, and a link or
+            // footnote may jump, so only the screen checks hold then.
+            let armed = before.mode == Mode::Interact
+                && harness.with_root_widget(|reader: &mut Markdown| {
+                    reader.shared.borrow().overlays.active_object.is_some()
+                });
             harness
                 .mouse(mouse::MouseEvent {
                     action: mouse::Action::Down,
@@ -875,6 +881,9 @@ fn step(
                 })
                 .unwrap();
             service(harness);
+            if armed {
+                return check_screen(harness, *width);
+            }
             let after = observed(harness);
             prop_assert_eq!(after.top, before.top);
             // A press on an object carries the cursor to the object's unit.

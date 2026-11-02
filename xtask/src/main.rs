@@ -4,6 +4,7 @@
 mod big_text;
 mod cargo_env;
 mod luau_grammar;
+mod soak;
 mod unicode_mosaics;
 mod xmark_specs;
 
@@ -69,6 +70,18 @@ enum Task {
         #[arg(long)]
         check: bool,
     },
+    /// Run the property tests with many cases and random seeds. Each
+    /// failure stays in its test's `proptest-regressions` file.
+    Soak {
+        /// The suites to run, `units` or `cursor`; every suite by default.
+        suites: Vec<String>,
+        /// The cases of each property test, in place of each suite's own.
+        #[arg(long)]
+        cases: Option<u32>,
+        /// The proptest seed, to repeat a run; random by default.
+        #[arg(long)]
+        seed: Option<u64>,
+    },
     /// Generate canopy-xmark's spec tests in `tests/suite` from its spec
     /// files.
     XmarkSpecs {
@@ -91,6 +104,11 @@ fn main() -> ExitCode {
         Task::BigText { check } => big_text::run(&root, check),
         Task::UnicodeMosaics { data, check } => unicode_mosaics::run(&root, &data, check),
         Task::XmarkSpecs { check } => xmark_specs::run(&root, check),
+        Task::Soak {
+            suites,
+            cases,
+            seed,
+        } => soak::run(&root, &suites, cases, seed),
         Task::Score { args } => {
             let mut command = vec!["run", "--quiet", "-p", "mosaic-score", "--"];
             command.extend(args.iter().map(String::as_str));
