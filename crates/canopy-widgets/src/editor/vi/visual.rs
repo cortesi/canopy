@@ -176,11 +176,7 @@ impl Editor {
         // The buffer clamps the ends to the text, and each end then moves to
         // the start of its grapheme, where motions put them.
         self.buffer.set_selection(Selection::new(ends.0, ends.1));
-        let clamped = self.buffer.selection();
-        self.buffer.set_selection(Selection::new(
-            motion::grapheme_start(&self.buffer, clamped.anchor()),
-            motion::grapheme_start(&self.buffer, clamped.head()),
-        ));
+        self.snap_visual_ends();
     }
 
     /// Return the position of the last character that a half-open range
@@ -567,7 +563,8 @@ impl Editor {
         match mode {
             VisualMode::Character => {
                 self.set_yank(range, false);
-                self.leave_visual_at(range.start);
+                // A caret at the start is what undo restores.
+                self.vi.set_mode(ViMode::Normal);
                 self.buffer.set_cursor(range.start);
                 if !range.is_empty() {
                     self.replace_range(range, "");
@@ -587,7 +584,8 @@ impl Editor {
                 } else {
                     range
                 };
-                self.leave_visual_at(range.start);
+                self.vi.set_mode(ViMode::Normal);
+                self.buffer.set_cursor(range.start);
                 self.replace_range(delete, "");
                 let line = first.min(self.buffer.line_count().saturating_sub(1));
                 let cursor = motion::clamp_to_char(&self.buffer, self.column_in(line));

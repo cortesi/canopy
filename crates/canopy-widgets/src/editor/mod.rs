@@ -67,9 +67,9 @@ impl Interaction {
 pub enum EditMode {
     /// Text entry mode with direct insertion.
     Text,
-    /// Vi-style modal editing. Its keys follow Neovim with its default
-    /// options. Visual mode selects as Vim does with 'selection' set to
-    /// inclusive; [`Editor::selection`] gives the selected range.
+    /// Vi-style modal editing. Visual mode follows Neovim with its default
+    /// options, and selects as Vim does with 'selection' set to inclusive.
+    /// [`Editor::selection`] gives the selected range.
     Vi,
 }
 
