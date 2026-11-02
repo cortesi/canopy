@@ -167,7 +167,7 @@ pub fn unit_at(units: &[EditUnit], byte: usize) -> Option<usize> {
 /// breaks at the end of `replacement` are dropped, except in code.
 pub fn replace_own_text(source: &str, unit: &EditUnit, replacement: &str) -> Option<Splice> {
     let own = unit.own.clone()?;
-    let term = terminator(source, &unit.range);
+    let term = line_terminator(source, &unit.range);
     let text = match unit.kind {
         EditKind::AtxHeading | EditKind::SetextHeading | EditKind::CalloutTitle => {
             separated(source, &own, lines(trim_breaks(replacement)).join(" "))
@@ -238,7 +238,7 @@ fn line_start(text: &str, at: usize) -> usize {
 
 /// Return the line terminator of the text in `range`: the first one in it,
 /// or else the one after it, or else the first in `source`, or else LF.
-fn terminator(source: &str, range: &Range<usize>) -> &'static str {
+pub(crate) fn line_terminator(source: &str, range: &Range<usize>) -> &'static str {
     let found = source[range.clone()]
         .find(['\n', '\r'])
         .map(|offset| range.start + offset)

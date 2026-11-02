@@ -4,6 +4,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, VecDeque},
     fmt::Display,
+    ops::Range,
     rc::Rc,
     result::Result as StdResult,
     sync::Arc,
@@ -11,7 +12,7 @@ use std::{
 };
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, ViewContext,
+    Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
     ViewContextExt, Widget,
     commands::{ArgValue, CommandStatus, CommandTarget},
     derive_commands,
@@ -30,7 +31,7 @@ use canopy::{
     status::StatusItem,
 };
 use canopy_widgets::{
-    Container, SearchBar, TableView,
+    Confirm, Container, SearchBar, TableView,
     editor::{Editor, LineNumbers, WrapMode},
     mosaic::{Tier, tier_for},
     scrollbar::Scrollbar,
@@ -59,7 +60,7 @@ use crate::{
     },
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, SourceAnchor, SourceMatches, SourceOptions},
-    surface::{RenderedSurface, SurfaceState},
+    surface::{PendingMark, RenderedSurface, SurfaceState},
     units::EditUnit,
 };
 
@@ -248,6 +249,26 @@ pub struct Markdown {
     restoring: bool,
     /// Whether pointer capture postpones a completed surface swap.
     deferred_publication: bool,
+    /// The open slot and the edit in it.
+    slot: Option<slot::OpenSlot>,
+    /// The dialog that asks before a discard drops changes, once mounted.
+    confirm: Option<TypedId<Confirm>>,
+    /// Edits of the text that the host has not taken, oldest first.
+    edits: VecDeque<BlockEdit>,
+    /// Whether the host stops every change through the reader.
+    locked: bool,
+}
+
+/// One edit of the reader's text, for the host to apply to its own copy of
+/// the text in order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlockEdit {
+    /// The epoch of the text that `range` addresses.
+    pub epoch: u64,
+    /// The UTF-8 bytes of that text that `text` replaces.
+    pub range: Range<usize>,
+    /// The text that takes their place.
+    pub text: String,
 }
 
 /// Convert an application-facing error into the common Canopy error type.
@@ -440,6 +461,10 @@ impl Markdown {
             last_size: None,
             restoring: false,
             deferred_publication: false,
+            slot: None,
+            confirm: None,
+            edits: VecDeque::new(),
+            locked: false,
         }
     }
     /// Accept a complete UTF-8 chunk or reject it without changing the
@@ -465,6 +490,8 @@ impl Markdown {
             DocumentInput::Receiving(text) => (text, true),
         };
         self.store.replace(&text, receiving).map_err(invalid)?;
+        // A new text drops an open block editor and its draft.
+        slot::close(self, ctx)?;
         self.dismiss_inspector(ctx)?;
         if let Some(nodes) = &self.nodes {
             ctx.with_widget_mut(nodes.rendered, |surface: &mut RenderedSurface, ctx| {
@@ -514,6 +541,7 @@ impl Markdown {
             state.mode = state.resting;
             state.marked = None;
             state.pending_mark = None;
+            state.awaiting = false;
             state.cursor_scroll = None;
             state.follow = if receiving {
                 Follow::Following
@@ -703,7 +731,7 @@ impl Markdown {
     }
     /// Reject switches while a modal or any reader drag owns interaction.
     fn can_switch(&self, ctx: &dyn ViewContext) -> Result<bool> {
-        Ok(self.inspector.is_none() && !self.drag_active(ctx)?)
+        Ok(self.inspector.is_none() && self.slot.is_none() && !self.drag_active(ctx)?)
     }
     /// Whether any Rendered, scrollbar, or mounted Source drag owns the
     /// pointer.
@@ -782,7 +810,7 @@ impl Markdown {
     /// Enter or leave the block cursor of the rendered view.
     #[command]
     pub fn set_mode(&mut self, ctx: &mut dyn Context, mode: Mode) -> Result<()> {
-        if mode == Mode::Interact && self.inspector.is_some() {
+        if mode == Mode::Interact && self.inspector.is_some() || self.slot.is_some() {
             return Ok(());
         }
         if mode == Mode::Interact {
@@ -817,7 +845,12 @@ impl Markdown {
             .as_ref()
             .is_some_and(|p| p.document.source.epoch == epoch);
         if !shown {
-            self.shared.borrow_mut().pending_mark = Some((epoch, byte));
+            self.shared.borrow_mut().pending_mark = Some(PendingMark {
+                epoch,
+                byte,
+                row: None,
+                mode: Mode::Interact,
+            });
             return Ok(());
         }
         if self.active == ViewType::Rendered
@@ -834,10 +867,216 @@ impl Markdown {
     pub fn selected_block(&self) -> Option<EditUnit> {
         self.shared.borrow_mut().marked_unit().map(|(unit, _)| unit)
     }
+    /// Return the accepted source text: the text of the current document,
+    /// with every commit and direct edit in it.
+    pub fn accepted_source(&self) -> Arc<str> {
+        self.store.snapshot().text()
+    }
+    /// Open the block editor on the marked unit, in place of its rows, at
+    /// the start of its own text. With no unit, open an empty editor at the
+    /// end of the text. It does nothing without a block editor in the
+    /// options, while the host locks blocks, an inspector is open, or an
+    /// edit awaits its layout.
+    #[command]
+    pub fn edit_block(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        slot::open(self, ctx)
+    }
+    /// Commit the block editor: record its text as an edit when it differs
+    /// from the text before the edit, and close it once the edit's layout
+    /// shows. A commit with no change records nothing.
+    #[command]
+    pub fn commit_block(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        slot::commit(self, ctx)
+    }
+    /// Close the block editor and drop the changes since the last
+    /// checkpoint. With such changes, ask first unless `confirmed`.
+    /// @param confirmed Whether to drop the changes without asking.
+    #[command]
+    pub fn discard_block(&mut self, ctx: &mut dyn Context, confirmed: bool) -> Result<()> {
+        slot::discard(self, ctx, confirmed)
+    }
+    /// Mark the block editor's text as kept: a later discard returns to it,
+    /// and commits it when it differs from the text before the edit.
+    /// Neither copy of the text changes until the editor closes.
+    #[command]
+    pub fn checkpoint_block(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        slot::checkpoint(self, ctx)
+    }
+    /// Return the edit that a commit of the block editor would make now:
+    /// its range and the editor's text, so a host can save the document as
+    /// it would be after a commit. Return `None` while no editor is open.
+    pub fn block_draft(&self, ctx: &dyn ViewContext) -> Option<BlockEdit> {
+        slot::draft(self, ctx)
+    }
+    /// Return the block editor while it is open, so a host can put text in
+    /// it.
+    pub fn block_editor(&self) -> Option<TypedId<Editor>> {
+        self.slot.as_ref().map(|slot| slot.editor)
+    }
+    /// Return whether the block editor is open.
+    #[command]
+    pub fn block_open(&self) -> bool {
+        self.slot.is_some()
+    }
+    /// Move focus to the open block editor.
+    #[command]
+    pub fn focus_block(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        if let Some(slot) = self.slot.as_ref() {
+            ctx.set_focus(slot.editor.into())?;
+        }
+        Ok(())
+    }
+    /// Stop, or allow again, every change through the reader: commit,
+    /// discard, `apply_edit`, and opening the block editor. A host locks the
+    /// reader while a captured voice target must stay valid.
+    /// @param locked Whether to stop changes.
+    #[command]
+    pub fn lock_blocks(&mut self, locked: bool) {
+        self.locked = locked;
+    }
+    /// Return whether the host stops changes through the reader.
+    #[command]
+    pub fn blocks_locked(&self) -> bool {
+        self.locked
+    }
+    /// Take the edits that the host has not applied, oldest first. The host
+    /// applies each to its own text, in order, before it reads that text
+    /// again. The publication wake says when an edit waits.
+    pub fn take_edits(&mut self) -> Vec<BlockEdit> {
+        self.edits.drain(..).collect()
+    }
+    /// Replace bytes `from..to` of the text of `epoch` with `text`, as a
+    /// commit of the block editor does, and record the edit. The view stays
+    /// rendered, and once the new text's layout shows, the cursor marks the
+    /// unit at `from`, on the screen row of the unit that held it.
+    ///
+    /// An edit of an old epoch, a range off character boundaries or across a
+    /// CRLF pair, a text past the source limit, a locked reader, and an open
+    /// block editor change nothing, and return an error.
+    /// @param epoch The epoch of the text that the range addresses.
+    /// @param from The first byte to replace.
+    /// @param to The byte after the last to replace.
+    /// @param text The text that takes their place.
+    #[command]
+    pub fn apply_edit(
+        &mut self,
+        ctx: &mut dyn Context,
+        epoch: u64,
+        from: usize,
+        to: usize,
+        text: String,
+    ) -> Result<()> {
+        if self.locked {
+            return Err(invalid("The host locked block edits"));
+        }
+        if self.slot.is_some() {
+            return Err(invalid("A block editor is open"));
+        }
+        // The unit's screen row, from the shown layout. While an earlier
+        // edit awaits its layout, the shown rows are stale, so the edit
+        // takes the row that the earlier one keeps.
+        let waiting = {
+            let state = self.shared.borrow();
+            state
+                .awaiting
+                .then(|| state.pending_mark.and_then(|mark| mark.row))
+        };
+        let row = waiting.unwrap_or_else(|| {
+            self.nodes.as_ref().and_then(|nodes| {
+                let view = ctx.view_of(nodes.rendered)?;
+                slot::unit_row(
+                    &mut self.shared.borrow_mut(),
+                    from,
+                    view.scroll.y,
+                    view.content.h,
+                )
+            })
+        });
+        self.edit_text(
+            ctx,
+            BlockEdit {
+                epoch,
+                range: from..to,
+                text,
+            },
+            row,
+        )
+    }
+    /// Make `edit` as a new epoch of the text, record it for the host, and
+    /// keep the shown frame until the new text's layout shows. Then the
+    /// cursor marks the unit at the edit's first byte, with that unit's first
+    /// row on screen row `row`.
+    fn edit_text(
+        &mut self,
+        ctx: &mut dyn Context,
+        edit: BlockEdit,
+        row: Option<u32>,
+    ) -> Result<()> {
+        let snapshot = self.store.snapshot();
+        if edit.epoch != snapshot.epoch {
+            return Err(invalid("The edit belongs to a replaced text"));
+        }
+        if !matches!(snapshot.lifecycle, Lifecycle::Complete(_)) {
+            return Err(invalid(
+                "A document that is still arriving cannot be edited",
+            ));
+        }
+        let source = snapshot.text();
+        let range = edit.range.clone();
+        let splits = |at: usize| {
+            source.as_bytes().get(at.wrapping_sub(1)) == Some(&b'\r')
+                && source.as_bytes().get(at) == Some(&b'\n')
+        };
+        if range.start > range.end
+            || range.end > source.len()
+            || !source.is_char_boundary(range.start)
+            || !source.is_char_boundary(range.end)
+            || splits(range.start)
+            || splits(range.end)
+        {
+            return Err(invalid(
+                "The edit's range is not a range of whole characters",
+            ));
+        }
+        let mut text = String::with_capacity(source.len() - range.len() + edit.text.len());
+        text.push_str(&source[..range.start]);
+        text.push_str(&edit.text);
+        text.push_str(&source[range.end..]);
+        self.store.replace(&text, false).map_err(invalid)?;
+        let epoch = self.store.snapshot().epoch;
+        self.dismiss_inspector(ctx)?;
+        self.source_results = None;
+        self.requests.replace();
+        self.switching = None;
+        self.saved_source_selection = None;
+        self.results = None;
+        self.search_index = None;
+        self.kept_match = None;
+        self.saved = [None, None];
+        self.return_position = None;
+        self.jumps.clear();
+        self.acknowledged = text.len();
+        self.failure = None;
+        self.generation += 1;
+        self.last_submitted = None;
+        {
+            let mut state = self.shared.borrow_mut();
+            state.overlays.search.clear();
+            state.overlays.search_current = None;
+            state.overlays.selection = None;
+            state.overlays.active_object = None;
+            let mark = slot::pending_mark(&state, epoch, range.start, row);
+            state.pending_mark = Some(mark);
+            state.awaiting = true;
+        }
+        self.edits.push_back(edit);
+        self.schedule(ctx, true)?;
+        self.wake_publication_host()
+    }
     /// Extend or start rendered text selection at the reading position.
     #[command]
     pub fn select_text(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.inspector.is_some() {
+        if self.inspector.is_some() || self.slot.is_some() {
             return Ok(());
         }
         if self.active != ViewType::Rendered {
@@ -855,6 +1094,10 @@ impl Markdown {
     /// rests in it.
     #[command]
     pub fn escape(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        // Esc that the block editor leaves, with no other work, commits it.
+        if self.slot.is_some() {
+            return slot::commit(self, ctx);
+        }
         if self.bar_drag {
             ctx.release_mouse()?;
             self.bar_drag = false;
@@ -876,7 +1119,7 @@ impl Markdown {
     /// the object's unit, or leave through normal focus traversal.
     #[command(enabled = "rendered_action_status")]
     pub fn next_object(&mut self, ctx: &mut dyn Context, delta: i32) -> Result<()> {
-        if self.active != ViewType::Rendered {
+        if self.active != ViewType::Rendered || self.slot.is_some() {
             return Ok(());
         }
         if let Some(nodes) = &self.nodes {
@@ -889,7 +1132,7 @@ impl Markdown {
     /// Resume tail following explicitly.
     #[command]
     pub fn follow(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.inspector.is_some() {
+        if self.inspector.is_some() || self.slot.is_some() {
             return Ok(());
         }
         self.shared.borrow_mut().follow = Follow::Following;
@@ -1140,6 +1383,10 @@ impl Markdown {
     /// Show the built-in search field, retaining the current query.
     #[command]
     pub fn start_search(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        // The block editor has a search of its own.
+        if self.slot.is_some() {
+            return Ok(());
+        }
         self.shared.borrow_mut().follow = Follow::Paused;
         if let Some(nodes) = &self.nodes {
             let query = self.query.text.clone();
@@ -1227,6 +1474,9 @@ impl Markdown {
     /// Visit a retained match in the active representation.
     #[command]
     pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32) -> Result<()> {
+        if self.slot.is_some() {
+            return Ok(());
+        }
         let Some(next) = view_search::step(self.search_index, self.search_matches(), delta) else {
             return Ok(());
         };
@@ -1256,7 +1506,7 @@ impl Markdown {
     /// a search is current.
     #[command(enabled = "rendered_action_status")]
     pub fn activate(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.active != ViewType::Rendered {
+        if self.active != ViewType::Rendered || self.slot.is_some() {
             return Ok(());
         }
         let p = self.shared.borrow().presentation.clone();
@@ -1399,7 +1649,7 @@ impl Markdown {
     /// Inspect a pinned snapshot of the displayed source.
     #[command]
     pub fn inspect_source(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.inspector.is_some() {
+        if self.inspector.is_some() || self.slot.is_some() {
             return Ok(());
         }
         let Some(snapshot) = self.displayed.clone() else {
@@ -1777,6 +2027,9 @@ impl Markdown {
     /// Return once from a fragment or footnote jump.
     #[command]
     pub fn return_from_jump(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        if self.slot.is_some() {
+            return Ok(());
+        }
         if let Some(position) = self.return_position.take() {
             self.restore(ctx, position)?;
         }
@@ -1785,7 +2038,7 @@ impl Markdown {
     /// Copy the active selection or selected object's default payload.
     #[command(enabled = "copy_status")]
     pub fn copy(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.displayed.is_none() {
+        if self.displayed.is_none() || self.slot.is_some() {
             return Ok(());
         }
         if self.active == ViewType::Source {
@@ -1922,6 +2175,7 @@ impl Markdown {
     fn rendered_actions_available(&self) -> bool {
         self.active == ViewType::Rendered
             && self.displayed.is_some()
+            && self.slot.is_none()
             && self.shared.borrow().presentation.is_some()
     }
     /// Reserve a host action before submitting bounded immutable copy work.
@@ -2151,7 +2405,10 @@ impl Markdown {
             || tags.geometry != self.geometry()
             || tags.source_options != self.source_options()
             || tags.generation != self.generation
-            || tags.revision < self.displayed_revision()
+            || self
+                .displayed
+                .as_ref()
+                .is_some_and(|shown| shown.epoch == tags.epoch && tags.revision < shown.revision)
             || self
                 .switching
                 .as_ref()
@@ -2167,6 +2424,11 @@ impl Markdown {
                 self.failure = Some(error.to_string());
                 self.switching = None;
                 self.dirty = false;
+                // A commit whose text cannot be laid out ends its slot; the
+                // text keeps the edit.
+                if self.slot.as_ref().is_some_and(|slot| slot.committed) {
+                    slot::close(self, ctx)?;
+                }
                 self.wake_publication_host()?;
                 return Ok(());
             }
@@ -2233,6 +2495,15 @@ impl Markdown {
                     nodes.source = Some(source.into());
                 }
                 self.source_snapshot = Some(result.source.clone());
+            }
+        }
+        // A committed slot shows its text until the text's layout shows. An
+        // open slot keeps its place in a new layout of the same text.
+        if tags.view == ViewType::Rendered {
+            if self.slot.as_ref().is_some_and(|slot| slot.committed) {
+                slot::close(self, ctx)?;
+            } else {
+                slot::layout_above(self, ctx)?;
             }
         }
         let switched = self.switching.take().is_some();
@@ -2450,6 +2721,10 @@ impl Markdown {
     /// Make Rendered match `index` current, mark the object it lies in, and
     /// reveal it as every searchable view does.
     fn reveal_rendered_match(&mut self, ctx: &mut dyn Context, index: usize) -> Result<()> {
+        // The reader's search does nothing while the block editor is open.
+        if self.slot.is_some() {
+            return Ok(());
+        }
         let Some(found) = self
             .results
             .as_ref()
@@ -2655,6 +2930,8 @@ impl Markdown {
         };
         let mode = if self.active == ViewType::Source {
             "Source"
+        } else if self.slot.is_some() {
+            "Editing"
         } else if self.shared.borrow().mode == Mode::Interact {
             "Interact"
         } else {
@@ -2705,8 +2982,9 @@ impl Markdown {
     }
     /// Compute scrollbar tracks from the current active child allocation.
     fn tracks(&self, ctx: &dyn ViewContext) -> ScrollbarTracks {
-        // An open inspector covers the document, whose position it hides.
-        if self.inspector.is_some() {
+        // An open inspector covers the document, whose position it hides,
+        // and the block editor's context does not scroll.
+        if self.inspector.is_some() || self.slot.is_some() {
             return (vec![], vec![]);
         }
         let Some(node) = self.navigation_node() else {
@@ -3251,7 +3529,14 @@ const ACTION_DONE: &str = "Done";
 /// so the reader's keys never reach into it. A key the inspector leaves
 /// unhandled still bubbles to the reader, so the reader's commands do nothing
 /// while an inspector covers it.
-const READER_PATHS: [&str; 2] = ["**/markdown/", "**/markdown_layers/markdown_reader/**/"];
+/// The block editor's column lies in the body too, but outside these paths, so
+/// the reader's keys never reach the editor in it.
+const READER_PATHS: [&str; 4] = [
+    "**/markdown/",
+    "**/markdown_reader/search_bar/**/",
+    "**/markdown_body/markdown_rendered/",
+    "**/markdown_body/markdown_source/",
+];
 
 impl Register for Markdown {
     fn register(setup: &mut Setup) -> Result<()> {
@@ -3259,6 +3544,7 @@ impl Register for Markdown {
         Editor::register(setup)?;
         Inspector::register(setup)?;
         TableView::register(setup)?;
+        Confirm::register(setup)?;
         crate::register_styles(setup);
         for (key, description, call) in [
             ("i", "Block cursor", Self::call_interact()),
@@ -3281,6 +3567,7 @@ impl Register for Markdown {
             ("ctrl-o", "Return from jump", Self::call_return_from_jump()),
             ("n", "Next match", Self::call_search_next(1i32)),
             ("N", "Previous match", Self::call_search_next(-1i32)),
+            ("e", "Edit block", Self::call_edit_block()),
         ] {
             for path in READER_PATHS {
                 setup.bind(
@@ -3299,6 +3586,22 @@ impl Register for Markdown {
                 )?;
             }
         }
+        // The block editor's own keys: ctrl-x drops the edit before the
+        // editor reads the key, so vi visual mode never takes it for x, and
+        // only while the editor is open, so a host's ctrl-x reaches it
+        // otherwise. Esc that the editor leaves commits through `escape`.
+        setup.bind(
+            Key::parse_spec("ctrl-x")?,
+            BindingOptions {
+                show_in_help: true,
+                path: Some("**/markdown_slot/**/".parse()?),
+                tier: BindingTier::Default,
+                description: "Discard block edits".into(),
+                source: None,
+                phase: Some(BindingPhase::BeforeWidget),
+            },
+            BindingAction::Command(Self::call_discard_block(false)),
+        )?;
         // Dormant intents allow Source to retain normal host focus traversal.
         // Disabled command bindings would consume Tab even when ineligible.
         for (key, name, description) in [
@@ -3437,8 +3740,12 @@ fn local_display(link: &LocalLink) -> String {
     }
 }
 
+mod slot;
+
 #[cfg(test)]
 mod cursor_tests;
+#[cfg(test)]
+mod slot_tests;
 #[cfg(test)]
 mod tests;
 

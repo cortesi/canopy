@@ -204,6 +204,17 @@ pub(super) fn state(reader: &Markdown, ctx: &dyn ViewContext) -> Result<ArgValue
             optional_number(shared.overlays.active_object),
         ),
         ("block", block),
+        (
+            "block_editor",
+            reader.slot.as_ref().map_or(ArgValue::Null, |slot| {
+                map([
+                    ("range", range(&slot.range)),
+                    ("committed", ArgValue::Bool(slot.committed)),
+                ])
+            }),
+        ),
+        ("edits", number(reader.edits.len())),
+        ("locked", ArgValue::Bool(reader.locked)),
         ("inspector", inspector),
         ("action_status", text(&reader.action_status)),
         ("failure", optional_text(reader.failure.as_deref())),

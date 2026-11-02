@@ -67,9 +67,13 @@ pub struct SurfaceState {
     /// the publications of one epoch. Outside Interact, it is the unit that
     /// the cursor marks again if it still shows when Interact starts.
     pub marked: Option<usize>,
-    /// The epoch and source byte of a unit for the cursor to mark once a
-    /// presentation of that epoch shows.
-    pub pending_mark: Option<(u64, usize)>,
+    /// A unit for the cursor to mark once a presentation of its epoch
+    /// shows.
+    pub pending_mark: Option<PendingMark>,
+    /// Whether a newer text than the shown presentation's, from an edit,
+    /// waits for its presentation. Moves that need geometry do nothing
+    /// until it shows.
+    pub awaiting: bool,
     /// How the view must scroll for the block cursor, which the controller
     /// does when it next polls.
     pub cursor_scroll: Option<CursorScroll>,
@@ -80,6 +84,21 @@ pub struct SurfaceState {
     /// The edit units of the shown document and their rows, built when the
     /// cursor first needs them.
     cursor: Option<CursorMap>,
+}
+
+/// A unit for the cursor to mark once a presentation of its epoch shows: as
+/// a host asks before a reload shows, or after an edit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PendingMark {
+    /// The epoch of the text that `byte` addresses.
+    pub epoch: u64,
+    /// A source byte; the cursor marks the unit that `unit_at` finds for it.
+    pub byte: usize,
+    /// The screen row for the unit's first row, or `None` to show the unit
+    /// by the smallest move.
+    pub row: Option<u32>,
+    /// The mode of the view once the unit shows.
+    pub mode: Mode,
 }
 
 /// How the view must scroll for the block cursor after it painted.
@@ -402,13 +421,27 @@ impl RenderedSurface {
         let epoch = next.document.source.epoch;
         state.document = Some(next.document.clone());
         state.presentation = Some(next);
-        // A unit that a host asked for before its presentation showed.
-        if let Some((pending, byte)) = state.pending_mark
-            && pending == epoch
+        if !same_epoch {
+            state.awaiting = false;
+        }
+        let mut target = target;
+        // A unit that a host asked for, or that an edit changed, before its
+        // presentation showed. An edit keeps its unit on its screen row.
+        if let Some(pending) = state.pending_mark
+            && pending.epoch == epoch
         {
             state.pending_mark = None;
-            state.marked = Some(byte);
-            state.mode = Mode::Interact;
+            state.marked = Some(pending.byte);
+            state.mode = pending.mode;
+            let rows = state
+                .cursor_map()
+                .and_then(|(units, rows)| rows.get(unit_at(&units, pending.byte)?).cloned());
+            if let Some(rows) = rows
+                && !same_epoch
+                && state.follow == Follow::Paused
+            {
+                target = Some((rows.start, pending.row));
+            }
         }
         if let Some((row, viewport_row)) = target {
             state.reveal = Some(Rect::new(0, row, 1, 1));
@@ -493,6 +526,10 @@ impl RenderedSurface {
         let view = frame(&ctx.view());
         let step = {
             let mut state = self.state.borrow_mut();
+            // The rows of an edited text are not laid out yet.
+            if state.awaiting {
+                return Ok(());
+            }
             let Some((_, rows)) = state.cursor_map() else {
                 return Ok(());
             };
@@ -966,6 +1003,7 @@ impl RenderedSurface {
         {
             let mut state = self.state.borrow_mut();
             if state.mode == Mode::Interact
+                && !state.awaiting
                 && let Some(unit) = state
                     .cursor_map()
                     .and_then(|(_, rows)| cursor::at_row(&rows, point.y))

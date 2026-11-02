@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use canopy::{CommandEnum, runtime::NodeWakeHandle};
-use canopy_widgets::editor::{LineNumbers, WrapMode};
+use canopy_widgets::editor::{EditorConfig, LineNumbers, WrapMode};
 
 use crate::{
     document::ParseLimits, executor::MarkdownExecutor, presentation::GlyphPreset,
@@ -60,6 +60,10 @@ pub struct MarkdownOptions {
     /// `Esc` returns to. Scroll leaves the block cursor on `Esc`; Interact
     /// keeps it, so the view always marks a unit.
     pub resting_mode: Mode,
+    /// The configuration of the `Editor` that edits a block in place, in the
+    /// slot. Without it, the reader cannot edit. The slot's editor grows with
+    /// its text, whatever the configuration says.
+    pub block_editor: Option<EditorConfig>,
     /// Restrict an explicitly partial source preview to Source.
     pub source_only: bool,
     /// Host status outside document content, such as a retained file range.
@@ -131,6 +135,7 @@ impl Default for MarkdownOptions {
             publication_wake: None,
             initial_view: ViewType::Rendered,
             resting_mode: Mode::Scroll,
+            block_editor: None,
             source_only: false,
             status: None,
             external_search: false,

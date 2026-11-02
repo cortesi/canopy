@@ -6,8 +6,14 @@
 //! the parser's spec files. [`check_units`] and [`check_edit`] check the
 //! invariants of edit units, and compare their ranges with a slow reference.
 
-use std::{env, fs, io, ops::Range, path::Path};
+use std::{env, fs, io, ops::Range, path::Path, sync::Arc, time::Duration};
 
+use canopy::{
+    NodeId, ViewContextExt,
+    error::Result as CanopyResult,
+    runtime::TurnInput,
+    testing::{ManualClock, harness::Harness},
+};
 use proptest::{
     collection::vec,
     prelude::*,
@@ -15,7 +21,9 @@ use proptest::{
 };
 
 use crate::{
+    Markdown,
     document::{DocumentSnapshot, ParseLimits, parse_document},
+    executor::{HeldWork, ManualExecutor},
     source_store::SourceStore,
     units::{EditKind, EditUnit, edit_units, parse_units, replace_own_text, unit_at},
 };
@@ -661,4 +669,123 @@ fn edit(
         ));
     }
     Ok(())
+}
+
+/// One step of the preparation work of the readers in a harness, which share
+/// one manual executor and run under a manual clock.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScheduleStep {
+    /// Run one turn of the event loop. The readers that woke or whose polls
+    /// are due poll: each submits its work, and takes and acknowledges a
+    /// finished result.
+    Turn,
+    /// Start the next queued preparation, and hold it.
+    Start,
+    /// Finish the held preparation at this index, modulo their number.
+    Finish(usize),
+    /// Reject the next submission of preparation work. The reader retries
+    /// once the clock passes its retry deadline.
+    Reject,
+    /// Move the clock by this many milliseconds.
+    Clock(u64),
+}
+
+/// Make the steps of a legal schedule: any order of turns, starts, finishes
+/// of held work, rejected submissions, and clock moves.
+pub fn schedule(steps: Range<usize>) -> impl Strategy<Value = Vec<ScheduleStep>> {
+    vec(
+        prop_oneof![
+            4 => Just(ScheduleStep::Turn),
+            3 => Just(ScheduleStep::Start),
+            3 => (0..4usize).prop_map(ScheduleStep::Finish),
+            1 => Just(ScheduleStep::Reject),
+            1 => (1..80u64).prop_map(ScheduleStep::Clock),
+        ],
+        steps,
+    )
+}
+
+/// The preparation work of the readers in a harness, under test control: no
+/// step waits on the wall clock.
+pub struct Schedule {
+    /// The executor the readers share.
+    manual: ManualExecutor,
+    /// The harness's clock.
+    clock: Arc<ManualClock>,
+    /// Preparations started and not finished, in the order they started.
+    held: Vec<HeldWork>,
+}
+
+/// The rounds a pump runs at most before it reports that the readers did not
+/// settle.
+const PUMP_ROUNDS: usize = 64;
+
+impl Schedule {
+    /// Control the work of `manual`'s readers, in a harness that runs under
+    /// `clock`.
+    pub fn new(manual: ManualExecutor, clock: Arc<ManualClock>) -> Self {
+        Self {
+            manual,
+            clock,
+            held: Vec::new(),
+        }
+    }
+
+    /// Return the number of held preparations.
+    pub fn held(&self) -> usize {
+        self.held.len()
+    }
+
+    /// Run one step.
+    pub fn step(&mut self, harness: &mut Harness, step: ScheduleStep) -> CanopyResult<()> {
+        match step {
+            ScheduleStep::Turn => {
+                harness.canopy.turn(TurnInput::Wake)?;
+            }
+            ScheduleStep::Start => {
+                if let Some(work) = self.manual.start_next() {
+                    self.held.push(work);
+                }
+            }
+            ScheduleStep::Finish(index) => {
+                if !self.held.is_empty() {
+                    let work = self.held.remove(index % self.held.len());
+                    work.finish();
+                }
+            }
+            ScheduleStep::Reject => self.manual.reject_next_submission(),
+            ScheduleStep::Clock(millis) => self.clock.advance(Duration::from_millis(millis))?,
+        }
+        Ok(())
+    }
+
+    /// Run turns, finish held and queued work in order, and move the clock
+    /// past retry deadlines, until every reader of `readers` is ready, at most
+    /// a bounded number of rounds. Then render the harness. Return whether
+    /// the readers settled.
+    pub fn pump(&mut self, harness: &mut Harness, readers: &[NodeId]) -> CanopyResult<bool> {
+        for _ in 0..PUMP_ROUNDS {
+            for work in self.held.drain(..) {
+                work.finish();
+            }
+            harness.canopy.turn(TurnInput::Wake)?;
+            while let Some(work) = self.manual.start_next() {
+                work.finish();
+            }
+            harness.canopy.turn(TurnInput::Wake)?;
+            let ready = readers.iter().try_fold(true, |ready, node| {
+                harness.canopy.with_root_context(|ctx| {
+                    ctx.with_widget(*node, |reader: &Markdown| Ok(ready && reader.ready()))
+                })
+            })?;
+            if ready {
+                harness.canopy.turn(TurnInput::Wake)?;
+                harness.render()?;
+                return Ok(true);
+            }
+            self.clock.advance(Duration::from_millis(100))?;
+        }
+        harness.render()?;
+        Ok(false)
+    }
 }

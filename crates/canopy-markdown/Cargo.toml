@@ -13,7 +13,7 @@ doctest = false
 default = ["syntax"]
 syntax = ["canopy-widgets/syntax"]
 # Proptest strategies and invariant checks that other tests share.
-testing = ["dep:proptest"]
+testing = ["dep:proptest", "canopy/testing"]
 
 [dependencies]
 canopy-xmark.workspace = true

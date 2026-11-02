@@ -22,7 +22,7 @@ use std::{
 };
 
 use canopy::{
-    Context, NodeId, Point, Rect, Register, Setup, ViewContext, Widget,
+    Context, NodeId, Point, Rect, Register, Setup, TypedId, ViewContext, Widget,
     commands::{
         ArgValue, CommandCall, CommandNode, CommandSpec, CommandType, FromArgValue, ToArgValue,
     },
@@ -33,12 +33,24 @@ use canopy::{
 };
 use canopy_widgets::{
     Tier,
-    editor::{LineNumbers, TextPosition, WrapMode},
+    editor::{Editor, EditorConfig, LineNumbers, TextPosition, WrapMode},
     table::PreparedTable,
 };
 use canopy_xmark::BlockQuoteKind;
 use image::RgbaImage;
 use url::Url;
+
+/// One edit of the reader's text, for the host to apply to its own copy of
+/// the text in order.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BlockEdit {
+    /// The epoch of the text that `range` addresses.
+    pub epoch: u64,
+    /// The UTF-8 bytes of that text that `text` replaces.
+    pub range: Range<usize>,
+    /// The text that takes their place.
+    pub text: String,
+}
 
 /// Source replacement with an explicit initial lifecycle.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -81,6 +93,10 @@ impl Markdown {
     /// Accepted source revision, including a Finish transition.
     pub fn accepted_revision(&self) -> u64;
 
+    /// Return the accepted source text: the text of the current document,
+    /// with every commit and direct edit in it.
+    pub fn accepted_source(&self) -> Arc<str>;
+
     /// Latest truthful status of a requested host action.
     pub fn action_status(&self) -> String;
 
@@ -95,11 +111,57 @@ impl Markdown {
     /// document.
     pub fn append(&mut self, ctx: &mut dyn Context, text: &str) -> canopy::error::Result<u64>;
 
+    /// Replace bytes `from..to` of the text of `epoch` with `text`, as a
+    /// commit of the block editor does, and record the edit. The view stays
+    /// rendered, and once the new text's layout shows, the cursor marks the
+    /// unit at `from`, on the screen row of the unit that held it.
+    ///
+    /// An edit of an old epoch, a range off character boundaries or across a
+    /// CRLF pair, a text past the source limit, a locked reader, and an open
+    /// block editor change nothing, and return an error.
+    /// @param epoch The epoch of the text that the range addresses.
+    /// @param from The first byte to replace.
+    /// @param to The byte after the last to replace.
+    /// @param text The text that takes their place.
+    pub fn apply_edit(
+        &mut self,
+        ctx: &mut dyn Context,
+        epoch: u64,
+        from: usize,
+        to: usize,
+        text: String,
+    ) -> canopy::error::Result<()>;
+
+    /// Return the edit that a commit of the block editor would make now:
+    /// its range and the editor's text, so a host can save the document as
+    /// it would be after a commit. Return `None` while no editor is open.
+    pub fn block_draft(&self, ctx: &dyn ViewContext) -> Option<BlockEdit>;
+
+    /// Return the block editor while it is open, so a host can put text in
+    /// it.
+    pub fn block_editor(&self) -> Option<TypedId<Editor>>;
+
+    /// Return whether the block editor is open.
+    pub fn block_open(&self) -> bool;
+
+    /// Return whether the host stops changes through the reader.
+    pub fn blocks_locked(&self) -> bool;
+
     /// Whether the view toggle is currently available.
     pub fn can_toggle_view_type(&self, ctx: &dyn ViewContext) -> canopy::error::Result<bool>;
 
+    /// Mark the block editor's text as kept: a later discard returns to it,
+    /// and commits it when it differs from the text before the edit.
+    /// Neither copy of the text changes until the editor closes.
+    pub fn checkpoint_block(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
     /// Drop the query and close the built-in field.
     pub fn clear_search(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Commit the block editor: record its text as an edit when it differs
+    /// from the text before the edit, and close it once the edit's layout
+    /// shows. A commit with no change records nothing.
+    pub fn commit_block(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Complete one host effect; duplicate and replaced-document replies are
     /// ignored.
@@ -118,11 +180,27 @@ impl Markdown {
     /// Copy the exact displayed source, including its final newline.
     pub fn copy_source(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Close the block editor and drop the changes since the last
+    /// checkpoint. With such changes, ask first unless `confirmed`.
+    /// @param confirmed Whether to drop the changes without asking.
+    pub fn discard_block(
+        &mut self,
+        ctx: &mut dyn Context,
+        confirmed: bool,
+    ) -> canopy::error::Result<()>;
+
     /// Close the active inspector and restore the document's focus.
     pub fn dismiss_inspector(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Revision painted by the active representation.
     pub fn displayed_revision(&self) -> u64;
+
+    /// Open the block editor on the marked unit, in place of its rows, at
+    /// the start of its own text. With no unit, open an empty editor at the
+    /// end of the text. It does nothing without a block editor in the
+    /// options, while the host locks blocks, an inspector is open, or an
+    /// edit awaits its layout.
+    pub fn edit_block(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Current document epoch.
     pub fn epoch(&self) -> u64;
@@ -138,6 +216,9 @@ impl Markdown {
         ctx: &mut dyn Context,
         outcome: FinishOutcome,
     ) -> canopy::error::Result<u64>;
+
+    /// Move focus to the open block editor.
+    pub fn focus_block(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Resume tail following explicitly.
     pub fn follow(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
@@ -178,6 +259,12 @@ impl Markdown {
     /// found nothing it names.
     #[must_use]
     pub fn link_missing(&self, destination: &str) -> bool;
+
+    /// Stop, or allow again, every change through the reader: commit,
+    /// discard, `apply_edit`, and opening the block editor. A host locks the
+    /// reader while a captured voice target must stay valid.
+    /// @param locked Whether to stop changes.
+    pub fn lock_blocks(&mut self, locked: bool);
 
     /// The actual scrolling surface, when it is mounted.
     pub fn navigation_node(&self) -> Option<NodeId>;
@@ -383,6 +470,11 @@ impl Markdown {
         resource: Resource,
     ) -> canopy::error::Result<()>;
 
+    /// Take the edits that the host has not applied, oldest first. The host
+    /// applies each to its own text, in order, before it reads that text
+    /// again. The publication wake says when an edit waits.
+    pub fn take_edits(&mut self) -> Vec<BlockEdit>;
+
     /// Drain the positions the reader left by its own jumps (fragments,
     /// block and heading anchors, and footnotes), oldest first.
     /// The reader keeps at most a few; a host with a history drains them
@@ -422,7 +514,22 @@ impl Markdown {
     pub fn call_activate() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
+    pub fn call_apply_edit(epoch: u64, from: usize, to: usize, text: String) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_block_open() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_blocks_locked() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_checkpoint_block() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
     pub fn call_clear_search() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_commit_block() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
     pub fn call_copy() -> CommandCall;
@@ -431,16 +538,25 @@ impl Markdown {
     pub fn call_copy_source() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
+    pub fn call_discard_block(confirmed: bool) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
     pub fn call_dismiss_inspector() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
     pub fn call_displayed_revision() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
+    pub fn call_edit_block() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
     pub fn call_epoch() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
     pub fn call_escape() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_focus_block() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
     pub fn call_follow() -> CommandCall;
@@ -453,6 +569,9 @@ impl Markdown {
 
     /// Build a positional call with typed user arguments.
     pub fn call_interact() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_lock_blocks(locked: bool) -> CommandCall;
 
     /// Build a positional call with typed user arguments.
     pub fn call_next_object(delta: i32) -> CommandCall;
@@ -530,7 +649,22 @@ impl Markdown {
     pub fn spec_activate() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
+    pub fn spec_apply_edit() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_block_open() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_blocks_locked() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_checkpoint_block() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
     pub fn spec_clear_search() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_commit_block() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_copy() -> &'static CommandSpec;
@@ -539,16 +673,25 @@ impl Markdown {
     pub fn spec_copy_source() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
+    pub fn spec_discard_block() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
     pub fn spec_dismiss_inspector() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_displayed_revision() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
+    pub fn spec_edit_block() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
     pub fn spec_epoch() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_escape() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_focus_block() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_follow() -> &'static CommandSpec;
@@ -561,6 +704,9 @@ impl Markdown {
 
     /// Return the command spec for this command.
     pub fn spec_interact() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_lock_blocks() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_next_object() -> &'static CommandSpec;
@@ -653,6 +799,10 @@ pub struct MarkdownOptions {
     /// `Esc` returns to. Scroll leaves the block cursor on `Esc`; Interact
     /// keeps it, so the view always marks a unit.
     pub resting_mode: Mode,
+    /// The configuration of the `Editor` that edits a block in place, in the
+    /// slot. Without it, the reader cannot edit. The slot's editor grows with
+    /// its text, whatever the configuration says.
+    pub block_editor: Option<EditorConfig>,
     /// Restrict an explicitly partial source preview to Source.
     pub source_only: bool,
     /// Host status outside document content, such as a retained file range.

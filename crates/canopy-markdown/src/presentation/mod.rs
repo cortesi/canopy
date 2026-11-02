@@ -739,6 +739,33 @@ impl PresentationSnapshot {
             start.saturating_add(position.offset).min(source.end)
         }))
     }
+    /// Map a row to its source byte when the block's readable text occurs
+    /// whole in its source, so the map is exact. Return `None` otherwise.
+    pub(crate) fn exact_source_at_row(&self, row: u32) -> Option<usize> {
+        let (block, row) = self.block_row(row)?;
+        let start = block.source_text_start?;
+        let offset = row
+            .runs
+            .iter()
+            .find_map(|run| run.reading.as_ref().map(|r| r.start))?;
+        Some(start.saturating_add(offset).min(row.source.end))
+    }
+    /// Return the columns before every block: the centered margin and the
+    /// inset that holds the cursor's bar, or none at a width of three columns
+    /// or less.
+    pub(crate) fn inset(&self) -> u32 {
+        let width = self.geometry.width.min(65535);
+        if width > 3 {
+            self.geometry.margin() + 2
+        } else {
+            0
+        }
+    }
+    /// Return the column of the cursor's bar: the left edge of the centered
+    /// margin.
+    pub(crate) fn bar_column(&self) -> u32 {
+        self.geometry.margin()
+    }
     /// Map a row to verified source bytes, falling back to the block start.
     pub fn source_at_row(&self, row: u32) -> Option<usize> {
         let (block, row) = self.block_row(row)?;
@@ -2705,6 +2732,7 @@ pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
         )
         .fg("markdown/object", palette.fg)
         .fg("markdown/block/bar", palette.accent)
+        .fg("markdown/block/editing", palette.green)
         .bg(
             "markdown/block",
             palette.bg.mix(palette.accent, BLOCK_TINT, Mix::Rgb),
