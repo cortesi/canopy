@@ -404,7 +404,8 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
         },
     )?;
     ctx.set_layout_override(below.into(), Layout::fill().into())?;
-    ctx.set_hidden(rendered, true)?;
+    // The column covers the rendered surface, which keeps its place: a
+    // hidden view would lose its scroll.
     reader.slot = Some(OpenSlot {
         column: column.into(),
         above: above.into(),
@@ -456,12 +457,8 @@ pub(super) fn close(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> 
     };
     let focused = ctx.is_on_focus_path(slot.column);
     ctx.remove_subtree(slot.column)?;
-    if let Some(nodes) = reader.nodes.as_ref() {
-        let rendered = nodes.rendered;
-        ctx.set_hidden(rendered, reader.active != ViewType::Rendered)?;
-        if focused {
-            ctx.set_focus(rendered)?;
-        }
+    if focused && let Some(nodes) = reader.nodes.as_ref() {
+        ctx.set_focus(nodes.rendered)?;
     }
     reader.update_chrome(ctx)
 }
@@ -528,7 +525,7 @@ pub(super) fn checkpoint(reader: &mut Markdown, ctx: &dyn ViewContext) -> Result
 /// Return the edit that a commit of the slot would make now, with the
 /// editor's text in place of its range.
 pub(super) fn draft(reader: &Markdown, ctx: &dyn ViewContext) -> Option<BlockEdit> {
-    let slot = reader.slot.as_ref()?;
+    let slot = reader.slot.as_ref().filter(|slot| !slot.committed)?;
     let draft = ctx
         .with_widget(slot.editor, |editor: &Editor| Ok(slot.draft(editor)))
         .ok()?;

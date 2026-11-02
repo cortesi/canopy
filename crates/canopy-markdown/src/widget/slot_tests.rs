@@ -485,6 +485,62 @@ fn opening_the_editor_closes_the_search_field() {
 }
 
 #[test]
+fn an_edit_of_a_tall_unit_puts_its_first_row_at_the_top_by_either_path() {
+    let code: String = (0..30).map(|n| format!("line {n}\n")).collect();
+    let text = format!("# Top\n\n```\n{code}```\n\nend\n");
+    let new: String = (0..30).map(|n| format!("new {n}\n")).collect();
+    let replacement = format!("```\n{new}```");
+    let mut ends = Vec::new();
+    for direct in [false, true] {
+        let (mut harness, manual) = editing(&text, EditMode::Vi, 30, 10);
+        settle(&mut harness, &manual);
+        for _ in 0..3 {
+            press(&mut harness, "j");
+        }
+        let (_, rows) = marked(&mut harness).unwrap();
+        assert!(
+            rows.start < view(&mut harness).0,
+            "the unit starts above the view"
+        );
+        let unit = reader(&mut harness, |reader, _| Ok(reader.selected_block())).unwrap();
+        if direct {
+            reader(&mut harness, |reader, ctx| {
+                let epoch = reader.epoch();
+                reader.apply_edit(
+                    ctx,
+                    epoch,
+                    unit.range.start,
+                    unit.range.end,
+                    replacement.clone(),
+                )
+            });
+        } else {
+            press(&mut harness, "e");
+            reader(&mut harness, |reader, ctx| {
+                let editor = reader.block_editor().unwrap();
+                ctx.with_widget_mut(editor, |editor: &mut Editor, _| {
+                    editor.set_text(replacement.clone());
+                    Ok(())
+                })?;
+                reader.commit_block(ctx)
+            });
+        }
+        // Both record the unit's first row on the top row, where the slot
+        // opens on such a unit.
+        let pending = reader(&mut harness, |reader, _| {
+            Ok(reader.shared.borrow().pending_mark)
+        });
+        assert_eq!(pending.and_then(|mark| mark.row), Some(0));
+        settle(&mut harness, &manual);
+        let (_, rows) = marked(&mut harness).unwrap();
+        let (top, _) = view(&mut harness);
+        assert_eq!(rows.start, top, "the edited unit starts at the top");
+        ends.push((pending.map(|mark| mark.byte), screen(&harness)));
+    }
+    assert_eq!(ends[0], ends[1]);
+}
+
+#[test]
 fn a_tall_unit_opens_on_the_line_of_its_first_row_in_view() {
     // Code maps rows to source exactly; a long paragraph of inline markup
     // does not, so it opens at the same fraction of the unit.
@@ -556,4 +612,21 @@ fn edits_that_change_structure_land_as_text() {
     assert_eq!(commit_edit(text, 2, "THREE"), "one\n\ntwo\n\nTHREE\n");
     // Deleting the only unit leaves no unit to mark.
     assert_eq!(commit_edit("solo", 0, ""), "");
+}
+
+#[test]
+fn closing_the_editor_keeps_the_view_where_it_was() {
+    // A view scrolled down stays put through an edit with no change.
+    let text: String = (0..20).map(|n| format!("paragraph {n}\n\n")).collect();
+    let (mut harness, manual) = editing(&text, EditMode::Vi, 30, 8);
+    settle(&mut harness, &manual);
+    press(&mut harness, "G");
+    let (top, _) = view(&mut harness);
+    assert!(top > 0);
+    let before = marked(&mut harness);
+    press(&mut harness, "e");
+    press(&mut harness, "Escape");
+    settle(&mut harness, &manual);
+    assert_eq!(view(&mut harness).0, top);
+    assert_eq!(marked(&mut harness), before);
 }

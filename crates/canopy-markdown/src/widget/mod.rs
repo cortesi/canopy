@@ -909,14 +909,19 @@ impl Markdown {
         slot::draft(self, ctx)
     }
     /// Return the block editor while it is open, so a host can put text in
-    /// it.
+    /// it. A committed editor that still shows while its text's layout
+    /// prepares is closed.
     pub fn block_editor(&self) -> Option<TypedId<Editor>> {
-        self.slot.as_ref().map(|slot| slot.editor)
+        self.slot
+            .as_ref()
+            .filter(|slot| !slot.committed)
+            .map(|slot| slot.editor)
     }
-    /// Return whether the block editor is open.
+    /// Return whether the block editor is open. A committed editor that
+    /// still shows while its text's layout prepares is closed.
     #[command]
     pub fn block_open(&self) -> bool {
-        self.slot.is_some()
+        self.slot.as_ref().is_some_and(|slot| !slot.committed)
     }
     /// Move focus to the open block editor.
     #[command]
@@ -969,7 +974,7 @@ impl Markdown {
         if self.locked {
             return Err(invalid("The host locked block edits"));
         }
-        if self.slot.is_some() {
+        if self.block_open() {
             return Err(invalid("A block editor is open"));
         }
         // The unit's screen row, from the shown layout. While an earlier
@@ -3744,6 +3749,8 @@ mod slot;
 
 #[cfg(test)]
 mod cursor_tests;
+#[cfg(test)]
+mod edit_props;
 #[cfg(test)]
 mod slot_tests;
 #[cfg(test)]

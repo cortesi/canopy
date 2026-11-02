@@ -73,7 +73,8 @@ enum Task {
     /// Run the property tests with many cases and random seeds. Each
     /// failure stays in its test's `proptest-regressions` file.
     Soak {
-        /// The suites to run, `units` or `cursor`; every suite by default.
+        /// The suites to run, `units`, `cursor`, or `edit`; every suite by
+        /// default.
         suites: Vec<String>,
         /// The cases of each property test, in place of each suite's own.
         #[arg(long)]

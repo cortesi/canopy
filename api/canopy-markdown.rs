@@ -138,10 +138,12 @@ impl Markdown {
     pub fn block_draft(&self, ctx: &dyn ViewContext) -> Option<BlockEdit>;
 
     /// Return the block editor while it is open, so a host can put text in
-    /// it.
+    /// it. A committed editor that still shows while its text's layout
+    /// prepares is closed.
     pub fn block_editor(&self) -> Option<TypedId<Editor>>;
 
-    /// Return whether the block editor is open.
+    /// Return whether the block editor is open. A committed editor that
+    /// still shows while its text's layout prepares is closed.
     pub fn block_open(&self) -> bool;
 
     /// Return whether the host stops changes through the reader.

@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 522bb83e9354a1558cce36f6c404e97db2d74d6e159502250e63d9fa81f45bb3 # shrinks to text = "- 1. ```\n     g;; }=;  \n     ```\n  2. #\n- > #\n\n  > [^1]: r gasmtfps [^1] [link](https://example.test)\n  >\n  > ^lone\n", steps = 11, width = 54, height = 8, vi = true
+cc e14e459abd7131e0d11f5c565c702ba1ab1d8dcfb64144b6ddbf367c58f074a9 # shrinks to text = "# a\r\n", steps = 0, replacement = "a\n```"
+cc c20f31237b9d0b867aee6775235dff3f94f980970cf59b6cc742f002a146b69b # shrinks to text = "- ![alt](image.png)\n- # a\n\n  # a\n- # a\n\n  # a\n\n- # a\n\n  # a", first = "a", second = "1. item", third = "%% open", schedules = [[Turn, Start, Finish(0), Turn], [], []]
+cc 18f18529834ffc8271567de4cc6a93e2ce2e7446326cfc397ca3d7db7f244fbd # shrinks to text = "> [!note] aa ^[an inline note] aaa aaa\n> > [!note] [link](https://example.test) aaaaa\n> > ![alt](image.png)", steps = 1, replacement = "```"

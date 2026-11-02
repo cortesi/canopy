@@ -28,7 +28,7 @@ struct Suite {
 }
 
 /// The soak suites, with the case counts of the testing plan.
-const SUITES: [Suite; 2] = [
+const SUITES: [Suite; 3] = [
     Suite {
         name: "units",
         package: "canopy-markdown",
@@ -39,6 +39,12 @@ const SUITES: [Suite; 2] = [
         name: "cursor",
         package: "canopy-markdown",
         filter: "widget::cursor_tests::",
+        cases: 2_000,
+    },
+    Suite {
+        name: "edit",
+        package: "canopy-markdown",
+        filter: "widget::edit_props::",
         cases: 2_000,
     },
 ];
