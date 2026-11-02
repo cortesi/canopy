@@ -224,6 +224,61 @@ Markdown is not local, so an edit can change the kinds of the units before
 it. For example, a `===` line under a paragraph makes it a heading. The bytes before the edited
 unit do not change.
 
+## Edit a block
+
+`MarkdownOptions::block_editor` holds the `EditorConfig` of an editor that
+edits one unit in place. Without it, the reader cannot edit. The editor is
+Canopy's own `Editor`, with Markdown highlighting. Run the example with
+`cargo run -p gyms -- blocks`.
+
+`e`, or `edit_block`, opens the editor on the marked unit's source, at the
+start of the unit's own text, and a vi editor in normal mode. While the editor is open,
+the reader's body is a column of three parts: rows of the rendered document
+above, the editor, and rendered rows below. The editor takes the screen row
+of the unit's first row, so the text does not jump. It moves up only as far
+as it must to fit, and grows with its text up to the height of the view. A
+bar in the style `markdown/block/editing` marks its rows. A unit that starts
+above the view puts the editor at the top, on the line of the first row that
+showed, or, when the reader cannot map that row to its source, on the line
+at the same fraction of the unit. With no unit, `e` opens an empty editor at
+the end of the text, and its commit adds the line breaks that start a new
+block. A resize lays out the same text again around the editor.
+
+The editor sits outside the paths of the reader's bindings, so the reader's
+keys never reach it, and `/` and `ctrl-r` are the editor's. The reader's own
+search field closes, and its search, Source view, and inspectors wait until
+the editor closes. `Esc` that the editor does not take commits: in vi normal
+mode with nothing pending, and in a text editor at any time. `ctrl-x` in
+the editor discards the changes, and asks first when there are any. It acts
+before the editor reads the key, and elsewhere the key stays the host's. The
+reader owns the question, so it works in any host.
+
+A host drives the editor from its own commands too. `block_editor` returns
+the editor while it is open, so a host can put text in it. `commit_block`
+and `discard_block` end the edit. `block_draft` returns the edit that a
+commit would make now, so a host can save the document as it would be after
+it. `checkpoint_block` then marks the editor's text as kept: a later discard
+returns to it, and commits it when it differs from the text before the edit.
+`lock_blocks` stops every change through the reader, which includes opening
+the editor, while a host needs the text to stay as it is.
+
+A commit with changes records a `BlockEdit`: the epoch of the text that its
+range addresses, the byte range, and the new text. A commit with no change
+records nothing. `apply_edit` makes the same edit with no editor, for a
+host that edits a block another way, such as by voice. An edit of an old epoch, a range off character boundaries or across a
+CRLF pair, or a text past the source limit changes nothing and returns an
+error. The host takes the edits with `take_edits` and applies each to its
+own copy of the text, in order. The publication wake says that an edit
+waits. `accepted_source` returns the reader's text, with every edit in it.
+
+An edit does not go through `replace`. The reader takes the new text as a
+new epoch, but keeps the frame on screen: the editor, or the rendered rows
+of a direct edit. When the new layout shows, the block cursor marks the unit
+at the edit's first byte, on the screen row the edited unit had, and the
+editor closes. A unit that starts above the view had the top row. Until then, `j`, `k`, `e`, and the pointer do nothing. When
+the edit leaves no units, the cursor marks none. Each edit parses and lays
+out the whole document again.
+
 ## Bounds and automation
 
 Options bound accepted source, semantic nodes/depth/table cells, automatic syntax
@@ -236,8 +291,10 @@ Editor buffers, in-flight jobs, inspectors, and host payloads.
 revision-addressed automation data. Collection windows cap their item count and
 text length. State includes publication, follow, the marked unit, inspector
 readiness, search coverage, and conservative resource categories. The marked
-unit gives its range, own text, kind, and rows. It never returns the full
-source. The `select_block_at` command marks a unit from a script.
+unit gives its range, own text, kind, and rows. State also gives the range of
+an open block editor, the number of edits that wait, and whether the host
+locks blocks. It never returns the full source; `accepted_source` does, in
+Rust. The `select_block_at` command marks a unit from a script.
 
 The default crate feature enables syntax highlighting. With default features
 removed, both views retain reading, search, selection, and copy. The crate does
@@ -258,9 +315,13 @@ source payload. The `fh-markdown` browser server and fh's `F m` action remain in
 The `testing` feature shares Proptest strategies with other tests: a grammar
 of documents, hostile edits, and the parser's spec examples. Its `check_units`
 and `check_edit` check the invariants of edit units against a slow reference,
-as a fuzz target can. Routine runs use a fixed seed. `cargo xtask soak` runs
-the property tests with many cases and random seeds, and keeps each failure in
-the test's `proptest-regressions` file.
+as a fuzz target can. Its `Schedule` drives a harness with the manual
+executor and a manual clock: `schedule` generates steps that run turns,
+start, finish, or reject held work, and advance the clock, and `pump`
+finishes all work until each reader shows its current text. Routine runs
+use a fixed seed. `cargo xtask soak` runs the property tests with many cases
+and random seeds, and keeps each failure in the test's
+`proptest-regressions` file.
 
 The tracked gym smoke suites live in `examples/gyms/markdown-smoke` and
 `examples/gyms/table-smoke`. Gallery scripts cover both representations, inspectors,

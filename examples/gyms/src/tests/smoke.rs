@@ -67,6 +67,8 @@ fn the_gallery_scripts_run() -> Result<()> {
         ),
         (Demo::Editor, "editor.luau"),
         (Demo::Markdown, "markdown.luau"),
+        (Demo::Markdown, "blocks.luau"),
+        (Demo::Blocks, "block-edit.luau"),
         (Demo::Table, "table.luau"),
         (Demo::Font, "font.luau"),
         (

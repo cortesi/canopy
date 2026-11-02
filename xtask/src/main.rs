@@ -154,11 +154,12 @@ fn run_smoke(workspace_root: &Path) -> bool {
 /// The gallery of the README: each gallery script of `examples/gyms/gallery`,
 /// and the arguments of the gym that it runs against. Paths are relative to
 /// `examples/gyms`, where the gyms run.
-const GALLERY: [(&str, &[&str]); 10] = [
+const GALLERY: [(&str, &[&str]); 11] = [
     ("style.luau", &["style"]),
     ("table.luau", &["table"]),
     ("markdown.luau", &["markdown"]),
     ("blocks.luau", &["markdown"]),
+    ("block-edit.luau", &["blocks"]),
     ("chart.luau", &["chart"]),
     ("big.luau", &["big"]),
     (

@@ -1,6 +1,6 @@
 {
   "title": "Canopy widgets",
-  "generated": 1793610358,
+  "generated": 1793618779,
   "font_size": 14.0,
   "scale": 2.0,
   "sizes": [
@@ -58,6 +58,76 @@
         {
           "size": "110x36",
           "file": "big-halves-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "block-edit",
+      "title": "Block editor",
+      "caption": "e opens Canopy's editor on the marked block's source, in its place between the rendered blocks above and below.",
+      "script": "block-edit.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "block-edit-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "block-edit-typed",
+      "title": "Typing",
+      "caption": "The editor grows with its text, and the blocks below move down.",
+      "script": "block-edit.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "block-edit-typed-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "block-edit-committed",
+      "title": "Committed",
+      "caption": "Esc commits: the reader shows the new text on the same rows, and the host applies the edit to its own copy.",
+      "script": "block-edit.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "block-edit-committed-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "block-edit-tall",
+      "title": "Tall block",
+      "caption": "The editor on a block taller than the view opens at the line the view showed.",
+      "script": "block-edit.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "block-edit-tall-110x36.png",
+          "width": 1870,
+          "height": 1332
+        }
+      ]
+    },
+    {
+      "id": "block-edit-discard",
+      "title": "Discard",
+      "caption": "Ctrl-x asks before it discards the changes; k returns to the editor.",
+      "script": "block-edit.luau",
+      "shots": [
+        {
+          "size": "110x36",
+          "file": "block-edit-discard-110x36.png",
           "width": 1870,
           "height": 1332
         }
@@ -845,6 +915,11 @@
       "script": "big.luau",
       "title": "Big",
       "summary": "The big text gym: the text fitted to the whole stage, then to a smaller area in the middle with a gradient, and its ladder of every face."
+    },
+    {
+      "script": "block-edit.luau",
+      "title": "Block edit",
+      "summary": "The block editor: the Blocks gym's reader, which edits the marked block in place and gives each edit to a host that keeps its own copy of the text."
     },
     {
       "script": "blocks.luau",

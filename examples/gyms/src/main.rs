@@ -24,6 +24,8 @@ pub(crate) const HELP_LABEL: &str = "help";
 
 /// Big text gym example nodes.
 mod big;
+/// Markdown edited a block at a time, with a host copy of the text.
+mod blocks;
 /// Char gym example nodes.
 mod char;
 /// Chart gym example nodes.
@@ -183,6 +185,8 @@ enum Demo {
     },
     /// Try custom text in every face, size, and setting of big text.
     Big,
+    /// Edit Markdown a block at a time, in place in the rendered view.
+    Blocks,
     /// Browse the character and glyph rendering gym.
     Char,
     /// Watch the chart primitives update live in every theme.
@@ -260,6 +264,7 @@ impl Demo {
                 builder.configure(widget_editor::WidgetEditor::register),
             ),
             Self::Big => big::binding_setup(builder.configure(big::BigGym::register)),
+            Self::Blocks => blocks::binding_setup(builder.configure(blocks::BlocksGym::register)),
             Self::Char => char::binding_setup(builder),
             Self::Chart => chart::binding_setup(builder.configure(chart::ChartGym::register)),
             Self::Cursor => cursor::binding_setup(builder),
@@ -300,6 +305,7 @@ impl Demo {
                 inspector,
             ),
             Self::Big => install(builder, big::BigGym::new(), inspector),
+            Self::Blocks => install(builder, blocks::BlocksGym::new(), inspector),
             Self::Char => install(builder, char::CharGym::new(), inspector),
             Self::Chart => install(builder, chart::ChartGym::new(), inspector),
             Self::Cursor => install(builder, cursor::CursorGym::new(), inspector),
