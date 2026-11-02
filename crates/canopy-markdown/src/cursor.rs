@@ -297,6 +297,23 @@ mod tests {
             Some(Step { unit: 2, top: 8 })
         );
         assert_eq!(settle(&[], None, frame(0, 2)), None);
+        // The nearest unit below is the first of those below, and a tall one
+        // shows its top.
+        let below = [0..2, 4..5, 8..9, 12..13];
+        assert_eq!(
+            settle(&below, Some(0), frame(5, 2)).map(|step| step.unit),
+            Some(2)
+        );
+        assert_eq!(
+            settle(&[0..2, 4..20], Some(0), frame(2, 2)),
+            Some(Step { unit: 1, top: 4 })
+        );
+        // A tall last unit above the view shows its bottom, past a unit of
+        // no rows.
+        assert_eq!(
+            settle(&[0..10, 30..30], Some(0), frame(12, 2)),
+            Some(Step { unit: 0, top: 8 })
+        );
     }
 
     #[test]

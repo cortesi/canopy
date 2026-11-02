@@ -13,6 +13,7 @@ use proptest::{collection::vec, prelude::*};
 use super::*;
 use crate::{
     executor::{ExecutorOptions, ManualExecutor, MarkdownExecutor},
+    surface::CursorScroll,
     testing,
     units::EditKind,
 };
@@ -397,6 +398,104 @@ fn a_new_layout_scrolls_to_the_marked_unit_it_hides() {
     assert_eq!(after, before);
     let (_, rows) = marked(&mut harness).unwrap();
     assert!(!visible(&mut harness, &rows).is_empty());
+}
+
+#[test]
+fn select_block_at_scrolls_to_a_unit_out_of_view() {
+    let (mut harness, manual) = reader(DOCUMENT, Mode::Interact, 40, 6);
+    settle(&mut harness, &manual);
+    let byte = DOCUMENT.find("omega").unwrap();
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.select_block_at(ctx, byte))
+        .unwrap();
+    service(&mut harness);
+    let (unit, rows) = marked(&mut harness).unwrap();
+    assert_eq!(unit, 5);
+    assert!(!visible(&mut harness, &rows).is_empty());
+}
+
+/// Scroll the view to `top` as a host does, without the cursor, ask for
+/// the reveal that a resize asks for, and poll the reader.
+fn reveal_from(harness: &mut Harness, top: u32) {
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            let node = reader.nodes.as_ref().unwrap().rendered;
+            ctx.scroll_node(node, ScrollOp::To(Point { x: 0, y: top }))?;
+            reader.shared.borrow_mut().cursor_scroll = Some(CursorScroll::Reveal);
+            Widget::poll(reader, ctx).map(|_| ())
+        })
+        .unwrap();
+}
+
+#[test]
+fn a_reveal_after_a_resize_shows_the_end_of_a_tall_unit_it_enters() {
+    // Paragraphs after the code let the view scroll past it.
+    let text = format!("{DOCUMENT}{}", "\nmore\n".repeat(12));
+    let (mut harness, manual) = reader(&text, Mode::Interact, 40, 7);
+    settle(&mut harness, &manual);
+    for _ in 0..4 {
+        press(&mut harness, "j");
+    }
+    let (unit, code) = marked(&mut harness).unwrap();
+    assert_eq!(unit, 4);
+    let (_, height) = view(&mut harness);
+    // Hidden below the view, the code shows its top.
+    reveal_from(&mut harness, 0);
+    assert_eq!(view(&mut harness).0, code.start);
+    // Hidden above the view, it shows its bottom.
+    reveal_from(&mut harness, code.end + 2);
+    assert_eq!(view(&mut harness).0 + height, code.end);
+    // While a row of it shows, the view stays.
+    reveal_from(&mut harness, code.start + 1);
+    assert_eq!(view(&mut harness).0, code.start + 1);
+}
+
+#[test]
+fn a_new_layout_keeps_the_marked_unit_on_its_screen_row() {
+    // A long paragraph above the marked unit wraps to fewer rows when the
+    // view widens. The marked unit holds its screen row; the top of the
+    // view would hold its own.
+    let text = format!(
+        "{}{}\n\nmarked\n\n{}",
+        "short\n\n".repeat(12),
+        "word ".repeat(40),
+        "after\n\n".repeat(12)
+    );
+    let (mut harness, manual) = reader(&text, Mode::Interact, 30, 14);
+    settle(&mut harness, &manual);
+    let byte = text.find("marked").unwrap();
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.select_block_at(ctx, byte))
+        .unwrap();
+    service(&mut harness);
+    // Put the marked unit in the middle of the view, below the paragraph.
+    let (_, rows) = marked(&mut harness).unwrap();
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.scroll_view(
+                ctx,
+                ScrollOp::To(Point {
+                    x: 0,
+                    y: rows.start - 8,
+                }),
+            )
+        })
+        .unwrap();
+    service(&mut harness);
+    let (top, _) = view(&mut harness);
+    let (unit, rows) = marked(&mut harness).unwrap();
+    let row = rows.start - top;
+    assert_eq!(row, 8);
+    harness.canopy.set_screen_size(Size::new(60, 14)).unwrap();
+    settle(&mut harness, &manual);
+    let (top, _) = view(&mut harness);
+    let (after, rows) = marked(&mut harness).unwrap();
+    assert_eq!(after, unit);
+    assert_eq!(
+        rows.start - top,
+        row,
+        "the marked unit keeps its screen row"
+    );
 }
 
 #[test]
