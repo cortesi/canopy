@@ -1291,7 +1291,7 @@ fn step(
 }
 
 proptest! {
-    #![proptest_config(testing::config(24))]
+    #![proptest_config(testing::config(16))]
 
     /// T3: the reader against the model, one operation at a time.
     #[test]

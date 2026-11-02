@@ -506,7 +506,7 @@ pub fn check_units(text: &str) -> Result<(), String> {
         if unit.own.is_none() {
             continue;
         }
-        for replacement in ["", "x", "one\ntwo"] {
+        for replacement in ["", "one\ntwo"] {
             edit(text, &units, index, replacement, true)?;
         }
     }

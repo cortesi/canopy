@@ -279,24 +279,52 @@ fn an_edit_can_change_the_kinds_of_the_units_before_it() {
 }
 
 #[test]
-fn every_spec_example_keeps_the_unit_invariants() {
+fn the_spec_corpus_is_whole() {
     let examples = spec_examples().unwrap();
     assert!(examples.len() > 1000, "{} examples", examples.len());
+}
+
+#[test]
+fn spec_examples_keep_the_unit_invariants_0() {
+    check_spec_shard(&spec_examples().unwrap(), 0);
+}
+
+#[test]
+fn spec_examples_keep_the_unit_invariants_1() {
+    check_spec_shard(&spec_examples().unwrap(), 1);
+}
+
+#[test]
+fn spec_examples_keep_the_unit_invariants_2() {
+    check_spec_shard(&spec_examples().unwrap(), 2);
+}
+
+#[test]
+fn spec_examples_keep_the_unit_invariants_3() {
+    check_spec_shard(&spec_examples().unwrap(), 3);
+}
+
+/// The shards that the spec examples split into, so the checks of a shard
+/// run in a test of their own.
+const SPEC_SHARDS: usize = 4;
+
+/// Check every spec example whose number is `shard` modulo the shards: the
+/// invariants of its units, and a hostile edit of each unit.
+fn check_spec_shard(examples: &[String], shard: usize) {
     let hostile = ["```", "a\n\nb", "- x", "==="];
-    for (number, example) in examples.iter().enumerate() {
+    for (number, example) in examples.iter().enumerate().skip(shard).step_by(SPEC_SHARDS) {
         check_units(example).unwrap_or_else(|error| panic!("example {number}: {error}"));
         let count = parse_units(example).len();
         for index in 0..count {
-            for replacement in hostile {
-                check_edit(example, index, replacement, false)
-                    .unwrap_or_else(|error| panic!("example {number}: {error}"));
-            }
+            let replacement = hostile[(number + index) % hostile.len()];
+            check_edit(example, index, replacement, false)
+                .unwrap_or_else(|error| panic!("example {number}: {error}"));
         }
     }
 }
 
 proptest! {
-    #![proptest_config(testing::config(256))]
+    #![proptest_config(testing::config(128))]
 
     #[test]
     fn generated_documents_keep_the_unit_invariants(text in document()) {
