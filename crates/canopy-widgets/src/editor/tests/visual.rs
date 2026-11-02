@@ -776,51 +776,55 @@ const SWEEP_TEXTS: [&str; 3] = [
     "this is a test, of words.  foo-bar baz_qux 世界 x",
 ];
 
-/// The keys of each case of the sweep, before and after its text object.
-const SWEEP_KEYS: [(&str, usize); 4] = [("v", 1), ("v", 2), ("vh", 1), ("V", 1)];
+/// The keys of the sweep in `tests/vim_diff.rs`.
+const SWEEP_KEYS: [&str; 32] = [
+    "viw", "viwiw", "vhiw", "Viw", "vaw", "vawaw", "vhaw", "Vaw", "vis", "visis", "vhis", "Vis",
+    "vas", "vasas", "vhas", "Vas", "vip", "vipip", "vhip", "Vip", "vap", "vapap", "vhap", "Vap",
+    "vw", "vb", "ve", "vww", "vbb", "vee", "vwb", "veb",
+];
 
-/// The text objects of the sweep.
-const SWEEP_OBJECTS: [&str; 6] = ["iw", "aw", "is", "as", "ip", "ap"];
+/// Parse one row of the recorded table: the mode, the cursor, and the
+/// selected range.
+fn recorded(row: &str) -> (Option<ViMode>, TextPosition, TextRange) {
+    let mut fields = row.split(' ');
+    let mode = match fields.next() {
+        Some("V") => VisualMode::Line,
+        _ => VisualMode::Character,
+    };
+    let numbers: Vec<usize> = fields
+        .map(|field| field.parse().expect("a number"))
+        .collect();
+    (
+        Some(ViMode::Visual(mode)),
+        TextPosition::new(numbers[0], numbers[1]),
+        range((numbers[2], numbers[3]), (numbers[4], numbers[5])),
+    )
+}
 
 #[test]
-fn text_objects_match_the_recorded_outcomes_of_neovim() {
+fn the_sweep_matches_the_recorded_outcomes_of_neovim() {
     // Neovim's outcomes of the sweep of `tests/vim_diff.rs`, which rewrites
     // the table, in the order of the loops below.
-    let table = include_str!("../../../tests/vim/objects.txt");
+    let table = include_str!("../../../tests/vim/sweep.txt");
     let mut rows = table.lines().filter(|row| !row.starts_with('#'));
     let config = EditorConfig::new().with_mode(EditMode::Vi);
     let mut failures = Vec::new();
     for text in SWEEP_TEXTS {
         for (line, content) in text.split('\n').enumerate() {
             for column in grapheme_starts(content) {
-                for object in SWEEP_OBJECTS {
-                    for (start, times) in SWEEP_KEYS {
-                        let keys = format!("{start}{}", object.repeat(times));
-                        let row = rows.next().expect("a recorded outcome for each case");
-                        let mut fields = row.split(' ');
-                        let mode = match fields.next() {
-                            Some("V") => VisualMode::Line,
-                            _ => VisualMode::Character,
-                        };
-                        let numbers: Vec<usize> = fields
-                            .map(|field| field.parse().expect("a number"))
-                            .collect();
-                        let expected = (
-                            Some(ViMode::Visual(mode)),
-                            TextPosition::new(numbers[0], numbers[1]),
-                            range((numbers[2], numbers[3]), (numbers[4], numbers[5])),
-                        );
-                        let editor = run_with(config.clone(), text, (line, column), &keys);
-                        let actual = (
-                            editor.vi_mode(),
-                            editor.cursor(),
-                            editor.selection().range(),
-                        );
-                        if actual != expected {
-                            failures.push(format!(
-                                "{keys} at {line}:{column} in {text:?}: {actual:?}, Neovim {expected:?}"
-                            ));
-                        }
+                for keys in SWEEP_KEYS {
+                    let row = rows.next().expect("a recorded outcome for each case");
+                    let expected = recorded(row);
+                    let editor = run_with(config.clone(), text, (line, column), keys);
+                    let actual = (
+                        editor.vi_mode(),
+                        editor.cursor(),
+                        editor.selection().range(),
+                    );
+                    if actual != expected {
+                        failures.push(format!(
+                            "{keys} at {line}:{column} in {text:?}: {actual:?}, Neovim {expected:?}"
+                        ));
                     }
                 }
             }

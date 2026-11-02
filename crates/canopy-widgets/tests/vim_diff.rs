@@ -388,13 +388,17 @@ const SWEEP_TEXTS: [&str; 3] = [
     "this is a test, of words.  foo-bar baz_qux 世界 x",
 ];
 
-/// The keys of each case of the sweep, before and after its text object.
-const SWEEP_KEYS: [(&str, usize); 4] = [("v", 1), ("v", 2), ("vh", 1), ("V", 1)];
+/// The keys of the sweep: each text object once, twice, from a selection
+/// of two characters, and from a line selection, then word motions.
+const SWEEP_KEYS: [&str; 32] = [
+    "viw", "viwiw", "vhiw", "Viw", "vaw", "vawaw", "vhaw", "Vaw", "vis", "visis", "vhis", "Vis",
+    "vas", "vasas", "vhas", "Vas", "vip", "vipip", "vhip", "Vip", "vap", "vapap", "vhap", "Vap",
+    "vw", "vb", "ve", "vww", "vbb", "vee", "vwb", "veb",
+];
 
-/// Every text object from every start in [`SWEEP_TEXTS`]: once, twice, from
-/// a selection of two characters, and from a line selection. The recorded
-/// table of `src/editor/tests/visual.rs` builds the same cases in the same
-/// order.
+/// Every sequence of [`SWEEP_KEYS`] from every start in [`SWEEP_TEXTS`]. The
+/// recorded table of `src/editor/tests/visual.rs` builds the same cases in
+/// the same order.
 fn object_sweep() -> Vec<Case> {
     let mut cases = Vec::new();
     for text in SWEEP_TEXTS {
@@ -404,20 +408,15 @@ fn object_sweep() -> Vec<Case> {
                 columns.push(0);
             }
             for column in columns {
-                for object in OBJECTS {
-                    for (start, times) in SWEEP_KEYS {
-                        let mut keys = Vec::new();
-                        push_chars(&mut keys, start);
-                        for _ in 0..times {
-                            push_chars(&mut keys, object);
-                        }
-                        cases.push(Case {
-                            text: text.to_string(),
-                            line,
-                            column,
-                            keys,
-                        });
-                    }
+                for sequence in SWEEP_KEYS {
+                    let mut keys = Vec::new();
+                    push_chars(&mut keys, sequence);
+                    cases.push(Case {
+                        text: text.to_string(),
+                        line,
+                        column,
+                        keys,
+                    });
                 }
             }
         }
@@ -704,14 +703,14 @@ fn run_vim(cases: &[Case]) -> Vec<Value> {
     results
 }
 
-/// Write Neovim's outcome of each case of the sweep of text objects to
-/// `tests/vim/objects.txt`, one line each: the mode, the cursor, and the
+/// Write Neovim's outcome of each case of the sweep to
+/// `tests/vim/sweep.txt`, one line each: the mode, the cursor, and the
 /// selected range, as numbers.
 fn record_sweep(sweep: &[Case], results: &[Value]) {
     let mut table = String::from(
-        "# Neovim's outcome of each case of the sweep of text objects in\n\
-         # tests/vim_diff.rs, in order: the mode, the cursor line and column, and\n\
-         # the start and end of the selected range. Rewrite with\n\
+        "# Neovim's outcome of each case of the sweep of text objects and word\n\
+         # motions in tests/vim_diff.rs, in order: the mode, the cursor line and\n\
+         # column, and the start and end of the selected range. Rewrite with\n\
          # VIM_DIFF_RECORD=1 cargo xtask vim-diff --cases 0\n",
     );
     for (case, result) in sweep.iter().zip(results) {
@@ -734,7 +733,7 @@ fn record_sweep(sweep: &[Case], results: &[Value]) {
         )
         .expect("a table");
     }
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/vim/objects.txt");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/vim/sweep.txt");
     fs::write(path, table).expect("the table writes");
 }
 
