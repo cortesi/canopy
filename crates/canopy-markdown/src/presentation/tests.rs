@@ -537,7 +537,7 @@ fn the_current_match_paints_apart_from_the_others() {
 }
 
 #[test]
-fn object_cursor_shares_one_ground_and_marks_its_rows_in_the_margin() {
+fn object_cursor_shares_one_ground_without_a_bar_of_its_own() {
     let p = prepared(
         "see [the guide](https://x) now\n\n```\nlet a\n\nlet b\n```\n",
         24,
@@ -561,19 +561,13 @@ fn object_cursor_shares_one_ground_and_marks_its_rows_in_the_margin() {
     );
     h.render().unwrap();
     let object = h.canopy.style().resolve("markdown/object");
-    let bar = h.canopy.style().resolve("markdown/object/bar");
     let ground = PartialStyle::new().bg(object.bg.clone());
-    let (object, bar) = (
-        object.resolve_solid().unwrap(),
-        bar.resolve_solid().unwrap(),
-    );
     let margin = |h: &Harness, y| h.buf().get(Point { x: 0, y }).unwrap().clone();
     assert!(h.tbuf().contains_text_style("the guide", &ground));
     assert!(!h.tbuf().contains_text_style("see", &ground));
-    assert_eq!((margin(&h, 0).ch, margin(&h, 0).style.fg), ('▌', bar.fg));
-    assert_eq!(margin(&h, card_start).ch, ' ');
+    assert_eq!(margin(&h, 0).ch, ' ', "only the block cursor has a bar");
 
-    // A card marks every row, blank code lines included, on the same ground.
+    // A card takes the ground across every row, blank code lines included.
     h.with_root_widget_context(|preview: &mut Preview, _| {
         preview.overlays.active_object = Some(card);
         Ok(())
@@ -582,11 +576,111 @@ fn object_cursor_shares_one_ground_and_marks_its_rows_in_the_margin() {
     h.render().unwrap();
     assert!(h.tbuf().contains_text_style("let a", &ground));
     assert!(!h.tbuf().contains_text_style("the guide", &ground));
-    assert_eq!(margin(&h, 0).ch, ' ');
-    // An unlabelled card is its three code lines.
+    let object = object.resolve_solid().unwrap();
     for y in card_start..card_start + 3 {
-        let cell = margin(&h, y);
-        assert_eq!((cell.ch, cell.style.bg), ('▌', object.bg), "row {y}");
+        let cell = h.buf().get(Point { x: 3, y }).unwrap().clone();
+        assert_eq!(cell.style.bg, object.bg, "row {y}");
+    }
+}
+
+#[test]
+fn block_cursor_bars_its_rows_or_takes_a_ground_without_a_margin() {
+    let text = "para\n\n## Head\n\n> quoted\n> lines\n";
+    let rows = |width| {
+        let p = PresentationSnapshot::prepare(
+            document(text),
+            GeometryKey {
+                width,
+                ..Default::default()
+            },
+            None,
+            &Supplied::default(),
+        );
+        let rows: Vec<_> = p
+            .document
+            .units
+            .iter()
+            .map(|unit| p.content_rows(unit.id).unwrap())
+            .collect();
+        (p, rows)
+    };
+    let (p, content) = rows(24);
+    // A paragraph's spacing row and a heading's blank row above it are not
+    // content; a heading's underline is.
+    assert_eq!(content, [0..1, 3..5, 6..7]);
+    let mut h = mounted(
+        p,
+        PaintOverlays {
+            block_rows: Some(content[1].clone()),
+            ..Default::default()
+        },
+        24,
+        10,
+    );
+    h.render().unwrap();
+    let bar = h
+        .canopy
+        .style()
+        .resolve("markdown/block/bar")
+        .resolve_solid()
+        .unwrap();
+    for y in 0..9 {
+        let cell = h.buf().get(Point { x: 0, y }).unwrap().clone();
+        if content[1].contains(&y) {
+            assert_eq!((cell.ch, cell.style.fg), ('▌', bar.fg), "row {y}");
+        } else {
+            assert_eq!(cell.ch, ' ', "row {y}");
+        }
+    }
+
+    // With no margin, the marked rows take the cursor's ground instead.
+    let (p, content) = rows(3);
+    let mut h = mounted(
+        p,
+        PaintOverlays {
+            block_rows: Some(content[0].clone()),
+            ..Default::default()
+        },
+        3,
+        6,
+    );
+    h.render().unwrap();
+    let ground = h
+        .canopy
+        .style()
+        .resolve("markdown/block")
+        .resolve_solid()
+        .unwrap()
+        .bg;
+    for y in 0..6 {
+        let cell = h.buf().get(Point { x: 0, y }).unwrap().clone();
+        assert_eq!(cell.style.bg == ground, content[0].contains(&y), "row {y}");
+    }
+}
+
+#[test]
+fn spacing_rows_hit_nothing_even_below_a_card() {
+    let p = PresentationSnapshot::prepare(
+        document("```\ncode\n```\n\n# Head\n"),
+        GeometryKey {
+            width: 24,
+            ..Default::default()
+        },
+        None,
+        &Supplied::default(),
+    );
+    let card = p.content_rows(p.document.units[0].id).unwrap();
+    let head = p.content_rows(p.document.units[1].id).unwrap();
+    assert!(
+        p.hit(Point {
+            x: 3,
+            y: card.start
+        })
+        .is_some()
+    );
+    // The card's spacing row, and the heading's blank row above it.
+    for y in card.end..head.start {
+        assert!(p.hit(Point { x: 3, y }).is_none(), "row {y}");
     }
 }
 

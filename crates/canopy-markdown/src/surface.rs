@@ -2,6 +2,7 @@
 
 use std::{
     cell::RefCell,
+    ops::Range,
     rc::Rc,
     sync::{Arc, Weak},
 };
@@ -24,9 +25,11 @@ use canopy_widgets::view_search;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
+    cursor::{self, Frame, Step},
     document::{DocumentSnapshot, Object, ReadingPosition, ReadingRange},
     options::{Follow, Mode},
     presentation::{PaintOverlays, PresentationSnapshot},
+    units::{EditUnit, edit_units, unit_at},
 };
 
 /// Reader state shared between the rendered surface and its controller.
@@ -57,10 +60,72 @@ pub struct SurfaceState {
     /// Whether a new query waits to reveal its first match once its matches
     /// publish. Reader input clears it.
     pub search_reveal: bool,
+    /// The mode that `Esc` returns to: Scroll, or Interact for a view that
+    /// rests in the block cursor.
+    pub resting: Mode,
+    /// The start of the unit that the block cursor marks. It holds across
+    /// the publications of one epoch. Outside Interact, it is the unit that
+    /// the cursor marks again if it still shows when Interact starts.
+    pub marked: Option<usize>,
+    /// The epoch and source byte of a unit for the cursor to mark once a
+    /// presentation of that epoch shows.
+    pub pending_mark: Option<(u64, usize)>,
+    /// How the view must scroll for the block cursor, which the controller
+    /// does when it next polls.
+    pub cursor_scroll: Option<CursorScroll>,
     /// Fixed reading endpoint for the current pointer gesture.
     drag_anchor: Option<ReadingPosition>,
     /// Retained display column for vertical selection movement.
     preferred_column: Option<u32>,
+    /// The edit units of the shown document and their rows, built when the
+    /// cursor first needs them.
+    cursor: Option<CursorMap>,
+}
+
+/// How the view must scroll for the block cursor after it painted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CursorScroll {
+    /// Show the unit nearest the view, as no unit shows.
+    Settle,
+    /// Show the marked unit again, as a resize or a new layout hid it.
+    Reveal,
+}
+
+/// The edit units of a shown document, and the content rows of each in its
+/// presentation.
+pub type CursorUnits = (Arc<[EditUnit]>, Arc<[Range<u32>]>);
+
+/// The edit units of a shown presentation, and the content rows of each.
+struct CursorMap {
+    /// The presentation that the rows belong to.
+    presentation: Weak<PresentationSnapshot>,
+    /// The document that the units belong to.
+    document: Weak<DocumentSnapshot>,
+    /// The edit units of the document.
+    units: Arc<[EditUnit]>,
+    /// The content rows of each unit.
+    rows: Arc<[Range<u32>]>,
+}
+
+/// Return the rows of the content of `unit` in `presentation`: from the first
+/// content row of its first block to the last of its last.
+fn unit_rows(presentation: &PresentationSnapshot, unit: &EditUnit) -> Range<u32> {
+    let blocks = &presentation.document.blocks;
+    unit.blocks
+        .clone()
+        .filter_map(|index| presentation.content_rows(blocks.get(index)?.unit_id))
+        .filter(|rows| !rows.is_empty())
+        .reduce(|a, b| a.start.min(b.start)..a.end.max(b.end))
+        .unwrap_or(0..0)
+}
+
+/// Return the document rows that `view` shows.
+fn frame(view: &View) -> Frame {
+    Frame {
+        top: view.scroll.y,
+        height: view.content.h,
+        canvas: view.canvas.h,
+    }
 }
 
 impl SurfaceState {
@@ -78,6 +143,104 @@ impl SurfaceState {
     pub fn leave_interact(&mut self) {
         self.mode = Mode::Scroll;
         self.overlays.active_object = None;
+    }
+
+    /// Return the edit units of the shown document and the rows of each,
+    /// building them for a new presentation.
+    pub fn cursor_map(&mut self) -> Option<CursorUnits> {
+        let presentation = self.presentation.clone()?;
+        let shown = |map: &CursorMap| Weak::as_ptr(&map.presentation) == Arc::as_ptr(&presentation);
+        if !self.cursor.as_ref().is_some_and(shown) {
+            let units = self
+                .cursor
+                .take()
+                .filter(|map| Weak::as_ptr(&map.document) == Arc::as_ptr(&presentation.document))
+                .map_or_else(
+                    || edit_units(&presentation.document).into(),
+                    |map| map.units,
+                );
+            let rows = units
+                .iter()
+                .map(|unit| unit_rows(&presentation, unit))
+                .collect();
+            self.cursor = Some(CursorMap {
+                presentation: Arc::downgrade(&presentation),
+                document: Arc::downgrade(&presentation.document),
+                units,
+                rows,
+            });
+        }
+        let map = self.cursor.as_ref()?;
+        Some((map.units.clone(), map.rows.clone()))
+    }
+
+    /// Return the index of the unit that the block cursor marks.
+    pub fn marked_index(&mut self) -> Option<usize> {
+        let byte = self.marked?;
+        unit_at(&self.cursor_map()?.0, byte)
+    }
+
+    /// Return the unit that the block cursor marks, and its rows, while
+    /// Interact lasts.
+    pub fn marked_unit(&mut self) -> Option<(EditUnit, Range<u32>)> {
+        if self.mode != Mode::Interact {
+            return None;
+        }
+        let index = self.marked_index()?;
+        let (units, rows) = self.cursor_map()?;
+        Some((units.get(index)?.clone(), rows.get(index)?.clone()))
+    }
+
+    /// Mark unit `index`. A move to another unit drops the object cursor,
+    /// unless `keep_object`, as when the object cursor carries the block
+    /// cursor.
+    pub fn mark(&mut self, index: usize, keep_object: bool) {
+        let Some(start) = self
+            .cursor_map()
+            .and_then(|(units, _)| Some(units.get(index)?.range.start))
+        else {
+            return;
+        };
+        let moved = self.marked_index() != Some(index);
+        if moved && !keep_object {
+            self.overlays.active_object = None;
+        }
+        self.marked = Some(start);
+    }
+
+    /// Return the index of the unit that holds block `index` of the shown
+    /// document.
+    pub fn unit_of_block(&mut self, index: usize) -> Option<usize> {
+        let (units, _) = self.cursor_map()?;
+        let unit = units.partition_point(|unit| unit.blocks.end <= index);
+        units
+            .get(unit)
+            .is_some_and(|found| found.blocks.contains(&index))
+            .then_some(unit)
+    }
+
+    /// Return the index of the unit of the reading unit `unit_id`.
+    pub fn unit_of_reading(&mut self, unit_id: u64) -> Option<usize> {
+        let block = self
+            .presentation
+            .as_ref()?
+            .document
+            .unit_position(unit_id)?;
+        self.unit_of_block(block)
+    }
+
+    /// Keep the block cursor on a unit with a row in view, as `frame` shows
+    /// it: the marked unit, or else the first unit in view, or else the
+    /// nearest unit, which the view must scroll to. Return that step, if the
+    /// cursor moves.
+    fn settle(&mut self, frame: Frame) -> Option<Step> {
+        if self.mode != Mode::Interact || frame.height == 0 {
+            return None;
+        }
+        let (_, rows) = self.cursor_map()?;
+        let step = cursor::settle(&rows, self.marked_index(), frame)?;
+        self.mark(step.unit, false);
+        Some(step)
     }
 
     /// Supersede any queued reveal after explicit reader navigation.
@@ -139,10 +302,13 @@ impl RenderedSurface {
         next: Arc<PresentationSnapshot>,
     ) -> Result<bool> {
         let navigation = self.state.borrow().navigation;
+        // The block cursor's unit holds its place on screen, so a resize or
+        // an append keeps it where the reader looks.
         let anchor = self
             .pending_reading
             .filter(|pending| pending.0 == navigation)
             .map(|(_, position, source, row)| (position, source, row))
+            .or_else(|| self.marked_anchor(ctx))
             .or_else(|| self.reading_anchor(ctx));
         let mut state = self.state.borrow_mut();
         let mut cleared = false;
@@ -198,7 +364,8 @@ impl RenderedSurface {
         } else {
             cleared = state.overlays.selection.is_some();
             state.overlays = PaintOverlays::default();
-            state.mode = Mode::Scroll;
+            state.mode = state.resting;
+            state.marked = None;
             state.drag_anchor = None;
             state.dragging = false;
             state.preferred_column = None;
@@ -232,8 +399,17 @@ impl RenderedSurface {
         self.pending_reading = resolved.map(|(position, source, viewport_row)| {
             (state.navigation, position, source, viewport_row)
         });
+        let epoch = next.document.source.epoch;
         state.document = Some(next.document.clone());
         state.presentation = Some(next);
+        // A unit that a host asked for before its presentation showed.
+        if let Some((pending, byte)) = state.pending_mark
+            && pending == epoch
+        {
+            state.pending_mark = None;
+            state.marked = Some(byte);
+            state.mode = Mode::Interact;
+        }
         if let Some((row, viewport_row)) = target {
             state.reveal = Some(Rect::new(0, row, 1, 1));
             ctx.reveal_anchor(viewport_row.map_or(RevealAlign::Nearest, RevealAlign::Top));
@@ -242,35 +418,143 @@ impl RenderedSurface {
         Ok(cleared)
     }
 
-    /// Enter object navigation without changing the follow policy.
-    pub fn enter_interact(&self, ctx: &dyn ViewContext) -> Result<()> {
-        let mut state = self.state.borrow_mut();
-        state.mode = Mode::Interact;
-        if let Some(presentation) = state.presentation.clone() {
-            let visible = ctx.view().view_rect();
-            let objects = &presentation.document.objects;
-            let remembered_visible = objects
-                .iter()
-                .find(|o| Some(o.id) == state.overlays.active_object)
-                .and_then(|o| object_row(&presentation, o))
-                .is_some_and(|row| {
-                    row >= visible.tl.y && row < visible.tl.y.saturating_add(visible.h)
-                });
-            if !remembered_visible {
-                state.overlays.active_object = objects
-                    .iter()
-                    .find(|o| object_row(&presentation, o).is_some_and(|row| row >= visible.tl.y))
-                    .or_else(|| presentation.document.objects.last())
-                    .map(|o| o.id);
+    /// Enter the block cursor without changing the follow policy. It marks
+    /// the unit it marked before, if that unit still shows, or else the first
+    /// unit with a row in view.
+    pub fn enter_interact(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        self.state.borrow_mut().mode = Mode::Interact;
+        self.sync_cursor(ctx)?;
+        self.state.borrow().notify()
+    }
+
+    /// Keep the block cursor on a unit with a row in view, and scroll to it
+    /// when no unit shows. After a resize hid the marked unit, scroll to
+    /// that unit instead.
+    pub fn sync_cursor(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        let view = ctx.view();
+        let shown = frame(&view);
+        let top = {
+            let mut state = self.state.borrow_mut();
+            match state.cursor_scroll.take() {
+                Some(CursorScroll::Reveal) => state
+                    .marked_unit()
+                    .map(|(_, rows)| rows)
+                    .filter(|rows| !rows.is_empty() && !shown.shows(rows))
+                    .map(|rows| cursor::reveal(&rows, shown, rows.start >= shown.top)),
+                _ => state.settle(shown).map(|step| step.top),
             }
+        };
+        if let Some(top) = top
+            && top != view.scroll.y
+        {
+            self.scroll_to(ctx, top);
         }
-        state.notify()
+        Ok(())
+    }
+
+    /// Mark the unit that holds source byte `byte`, or else the next unit,
+    /// or else the one before, enter the block cursor, and show the unit.
+    pub fn select_block_at(&mut self, ctx: &mut dyn Context, byte: usize) -> Result<()> {
+        let view = ctx.view();
+        let step = {
+            let mut state = self.state.borrow_mut();
+            state.mode = Mode::Interact;
+            let Some((units, rows)) = state.cursor_map() else {
+                return Ok(());
+            };
+            let Some(unit) = unit_at(&units, byte) else {
+                return Ok(());
+            };
+            state.mark(unit, false);
+            state.follow = Follow::Paused;
+            state.navigated();
+            rows.get(unit)
+                .filter(|rows| !rows.is_empty())
+                .map(|rows| cursor::reveal(rows, frame(&view), true))
+        };
+        if let Some(top) = step {
+            self.scroll_to(ctx, top);
+        }
+        self.state.borrow().notify()
+    }
+
+    /// Scroll the view so its first row is `top`, as the block cursor's own
+    /// move, and keep the observed offset.
+    fn scroll_to(&mut self, ctx: &mut dyn Context, top: u32) {
+        let x = ctx.view().scroll.x;
+        ctx.scroll(ScrollOp::To(Point { x, y: top }));
+        let view = ctx.view();
+        self.observed_scroll = Some((view.scroll, view.content_size()));
+    }
+
+    /// Move the block cursor by a navigation intent: to the next or previous
+    /// unit, or the first or last, or through a tall unit.
+    fn block_step(&mut self, ctx: &mut dyn Context, intent: NavIntent) -> Result<()> {
+        let view = frame(&ctx.view());
+        let step = {
+            let mut state = self.state.borrow_mut();
+            let Some((_, rows)) = state.cursor_map() else {
+                return Ok(());
+            };
+            let marked = state.marked_index();
+            match (intent, marked) {
+                (NavIntent::Down, Some(index)) => cursor::down(&rows, index, view),
+                (NavIntent::Up, Some(index)) => cursor::up(&rows, index, view),
+                (NavIntent::First, _) => cursor::first(&rows, view),
+                (NavIntent::Last, _) => cursor::last(&rows, view),
+                _ => cursor::settle(&rows, marked, view),
+            }
+        };
+        let Some(step) = step else {
+            return Ok(());
+        };
+        {
+            let mut state = self.state.borrow_mut();
+            state.mark(step.unit, false);
+            state.follow = Follow::Paused;
+            state.navigated();
+        }
+        self.scroll_to(ctx, step.top);
+        self.state.borrow().notify()
+    }
+
+    /// Capture the reading position of the first row of the marked unit in
+    /// view, while Interact lasts, with its row in the view.
+    fn marked_anchor(&self, ctx: &dyn ViewContext) -> Option<(ReadingPosition, usize, u32)> {
+        let view = ctx.view().view_rect();
+        let (_, rows) = self.state.borrow_mut().marked_unit()?;
+        let from = rows.start.max(view.tl.y);
+        let end = rows.end.min(view.tl.y.saturating_add(view.h));
+        if from >= end {
+            return None;
+        }
+        self.anchor_at(
+            Point {
+                x: view.tl.x,
+                y: from,
+            },
+            end,
+        )
+        .map(|(position, source, row)| (position, source, row + (from - view.tl.y)))
     }
 
     /// Start selection at the object boundary or current reading anchor.
     pub fn start_selection(&self, ctx: &dyn ViewContext) -> Result<()> {
         let reading = self.reading_anchor(ctx).map(|a| a.0);
         let mut state = self.state.borrow_mut();
+        // The block cursor's unit starts it, at its first reading position.
+        let marked = state.marked_unit().and_then(|(unit, _)| {
+            let block = state
+                .presentation
+                .as_ref()?
+                .document
+                .blocks
+                .get(unit.blocks.start)?;
+            Some(ReadingPosition {
+                unit_id: block.unit_id,
+                offset: 0,
+            })
+        });
         state.mode = Mode::Interact;
         if state.overlays.selection.is_none() {
             let object_position = state.presentation.as_ref().and_then(|p| {
@@ -281,7 +565,7 @@ impl RenderedSurface {
                     .find(|o| Some(o.id) == state.overlays.active_object)?;
                 object_position(&p.document, object)
             });
-            if let Some(position) = object_position.or(reading) {
+            if let Some(position) = object_position.or(marked).or(reading) {
                 state.overlays.selection = Some(ReadingRange {
                     start: position,
                     end: position,
@@ -294,19 +578,23 @@ impl RenderedSurface {
         state.notify()
     }
 
-    /// Clear selection first, otherwise return to scrolling; release capture.
+    /// Clear the text selection first, then the object cursor, and then,
+    /// for a view that rests in Scroll, leave the block cursor. Release
+    /// capture.
     pub fn escape(&self, ctx: &mut dyn Context) -> Result<bool> {
         let mut state = self.state.borrow_mut();
-        let selected = state.overlays.selection.take().is_some();
-        let handled = selected
-            || state.mode == Mode::Interact
-            || state.drag_anchor.is_some()
-            || state.overlays.active_object.is_some();
+        let handled = if state.overlays.selection.take().is_some()
+            || state.overlays.active_object.take().is_some()
+        {
+            true
+        } else if state.mode == Mode::Interact && state.resting == Mode::Scroll {
+            state.leave_interact();
+            true
+        } else {
+            state.drag_anchor.is_some()
+        };
         if !handled {
             return Ok(false);
-        }
-        if !selected {
-            state.leave_interact();
         }
         state.dragging = false;
         state.drag_anchor = None;
@@ -328,29 +616,13 @@ impl RenderedSurface {
         if selection {
             return self.move_selection(ctx, intent);
         }
-        if matches!(intent, NavIntent::First | NavIntent::Last) {
-            let mut state = self.state.borrow_mut();
-            let target = state.presentation.as_ref().and_then(|p| {
-                if intent == NavIntent::First {
-                    p.document.objects.first()
-                } else {
-                    p.document.objects.last()
-                }
-                .map(|o| o.id)
-            });
-            if target == state.overlays.active_object {
-                return Ok(());
-            }
-            state.overlays.active_object = target;
-            state.follow = Follow::Paused;
-            state.navigated();
-            drop(state);
-            return self.reveal_object(ctx);
-        }
-        self.object_next(ctx, if intent == NavIntent::Up { -1 } else { 1 }, false)
+        self.block_step(ctx, intent)
     }
 
-    /// Visit an adjacent object, optionally traversing focus at a boundary.
+    /// Visit an adjacent object in the block cursor, and carry the cursor to
+    /// the object's unit, or traverse focus at a boundary if
+    /// `leave_at_boundary`. With no object cursor, start from the marked
+    /// unit: forward at its first object, backward at its last.
     pub fn object_next(
         &self,
         ctx: &mut dyn Context,
@@ -361,18 +633,28 @@ impl RenderedSurface {
         let Some(presentation) = state.presentation.clone() else {
             return Ok(());
         };
+        state.mode = Mode::Interact;
         let objects = &presentation.document.objects;
         let current = objects
             .iter()
             .position(|o| Some(o.id) == state.overlays.active_object);
-        let target = match current {
-            Some(index) if delta < 0 => index.checked_sub(1),
-            Some(index) => (index + 1 < objects.len()).then_some(index + 1),
-            None if delta < 0 => objects.len().checked_sub(1),
-            None => (!objects.is_empty()).then_some(0),
+        let marked = state.marked_unit().map(|(unit, _)| unit.range);
+        let target = match (current, marked) {
+            (Some(index), _) if delta < 0 => index.checked_sub(1),
+            (Some(index), _) => (index + 1 < objects.len()).then_some(index + 1),
+            (None, Some(range)) if delta < 0 => {
+                objects.iter().rposition(|o| o.source.start <= range.end)
+            }
+            (None, Some(range)) => objects.iter().position(|o| o.source.start >= range.start),
+            (None, None) if delta < 0 => objects.len().checked_sub(1),
+            (None, None) => (!objects.is_empty()).then_some(0),
         };
         if let Some(index) = target {
-            state.overlays.active_object = Some(objects[index].id);
+            let object = &objects[index];
+            state.overlays.active_object = Some(object.id);
+            if let Some(unit) = state.unit_of_reading(object.unit_id) {
+                state.mark(unit, true);
+            }
             state.follow = Follow::Paused;
             state.navigated();
             drop(state);
@@ -506,12 +788,15 @@ impl RenderedSurface {
         let before = ctx.view().scroll;
         ctx.scroll(operation);
         let view = ctx.view();
-        let mut state = self.state.borrow_mut();
-        if before != view.scroll {
-            state.scrolled(&view);
+        {
+            let mut state = self.state.borrow_mut();
+            if before != view.scroll {
+                state.scrolled(&view);
+            }
         }
         self.observed_scroll = Some((view.scroll, view.content_size()));
-        state.notify()
+        self.sync_cursor(ctx)?;
+        self.state.borrow().notify()
     }
 
     /// Move the active endpoint by grapheme or displayed row and reveal it.
@@ -674,18 +959,42 @@ impl RenderedSurface {
             } else {
                 ctx.view().content_point(event.location)
             };
+        // A press on a row of a unit moves the block cursor to that unit.
+        let mut marked = false;
+        if event.action == mouse::Action::Down
+            && let Some(point) = point
+        {
+            let mut state = self.state.borrow_mut();
+            if state.mode == Mode::Interact
+                && let Some(unit) = state
+                    .cursor_map()
+                    .and_then(|(_, rows)| cursor::at_row(&rows, point.y))
+            {
+                state.mark(unit, false);
+                state.follow = Follow::Paused;
+                state.navigated();
+                ctx.set_focus(ctx.node_id())?;
+                state.notify()?;
+                marked = true;
+            }
+        }
+        let ignore = if marked {
+            EventOutcome::Handle
+        } else {
+            EventOutcome::Ignore
+        };
         let Some(hit) = point.and_then(|point| presentation.hit(point)) else {
-            return Ok(EventOutcome::Ignore);
+            return Ok(ignore);
         };
         let Some(position) = hit.reading else {
-            return Ok(EventOutcome::Ignore);
+            return Ok(ignore);
         };
         let mut state = self.state.borrow_mut();
         if !state.presentation.as_ref().is_some_and(|p| {
             p.document.source.epoch == presentation.document.source.epoch
                 && valid_position(&p.document, position)
         }) {
-            return Ok(EventOutcome::Ignore);
+            return Ok(ignore);
         }
         if event.action == mouse::Action::Down {
             ctx.set_focus(ctx.node_id())?;
@@ -697,6 +1006,9 @@ impl RenderedSurface {
                     state.mode == Mode::Interact && state.overlays.active_object == Some(object);
                 state.mode = Mode::Interact;
                 state.overlays.active_object = Some(object);
+                if let Some(unit) = state.unit_of_reading(position.unit_id) {
+                    state.mark(unit, true);
+                }
                 state.overlays.selection = None;
                 state.follow = Follow::Paused;
                 state.navigated();
@@ -770,6 +1082,9 @@ impl Widget for RenderedSurface {
             state.width = view.content.w;
             state.notify()?;
         }
+        let resized = self
+            .observed_scroll
+            .is_some_and(|(_, size)| size != view.content_size());
         if let Some((before, size)) = self.observed_scroll
             && size == view.content_size()
             && before != view.scroll
@@ -786,6 +1101,29 @@ impl Widget for RenderedSurface {
             state.drag_anchor = None;
             state.dragging = false;
         }
+        // The block cursor keeps a unit in view. A resize or a new layout
+        // keeps the marked unit, and the controller scrolls to it, unless the
+        // view follows the tail; when no unit shows, it scrolls to the
+        // nearest.
+        let shown = frame(&view);
+        let hidden = state
+            .marked_unit()
+            .is_some_and(|(_, rows)| !rows.is_empty() && !shown.shows(&rows));
+        let laid_out = state.presentation.as_ref().is_some_and(|presentation| {
+            self.painted.as_ref().map(Weak::as_ptr) != Some(Arc::as_ptr(presentation))
+        });
+        let revealing = state.cursor_scroll == Some(CursorScroll::Reveal);
+        if (resized || laid_out) && hidden && shown.height > 0 && state.follow == Follow::Paused {
+            state.cursor_scroll = Some(CursorScroll::Reveal);
+            state.notify()?;
+        } else if !revealing
+            && let Some(step) = state.settle(shown)
+            && step.top != view.scroll.y
+        {
+            state.cursor_scroll = Some(CursorScroll::Settle);
+            state.notify()?;
+        }
+        state.overlays.block_rows = state.marked_unit().map(|(_, rows)| rows);
         if let Some(presentation) = state.presentation.as_ref() {
             presentation.paint(render, view.view_rect(), &state.overlays)?;
             self.painted = Some(Arc::downgrade(presentation));

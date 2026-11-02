@@ -26,7 +26,9 @@ pub enum MarkdownMode {
     /// Navigation moves the document viewport.
     #[default]
     Scroll,
-    /// Navigation moves an object cursor or text-selection endpoint.
+    /// The block cursor: navigation moves a cursor over the edit units of
+    /// the document, which a bar in the left margin marks. An object cursor
+    /// and text selection work inside it.
     Interact,
 }
 
@@ -54,6 +56,10 @@ pub struct MarkdownOptions {
     pub publication_wake: Option<NodeWakeHandle>,
     /// Initial representation of a new document.
     pub initial_view: ViewType,
+    /// The rendered view's resting mode, which a new document starts in and
+    /// `Esc` returns to. Scroll leaves the block cursor on `Esc`; Interact
+    /// keeps it, so the view always marks a unit.
+    pub resting_mode: Mode,
     /// Restrict an explicitly partial source preview to Source.
     pub source_only: bool,
     /// Host status outside document content, such as a retained file range.
@@ -124,6 +130,7 @@ impl Default for MarkdownOptions {
             executor: MarkdownExecutor::default(),
             publication_wake: None,
             initial_view: ViewType::Rendered,
+            resting_mode: Mode::Scroll,
             source_only: false,
             status: None,
             external_search: false,

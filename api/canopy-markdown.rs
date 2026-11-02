@@ -84,7 +84,11 @@ impl Markdown {
     /// Latest truthful status of a requested host action.
     pub fn action_status(&self) -> String;
 
-    /// Open the selected link, code, table, or source inspector.
+    /// Open the selected link, code, table, or source inspector: the object
+    /// cursor's object. In the block cursor without one, take the marked
+    /// unit's own card, such as its code or table, or else the first object
+    /// in the unit. In Scroll, take the first object of the document, unless
+    /// a search is current.
     pub fn activate(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Accept a complete UTF-8 chunk or reject it without changing the
@@ -123,7 +127,9 @@ impl Markdown {
     /// Current document epoch.
     pub fn epoch(&self) -> u64;
 
-    /// End the innermost document selection, otherwise return to scrolling.
+    /// End the innermost thing in the rendered view: the text selection,
+    /// then the object cursor, and then the block cursor, unless the view
+    /// rests in it.
     pub fn escape(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Apply final EOF interpretation, including an explicitly aborted outcome.
@@ -140,7 +146,8 @@ impl Markdown {
     pub fn follow_state(&self) -> Follow;
 
     /// Return whether the reader has an item to copy: a text selection, the
-    /// object Interact selected, or what an open inspector selects.
+    /// object cursor's object, the unit the block cursor marks, or what an
+    /// open inspector selects.
     pub fn has_item(&self, ctx: &dyn ViewContext) -> canopy::error::Result<bool>;
 
     /// Inspect a pinned snapshot of the displayed source.
@@ -152,7 +159,9 @@ impl Markdown {
     /// Whether an open inspector has published all requested preparation.
     pub fn inspector_ready(&self, ctx: &dyn ViewContext) -> canopy::error::Result<bool>;
 
-    /// Enter object navigation without pausing follow until the cursor moves.
+    /// Enter the block cursor without pausing follow until the cursor moves.
+    /// It marks the first unit with a row in view, or the unit it marked
+    /// before if that unit still shows.
     pub fn interact(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Cancel the reveal that the held query's next matches would make, as
@@ -176,8 +185,8 @@ impl Markdown {
     /// Construct a complete document. Preparation begins after allocation.
     pub fn new(source: String, options: MarkdownOptions) -> canopy::error::Result<Self>;
 
-    /// Visit the next actionable object or leave through normal focus
-    /// traversal.
+    /// Visit the next actionable object in the block cursor, which moves to
+    /// the object's unit, or leave through normal focus traversal.
     pub fn next_object(&mut self, ctx: &mut dyn Context, delta: i32) -> canopy::error::Result<()>;
 
     /// Read a bounded page of rendered objects with its snapshot revision.
@@ -248,7 +257,8 @@ impl Markdown {
         anchor: &str,
     ) -> canopy::error::Result<bool>;
 
-    /// Scroll the active view while preserving object cursor and follow policy.
+    /// Scroll the active view while preserving object cursor and follow
+    /// policy. The block cursor stays on a unit in view.
     pub fn scroll_view(&mut self, ctx: &mut dyn Context, op: ScrollOp)
     -> canopy::error::Result<()>;
 
@@ -282,8 +292,22 @@ impl Markdown {
     /// Read a bounded page of matches in the active search projection.
     pub fn search_window(&self, offset: usize, limit: usize) -> ArgValue;
 
+    /// Mark the edit unit that holds source byte `byte`, or else the next
+    /// unit, or else the one before, and show it in the block cursor. Before
+    /// the document's first presentation shows, the reader marks the unit
+    /// once it does, as for a host that restores a place after a reload.
+    pub fn select_block_at(
+        &mut self,
+        ctx: &mut dyn Context,
+        byte: usize,
+    ) -> canopy::error::Result<()>;
+
     /// Extend or start rendered text selection at the reading position.
     pub fn select_text(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Return the edit unit that the block cursor marks, or `None` outside
+    /// the block cursor or with no unit.
+    pub fn selected_block(&self) -> Option<EditUnit>;
 
     /// Center the reader's content, as [`MarkdownOptions::centered`] says,
     /// without resetting the document.
@@ -293,7 +317,7 @@ impl Markdown {
         centered: bool,
     ) -> canopy::error::Result<()>;
 
-    /// Enter or leave the rendered object-navigation mode.
+    /// Enter or leave the block cursor of the rendered view.
     pub fn set_mode(&mut self, ctx: &mut dyn Context, mode: Mode) -> canopy::error::Result<()>;
 
     /// Retain a literal or fh-compatible smart-case regex query.
@@ -470,6 +494,9 @@ impl Markdown {
     pub fn call_search_window(offset: usize, limit: usize) -> CommandCall;
 
     /// Build a positional call with typed user arguments.
+    pub fn call_select_block_at(byte: usize) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
     pub fn call_select_text() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
@@ -575,6 +602,9 @@ impl Markdown {
     pub fn spec_search_window() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
+    pub fn spec_select_block_at() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
     pub fn spec_select_text() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
@@ -619,6 +649,10 @@ pub struct MarkdownOptions {
     pub publication_wake: Option<NodeWakeHandle>,
     /// Initial representation of a new document.
     pub initial_view: ViewType,
+    /// The rendered view's resting mode, which a new document starts in and
+    /// `Esc` returns to. Scroll leaves the block cursor on `Esc`; Interact
+    /// keeps it, so the view always marks a unit.
+    pub resting_mode: Mode,
     /// Restrict an explicitly partial source preview to Source.
     pub source_only: bool,
     /// Host status outside document content, such as a retained file range.
@@ -857,7 +891,9 @@ pub enum Mode {
     /// Navigation moves the document viewport.
     #[default]
     Scroll,
-    /// Navigation moves an object cursor or text-selection endpoint.
+    /// The block cursor: navigation moves a cursor over the edit units of
+    /// the document, which a bar in the left margin marks. An object cursor
+    /// and text selection work inside it.
     Interact,
 }
 
@@ -1826,6 +1862,9 @@ pub mod presentation {
         pub search_current: Option<usize>,
         /// Current object cursor, independent of document selection.
         pub active_object: Option<u64>,
+        /// Document rows that the block cursor marks with a bar in the left
+        /// margin, or with its ground where blocks have no margin.
+        pub block_rows: Option<Range<u32>>,
         /// Images the host supplied, which image blocks paint.
         pub images: ImagePixels,
     }
@@ -1930,7 +1969,9 @@ pub mod presentation {
         /// Indexed canvas height, including block decoration and spacing.
         pub fn height(&self) -> u32;
 
-        /// Map a canvas cell to a whole readable grapheme or atomic card.
+        /// Map a canvas cell to a whole readable grapheme or atomic card. The
+        /// spacing rows between blocks, and a heading's blank row above it, hit
+        /// nothing.
         pub fn hit(&self, point: Point) -> Option<Hit>;
 
         /// Paint the visible document rectangle at viewport origin zero. This

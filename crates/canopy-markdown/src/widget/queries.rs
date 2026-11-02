@@ -106,6 +106,18 @@ pub(super) fn state(reader: &Markdown, ctx: &dyn ViewContext) -> Result<ArgValue
         lifecycle(&accepted.lifecycle)
     };
     let position = reader.position(ctx)?;
+    let block = reader
+        .shared
+        .borrow_mut()
+        .marked_unit()
+        .map_or(ArgValue::Null, |(unit, rows)| {
+            map([
+                ("range", range(&unit.range)),
+                ("own", unit.own.as_ref().map_or(ArgValue::Null, range)),
+                ("kind", text(&format!("{:?}", unit.kind))),
+                ("rows", range(&(rows.start as usize..rows.end as usize))),
+            ])
+        });
     let shared = reader.shared.borrow();
     let rendered = shared.presentation.as_ref();
     let document = reader.last_document.as_ref();
@@ -191,6 +203,7 @@ pub(super) fn state(reader: &Markdown, ctx: &dyn ViewContext) -> Result<ArgValue
             "active_object",
             optional_number(shared.overlays.active_object),
         ),
+        ("block", block),
         ("inspector", inspector),
         ("action_status", text(&reader.action_status)),
         ("failure", optional_text(reader.failure.as_deref())),

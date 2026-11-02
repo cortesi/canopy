@@ -30,7 +30,8 @@ mod tests {
         Ok(app)
     }
 
-    /// Return the object the reader's Interact mode selects.
+    /// Return the object that the object cursor of the reader's block cursor
+    /// selects.
     async fn active_object(app: &TermHost) -> Result<Value> {
         app.eval(
             r#"local reader = assert(canopy.find_node("**/markdown"))
@@ -56,8 +57,10 @@ mod tests {
                 .join("\n")
                 .contains("clear explanations")
         );
-        app.keys(&["i"]).await?;
+        // `i` enters the block cursor, and tab selects its first object.
+        app.keys(&["i", "tab"]).await?;
         let first = active_object(&app).await?;
+        assert_ne!(first, Value::Null, "tab selects an object");
         app.keys(&["tab"]).await?;
         let second = active_object(&app).await?;
         assert_ne!(first, second, "tab steps to the next object");

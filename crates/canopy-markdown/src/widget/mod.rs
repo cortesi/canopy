@@ -60,6 +60,7 @@ use crate::{
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, SourceAnchor, SourceMatches, SourceOptions},
     surface::{RenderedSurface, SurfaceState},
+    units::EditUnit,
 };
 
 /// A view-independent persisted reading location within one document epoch.
@@ -383,7 +384,12 @@ impl Markdown {
             options.initial_view
         };
         let shared = Rc::new(RefCell::new(SurfaceState::default()));
-        shared.borrow_mut().follow = follow;
+        {
+            let mut state = shared.borrow_mut();
+            state.follow = follow;
+            state.resting = options.resting_mode;
+            state.mode = options.resting_mode;
+        }
         Self {
             options,
             store,
@@ -505,7 +511,10 @@ impl Markdown {
             state.presentation = None;
             state.document = None;
             state.overlays = Default::default();
-            state.mode = Mode::Scroll;
+            state.mode = state.resting;
+            state.marked = None;
+            state.pending_mark = None;
+            state.cursor_scroll = None;
             state.follow = if receiving {
                 Follow::Following
             } else {
@@ -770,7 +779,7 @@ impl Markdown {
         self.generation += 1;
         self.schedule(ctx, true)
     }
-    /// Enter or leave the rendered object-navigation mode.
+    /// Enter or leave the block cursor of the rendered view.
     #[command]
     pub fn set_mode(&mut self, ctx: &mut dyn Context, mode: Mode) -> Result<()> {
         if mode == Mode::Interact && self.inspector.is_some() {
@@ -787,10 +796,43 @@ impl Markdown {
         }
         self.update_chrome(ctx)
     }
-    /// Enter object navigation without pausing follow until the cursor moves.
+    /// Enter the block cursor without pausing follow until the cursor moves.
+    /// It marks the first unit with a row in view, or the unit it marked
+    /// before if that unit still shows.
     #[command]
     pub fn interact(&mut self, ctx: &mut dyn Context) -> Result<()> {
         self.set_mode(ctx, Mode::Interact)
+    }
+    /// Mark the edit unit that holds source byte `byte`, or else the next
+    /// unit, or else the one before, and show it in the block cursor. Before
+    /// the document's first presentation shows, the reader marks the unit
+    /// once it does, as for a host that restores a place after a reload.
+    #[command]
+    pub fn select_block_at(&mut self, ctx: &mut dyn Context, byte: usize) -> Result<()> {
+        let epoch = self.epoch();
+        let shown = self
+            .shared
+            .borrow()
+            .presentation
+            .as_ref()
+            .is_some_and(|p| p.document.source.epoch == epoch);
+        if !shown {
+            self.shared.borrow_mut().pending_mark = Some((epoch, byte));
+            return Ok(());
+        }
+        if self.active == ViewType::Rendered
+            && let Some(nodes) = &self.nodes
+        {
+            ctx.with_widget_mut(nodes.rendered, |surface: &mut RenderedSurface, ctx| {
+                surface.select_block_at(ctx, byte)
+            })?;
+        }
+        self.update_chrome(ctx)
+    }
+    /// Return the edit unit that the block cursor marks, or `None` outside
+    /// the block cursor or with no unit.
+    pub fn selected_block(&self) -> Option<EditUnit> {
+        self.shared.borrow_mut().marked_unit().map(|(unit, _)| unit)
     }
     /// Extend or start rendered text selection at the reading position.
     #[command]
@@ -808,7 +850,9 @@ impl Markdown {
         }
         Ok(())
     }
-    /// End the innermost document selection, otherwise return to scrolling.
+    /// End the innermost thing in the rendered view: the text selection,
+    /// then the object cursor, and then the block cursor, unless the view
+    /// rests in it.
     #[command]
     pub fn escape(&mut self, ctx: &mut dyn Context) -> Result<()> {
         if self.bar_drag {
@@ -828,8 +872,8 @@ impl Markdown {
         }
         self.update_chrome(ctx)
     }
-    /// Visit the next actionable object or leave through normal focus
-    /// traversal.
+    /// Visit the next actionable object in the block cursor, which moves to
+    /// the object's unit, or leave through normal focus traversal.
     #[command(enabled = "rendered_action_status")]
     pub fn next_object(&mut self, ctx: &mut dyn Context, delta: i32) -> Result<()> {
         if self.active != ViewType::Rendered {
@@ -900,13 +944,15 @@ impl Markdown {
             .and_then(|n| ctx.view_of(n))
             .map_or(0, |v| v.scroll.y)
     }
-    /// Scroll the active view while preserving object cursor and follow policy.
+    /// Scroll the active view while preserving object cursor and follow
+    /// policy. The block cursor stays on a unit in view.
     pub fn scroll_view(&mut self, ctx: &mut dyn Context, op: ScrollOp) -> Result<()> {
         let Some(node) = self.navigation_node() else {
             return Ok(());
         };
         let before = ctx.view_of(node).map(|v| v.scroll);
         ctx.scroll_node(node, op)?;
+        self.sync_cursor(ctx)?;
         if let Some(view) = ctx.view_of(node)
             && before != Some(view.scroll)
         {
@@ -918,6 +964,18 @@ impl Markdown {
             }
         }
         self.update_chrome(ctx)
+    }
+    /// Keep the block cursor on a unit in view after the rendered view
+    /// moved.
+    fn sync_cursor(&self, ctx: &mut dyn Context) -> Result<()> {
+        if self.active == ViewType::Rendered
+            && let Some(nodes) = &self.nodes
+        {
+            ctx.with_widget_mut(nodes.rendered, |surface: &mut RenderedSurface, ctx| {
+                surface.sync_cursor(ctx)
+            })?;
+        }
+        Ok(())
     }
     /// Capture the current logical viewport anchor.
     pub fn position(&self, ctx: &dyn ViewContext) -> Result<ReaderPosition> {
@@ -1191,7 +1249,11 @@ impl Markdown {
         }
         self.update_chrome(ctx)
     }
-    /// Open the selected link, code, table, or source inspector.
+    /// Open the selected link, code, table, or source inspector: the object
+    /// cursor's object. In the block cursor without one, take the marked
+    /// unit's own card, such as its code or table, or else the first object
+    /// in the unit. In Scroll, take the first object of the document, unless
+    /// a search is current.
     #[command(enabled = "rendered_action_status")]
     pub fn activate(&mut self, ctx: &mut dyn Context) -> Result<()> {
         if self.active != ViewType::Rendered {
@@ -1199,12 +1261,12 @@ impl Markdown {
         }
         let p = self.shared.borrow().presentation.clone();
         let Some(p) = p else { return Ok(()) };
-        let id = self.shared.borrow().overlays.active_object.or_else(|| {
-            if self.search_index.is_some() {
-                None
-            } else {
-                p.document.objects.first().map(|o| o.id)
-            }
+        let active = self.shared.borrow().overlays.active_object;
+        let marked = self.shared.borrow_mut().marked_unit();
+        let id = active.or_else(|| match &marked {
+            Some((unit, _)) => unit_object(&p.document, unit),
+            None if self.search_index.is_some() => None,
+            None => p.document.objects.first().map(|o| o.id),
         });
         let Some(object) = id
             .and_then(|id| p.document.objects.iter().find(|o| o.id == id))
@@ -1758,7 +1820,7 @@ impl Markdown {
         let selected = self.shared.borrow().overlays.active_object;
         if let Some(object) = selected.and_then(|id| p.document.objects.iter().find(|o| o.id == id))
         {
-            self.queue_copy(
+            return self.queue_copy(
                 ctx,
                 CopyInput::Object {
                     document: p.document.clone(),
@@ -1766,12 +1828,26 @@ impl Markdown {
                 },
                 Some(object.id),
                 p.document.source.revision,
-            )?;
+            );
+        }
+        // The block cursor's unit copies as its exact source.
+        let marked = self.shared.borrow_mut().marked_unit();
+        if let Some((unit, _)) = marked {
+            return self.queue_copy(
+                ctx,
+                CopyInput::Source {
+                    text: p.document.source.text(),
+                    range: unit.range,
+                },
+                None,
+                p.document.source.revision,
+            );
         }
         Ok(())
     }
     /// Return whether the reader has an item to copy: a text selection, the
-    /// object Interact selected, or what an open inspector selects.
+    /// object cursor's object, the unit the block cursor marks, or what an
+    /// open inspector selects.
     pub fn has_item(&self, ctx: &dyn ViewContext) -> Result<bool> {
         if !self.options.clipboard || self.displayed.is_none() {
             return Ok(false);
@@ -1788,11 +1864,13 @@ impl Markdown {
             };
         }
         // A search match can mark an object while scrolling, but only
-        // Interact selects one.
-        let shared = self.shared.borrow();
+        // Interact selects one, or the unit its block cursor marks.
+        let mut shared = self.shared.borrow_mut();
         Ok(shared.presentation.is_some()
             && (shared.overlays.selection.is_some()
-                || (shared.mode == Mode::Interact && shared.overlays.active_object.is_some())))
+                || (shared.mode == Mode::Interact
+                    && (shared.overlays.active_object.is_some()
+                        || shared.marked_unit().is_some()))))
     }
     /// Copy the item [`Self::has_item`] finds. With none, copy nothing.
     pub fn copy_item(&mut self, ctx: &mut dyn Context) -> Result<()> {
@@ -2389,6 +2467,10 @@ impl Markdown {
                 return Ok(());
             };
             let unit = found.address.unit_id();
+            // The block cursor moves to the match's unit.
+            if let Some(index) = state.unit_of_reading(unit) {
+                state.mark(index, true);
+            }
             state.overlays.active_object = match found.address {
                 SearchAddress::Unit { .. } => p.document.unit(unit).and_then(|unit| {
                     unit.spans
@@ -2920,6 +3002,9 @@ impl Widget for Markdown {
                 }
             }
         }
+        if self.shared.borrow().cursor_scroll.is_some() {
+            self.sync_cursor(ctx)?;
+        }
         let pending = self.shared.borrow_mut().pending_open.take();
         if let Some(object) = pending {
             // A failed pointer activation is a status, not a reason to skip
@@ -3004,6 +3089,7 @@ impl Widget for Markdown {
             if handled {
                 self.bar_drag = ctx.has_mouse_capture();
                 if before != self.view_offset(ctx) {
+                    self.sync_cursor(ctx)?;
                     if self
                         .navigation_node()
                         .and_then(|node| ctx.view_of(node))
@@ -3125,6 +3211,25 @@ impl Widget for Markdown {
     }
 }
 
+/// Return the object that activating `unit` opens: the card of one of its
+/// blocks, such as its code, table, source, or image, or else its first
+/// object.
+fn unit_object(document: &DocumentSnapshot, unit: &EditUnit) -> Option<u64> {
+    let blocks = document.blocks.get(unit.blocks.clone())?;
+    let inside = |unit_id: u64| blocks.iter().any(|block| block.unit_id == unit_id);
+    document
+        .objects
+        .iter()
+        .find(|object| blocks.iter().any(|block| block.source == object.source))
+        .or_else(|| {
+            document
+                .objects
+                .iter()
+                .find(|object| inside(object.unit_id))
+        })
+        .map(|object| object.id)
+}
+
 /// Return the source byte of each Rendered match, in order.
 fn match_bytes(state: &SurfaceState) -> Vec<usize> {
     let Some(p) = state.presentation.as_ref() else {
@@ -3156,9 +3261,9 @@ impl Register for Markdown {
         TableView::register(setup)?;
         crate::register_styles(setup);
         for (key, description, call) in [
-            ("i", "Interact", Self::call_interact()),
+            ("i", "Block cursor", Self::call_interact()),
             ("v", "Select text", Self::call_select_text()),
-            ("Escape", "End selection", Self::call_escape()),
+            ("Escape", "End selection or cursor", Self::call_escape()),
             (
                 "ctrl-r",
                 "Toggle Rendered / Source",
@@ -3332,6 +3437,8 @@ fn local_display(link: &LocalLink) -> String {
     }
 }
 
+#[cfg(test)]
+mod cursor_tests;
 #[cfg(test)]
 mod tests;
 

@@ -1,0 +1,11 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 8ca12d70acb87fa45096b58e3f8f12847b41668f8223a8250d12d11c1460b1cc # shrinks to text = "", width = 2, height = 1, interact = false, actions = [Replace("---\ntitle: A\n---\n\n"), Tab(false), Click(0)]
+cc 9ec390c8b4cd58588045389d06d7b03128a04e9a13a1c6af2de7e95d25ef6716 # shrinks to text = "- - # a\n  - # a\n\n    # a", width = 2, height = 5, interact = true, actions = [Model(Down), Resize(2, 2)]
+cc 73fcb66d8b74c839f278c6104717cb47a51fa5ea07378b657add665d438507e8 # shrinks to text = "- ![[note]]", width = 16, height = 5, interact = false, actions = [Click(11)]
+cc 71a57543b5592b7110088a7d9679b71adedc571c4871649cddcbcafce2af3662 # shrinks to text = "- <div>\n  a\n  </div>\n- ^lone\n\n  a [[wiki]]", width = 2, height = 1, interact = false, actions = [Model(Last), Resize(11, 3), Model(Up), Model(Up), Click(3)]
+cc aa62811e1e7873f65aac1843fc76acba4e567ec9dbda9ddfc4178a5f58ec4f64 # shrinks to text = "> [[wiki]] aaa a\tb\n> ===\n\n> - ^lone\n>\n>   # a", width = 15, height = 3, interact = false, actions = [Model(Interact), Model(Down), Resize(2, 9)]

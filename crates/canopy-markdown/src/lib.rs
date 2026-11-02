@@ -3,6 +3,8 @@
 //! The host supplies text and performs explicit browser and clipboard requests.
 //! Parsing, preparation, and publication never perform external actions.
 
+/// The movement of the block cursor over the rows of edit units.
+mod cursor;
 /// Semantic documents, source mappings, and actionable objects.
 pub mod document;
 /// Bounded shared preparation and deterministic scheduling.

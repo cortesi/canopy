@@ -2744,9 +2744,13 @@ fn an_item_is_what_interact_or_a_selection_chose() {
     harness
         .with_unique(|reader: &mut Markdown, ctx| reader.interact(ctx))
         .unwrap();
-    assert!(has_item(&mut harness), "Interact selects the link");
+    assert!(has_item(&mut harness), "the block cursor marks a unit");
+    // Tab selects the link, which copies as the item.
     harness
-        .with_unique(|reader: &mut Markdown, ctx| reader.copy_item(ctx))
+        .with_unique(|reader: &mut Markdown, ctx| {
+            reader.next_object(ctx, 1)?;
+            reader.copy_item(ctx)
+        })
         .unwrap();
     next_child_work(&mut harness, &manual).finish();
     harness.canopy.turn(TurnInput::Wake).unwrap();
@@ -2821,10 +2825,16 @@ fn an_item_is_what_interact_or_a_selection_chose() {
         .unwrap();
     assert_eq!(status, "Failed: no clipboard");
 
+    // Esc drops the link, and the marked unit is the item. A second Esc
+    // leaves the block cursor, which drops it too.
     harness
         .with_unique(|reader: &mut Markdown, ctx| reader.escape(ctx))
         .unwrap();
-    assert!(!has_item(&mut harness), "leaving Interact drops the link");
+    assert!(has_item(&mut harness), "the marked unit stays the item");
+    harness
+        .with_unique(|reader: &mut Markdown, ctx| reader.escape(ctx))
+        .unwrap();
+    assert!(!has_item(&mut harness), "leaving Interact drops the unit");
 }
 
 #[test]

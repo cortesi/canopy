@@ -49,6 +49,10 @@ const MAX_PREPARED_ROWS: usize = 262_144;
 /// accent. Panels and selections share one color in some themes, so a tint
 /// keeps the cursor apart from code cards and inline code.
 const OBJECT_TINT: f32 = 0.25;
+/// How far the block cursor's ground leans from the background toward the
+/// accent, where blocks have no margin for its bar. It stays fainter than the
+/// object cursor's ground, which lies inside it.
+const BLOCK_TINT: f32 = 0.15;
 /// Every readable byte of a unit, for whole-unit overlay tests.
 const WHOLE_UNIT: Range<usize> = 0..usize::MAX;
 /// Rows an image block takes at most.
@@ -256,6 +260,9 @@ struct BlockLayout {
     image: Option<ImagePlacement>,
     /// Where each cell of a table block lies in the unit's readable text.
     cells: Arc<[CellSpan]>,
+    /// The block's content rows, relative to its start: every row but a
+    /// heading's blank row above it and the spacing rows below it.
+    content: Range<u32>,
 }
 
 /// Preparation evidence, independent of paint work.
@@ -297,6 +304,9 @@ pub struct PaintOverlays {
     pub search_current: Option<usize>,
     /// Current object cursor, independent of document selection.
     pub active_object: Option<u64>,
+    /// Document rows that the block cursor marks with a bar in the left
+    /// margin, or with its ground where blocks have no margin.
+    pub block_rows: Option<Range<u32>>,
     /// Images the host supplied, which image blocks paint.
     pub images: ImagePixels,
 }
@@ -524,6 +534,7 @@ impl PresentationSnapshot {
                     source_text_start: old.source_text_start,
                     image: old.image.clone(),
                     cells: old.cells.clone(),
+                    content: old.content.clone(),
                 }
             } else {
                 result.stats.prepared_blocks += 1;
@@ -576,6 +587,8 @@ impl PresentationSnapshot {
                     image.size.h = image.size.h.min(rows);
                 }
                 layout.image = layout.image.take().filter(|image| image.size.h > 0);
+                let rows = layout.rows.len() as u32;
+                layout.content = layout.content.start.min(rows)..layout.content.end.min(rows);
                 result.truncated = true;
             }
             result.truncated |= layout.rows.len() >= MAX_PREPARED_ROWS;
@@ -691,6 +704,13 @@ impl PresentationSnapshot {
             .table
             .clone()
     }
+    /// Return the document rows of the content of the block of `unit_id`:
+    /// every row but a heading's blank row above it and the spacing rows
+    /// below it.
+    pub(crate) fn content_rows(&self, unit_id: u64) -> Option<Range<u32>> {
+        let block = self.blocks.get(*self.unit_blocks.get(&unit_id)?)?;
+        Some(block.start + block.content.start..block.start + block.content.end)
+    }
     /// Find the block containing a document row using its height index.
     fn block_at(&self, row: u32) -> Option<&BlockLayout> {
         let index = self
@@ -775,12 +795,17 @@ impl PresentationSnapshot {
             .unwrap_or(0);
         b.start.saturating_add(row as u32)
     }
-    /// Map a canvas cell to a whole readable grapheme or atomic card.
+    /// Map a canvas cell to a whole readable grapheme or atomic card. The
+    /// spacing rows between blocks, and a heading's blank row above it, hit
+    /// nothing.
     pub fn hit(&self, point: Point) -> Option<Hit> {
         if point.x >= self.geometry.width {
             return None;
         }
         let (b, row) = self.block_row(point.y)?;
+        if !b.content.contains(&(point.y - b.start)) {
+            return None;
+        }
         if row.atomic {
             return Some(Hit {
                 reading: Some(ReadingPosition {
@@ -912,10 +937,13 @@ impl PresentationSnapshot {
                 && (row.ground == "markdown/card"
                     || (block.table.is_some() && table_rows.contains(&(y - block.start)))
                     || row.runs.iter().any(|run| run.object == block.object));
-            // An image paints over its rows, so only the bar marks it.
-            let active_row = active_card
-                || row.runs.iter().any(|run| active(run.object))
-                || active(block.object) && block.image.is_some();
+            // The block cursor marks its rows with a bar in the margin, or
+            // with its ground where blocks have no margin.
+            let marked = overlays
+                .block_rows
+                .as_ref()
+                .is_some_and(|rows| rows.contains(&y));
+            let barred = self.geometry.width.min(65535) > 3;
             let ground = if whole_selected {
                 "markdown/selection"
             } else if whole_current {
@@ -924,6 +952,8 @@ impl PresentationSnapshot {
                 view_search::MATCH
             } else if active_card {
                 "markdown/object"
+            } else if marked && !barred {
+                "markdown/block"
             } else {
                 row.ground
             };
@@ -1004,10 +1034,9 @@ impl PresentationSnapshot {
                     x = x.saturating_add(width);
                 }
             }
-            // A bar in the left margin marks every row of the active object.
             let margin_x = self.geometry.margin();
             let margin = Rect::new(margin_x, y, 1, 1);
-            if active_row && block.inset > margin_x && visible.contains_rect(margin) {
+            if marked && barred && visible.contains_rect(margin) {
                 let (_, bg) = cell_ground(margin_x, row, &ground_bg, &text_bg);
                 let at = Point {
                     x: margin_x - visible.tl.x,
@@ -1341,6 +1370,8 @@ fn prepare_block(
     let mut table_start = 0;
     let mut table_height = 0;
     let mut image_placement = None;
+    // A heading's blank row above it, which is not content.
+    let mut lead = 0;
     let mut prefix = block_prefix(block, geometry.glyphs);
     // Cards, tables, and rules in a quote sit inside its rails.
     let rails = quote_rails(block, block.quote_depth, geometry.glyphs);
@@ -1557,6 +1588,7 @@ fn prepare_block(
             // closes.
             if level.is_some() && !leading && block.depth == 0 && block.quote_depth == 0 {
                 rows.push(make_row());
+                lead = 1;
             }
             if let BlockKind::Footnote { label } = &block.kind {
                 prefix.push(format!("[{label}] "), "markdown/structure");
@@ -1661,7 +1693,8 @@ fn prepare_block(
             }
         }
     }
-    frame(&mut rows, make_row, block, unit, (inset, body), geometry);
+    let spacing = frame(&mut rows, make_row, block, unit, (inset, body), geometry);
+    let content = lead..(rows.len() - spacing) as u32;
     BlockLayout {
         id: block.id,
         signature: 0,
@@ -1676,6 +1709,7 @@ fn prepare_block(
         source_text_start: None,
         image: image_placement,
         cells: table_cells(block),
+        content,
     }
 }
 
@@ -2134,7 +2168,8 @@ fn quote_rails(block: &Block, depth: usize, glyphs: GlyphPreset) -> Prefix {
 
 /// Give the rows of a card, table, rule, or empty block the rails of its
 /// quotes, then add spacing. Spacing keeps the rails of the quotes the next
-/// block shares, so a quote's bar runs unbroken.
+/// block shares, so a quote's bar runs unbroken. Return the number of
+/// spacing rows.
 fn frame(
     rows: &mut Vec<PreparedRow>,
     make_row: impl Fn() -> PreparedRow,
@@ -2142,7 +2177,7 @@ fn frame(
     unit: &ReadingUnit,
     (inset, body): (u32, u32),
     geometry: GeometryKey,
-) {
+) -> usize {
     let glyphs = geometry.glyphs;
     let rails = quote_rails(block, block.quote_depth, glyphs);
     let carded = matches!(
@@ -2158,11 +2193,13 @@ fn frame(
         }
     }
     let join = quote_rails(block, block.quote_join, glyphs);
-    for _ in 0..geometry.spacing.min(3) {
+    let spacing = usize::from(geometry.spacing.min(3));
+    for _ in 0..spacing {
         let mut row = make_row();
         rail(&mut row, &join, inset, body, glyphs);
         rows.push(row);
     }
+    spacing
 }
 
 /// Return whether column `x` of `row` lies on the row's ground, and the
@@ -2181,9 +2218,9 @@ fn cell_ground<'a>(
     }
 }
 
-/// Paint the active object's bar in the left margin, at `local`.
+/// Paint the block cursor's bar in the left margin, at `local`.
 fn margin_bar(render: &mut Render, bg: Paint, local: Point, glyphs: GlyphPreset) -> Result<()> {
-    let mut bar = render.resolve_style("markdown/object/bar");
+    let mut bar = render.resolve_style("markdown/block/bar");
     bar.bg = bg;
     let glyph = match glyphs {
         GlyphPreset::Unicode => "▌",
@@ -2667,7 +2704,11 @@ pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
             palette.bg.mix(palette.accent, OBJECT_TINT, Mix::Rgb),
         )
         .fg("markdown/object", palette.fg)
-        .fg("markdown/object/bar", palette.accent)
+        .fg("markdown/block/bar", palette.accent)
+        .bg(
+            "markdown/block",
+            palette.bg.mix(palette.accent, BLOCK_TINT, Mix::Rgb),
+        )
         .fg("markdown/status", palette.muted_fg)
         .fg("markdown/image", palette.muted_fg)
         .fg("markdown/embed", palette.muted_fg)
