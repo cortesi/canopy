@@ -193,8 +193,10 @@ fn a_discard_asks_first_and_drops_changes_since_the_checkpoint() {
     harness.key('A').unwrap();
     type_text(&mut harness, " dropped");
     press(&mut harness, "Escape");
-    // ctrl-x asks; keep editing declines.
+    // ctrl-x asks, and asking again while the question shows changes
+    // nothing; keep editing declines.
     press(&mut harness, "ctrl-x");
+    reader(&mut harness, |reader, ctx| reader.discard_block(ctx, false));
     assert!(reader(&mut harness, |reader, _| Ok(reader.block_open())));
     press(&mut harness, "k");
     assert!(reader(&mut harness, |reader, _| Ok(reader.block_open())));
@@ -328,10 +330,15 @@ fn apply_edit_refuses_what_it_cannot_make() {
                 .is_err())
         })
     };
-    // An old epoch, a split character, a split CRLF pair, a range past the
-    // end, and a text past the source limit.
+    // An old epoch, a reversed range, a split character at either end, a
+    // split CRLF pair, a range past the end, and a text past the source
+    // limit.
     assert!(refused(&mut harness, epoch + 1, 0..1, "x"));
+    #[expect(clippy::reversed_empty_ranges, reason = "the edit's range is reversed")]
+    let reversed = 3..1;
+    assert!(refused(&mut harness, epoch, reversed, "x"));
     assert!(refused(&mut harness, epoch, 9..10, "x"));
+    assert!(refused(&mut harness, epoch, 10..11, "x"));
     assert!(refused(&mut harness, epoch, 4..5, "x"));
     assert!(refused(&mut harness, epoch, 0..99, "x"));
     assert!(refused(&mut harness, epoch, 0..0, "x"));
@@ -629,4 +636,336 @@ fn closing_the_editor_keeps_the_view_where_it_was() {
     settle(&mut harness, &manual);
     assert_eq!(view(&mut harness).0, top);
     assert_eq!(marked(&mut harness), before);
+}
+
+#[test]
+fn e_does_nothing_where_the_reader_cannot_edit() {
+    let open = |harness: &mut Harness| reader(harness, |reader, _| Ok(reader.block_open()));
+    // An open editor stays as it is.
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    press(&mut harness, "e");
+    let editor = reader(&mut harness, |reader, _| Ok(reader.block_editor()));
+    reader(&mut harness, |reader, ctx| reader.edit_block(ctx));
+    assert_eq!(
+        reader(&mut harness, |reader, _| Ok(reader.block_editor())),
+        editor
+    );
+    // An inspector covers the reader.
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    reader(&mut harness, |reader, ctx| reader.inspect_source(ctx));
+    service(&mut harness);
+    assert!(reader(&mut harness, |reader, _| Ok(reader
+        .inspector
+        .is_some())));
+    reader(&mut harness, |reader, ctx| reader.edit_block(ctx));
+    assert!(!open(&mut harness));
+    // Source shows.
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    reader(&mut harness, |reader, ctx| {
+        reader.set_view_type(ctx, ViewType::Source)
+    });
+    settle(&mut harness, &manual);
+    reader(&mut harness, |reader, ctx| reader.edit_block(ctx));
+    assert!(!open(&mut harness));
+    // A new text has not shown yet.
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    reader(&mut harness, |reader, ctx| {
+        reader
+            .replace(ctx, DocumentInput::Complete("# New\n".into()))
+            .map(|_| ())
+    });
+    reader(&mut harness, |reader, ctx| reader.edit_block(ctx));
+    assert!(!open(&mut harness));
+    settle(&mut harness, &manual);
+    reader(&mut harness, |reader, ctx| reader.edit_block(ctx));
+    assert!(open(&mut harness));
+}
+
+#[test]
+fn e_from_scroll_enters_the_block_cursor_and_edits_its_unit() {
+    let (mut harness, manual) = editing_with(DOCUMENT, EditMode::Vi, 40, 20, |options| {
+        options.resting_mode = Mode::Scroll;
+    });
+    settle(&mut harness, &manual);
+    assert!(marked(&mut harness).is_none());
+    press(&mut harness, "e");
+    assert_eq!(editor_state(&mut harness).0, "## One");
+}
+
+#[test]
+fn a_tall_unit_that_starts_at_the_top_opens_with_its_first_line_showing() {
+    let code: String = (0..30).map(|n| format!("line {n}\n")).collect();
+    let text = format!("# Top\n\n```\n{code}```\n");
+    let (mut harness, manual) = editing(&text, EditMode::Vi, 30, 10);
+    settle(&mut harness, &manual);
+    press(&mut harness, "j");
+    let (_, rows) = marked(&mut harness).unwrap();
+    assert_eq!(
+        rows.start,
+        view(&mut harness).0,
+        "the unit starts at the top"
+    );
+    press(&mut harness, "e");
+    // The editor opens on the code's first line, below the fence, and the
+    // fence still shows.
+    assert_eq!(editor_state(&mut harness).1, TextPosition::new(1, 0));
+    assert!(harness.tbuf().lines()[0].contains("```"));
+}
+
+#[test]
+fn the_slot_follows_the_margin_through_a_resize() {
+    let (mut harness, manual) = editing_with(DOCUMENT, EditMode::Vi, 40, 20, |options| {
+        options.centered = true;
+        options.prose_width = 20;
+    });
+    settle(&mut harness, &manual);
+    press(&mut harness, "e");
+    // The column of the editor's text on the top row, and the presentation's
+    // inset and bar.
+    let place = |harness: &mut Harness| {
+        let line = &harness.tbuf().lines()[0];
+        let x = line[..line.find("## One").unwrap()].chars().count() as u32;
+        reader(harness, |reader, _| {
+            let state = reader.shared.borrow();
+            let presentation = state.presentation.as_ref().unwrap();
+            Ok((x, presentation.inset(), presentation.bar_column()))
+        })
+    };
+    let (x, inset, bar) = place(&mut harness);
+    assert_eq!((x, bar), (inset, inset - 2));
+    assert_eq!(harness.buf().get(Point::new(bar, 0)).unwrap().ch, '▌');
+    harness.canopy.set_screen_size(Size::new(60, 20)).unwrap();
+    settle(&mut harness, &manual);
+    let (x, new_inset, bar) = place(&mut harness);
+    assert!(new_inset > inset, "a wider view moves the margin in");
+    assert_eq!((x, bar), (new_inset, new_inset - 2));
+    assert_eq!(harness.buf().get(Point::new(bar, 0)).unwrap().ch, '▌');
+}
+
+#[test]
+fn the_scrollbar_hides_while_the_editor_is_open() {
+    let text: String = (0..30).map(|n| format!("para {n}\n\n")).collect();
+    let (mut harness, manual) = editing(&text, EditMode::Vi, 30, 10);
+    settle(&mut harness, &manual);
+    for _ in 0..12 {
+        press(&mut harness, "j");
+    }
+    let last = |harness: &Harness| -> String {
+        (0..10)
+            .map(|y| harness.buf().get(Point::new(29, y)).unwrap().ch)
+            .collect()
+    };
+    assert_ne!(last(&harness).trim(), "", "the scrollbar shows");
+    press(&mut harness, "e");
+    assert_eq!(last(&harness).trim(), "", "the scrollbar hides");
+}
+
+#[test]
+fn the_rows_around_the_editor_keep_their_images() {
+    let text = "![Local](pics/a.png)\n\nAfter.\n";
+    let (mut harness, manual) = editing_with(text, EditMode::Vi, 40, 20, |options| {
+        options.resources = true;
+    });
+    settle(&mut harness, &manual);
+    let requests = reader(
+        &mut harness,
+        |reader, _| Ok(reader.take_resource_requests()),
+    );
+    reader(&mut harness, |reader, ctx| {
+        reader.supply_resource(
+            ctx,
+            requests[0].id,
+            Resource::Image(super::tests::two_tone()),
+        )
+    });
+    settle(&mut harness, &manual);
+    press(&mut harness, "j");
+    let (_, rows) = marked(&mut harness).unwrap();
+    // The cells of the rows above the unit, with their styles.
+    let image = |harness: &Harness| -> Vec<String> {
+        let screen = harness.buf();
+        (0..rows.start)
+            .flat_map(|y| (0..40).map(move |x| (x, y)))
+            .map(|(x, y)| format!("{:?}", screen.get(Point::new(x, y))))
+            .collect()
+    };
+    let before = image(&harness);
+    // The image paints its colours as the ground of blank cells.
+    let blank = format!("{:?}", harness.buf().get(Point::new(39, 19)));
+    assert!(before.iter().any(|cell| *cell != blank), "the image shows");
+    press(&mut harness, "e");
+    assert!(reader(&mut harness, |reader, _| Ok(reader.block_open())));
+    assert_eq!(image(&harness), before);
+}
+
+#[test]
+fn a_commit_keeps_the_unit_where_the_editor_moved_to_fit() {
+    let paras = |range: Range<u32>| -> String { range.map(|n| format!("para {n}\n\n")).collect() };
+    let text = format!("{}```\ncode\n```\n\n{}", paras(0..7), paras(7..20));
+    let (mut harness, manual) = editing(&text, EditMode::Vi, 30, 20);
+    settle(&mut harness, &manual);
+    for _ in 0..7 {
+        press(&mut harness, "j");
+    }
+    let (_, rows) = marked(&mut harness).unwrap();
+    let opened = rows.start - view(&mut harness).0;
+    press(&mut harness, "e");
+    for n in 0..10 {
+        press(&mut harness, "o");
+        type_text(&mut harness, &format!("more {n}"));
+        press(&mut harness, "Escape");
+    }
+    let (above, slot, _) =
+        reader(&mut harness, |reader, ctx| Ok(slot::parts(reader, ctx))).unwrap();
+    assert!(above < opened, "the editor moved up to fit its {slot} rows");
+    press(&mut harness, "Escape");
+    settle(&mut harness, &manual);
+    let (_, rows) = marked(&mut harness).unwrap();
+    assert_eq!(rows.start - view(&mut harness).0, above);
+}
+
+#[test]
+fn the_readers_commands_wait_while_the_editor_is_open() {
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    press(&mut harness, "e");
+    let editor = reader(&mut harness, |reader, _| Ok(reader.block_editor())).unwrap();
+    reader(&mut harness, |reader, ctx| {
+        reader.return_position = Some(reader.position(ctx)?);
+        reader.select_text(ctx)?;
+        reader.follow(ctx)?;
+        reader.return_from_jump(ctx)?;
+        reader.set_mode(ctx, Mode::Scroll)
+    });
+    service(&mut harness);
+    assert!(reader(&mut harness, |reader, ctx| {
+        let state = reader.shared.borrow();
+        Ok(reader.block_open()
+            && ctx.focused_node() == Some(editor.into())
+            && reader.return_position.is_some()
+            && state.overlays.selection.is_none()
+            && state.follow == Follow::Paused
+            && state.mode == Mode::Interact)
+    }));
+}
+
+#[test]
+fn an_inspector_keeps_the_block_cursor_out() {
+    let (mut harness, manual) = editing_with(DOCUMENT, EditMode::Vi, 40, 20, |options| {
+        options.resting_mode = Mode::Scroll;
+    });
+    settle(&mut harness, &manual);
+    reader(&mut harness, |reader, ctx| reader.inspect_source(ctx));
+    service(&mut harness);
+    reader(&mut harness, |reader, ctx| {
+        reader.set_mode(ctx, Mode::Interact)
+    });
+    assert_eq!(
+        reader(&mut harness, |reader, _| Ok(reader.shared.borrow().mode)),
+        Mode::Scroll
+    );
+}
+
+#[test]
+fn focus_block_returns_focus_to_the_editor() {
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    press(&mut harness, "e");
+    let focused = reader(&mut harness, |reader, ctx| {
+        let editor = reader.block_editor().unwrap();
+        ctx.set_focus(reader.nodes.as_ref().unwrap().rendered)?;
+        reader.focus_block(ctx)?;
+        Ok(ctx.focused_node() == Some(editor.into()))
+    });
+    assert!(focused);
+}
+
+#[test]
+fn keys_that_need_the_new_layout_work_as_soon_as_it_shows() {
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    press(&mut harness, "e");
+    harness.key('x').unwrap();
+    press(&mut harness, "Escape");
+    let epoch = reader(&mut harness, |reader, _| Ok(reader.epoch()));
+    let shown = |harness: &mut Harness| {
+        reader(harness, |reader, _| {
+            Ok(reader
+                .shared
+                .borrow()
+                .presentation
+                .as_ref()
+                .map(|p| p.document.source.epoch))
+        })
+    };
+    // Run the work a job at a time, and stop as soon as the new text shows.
+    while shown(&mut harness) != Some(epoch) {
+        service(&mut harness);
+        assert!(manual.run_next(), "work remains until the new text shows");
+        service(&mut harness);
+    }
+    assert!(!reader(&mut harness, |reader, _| Ok(reader
+        .shared
+        .borrow()
+        .awaiting)));
+    let (index, _) = marked(&mut harness).unwrap();
+    press(&mut harness, "j");
+    assert_eq!(marked(&mut harness).unwrap().0, index + 1);
+}
+
+#[test]
+fn a_view_of_three_columns_has_no_margin_beside_the_editor() {
+    // The reader keeps a column for its scrollbar, so its text is three
+    // columns wide in four.
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 4, 10);
+    settle(&mut harness, &manual);
+    press(&mut harness, "e");
+    assert!(reader(&mut harness, |reader, _| Ok(reader.block_open())));
+    assert_eq!(harness.buf().get(Point::new(0, 0)).unwrap().ch, '#');
+}
+
+#[test]
+fn return_from_jump_goes_back_once() {
+    let text: String = (0..30).map(|n| format!("para {n}\n\n")).collect();
+    let (mut harness, manual) = editing(&text, EditMode::Vi, 30, 10);
+    settle(&mut harness, &manual);
+    let start = reader(&mut harness, |reader, ctx| reader.position(ctx));
+    press(&mut harness, "G");
+    assert!(view(&mut harness).0 > 0);
+    reader(&mut harness, |reader, ctx| {
+        reader.return_position = Some(start);
+        reader.return_from_jump(ctx)
+    });
+    service(&mut harness);
+    assert_eq!(view(&mut harness).0, 0);
+    assert!(reader(&mut harness, |reader, _| Ok(reader
+        .return_position
+        .is_none())));
+}
+
+#[test]
+fn a_document_that_is_still_arriving_cannot_be_edited() {
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    reader(&mut harness, |reader, ctx| {
+        reader
+            .replace(ctx, DocumentInput::Receiving("# Live\n\nmore".into()))
+            .map(|_| ())
+    });
+    settle(&mut harness, &manual);
+    let refused = reader(&mut harness, |reader, ctx| {
+        let epoch = reader.epoch();
+        Ok(reader.edit_block(ctx).is_err()
+            && reader.apply_edit(ctx, epoch, 0, 1, "x".into()).is_err())
+    });
+    assert!(refused);
+    assert!(!reader(&mut harness, |reader, _| Ok(reader.block_open())));
+    assert_eq!(
+        &*reader(&mut harness, |reader, _| Ok(reader.accepted_source())),
+        "# Live\n\nmore"
+    );
 }

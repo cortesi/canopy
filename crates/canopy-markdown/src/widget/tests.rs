@@ -1227,7 +1227,7 @@ fn successful_jumps_queue_the_position_they_left() {
 }
 
 /// A 64 by 32 image, red on its left half and blue on its right.
-fn two_tone() -> Arc<image::RgbaImage> {
+pub(super) fn two_tone() -> Arc<image::RgbaImage> {
     Arc::new(image::RgbaImage::from_fn(64, 32, |x, _| {
         if x < 32 {
             image::Rgba([220, 20, 20, 255])

@@ -301,7 +301,9 @@ proptest! {
     #![proptest_config(testing::config(8))]
 
     /// A direct edit and a commit of the same text make the same edit and
-    /// the same state.
+    /// the same state. A commit keeps its block on the row where the editor
+    /// shows, so where the editor moved up to fit its text, the views
+    /// compare from the top of the text.
     #[test]
     fn a_direct_edit_and_a_commit_agree(
         text in document(),
@@ -309,6 +311,7 @@ proptest! {
         replacement in hostile_text(),
     ) {
         let mut results = Vec::new();
+        let mut moved = false;
         for direct in [false, true] {
             let (mut harness, mut work, node) = clocked(&text, true, 40, 14);
             for _ in 0..steps {
@@ -318,6 +321,8 @@ proptest! {
             let Some(unit) = unit else {
                 return Ok(());
             };
+            let (_, rows) = marked(&mut harness).unwrap();
+            let opened = rows.start.saturating_sub(view(&mut harness).0);
             if direct {
                 // The editor's new lines take a CRLF unit's breaks; a direct
                 // edit takes its bytes as they are.
@@ -330,13 +335,16 @@ proptest! {
             } else {
                 press(&mut harness, "e");
                 run(&mut harness, &mut work, node, true, &Op::SetText(replacement.clone()));
+                let parts = reader(&mut harness, |reader, ctx| Ok(slot::parts(reader, ctx)));
+                moved = parts.is_some_and(|(above, _, _)| above != opened);
                 reader(&mut harness, |reader, ctx| reader.commit_block(ctx));
             }
             settle(&mut harness, &mut work, node);
             let edits = reader(&mut harness, |reader, _| Ok(reader.take_edits()));
             let source = reader(&mut harness, |reader, _| Ok(reader.accepted_source()));
             let selected = reader(&mut harness, |reader, _| Ok(reader.selected_block()));
-            results.push((edits, source.to_string(), selected, view(&mut harness), harness.buf().clone()));
+            let shown = (view(&mut harness), harness.buf().clone());
+            results.push((edits, source.to_string(), selected, shown, from_top(&mut harness)));
         }
         let (commit, direct) = (&results[0], &results[1]);
         let strip = |edits: &[BlockEdit]| {
@@ -349,8 +357,12 @@ proptest! {
         }
         prop_assert_eq!(&commit.1, &direct.1);
         prop_assert_eq!(&commit.2, &direct.2);
-        prop_assert_eq!(&commit.3, &direct.3);
-        prop_assert_eq!(&commit.4, &direct.4);
+        if moved {
+            prop_assert_eq!(text_rows(&commit.4), text_rows(&direct.4));
+            prop_assert!(commit.4 == direct.4, "the screens' styles differ");
+        } else {
+            prop_assert_eq!(&commit.3, &direct.3);
+        }
     }
 
     /// A session that needs no new geometry ends with the same text, the
@@ -408,18 +420,24 @@ proptest! {
             // A direct edit keeps its unit on the row where the screen shows
             // it, and what the screen shows then depends on the schedule. So
             // the screens compare from the top of the text.
-            reader(&mut harness, |reader, ctx| {
-                let view = reader.navigation_node().unwrap();
-                ctx.scroll_node(view, ScrollOp::To(Point::new(0, 0))).map(|_| ())
-            });
-            harness.render().unwrap();
-            ends.push((source.to_string(), selected, harness.buf().clone()));
+            ends.push((source.to_string(), selected, from_top(&mut harness)));
         }
         prop_assert_eq!(&ends[0].0, &ends[1].0);
         prop_assert_eq!(&ends[0].1, &ends[1].1);
         prop_assert_eq!(text_rows(&ends[0].2), text_rows(&ends[1].2));
         prop_assert!(ends[0].2 == ends[1].2, "the screens' styles differ");
     }
+}
+
+/// Return the screen with the view scrolled to the top of the text.
+fn from_top(harness: &mut Harness) -> TermBuf {
+    reader(harness, |reader, ctx| {
+        let view = reader.navigation_node().unwrap();
+        ctx.scroll_node(view, ScrollOp::To(Point::new(0, 0)))
+            .map(|_| ())
+    });
+    harness.render().unwrap();
+    harness.buf().clone()
 }
 
 /// Return `text` with its line breaks in `terminator`, when that is CRLF.

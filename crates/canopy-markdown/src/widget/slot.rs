@@ -21,12 +21,11 @@ use canopy::{
 use canopy_widgets::highlight::SyntectHighlighter;
 use canopy_widgets::{
     Answer, Closing, Confirm, ConfirmRequest, Container,
-    editor::{EditMode, Editor, EditorConfig, ViMode},
+    editor::{Editor, EditorConfig},
 };
 
 use super::{BlockEdit, Markdown, invalid};
 use crate::{
-    ViewType,
     presentation::PaintOverlays,
     source_store::Lifecycle,
     surface::{PendingMark, RenderedSurface, SurfaceState},
@@ -47,6 +46,8 @@ pub(super) struct OpenSlot {
     /// The slot: the bar and the editor.
     #[cfg_attr(not(test), expect(dead_code, reason = "tests read the parts' heights"))]
     middle: NodeId,
+    /// The margin of the slot, with its bar.
+    bar: NodeId,
     /// The rows below the slot.
     #[cfg_attr(not(test), expect(dead_code, reason = "tests read the parts' heights"))]
     below: NodeId,
@@ -78,24 +79,7 @@ impl OpenSlot {
     /// Return the text of the editor with its line breaks in the unit's
     /// terminator.
     fn draft(&self, editor: &Editor) -> String {
-        let text = editor.text();
-        if self.terminator == "\n" {
-            return text;
-        }
-        // The editor adds lines with LF. A CRLF unit keeps its own breaks.
-        let mut out = String::with_capacity(text.len());
-        let mut chars = text.chars().peekable();
-        while let Some(c) = chars.next() {
-            match c {
-                '\r' if chars.peek() == Some(&'\n') => {
-                    chars.next();
-                    out.push_str(self.terminator);
-                }
-                '\n' | '\r' => out.push_str(self.terminator),
-                c => out.push(c),
-            }
-        }
-        out
+        in_terminator(&editor.text(), self.terminator)
     }
 
     /// Return the edit that puts `text` in place of the range.
@@ -110,6 +94,27 @@ impl OpenSlot {
             },
         }
     }
+}
+
+/// Return `text` with each of its line breaks in `terminator`. The editor adds
+/// lines with LF, and a CRLF unit keeps its own breaks.
+fn in_terminator(text: &str, terminator: &str) -> String {
+    if terminator == "\n" {
+        return text.to_owned();
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\r' if chars.peek() == Some(&'\n') => {
+                chars.next();
+                out.push_str(terminator);
+            }
+            '\n' | '\r' => out.push_str(terminator),
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 /// Which rows of the presentation a part shows.
@@ -187,9 +192,6 @@ impl Widget for SlotBar {
     fn name(&self) -> NodeName {
         NodeName::convert("markdown_slot_bar")
     }
-    fn layout(&self) -> Layout {
-        Layout::fill()
-    }
     fn render(&mut self, render: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         render.fill("markdown/text", view.outer_rect_local(), ' ')?;
@@ -199,14 +201,11 @@ impl Widget for SlotBar {
             .presentation
             .as_ref()
             .map_or(0, |p| p.bar_column());
-        if column < view.content.w {
-            render.fill(
-                "markdown/block/editing",
-                Rect::new(column, 0, 1, view.content.h),
-                '▌',
-            )?;
-        }
-        Ok(())
+        render.fill(
+            "markdown/block/editing",
+            Rect::new(column, 0, 1, view.content.h),
+            '▌',
+        )
     }
 }
 
@@ -222,6 +221,9 @@ impl Widget for EditColumn {
         Layout::fill()
     }
     fn render(&mut self, render: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        // The parts leave the editor's padding unpainted. The fill keeps the
+        // surface beneath from showing through it, although the surface
+        // paints nothing there while the slot is open.
         render.fill("markdown/text", ctx.view().outer_rect_local(), ' ')
     }
 }
@@ -285,10 +287,8 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
     let Some(config) = reader.options.block_editor.clone() else {
         return Ok(());
     };
-    if reader.locked || reader.slot.is_some() || reader.inspector.is_some() {
-        return Ok(());
-    }
-    if reader.active != ViewType::Rendered || !reader.rendered_actions_available() {
+    // The slot opens over the rendered view alone, once at a time.
+    if reader.locked || reader.inspector.is_some() || !reader.rendered_actions_available() {
         return Ok(());
     }
     let snapshot = reader.store.snapshot();
@@ -301,6 +301,9 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
         return Ok(());
     };
     let (body, rendered, search) = (nodes.body, nodes.rendered, nodes.search);
+    // The units must be those of the current text, or the edit's range would
+    // address another text. A new text that has not shown leaves the rendered
+    // actions unavailable too, and an edit's text sets `awaiting`.
     {
         let state = reader.shared.borrow();
         let shown = state
@@ -317,9 +320,7 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
             surface.enter_interact(ctx)
         })?;
     }
-    let view = ctx.view_of(rendered);
-    let top = view.as_ref().map_or(0, |view| view.scroll.y);
-    let height = view.as_ref().map_or(1, |view| view.content.h.max(1));
+    let top = ctx.view_of(rendered).map_or(0, |view| view.scroll.y);
     let source = snapshot.text();
     let (range, lead, cursor, row, terminator, tall) = {
         let mut state = reader.shared.borrow_mut();
@@ -328,7 +329,7 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
             (Some((unit, rows)), Some(p)) => {
                 let exact = p.exact_source_at_row(top.max(rows.start));
                 let cursor = opening_byte(&source, &unit, &rows, top, exact);
-                let row = rows.start.saturating_sub(top).min(height - 1);
+                let row = rows.start.saturating_sub(top);
                 let terminator = line_terminator(&source, &unit.range);
                 let tall = rows.start < top;
                 (unit.range, String::new(), cursor, row, terminator, tall)
@@ -336,9 +337,7 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
             (_, presentation) => {
                 let end = source.len();
                 let terminator = line_terminator(&source, &(end..end));
-                let row = presentation
-                    .map_or(0, |p| p.height().saturating_sub(top))
-                    .min(height - 1);
+                let row = presentation.map_or(0, |p| p.height().saturating_sub(top));
                 let lead = new_block_lead(&source, terminator);
                 (end..end, lead, 0, row, terminator, false)
             }
@@ -364,20 +363,12 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
         column,
         Container::new(Layout::row()).with_name("markdown_slot"),
     )?;
-    let inset = reader
-        .shared
-        .borrow()
-        .presentation
-        .as_ref()
-        .map_or(0, |p| p.inset());
     let bar = ctx.add_child(
         slot,
         SlotBar {
             shared: reader.shared.clone(),
         },
     )?;
-    ctx.set_layout_override(bar.into(), Layout::fill().fixed_width(inset).into())?;
-    ctx.set_hidden(bar.into(), inset == 0)?;
     let editor = ctx.add_child(
         slot,
         Editor::with_config(original.clone(), slot_config(&config)),
@@ -403,13 +394,13 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
             shared: reader.shared.clone(),
         },
     )?;
-    ctx.set_layout_override(below.into(), Layout::fill().into())?;
     // The column covers the rendered surface, which keeps its place: a
     // hidden view would lose its scroll.
     reader.slot = Some(OpenSlot {
         column: column.into(),
         above: above.into(),
         middle: slot.into(),
+        bar: bar.into(),
         below: below.into(),
         editor,
         epoch: snapshot.epoch,
@@ -421,7 +412,7 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
         row,
         committed: false,
     });
-    layout_above(reader, ctx)?;
+    layout_parts(reader, ctx)?;
     ctx.with_widget_mut(editor, |editor: &mut Editor, ctx| {
         let position = editor.position_of_offset(cursor);
         editor.set_cursor(ctx, position);
@@ -430,24 +421,29 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
         if tall {
             ctx.reveal_anchor(RevealAlign::Top(0));
         }
-        if editor.config().mode == EditMode::Vi {
-            editor.set_vi_mode(ViMode::Normal);
-        }
         Ok(())
     })?;
     ctx.set_focus(editor.into())?;
     reader.update_chrome(ctx)
 }
 
-/// Fit the rows above the slot to the slot's screen row, and to the rows of
-/// the presentation above the unit.
-pub(super) fn layout_above(reader: &Markdown, ctx: &mut dyn Context) -> Result<()> {
+/// Lay out the parts for the current presentation: fit the rows above the
+/// slot to the slot's screen row and to the rows above the unit, and the
+/// slot's margin to the presentation's.
+pub(super) fn layout_parts(reader: &Markdown, ctx: &mut dyn Context) -> Result<()> {
     let Some(slot) = reader.slot.as_ref() else {
         return Ok(());
     };
-    let (above, row) = (slot.above, slot.row);
-    let rows = slot_rows(&mut reader.shared.borrow_mut()).unwrap_or(0..0);
-    ctx.set_layout_override(above, above_layout(row.min(rows.start)).into())
+    let (above, bar, row) = (slot.above, slot.bar, slot.row);
+    let (rows, inset) = {
+        let mut state = reader.shared.borrow_mut();
+        let inset = state.presentation.as_ref().map_or(0, |p| p.inset());
+        (slot_rows(&mut state).unwrap_or(0..0), inset)
+    };
+    ctx.set_layout_override(above, above_layout(row.min(rows.start)).into())?;
+    ctx.set_layout_override(bar, Layout::fill().fixed_width(inset).into())?;
+    ctx.set_hidden(bar, inset == 0)?;
+    Ok(())
 }
 
 /// Close the slot and show the rendered surface again.
@@ -502,7 +498,10 @@ fn finish(reader: &mut Markdown, ctx: &mut dyn Context, target: &str) -> Result<
         return close(reader, ctx);
     }
     let edit = slot.edit(target);
-    let row = slot.row;
+    // The slot's screen row now, which it left to fit its text.
+    let row = ctx
+        .view_of(slot.above)
+        .map_or(slot.row, |view| view.outer.h);
     reader.edit_text(ctx, edit, Some(row))?;
     if let Some(slot) = reader.slot.as_mut() {
         slot.committed = true;
@@ -584,8 +583,7 @@ pub(super) fn pending_mark(
 }
 
 /// Return the screen row of the first row of the unit that holds `byte`, if
-/// the unit shows. A unit that starts above the view gives the top row, as
-/// the slot opens there on such a unit.
+/// the unit shows.
 pub(super) fn unit_row(
     state: &mut SurfaceState,
     byte: usize,
@@ -594,6 +592,13 @@ pub(super) fn unit_row(
 ) -> Option<u32> {
     let (units, rows) = state.cursor_map()?;
     let rows = rows.get(unit_at(&units, byte)?)?.clone();
+    screen_row(&rows, top, height)
+}
+
+/// Return the screen row of the first of `rows` in a view of `height` rows
+/// from `top`, if any of them shows. Rows that start above the view give the
+/// top row, as the slot opens there on such a unit.
+fn screen_row(rows: &Range<u32>, top: u32, height: u32) -> Option<u32> {
     let shows = rows.start < top.saturating_add(height) && (rows.start >= top || rows.end > top);
     shows.then(|| rows.start.saturating_sub(top))
 }
@@ -610,6 +615,7 @@ pub(super) fn parts(reader: &Markdown, ctx: &dyn ViewContext) -> Option<(u32, u3
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::units::parse_units;
 
     #[test]
     fn a_new_block_starts_after_a_blank_line() {
@@ -618,5 +624,48 @@ mod tests {
         assert_eq!(new_block_lead("a\n", "\n"), "\n");
         assert_eq!(new_block_lead("a\n\n", "\n"), "");
         assert_eq!(new_block_lead("a\r\n", "\r\n"), "\r\n");
+    }
+
+    #[test]
+    fn every_break_takes_the_units_terminator() {
+        assert_eq!(in_terminator("a\nb\rc", "\n"), "a\nb\rc");
+        assert_eq!(
+            in_terminator("a\nb\r\nc\rd\r", "\r\n"),
+            "a\r\nb\r\nc\r\nd\r\n"
+        );
+    }
+
+    #[test]
+    fn a_tall_unit_opens_on_its_exact_row_or_at_the_same_fraction() {
+        let source = "intro\n\n```\nl1\nl2\nl3\nl4\n```\n";
+        let unit = parse_units(source).pop().unwrap();
+        let start = unit.range.start;
+        assert_eq!(&source[unit.range.clone()], "```\nl1\nl2\nl3\nl4\n```");
+        // The unit's lines start at 0, 4, 7, 10, 13, and 16, and its six
+        // rows are 2..8. A unit that starts in view opens at its own text.
+        let rows = 2..8;
+        assert_eq!(opening_byte(source, &unit, &rows, 2, Some(start + 9)), 4);
+        // An exact row in the unit opens there.
+        assert_eq!(opening_byte(source, &unit, &rows, 5, Some(start + 7)), 7);
+        // Otherwise, three rows down six opens three lines down six, as it
+        // does for an exact byte outside the unit.
+        assert_eq!(opening_byte(source, &unit, &rows, 5, None), 10);
+        assert_eq!(opening_byte(source, &unit, &rows, 5, Some(0)), 10);
+        assert_eq!(opening_byte(source, &unit, &(2..14), 5, None), 4);
+        // Rows past the unit open on its last line.
+        assert_eq!(opening_byte(source, &unit, &(2..4), 10, None), 16);
+    }
+
+    #[test]
+    fn a_units_screen_row_is_its_first_row_in_view() {
+        assert_eq!(screen_row(&(3..5), 2, 10), Some(1));
+        assert_eq!(screen_row(&(2..2), 2, 10), Some(0));
+        assert_eq!(screen_row(&(11..14), 2, 10), Some(9));
+        // A unit that starts above the view and ends in it takes the top row.
+        assert_eq!(screen_row(&(0..3), 2, 10), Some(0));
+        // A unit wholly above or below the view has no row.
+        assert_eq!(screen_row(&(0..2), 2, 10), None);
+        assert_eq!(screen_row(&(12..14), 2, 10), None);
+        assert_eq!(screen_row(&(20..22), 2, 10), None);
     }
 }

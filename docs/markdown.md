@@ -274,10 +274,12 @@ waits. `accepted_source` returns the reader's text, with every edit in it.
 An edit does not go through `replace`. The reader takes the new text as a
 new epoch, but keeps the frame on screen: the editor, or the rendered rows
 of a direct edit. When the new layout shows, the block cursor marks the unit
-at the edit's first byte, on the screen row the edited unit had, and the
-editor closes. A unit that starts above the view had the top row. Until then, `j`, `k`, `e`, and the pointer do nothing. When
-the edit leaves no units, the cursor marks none. Each edit parses and lays
-out the whole document again.
+at the edit's first byte, on the screen row where the frame showed the edited
+block, and the editor closes. That is the editor's row, which it may have
+left to fit its text, or the unit's row, which is the top row for a unit
+that starts above the view. Until then, `j`, `k`, `e`, and the pointer do
+nothing. When the edit leaves no units, the cursor marks none. Each edit
+parses and lays out the whole document again.
 
 ## Bounds and automation
 

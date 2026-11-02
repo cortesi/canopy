@@ -1032,8 +1032,8 @@ impl Markdown {
             source.as_bytes().get(at.wrapping_sub(1)) == Some(&b'\r')
                 && source.as_bytes().get(at) == Some(&b'\n')
         };
+        // A range past the end has no character boundary there.
         if range.start > range.end
-            || range.end > source.len()
             || !source.is_char_boundary(range.start)
             || !source.is_char_boundary(range.end)
             || splits(range.start)
@@ -2508,7 +2508,7 @@ impl Markdown {
             if self.slot.as_ref().is_some_and(|slot| slot.committed) {
                 slot::close(self, ctx)?;
             } else {
-                slot::layout_above(self, ctx)?;
+                slot::layout_parts(self, ctx)?;
             }
         }
         let switched = self.switching.take().is_some();
