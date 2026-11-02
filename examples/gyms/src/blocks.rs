@@ -24,6 +24,7 @@ const LOCKED: &str = "The gym locked the blocks: L unlocks them";
 /// The gym's bindings, beside the reader's own.
 const BINDINGS: &str = r#"
 root.default_bindings()
+markdown.default_bindings()
 canopy.keymap({
     path = "blocks_gym",
     { key = "L", description = "Lock or unlock the blocks", action = command.blocks_gym.toggle_lock() },

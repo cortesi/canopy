@@ -18,10 +18,7 @@ use canopy::{
     derive_commands,
     error::{Error, Result},
     geom::{Line, Point, Rect, Size},
-    input::{
-        BindingAction, BindingOptions, BindingPhase, BindingTier, Event, IntentName, IntentSpec,
-        NavIntent, key::Key, mouse,
-    },
+    input::{Event, IntentSpec, NavIntent, key::Key, mouse},
     layout::{
         Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement, RevealAlign,
         ScrollOp,
@@ -880,7 +877,17 @@ impl Markdown {
     /// layout. While the host locks blocks, it shows the lock's notice.
     #[command]
     pub fn edit_block(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        slot::open(self, ctx)
+        slot::open(self, ctx, slot::Opening::Unit)
+    }
+    /// Open an empty block editor after the marked unit, in insert mode for
+    /// a vi editor. A commit puts its text after the unit as a new block,
+    /// with a blank line between them, in the quotes and list items of the
+    /// unit's first block. A blank text adds nothing. With no unit, the new
+    /// block goes at the end of the text. It does nothing where `edit_block`
+    /// does nothing, and shows the lock's notice as it does.
+    #[command]
+    pub fn append_block(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        slot::open(self, ctx, slot::Opening::After)
     }
     /// Commit the block editor: record its text as an edit when it differs
     /// from the text before the edit, and close it once the edit's layout
@@ -1020,17 +1027,19 @@ impl Markdown {
                 range: from..to,
                 text,
             },
+            from,
             row,
         )
     }
     /// Make `edit` as a new epoch of the text, record it for the host, and
     /// keep the shown frame until the new text's layout shows. Then the
-    /// cursor marks the unit at the edit's first byte, with that unit's first
-    /// row on screen row `row`.
+    /// cursor marks the unit at byte `first` of the new text, with that
+    /// unit's first row on screen row `row`.
     fn edit_text(
         &mut self,
         ctx: &mut dyn Context,
         edit: BlockEdit,
+        first: usize,
         row: Option<u32>,
     ) -> Result<()> {
         let snapshot = self.store.snapshot();
@@ -1086,7 +1095,7 @@ impl Markdown {
             state.overlays.search_current = None;
             state.overlays.selection = None;
             state.overlays.active_object = None;
-            let mark = slot::pending_mark(&state, epoch, range.start, row);
+            let mark = slot::pending_mark(&state, epoch, first, row);
             state.pending_mark = Some(mark);
             state.awaiting = true;
         }
@@ -3545,19 +3554,9 @@ fn match_bytes(state: &SurfaceState) -> Vec<usize> {
 /// The action status after the host performs an action.
 const ACTION_DONE: &str = "Done";
 
-/// Where the reader's own bindings apply: the reader itself, which a host may
-/// focus, and its reading column. An open inspector lies beside the column,
-/// so the reader's keys never reach into it. A key the inspector leaves
-/// unhandled still bubbles to the reader, so the reader's commands do nothing
-/// while an inspector covers it.
-/// The block editor's column lies in the body too, but outside these paths, so
-/// the reader's keys never reach the editor in it.
-const READER_PATHS: [&str; 4] = [
-    "**/markdown/",
-    "**/markdown_reader/search_bar/**/",
-    "**/markdown_body/markdown_rendered/",
-    "**/markdown_body/markdown_source/",
-];
+/// The reader's default keys, which a host takes with
+/// `markdown.default_bindings()`, or replaces with its own.
+const DEFAULT_BINDINGS: &str = include_str!("bindings.luau");
 
 impl Register for Markdown {
     fn register(setup: &mut Setup) -> Result<()> {
@@ -3567,130 +3566,17 @@ impl Register for Markdown {
         TableView::register(setup)?;
         Confirm::register(setup)?;
         crate::register_styles(setup);
-        for (key, description, call) in [
-            ("i", "Block cursor", Self::call_interact()),
-            ("v", "Select text", Self::call_select_text()),
-            ("Escape", "End selection or cursor", Self::call_escape()),
+        for (name, description) in [
+            (ACTIVATE_INTENT, "Inspect the selected Rendered object"),
+            (NEXT_OBJECT_INTENT, "Next Rendered object or focus target"),
             (
-                "ctrl-r",
-                "Toggle Rendered / Source",
-                Self::call_toggle_view_type(),
-            ),
-            ("/", "Search document", Self::call_start_search()),
-            ("y", "Copy", Self::call_copy()),
-            ("ctrl-y", "Copy exact source", Self::call_copy_source()),
-            (
-                "ctrl-s",
-                "Inspect source snapshot",
-                Self::call_inspect_source(),
-            ),
-            ("f", "Follow tail", Self::call_follow()),
-            ("ctrl-o", "Return from jump", Self::call_return_from_jump()),
-            ("n", "Next match", Self::call_search_next(1i32)),
-            ("N", "Previous match", Self::call_search_next(-1i32)),
-            ("e", "Edit block", Self::call_edit_block()),
-        ] {
-            for path in READER_PATHS {
-                setup.bind(
-                    Key::parse_spec(key)?,
-                    BindingOptions {
-                        show_in_help: true,
-                        path: Some(path.parse()?),
-                        tier: BindingTier::Default,
-                        description: description.into(),
-                        source: None,
-                        phase: key
-                            .starts_with("ctrl-")
-                            .then_some(BindingPhase::BeforeWidget),
-                    },
-                    BindingAction::Command(call.clone()),
-                )?;
-            }
-        }
-        // The block editor's own keys: ctrl-x drops the edit before the
-        // editor reads the key, so vi visual mode never takes it for x, and
-        // only while the editor is open, so a host's ctrl-x reaches it
-        // otherwise. Esc that the editor leaves commits through `escape`.
-        setup.bind(
-            Key::parse_spec("ctrl-x")?,
-            BindingOptions {
-                show_in_help: true,
-                path: Some("**/markdown_slot/**/".parse()?),
-                tier: BindingTier::Default,
-                description: "Discard block edits".into(),
-                source: None,
-                phase: Some(BindingPhase::BeforeWidget),
-            },
-            BindingAction::Command(Self::call_discard_block(false)),
-        )?;
-        // Dormant intents allow Source to retain normal host focus traversal.
-        // Disabled command bindings would consume Tab even when ineligible.
-        for (key, name, description) in [
-            (
-                "Enter",
-                ACTIVATE_INTENT,
-                "Inspect the selected Rendered object",
-            ),
-            (
-                "Tab",
-                NEXT_OBJECT_INTENT,
-                "Next Rendered object or focus target",
-            ),
-            (
-                "shift-Tab",
                 PREVIOUS_OBJECT_INTENT,
                 "Previous Rendered object or focus target",
             ),
         ] {
             setup.register_intent(IntentSpec::new(name, description)?)?;
-            for path in READER_PATHS {
-                setup.bind(
-                    Key::parse_spec(key)?,
-                    BindingOptions {
-                        show_in_help: true,
-                        path: Some(path.parse()?),
-                        tier: BindingTier::Default,
-                        description: description.into(),
-                        source: None,
-                        phase: None,
-                    },
-                    BindingAction::Intent(IntentName::new(name)?),
-                )?;
-            }
         }
-        for (key, nav) in [
-            ("Up", NavIntent::Up),
-            ("k", NavIntent::Up),
-            ("Down", NavIntent::Down),
-            ("j", NavIntent::Down),
-            ("Left", NavIntent::Left),
-            ("h", NavIntent::Left),
-            ("Right", NavIntent::Right),
-            ("l", NavIntent::Right),
-            ("PageUp", NavIntent::PageUp),
-            ("PageDown", NavIntent::PageDown),
-            ("Space", NavIntent::PageDown),
-            ("Home", NavIntent::First),
-            ("g", NavIntent::First),
-            ("End", NavIntent::Last),
-            ("G", NavIntent::Last),
-        ] {
-            for path in ["**/markdown/", "**/markdown_rendered/"] {
-                setup.bind(
-                    Key::parse_spec(key)?,
-                    BindingOptions {
-                        show_in_help: true,
-                        path: Some(path.parse()?),
-                        tier: BindingTier::Default,
-                        description: format!("{nav:?}"),
-                        source: None,
-                        phase: None,
-                    },
-                    BindingAction::Intent(IntentName::new(nav.name())?),
-                )?;
-            }
-        }
-        Ok(())
+        setup.register_default_bindings("markdown", DEFAULT_BINDINGS)
     }
 }
 

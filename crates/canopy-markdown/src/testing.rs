@@ -715,6 +715,7 @@ impl EditCheck {
         let clock = Arc::new(ManualClock::new());
         let harness = Harness::builder(reader)
             .register::<Markdown>()
+            .script("markdown-defaults", "markdown.default_bindings()")
             .clock(clock.clone())
             .size(40, 12)
             .build()

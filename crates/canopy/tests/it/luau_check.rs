@@ -85,7 +85,9 @@ mod tests {
                 // Each app's tests build it without a home, which compiles
                 // its defaults under the startup-script contract.
                 || file == "examples/hello/src/default_config.luau"
-                || file == "examples/todo/src/default_config.luau";
+                || file == "examples/todo/src/default_config.luau"
+                // The reader's tests run its default keys in each harness.
+                || file == "crates/canopy-markdown/src/widget/bindings.luau";
             assert!(owned, "tracked Luau file has no checker owner: {file}");
         }
         Ok(())

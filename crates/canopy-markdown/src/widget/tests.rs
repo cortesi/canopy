@@ -1,6 +1,7 @@
 use std::{cell::Cell, rc::Rc};
 
 use canopy::{
+    input::{BindingAction, BindingOptions, BindingTier, IntentName},
     layout::ScrollAxis,
     runtime::{NoticeLevel, TurnInput},
     testing::harness::Harness,
@@ -52,6 +53,7 @@ fn configured(
     };
     let harness = Harness::builder(reader)
         .register::<Markdown>()
+        .script("markdown-defaults", "markdown.default_bindings()")
         .size(40, 8)
         .build()
         .unwrap();
@@ -2235,6 +2237,7 @@ fn source_enter_and_tab_do_not_activate_or_navigate_cached_rendered_objects() {
         after: None,
     })
     .register::<TraversalHost>()
+    .script("markdown-defaults", "markdown.default_bindings()")
     .size(40, 8)
     .build()
     .unwrap();
@@ -2421,6 +2424,7 @@ fn a_followed_link_wakes_the_host_to_take_its_request() {
         polls: polls.clone(),
     })
     .register::<Markdown>()
+    .script("markdown-defaults", "markdown.default_bindings()")
     .size(40, 8)
     .build()
     .unwrap();
@@ -2466,6 +2470,7 @@ fn accepted_publication_wakes_host_but_stale_results_and_queries_do_not() {
         polls: polls.clone(),
     })
     .register::<Markdown>()
+    .script("markdown-defaults", "markdown.default_bindings()")
     .size(40, 8)
     .build()
     .unwrap();
@@ -2728,6 +2733,7 @@ fn an_item_is_what_interact_or_a_selection_chose() {
         polls: Rc::new(Cell::new(0)),
     })
     .register::<Markdown>()
+    .script("markdown-defaults", "markdown.default_bindings()")
     .size(40, 8)
     .build()
     .unwrap();

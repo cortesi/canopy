@@ -1079,20 +1079,7 @@ impl Register for Inspector {
                 BindingAction::Command(call),
             )?;
         }
-        // y is an application binding, which the inspector's scoped modal
-        // admits, so a host can give the key to its own copy action.
-        setup.bind(
-            InputSpec::Key(Key::parse_spec("y")?),
-            BindingOptions {
-                tier: BindingTier::Default,
-                description: "Copy selection".into(),
-                path: Some("**/markdown_inspector/**/".parse()?),
-                phase: Some(BindingPhase::AfterWidget),
-                show_in_help: true,
-                source: None,
-            },
-            BindingAction::Command(Self::call_copy_selection()),
-        )?;
+        // Its y is an application binding, in the reader's default keys.
         Ok(())
     }
 }

@@ -21,7 +21,7 @@ use canopy::{
 use canopy_widgets::highlight::SyntectHighlighter;
 use canopy_widgets::{
     Answer, Closing, Confirm, ConfirmRequest, Container,
-    editor::{Editor, EditorConfig, Interaction},
+    editor::{Editor, EditorConfig, Interaction, ViMode},
 };
 
 use super::{BlockEdit, Markdown, invalid};
@@ -29,7 +29,7 @@ use crate::{
     presentation::PaintOverlays,
     source_store::Lifecycle,
     surface::{PendingMark, RenderedSurface, SurfaceState},
-    units::{EditUnit, line_terminator, unit_at},
+    units::{EditUnit, NewBlock, line_terminator, unit_at},
 };
 
 /// Flex weight of the rows above the slot, far above the weight of the rows
@@ -55,12 +55,12 @@ pub(super) struct OpenSlot {
     pub(super) editor: TypedId<Editor>,
     /// The epoch of the text that `range` addresses.
     pub(super) epoch: u64,
-    /// The source bytes the edit replaces: the marked unit, or an empty
-    /// range at the end of a text with no unit.
+    /// The source bytes the edit replaces: the marked unit, or the empty
+    /// range of a new block.
     pub(super) range: Range<usize>,
-    /// Text a commit puts before the editor's text: the line breaks that
-    /// start a new block at the end of the text.
-    lead: String,
+    /// The new block that the editor's text makes, or `None` for an edit of
+    /// the marked unit.
+    pub(super) new_block: Option<NewBlock>,
     /// The line terminator of the unit, which new lines take.
     terminator: &'static str,
     /// The text of `range` when the slot opened.
@@ -82,17 +82,23 @@ impl OpenSlot {
         in_terminator(&editor.text(), self.terminator)
     }
 
-    /// Return the edit that puts `text` in place of the range.
+    /// Return the edit that puts `text` in place of the range: the text
+    /// itself, or the source of a new block of it.
     fn edit(&self, text: &str) -> BlockEdit {
         BlockEdit {
             epoch: self.epoch,
             range: self.range.clone(),
-            text: if text.is_empty() {
-                String::new()
-            } else {
-                format!("{}{text}", self.lead)
-            },
+            text: self
+                .new_block
+                .as_ref()
+                .map_or_else(|| text.to_owned(), |block| block.text(text)),
         }
+    }
+
+    /// Return the source byte where the edit's first unit starts: the start
+    /// of the range, or of a new block's first line.
+    fn first_byte(&self) -> usize {
+        self.range.start + self.new_block.as_ref().map_or(0, |block| block.lead.len())
     }
 }
 
@@ -126,17 +132,52 @@ enum Part {
     Below,
 }
 
-/// Return the rows of the presentation that the slot takes the place of:
-/// the content rows of the marked unit, or the end of a text with no unit.
-fn slot_rows(state: &mut SurfaceState) -> Option<Range<u32>> {
+/// The rows of the presentation around the slot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SlotRows {
+    /// The row after the last row above the slot.
+    above: u32,
+    /// The first row below the slot.
+    below: u32,
+}
+
+/// Return the rows of the presentation around the slot. An edit of the
+/// marked unit takes the place of its content rows. A new block after it
+/// lies between it and the next unit, with the rows between them on both
+/// sides, so it shows as a block of its own. With no unit, the slot lies at
+/// the end of the text.
+fn slot_rows(state: &mut SurfaceState, new_block: bool) -> Option<SlotRows> {
     let height = state.presentation.as_ref()?.height();
-    Some(state.marked_unit().map_or(height..height, |(_, rows)| rows))
+    let Some((_, rows)) = state.marked_unit() else {
+        return Some(SlotRows {
+            above: height,
+            below: height,
+        });
+    };
+    if !new_block {
+        return Some(SlotRows {
+            above: rows.start,
+            below: rows.end,
+        });
+    }
+    let index = state.marked_index()?;
+    let (_, all) = state.cursor_map()?;
+    let next = all
+        .get(index + 1..)
+        .and_then(|after| after.iter().find(|rows| !rows.is_empty()))
+        .map_or(height, |rows| rows.start);
+    Some(SlotRows {
+        above: next.max(rows.end),
+        below: rows.end,
+    })
 }
 
 /// Rows of the presentation above or below the slot. They do not scroll.
 struct EditRows {
     /// Which rows this part shows.
     part: Part,
+    /// Whether the slot holds a new block.
+    new_block: bool,
     /// The reader's shared state, which holds the presentation.
     shared: Rc<RefCell<SurfaceState>>,
 }
@@ -155,7 +196,7 @@ impl Widget for EditRows {
         let view = ctx.view();
         render.fill("markdown/text", view.outer_rect_local(), ' ')?;
         let mut state = self.shared.borrow_mut();
-        let Some(rows) = slot_rows(&mut state) else {
+        let Some(rows) = slot_rows(&mut state, self.new_block) else {
             return Ok(());
         };
         let Some(presentation) = state.presentation.clone() else {
@@ -163,8 +204,8 @@ impl Widget for EditRows {
         };
         let height = view.content.h;
         let first = match self.part {
-            Part::Above => rows.start.saturating_sub(height),
-            Part::Below => rows.end,
+            Part::Above => rows.above.saturating_sub(height),
+            Part::Below => rows.below,
         };
         // The images of image blocks are the only overlays the parts show.
         let overlays = PaintOverlays {
@@ -240,17 +281,6 @@ fn slot_config(config: &EditorConfig) -> EditorConfig {
     config.clone().with_auto_grow(true)
 }
 
-/// Return the line breaks that start a new block after `source`.
-fn new_block_lead(source: &str, terminator: &str) -> String {
-    if source.is_empty() || source.ends_with(&format!("{terminator}{terminator}")) {
-        String::new()
-    } else if source.ends_with(['\n', '\r']) {
-        terminator.to_owned()
-    } else {
-        terminator.repeat(2)
-    }
-}
-
 /// Return the byte, in the unit's text, where the editor opens: the start of
 /// the unit's own text, or of the unit. In a tall unit whose first row is
 /// above the view, the byte of the first row that shows, when the reader maps
@@ -279,11 +309,20 @@ fn opening_byte(
     lines[line.min(lines.len() - 1)]
 }
 
-/// Open the slot on the marked unit, or, with no unit, an empty one at the
-/// end of the text.
-pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
+/// What the slot opens on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Opening {
+    /// The marked unit.
+    Unit,
+    /// A new block after the marked unit.
+    After,
+}
+
+/// Open the slot on the marked unit, or empty for a new block after it, as
+/// `opening` says. With no unit, open it empty at the end of the text.
+pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context, opening: Opening) -> Result<()> {
     // Without a block editor in its options, the reader cannot edit, and
-    // its `e` does nothing.
+    // its `e` and `a` do nothing.
     let Some(config) = reader.options.block_editor.clone() else {
         return Ok(());
     };
@@ -325,28 +364,37 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
     }
     let top = ctx.view_of(rendered).map_or(0, |view| view.scroll.y);
     let source = snapshot.text();
-    let (range, lead, cursor, row, terminator, tall) = {
+    let (range, new_block, cursor, row, terminator, tall) = {
         let mut state = reader.shared.borrow_mut();
         let presentation = state.presentation.clone();
         match (state.marked_unit(), presentation) {
-            (Some((unit, rows)), Some(p)) => {
+            (Some((unit, rows)), Some(p)) if opening == Opening::Unit => {
                 let exact = p.exact_source_at_row(top.max(rows.start));
                 let cursor = opening_byte(&source, &unit, &rows, top, exact);
                 let row = rows.start.saturating_sub(top);
                 let terminator = line_terminator(&source, &unit.range);
                 let tall = rows.start < top;
-                (unit.range, String::new(), cursor, row, terminator, tall)
+                (unit.range, None, cursor, row, terminator, tall)
+            }
+            (Some((unit, _)), Some(p)) => {
+                let block = NewBlock::after(&p.document, &unit);
+                let terminator = line_terminator(&source, &unit.range);
+                let above = slot_rows(&mut state, true).map_or(0, |rows| rows.above);
+                let row = above.saturating_sub(top);
+                (block.at..block.at, Some(block), 0, row, terminator, false)
             }
             (_, presentation) => {
+                let block = NewBlock::at_end(&source);
                 let end = source.len();
                 let terminator = line_terminator(&source, &(end..end));
                 let row = presentation.map_or(0, |p| p.height().saturating_sub(top));
-                let lead = new_block_lead(&source, terminator);
-                (end..end, lead, 0, row, terminator, false)
+                (end..end, Some(block), 0, row, terminator, false)
             }
         }
     };
+    let insert = opening == Opening::After;
     let original = source[range.clone()].to_owned();
+    let is_new = new_block.is_some();
     // The reader's search does nothing while the slot is open, so its field
     // closes.
     if !reader.options.external_search {
@@ -359,6 +407,7 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
         column,
         EditRows {
             part: Part::Above,
+            new_block: is_new,
             shared: reader.shared.clone(),
         },
     )?;
@@ -394,6 +443,7 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
         column,
         EditRows {
             part: Part::Below,
+            new_block: is_new,
             shared: reader.shared.clone(),
         },
     )?;
@@ -408,7 +458,7 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
         editor,
         epoch: snapshot.epoch,
         range,
-        lead,
+        new_block,
         terminator,
         original: original.clone(),
         kept: original,
@@ -419,6 +469,10 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
     ctx.with_widget_mut(editor, |editor: &mut Editor, ctx| {
         let position = editor.position_of_offset(cursor);
         editor.set_cursor(ctx, position);
+        // A new block takes its text at once.
+        if insert {
+            editor.set_vi_mode(ViMode::Insert);
+        }
         // A tall unit's slot is at the top of the view, where the reader
         // showed the line the editor opens on.
         if tall {
@@ -438,12 +492,14 @@ pub(super) fn layout_parts(reader: &Markdown, ctx: &mut dyn Context) -> Result<(
         return Ok(());
     };
     let (above, bar, row) = (slot.above, slot.bar, slot.row);
+    let new_block = slot.new_block.is_some();
     let (rows, inset) = {
         let mut state = reader.shared.borrow_mut();
         let inset = state.presentation.as_ref().map_or(0, |p| p.inset());
-        (slot_rows(&mut state).unwrap_or(0..0), inset)
+        let rows = slot_rows(&mut state, new_block).map_or(0, |rows| rows.above);
+        (rows, inset)
     };
-    ctx.set_layout_override(above, above_layout(row.min(rows.start)).into())?;
+    ctx.set_layout_override(above, above_layout(row.min(rows)).into())?;
     ctx.set_layout_override(bar, Layout::fill().fixed_width(inset).into())?;
     ctx.set_hidden(bar, inset == 0)?;
     Ok(())
@@ -503,15 +559,16 @@ fn finish(reader: &mut Markdown, ctx: &mut dyn Context, target: &str) -> Result<
     let Some(slot) = reader.slot.as_ref() else {
         return Ok(());
     };
-    if target == slot.original {
+    let edit = slot.edit(target);
+    if edit.text == slot.original {
         return close(reader, ctx);
     }
-    let edit = slot.edit(target);
     // The slot's screen row now, which it left to fit its text.
     let row = ctx
         .view_of(slot.above)
         .map_or(slot.row, |view| view.outer.h);
-    reader.edit_text(ctx, edit, Some(row))?;
+    let first = slot.first_byte();
+    reader.edit_text(ctx, edit, first, Some(row))?;
     if let Some(slot) = reader.slot.as_mut() {
         slot.committed = true;
         // The committed editor shows until the new layout does, and takes
@@ -642,15 +699,6 @@ pub(super) fn parts(reader: &Markdown, ctx: &dyn ViewContext) -> Option<(u32, u3
 mod tests {
     use super::*;
     use crate::units::parse_units;
-
-    #[test]
-    fn a_new_block_starts_after_a_blank_line() {
-        assert_eq!(new_block_lead("", "\n"), "");
-        assert_eq!(new_block_lead("a", "\n"), "\n\n");
-        assert_eq!(new_block_lead("a\n", "\n"), "\n");
-        assert_eq!(new_block_lead("a\n\n", "\n"), "");
-        assert_eq!(new_block_lead("a\r\n", "\r\n"), "\r\n");
-    }
 
     #[test]
     fn every_break_takes_the_units_terminator() {

@@ -49,6 +49,7 @@ pub(super) fn reader(
     .unwrap();
     let harness = Harness::builder(reader)
         .register::<Markdown>()
+        .script("markdown-defaults", "markdown.default_bindings()")
         .size(width, height)
         .build()
         .unwrap();
@@ -414,6 +415,7 @@ fn the_object_cursor_leaves_each_end_toward_its_own_side() {
         .collect();
     let mut harness = Harness::builder(Pair { readers })
         .register::<Pair>()
+        .script("markdown-defaults", "markdown.default_bindings()")
         .size(30, 12)
         .build()
         .unwrap();

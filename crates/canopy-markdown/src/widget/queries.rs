@@ -209,6 +209,7 @@ pub(super) fn state(reader: &Markdown, ctx: &dyn ViewContext) -> Result<ArgValue
             reader.slot.as_ref().map_or(ArgValue::Null, |slot| {
                 map([
                     ("range", range(&slot.range)),
+                    ("new_block", ArgValue::Bool(slot.new_block.is_some())),
                     ("committed", ArgValue::Bool(slot.committed)),
                 ])
             }),
@@ -658,6 +659,7 @@ mod tests {
         assert_eq!(items(&objects(&reader, 0, 128)).len(), 1);
         let mut harness = Harness::builder(reader)
             .register::<Markdown>()
+            .script("markdown-defaults", "markdown.default_bindings()")
             .size(40, 8)
             .build()
             .unwrap();
@@ -684,6 +686,7 @@ mod tests {
         assert_eq!(reader.store.snapshot().flattened_bytes(), 0);
         let mut harness = Harness::builder(reader)
             .register::<Markdown>()
+            .script("markdown-defaults", "markdown.default_bindings()")
             .size(40, 8)
             .build()
             .unwrap();
@@ -722,6 +725,7 @@ mod tests {
         reader.failure = Some("error".repeat(200));
         let mut harness = Harness::builder(reader)
             .register::<Markdown>()
+            .script("markdown-defaults", "markdown.default_bindings()")
             .size(40, 8)
             .build()
             .unwrap();

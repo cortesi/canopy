@@ -14,7 +14,7 @@
 use std::ops::Range;
 
 use crate::{
-    document::{DocumentSnapshot, ParseLimits, line_text_end, parse_document},
+    document::{BlockKind, DocumentSnapshot, ParseLimits, line_text_end, parse_document},
     source_store::SourceStore,
 };
 
@@ -203,6 +203,169 @@ pub fn replace_own_text(source: &str, unit: &EditUnit, replacement: &str) -> Opt
         }
     };
     Some(Splice { range: own, text })
+}
+
+/// The place of a new block in a text, and the text around its lines.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct NewBlock {
+    /// The byte where the block goes.
+    pub(crate) at: usize,
+    /// The text before the block's lines: the breaks that start a block.
+    pub(crate) lead: String,
+    /// The prefix of each line of the block: the markers of its quotes, and
+    /// blanks in place of the markers of its list items.
+    prefix: String,
+    /// The text after the block's lines: a blank line when a line follows
+    /// with no blank line between, so that line stays out of the block.
+    trail: String,
+    /// The line terminator of the block's lines.
+    terminator: &'static str,
+}
+
+impl NewBlock {
+    /// Return a new block at the end of `source`, outside every container.
+    pub(crate) fn at_end(source: &str) -> Self {
+        let at = source.len();
+        let terminator = line_terminator(source, &(at..at));
+        let lead = if source.is_empty() || source.ends_with(&terminator.repeat(2)) {
+            String::new()
+        } else if source.ends_with(['\n', '\r']) {
+            terminator.to_owned()
+        } else {
+            terminator.repeat(2)
+        };
+        Self {
+            at,
+            lead,
+            prefix: String::new(),
+            trail: String::new(),
+            terminator,
+        }
+    }
+
+    /// Return a new block after `unit` of `document`, in the quotes and list
+    /// items of the unit's first block, with a blank line between them.
+    pub(crate) fn after(document: &DocumentSnapshot, unit: &EditUnit) -> Self {
+        let source = document.source.text();
+        let at = unit.range.end;
+        let terminator = line_terminator(&source, &unit.range);
+        let prefix = block_prefix(document, unit.blocks.start);
+        let blank = prefix.trim_end_matches([' ', '\t']);
+        let next = source[at..]
+            .strip_prefix(terminator)
+            .map(|rest| &rest[..line_text_end(rest, 0)]);
+        let trail = match next {
+            Some(line) if !line.trim_start_matches(['>', ' ', '\t']).is_empty() => {
+                format!("{terminator}{blank}")
+            }
+            _ => String::new(),
+        };
+        Self {
+            at,
+            lead: format!("{terminator}{blank}{terminator}"),
+            prefix,
+            trail,
+            terminator,
+        }
+    }
+
+    /// Return the source text that puts a block of `text` here, or an empty
+    /// text when `text` is blank. Each line takes the prefix, and a blank
+    /// line takes it without its trailing blanks. Line breaks at the end of
+    /// `text` are dropped.
+    pub(crate) fn text(&self, text: &str) -> String {
+        if text.trim().is_empty() {
+            return String::new();
+        }
+        let blank = self.prefix.trim_end_matches([' ', '\t']);
+        let lines: Vec<String> = lines(trim_breaks(text))
+            .into_iter()
+            .map(|line| {
+                if line.trim().is_empty() {
+                    blank.to_owned()
+                } else {
+                    format!("{}{line}", self.prefix)
+                }
+            })
+            .collect();
+        format!("{}{}{}", self.lead, lines.join(self.terminator), self.trail)
+    }
+}
+
+/// The indent of the lines of a footnote's body after its first.
+const FOOTNOTE_INDENT: &str = "    ";
+
+/// Return the prefix of the lines of a new block in the containers of block
+/// `index`: the text before the block on its first line, with blanks in
+/// place of list markers. A footnote label takes the indent of a footnote's
+/// body. The block's own indent is not part of it: the indent of indented
+/// code, and, outside lists, every blank after the last quote marker but
+/// one.
+fn block_prefix(document: &DocumentSnapshot, index: usize) -> String {
+    let text = document.source.text();
+    let Some(block) = document.blocks.get(index) else {
+        return String::new();
+    };
+    let mut start = block.source.start.min(text.len());
+    while !text.is_char_boundary(start) {
+        start -= 1;
+    }
+    let line = &text[line_start(&text, start)..start];
+    if let Some((label, rest)) = footnote_label(line) {
+        return code_unindented(
+            document,
+            index,
+            format!(
+                "{}{FOOTNOTE_INDENT}{}",
+                continuation(&line[..label]),
+                continuation(&line[rest..])
+            ),
+        );
+    }
+    if block.depth > block.quote_depth {
+        return code_unindented(document, index, continuation(line));
+    }
+    // Outside lists, the containers are quotes and footnote bodies.
+    let quotes = line.rfind('>').map_or(0, |last| {
+        let after = &line[last + 1..];
+        last + 1
+            + after
+                .chars()
+                .next()
+                .filter(|c| matches!(c, ' ' | '\t'))
+                .map_or(0, char::len_utf8)
+    });
+    // The indent of a footnote's body comes before its quotes.
+    if quotes == 0 && matches!(block.kind, BlockKind::Footnote { .. }) {
+        return FOOTNOTE_INDENT.to_owned();
+    }
+    continuation(&line[..quotes])
+}
+
+/// Return `prefix` without the indent of indented code, when block `index`
+/// is indented code.
+fn code_unindented(document: &DocumentSnapshot, index: usize, mut prefix: String) -> String {
+    let indented = document
+        .syntax(index)
+        .is_some_and(|syntax| syntax.kind == EditKind::IndentedCode);
+    if indented {
+        if prefix.ends_with('\t') {
+            prefix.pop();
+        } else {
+            let spaces = prefix.len() - prefix.trim_end_matches(' ').len();
+            prefix.truncate(prefix.len() - spaces.min(4));
+        }
+    }
+    prefix
+}
+
+/// Return where the first footnote label of `line` starts, and where the
+/// text after the label and its blanks starts.
+fn footnote_label(line: &str) -> Option<(usize, usize)> {
+    let start = line.find("[^")?;
+    let after = start + line[start..].find("]:")? + 2;
+    let rest = line.len() - line[after..].trim_start_matches([' ', '\t']).len();
+    Some((start, rest))
 }
 
 /// Return the bytes of the whole lines that hold `source`, from the start of

@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ff3017879f7ed6428e76e7071524e6eb3254a8261cb39fbfc6b1c90a358dd28b # shrinks to text = "- > - # a\n  >\n  >   # a\n\n  # a\n\n- ^lone\n\n- > 日本語\n\n1. [ ] 1. [ ] ![alt](image.png)\n   2. [ ] `code`\n      xta *em* **strong** *em* ezuj\n      <b> ^[an inline note] [[wiki]]  \n   3. [ ] #\n\n      ---\n\n   1. 日本語 ==mark== tkpyn ^[an inline note] *em*\n      zbux tmwdasgq\n\n      #\n   2.     dy;t=\n          ``\n\n      > ^[an inline note]  \n\n2. [ ] > [!warning]\n   >     \tindented\n   >     t {e(y};b ;\n\n   > ![alt](image.png)\n   >\n   > **strong** <b> e\u{301} w\n\n3. [ ] - > [!TIP]\n     > # ^[an inline note] ##", index = 7
+cc 648f7ad10bc0a8eab0f320cdb1ee3aef7dac7961af51b7150ac88d205def6ded # shrinks to text = "# a\n\n- [ ] <div>\n  a\n  </div>\n\n1. - ^lone\n   - # a\n2. ^lone", index = 3
+cc c803b7a0164232ccb331558325f851ee733243fbeac64bd712e3bd2d443f68d4 # shrinks to text = "# a\n\n- # a\n\n  # a\n- # a\n\n  # a\n- > ```", index = 5
+cc 8f2d452a842858c7cc0ba156a0df20a32793ff70de1566cecfcdccc5ae09f1aa # shrinks to text = "---\ntitle: A\n---\n\n- # a\n- - ^lone\n\n    # a\n\n> [!note]\n> > [!note]\n> >     code", index = 4

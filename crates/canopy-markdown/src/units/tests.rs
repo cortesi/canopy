@@ -323,6 +323,200 @@ fn check_spec_shard(examples: &[String], shard: usize) {
     }
 }
 
+/// The source after a new block of `typed` after unit `index` of `text`.
+fn appended(text: &str, index: usize, typed: &str) -> String {
+    let document = testing::parse(text);
+    let block = NewBlock::after(&document, &edit_units(&document)[index]);
+    let mut out = text.to_owned();
+    out.insert_str(block.at, &block.text(typed));
+    out
+}
+
+#[test]
+fn a_new_block_lies_in_the_containers_of_the_unit_before_it() {
+    let cases: &[(&str, usize, &str, &str)] = &[
+        ("a\n\nb\n", 0, "new", "a\n\nnew\n\nb\n"),
+        ("a\n\nb\n", 1, "new", "a\n\nb\n\nnew\n"),
+        ("a", 0, "new", "a\n\nnew"),
+        // A quote keeps its markers, and its blank lines take them too.
+        ("> a\n> b\n", 0, "x\n\ny", "> a\n> b\n>\n> x\n>\n> y\n"),
+        // A list item takes blanks in place of its marker. A line that
+        // follows the unit takes a blank line, so it stays out of the block.
+        ("- a\n- b\n", 0, "new", "- a\n\n  new\n\n- b\n"),
+        ("> - a\n", 0, "new", "> - a\n>\n>   new\n"),
+        // The marks of a heading and the indent of code are no container.
+        ("# H\npara\n", 0, "new", "# H\n\nnew\n\npara\n"),
+        ("    code\n", 0, "new", "    code\n\nnew\n"),
+        (
+            "- a\n\n      code\n",
+            1,
+            "new",
+            "- a\n\n      code\n\n  new\n",
+        ),
+        // CRLF text takes CRLF, and breaks at the end of the text drop.
+        (
+            "a\r\n\r\nb\r\n",
+            0,
+            "x\ny\n\n",
+            "a\r\n\r\nx\r\ny\r\n\r\nb\r\n",
+        ),
+        // A blank text adds nothing.
+        ("a\n", 0, " \n\t", "a\n"),
+    ];
+    for (text, index, typed, expected) in cases {
+        assert_eq!(&appended(text, *index, typed), expected, "{text:?}");
+    }
+}
+
+#[test]
+fn a_new_block_at_the_end_starts_after_a_blank_line() {
+    for (source, lead) in [
+        ("", ""),
+        ("a", "\n\n"),
+        ("a\n", "\n"),
+        ("a\n\n", ""),
+        ("a\r\n", "\r\n"),
+    ] {
+        let block = NewBlock::at_end(source);
+        assert_eq!(block.at, source.len());
+        assert_eq!(block.lead, lead, "{source:?}");
+        assert_eq!(block.text("new"), format!("{lead}new"));
+    }
+}
+
+/// The words of the new blocks of the checks.
+const FRESH: &str = "Fresh words";
+
+/// Check a new block of words after unit `index` of `text`, as
+/// [`check_new_block_in`] does, with the invariants of the new text's units.
+fn check_new_block(text: &str, index: usize) -> Result<(), String> {
+    let document = testing::parse(text);
+    check_new_block_in(text, &document, &edit_units(&document), index, true)
+}
+
+/// Check a new block of words after unit `index` of `text`, whose document
+/// and units these are. The text around it does not change. It makes one
+/// paragraph unit right after the unit, and every other unit keeps its kind
+/// and its own text. A fence or raw HTML block that runs to the end of its
+/// container takes the new block in instead, so that unit grows. With
+/// `invariants`, the units of the new text keep their invariants too.
+fn check_new_block_in(
+    text: &str,
+    document: &DocumentSnapshot,
+    units: &[EditUnit],
+    index: usize,
+    invariants: bool,
+) -> Result<(), String> {
+    let Some(unit) = units.get(index) else {
+        return Ok(());
+    };
+    let block = NewBlock::after(document, unit);
+    let mut new = text.to_owned();
+    new.insert_str(block.at, &block.text(FRESH));
+    let fail = |what: &str| {
+        Err(format!(
+            "a new block after unit {index} of {text:?} {what}: {new:?}"
+        ))
+    };
+    if block.at != unit.range.end {
+        return fail("lies elsewhere");
+    }
+    if invariants {
+        check_units(&new).map_err(|error| format!("{new:?}: {error}"))?;
+    }
+    let grown = parse_units(&new);
+    let open = matches!(
+        unit.kind,
+        EditKind::FencedCode | EditKind::Html | EditKind::Source
+    );
+    if open
+        && grown.iter().any(|after| {
+            after.range.start == unit.range.start && new[after.range.clone()].contains(FRESH)
+        })
+    {
+        return Ok(());
+    }
+    // A list item of a lone block id loses its own text when its list turns
+    // loose, as the id then names the block before it.
+    let shape = |text: &str, unit: &EditUnit| {
+        let own = unit.own.clone().map(|own| text[own].to_owned());
+        let id = own.as_deref().is_some_and(|own| {
+            own.strip_prefix('^').is_some_and(|id| {
+                !id.is_empty() && id.chars().all(|c| c.is_alphanumeric() || c == '-')
+            })
+        });
+        (unit.kind, own.filter(|_| !id))
+    };
+    let before: Vec<_> = units.iter().map(|unit| shape(text, unit)).collect();
+    let mut after: Vec<_> = grown.iter().map(|unit| shape(&new, unit)).collect();
+    if after.len() != before.len() + 1 {
+        return fail("changes the count of units");
+    }
+    // A paragraph in a footnote is a unit of the footnote's kind.
+    let fresh = after.remove(index + 1);
+    if !matches!(fresh.0, EditKind::Paragraph | EditKind::Footnote)
+        || fresh.1.as_deref() != Some(FRESH)
+    {
+        return fail(&format!("makes {fresh:?}"));
+    }
+    if after != before {
+        let changed: Vec<_> = before.iter().zip(&after).filter(|(a, b)| a != b).collect();
+        return fail(&format!("changes another unit, {changed:?}"));
+    }
+    Ok(())
+}
+
+/// Spec examples where a new block after a unit joins other blocks, by their
+/// corner cases: a comment across blocks, a footnote definition inside
+/// another, and the continuation lines of a link definition.
+const JOINING_EXAMPLES: [usize; 5] = [42, 116, 117, 416, 419];
+
+/// Check a new block after each unit of every spec example whose number is
+/// `shard` modulo the shards. The unit invariants of each new text have
+/// checks of their own, in the hostile edits.
+fn check_new_block_shard(shard: usize) {
+    let mut failures = Vec::new();
+    for (number, example) in spec_examples()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .skip(shard)
+        .step_by(SPEC_SHARDS)
+    {
+        if JOINING_EXAMPLES.contains(&number) {
+            continue;
+        }
+        let document = testing::parse(example);
+        let units = edit_units(&document);
+        for index in 0..units.len() {
+            if let Err(error) = check_new_block_in(example, &document, &units, index, false) {
+                failures.push(format!("example {number}: {error}"));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn a_new_block_after_each_unit_of_the_spec_examples_stands_alone_0() {
+    check_new_block_shard(0);
+}
+
+#[test]
+fn a_new_block_after_each_unit_of_the_spec_examples_stands_alone_1() {
+    check_new_block_shard(1);
+}
+
+#[test]
+fn a_new_block_after_each_unit_of_the_spec_examples_stands_alone_2() {
+    check_new_block_shard(2);
+}
+
+#[test]
+fn a_new_block_after_each_unit_of_the_spec_examples_stands_alone_3() {
+    check_new_block_shard(3);
+}
+
 proptest! {
     #![proptest_config(testing::config(128))]
 
@@ -339,5 +533,10 @@ proptest! {
         own in any::<bool>(),
     ) {
         check_edit(&text, index, &replacement, own).map_err(TestCaseError::fail)?;
+    }
+
+    #[test]
+    fn a_new_block_after_any_unit_stands_alone(text in document(), index in 0..8usize) {
+        check_new_block(&text, index).map_err(TestCaseError::fail)?;
     }
 }

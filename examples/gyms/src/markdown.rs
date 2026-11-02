@@ -37,6 +37,11 @@ canopy::slot!(StatusSlot: Text);
 /// because a stream is appended repeatedly.
 const BINDINGS: &str = r#"
 root.default_bindings()
+markdown.default_bindings()
+-- The gym's reader edits no blocks, and its a appends a stream chunk.
+for _, path in { "**/markdown/", "**/markdown_reader/search_bar/**/", "**/markdown_body/markdown_rendered/", "**/markdown_body/markdown_source/" } do
+    canopy.unbind_key("a", { path = path })
+end
 canopy.keymap({
     path = "markdown_gym",
     { key = "a", description = "Append next stream chunk", action = command.markdown_gym.append_chunk() },

@@ -111,6 +111,14 @@ impl Markdown {
     /// document.
     pub fn append(&mut self, ctx: &mut dyn Context, text: &str) -> canopy::error::Result<u64>;
 
+    /// Open an empty block editor after the marked unit, in insert mode for
+    /// a vi editor. A commit puts its text after the unit as a new block,
+    /// with a blank line between them, in the quotes and list items of the
+    /// unit's first block. A blank text adds nothing. With no unit, the new
+    /// block goes at the end of the text. It does nothing where `edit_block`
+    /// does nothing, and shows the lock's notice as it does.
+    pub fn append_block(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
     /// Replace bytes `from..to` of the text of `epoch` with `text`, as a
     /// commit of the block editor does, and record the edit. The view stays
     /// rendered, and once the new text's layout shows, the cursor marks the
@@ -522,6 +530,9 @@ impl Markdown {
     pub fn call_activate() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
+    pub fn call_append_block() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
     pub fn call_apply_edit(epoch: u64, from: usize, to: usize, text: String) -> CommandCall;
 
     /// Build a positional call with typed user arguments.
@@ -655,6 +666,9 @@ impl Markdown {
 
     /// Return the command spec for this command.
     pub fn spec_activate() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_append_block() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_apply_edit() -> &'static CommandSpec;

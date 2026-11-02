@@ -58,6 +58,7 @@ pub(super) fn editing_with(
     let reader = Markdown::new(text.to_owned(), options).unwrap();
     let harness = Harness::builder(reader)
         .register::<Markdown>()
+        .script("markdown-defaults", "markdown.default_bindings()")
         .size(width, height)
         .build()
         .unwrap();
@@ -399,13 +400,14 @@ fn a_locked_reader_opens_commits_and_discards_nothing() {
 
 #[test]
 fn e_in_a_document_without_units_opens_an_empty_editor_at_the_end() {
-    for (text, expected) in [
-        ("", "First"),
-        ("[a]: https://a.test\n", "[a]: https://a.test\n\nFirst"),
+    for (text, expected, key) in [
+        ("", "First", "e"),
+        ("[a]: https://a.test\n", "[a]: https://a.test\n\nFirst", "e"),
+        ("[a]: https://a.test\n", "[a]: https://a.test\n\nFirst", "a"),
     ] {
         let (mut harness, manual) = editing(text, EditMode::Text, 40, 10);
         settle(&mut harness, &manual);
-        press(&mut harness, "e");
+        press(&mut harness, key);
         assert_eq!(draft(&mut harness).as_deref(), Some(""), "{text:?}");
         type_text(&mut harness, "First");
         press(&mut harness, "Escape");
@@ -415,6 +417,77 @@ fn e_in_a_document_without_units_opens_an_empty_editor_at_the_end() {
         let unit = reader(&mut harness, |reader, _| Ok(reader.selected_block())).unwrap();
         assert_eq!(&source[unit.range], "First");
     }
+}
+
+#[test]
+fn a_opens_an_empty_editor_after_the_marked_unit_and_its_commit_adds_a_block() {
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    press(&mut harness, "j");
+    let next = super::cursor_tests::extents(&mut harness)[2].start;
+    let row = next - view(&mut harness).0;
+    press(&mut harness, "a");
+    // The editor opens empty, and takes text at once.
+    let (text, _, mode) = editor_state(&mut harness);
+    assert_eq!(text, "");
+    assert_eq!(mode, Some(ViMode::Insert));
+    // It lies where the next unit started, with the blank rows between the
+    // units above and below it.
+    let lines = harness.tbuf().lines();
+    assert_eq!(harness.buf().get(Point::new(0, row)).unwrap().ch, '▌');
+    assert!(lines[row as usize - 1].trim().is_empty(), "{lines:#?}");
+    assert!(lines[row as usize + 1].trim().is_empty(), "{lines:#?}");
+    assert!(lines[row as usize + 2].contains("item a"), "{lines:#?}");
+    type_text(&mut harness, "new words");
+    press(&mut harness, "Escape");
+    press(&mut harness, "Escape");
+    // The new block lies in the quote, after a blank line of it.
+    let at = DOCUMENT.find("> beta line").unwrap() + "> beta line".len();
+    let edits = reader(&mut harness, |reader, _| Ok(reader.take_edits()));
+    assert_eq!(edits.len(), 1);
+    assert_eq!(edits[0].range, at..at);
+    assert_eq!(edits[0].text, "\n>\n> new words");
+    settle(&mut harness, &manual);
+    // The cursor marks the new block, on the row where the editor was.
+    let source = reader(&mut harness, |reader, _| Ok(reader.accepted_source()));
+    let selected = reader(&mut harness, |reader, _| Ok(reader.selected_block())).unwrap();
+    assert_eq!(&source[selected.range], "> new words");
+    let (_, rows) = marked(&mut harness).unwrap();
+    assert_eq!(rows.start - view(&mut harness).0, row);
+}
+
+#[test]
+fn a_blank_new_block_adds_nothing() {
+    for mode in [EditMode::Vi, EditMode::Text] {
+        let (mut harness, manual) = editing(DOCUMENT, mode, 40, 20);
+        settle(&mut harness, &manual);
+        press(&mut harness, "j");
+        let before = screen(&harness);
+        press(&mut harness, "a");
+        type_text(&mut harness, "  ");
+        press(&mut harness, "Escape");
+        press(&mut harness, "Escape");
+        settle(&mut harness, &manual);
+        assert!(!reader(&mut harness, |reader, _| Ok(reader.block_open())));
+        assert!(reader(&mut harness, |reader, _| Ok(reader.take_edits())).is_empty());
+        assert_eq!(screen(&harness), before, "{mode:?}");
+    }
+}
+
+#[test]
+fn the_draft_of_a_new_block_is_its_source() {
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Text, 40, 20);
+    settle(&mut harness, &manual);
+    press(&mut harness, "j");
+    press(&mut harness, "j");
+    press(&mut harness, "a");
+    type_text(&mut harness, "more");
+    let at = DOCUMENT.find("- item a").unwrap() + "- item a".len();
+    let edit = reader(&mut harness, |reader, ctx| Ok(reader.block_draft(ctx))).unwrap();
+    // The new paragraph lies in the list item, and the next item keeps a
+    // blank line before it.
+    assert_eq!(edit.range, at..at);
+    assert_eq!(edit.text, "\n\n  more\n");
 }
 
 #[test]

@@ -11,7 +11,13 @@ Run the examples with `cargo run -p gyms -- markdown` and
 
 Register `Markdown` during setup, construct it with `Markdown::new(text, options)`,
 and mount it as a child. Preparation starts after the reader receives its viewport
-width. `ready()` reports whether the active view has caught up with accepted input,
+width.
+
+Registration binds no keys. The reader's keys are a Luau script, which a host's
+configuration runs with `markdown.default_bindings()`, or replaces with keymaps
+of its own. The script is `crates/canopy-markdown/src/widget/bindings.luau`, and
+it lists every key that this document names. The keys of an inspector, other
+than its `y`, belong to its framework group, and bind at registration. `ready()` reports whether the active view has caught up with accepted input,
 geometry, and search. The outgoing view remains usable during preparation.
 
 Create one `MarkdownExecutor` per host and clone it into the `MarkdownOptions` of
@@ -244,6 +250,21 @@ at the same fraction of the unit. With no unit, `e` opens an empty editor at
 the end of the text, and its commit adds the line breaks that start a new
 block. A resize lays out the same text again around the editor.
 
+`a`, or `append_block`, opens an empty editor after the marked unit, in insert
+mode for a vi editor. The editor takes the screen row where the next unit
+started, with the rows between the two units above and below it, so it shows
+as a block of its own. Its commit puts the text after the unit as a new block,
+with a blank line between them, and a blank line after it when a line follows
+with none. Each line takes the prefix of the containers of the unit's first
+block: its quote markers, and blanks in place of its list markers. A footnote
+label takes the indent of a footnote's body, and the indent of indented code is
+no container. So a new block after a quoted paragraph is a paragraph of the
+same quote, and one after a list item is a paragraph of that item. A blank
+text adds nothing. A fence or raw HTML block that runs to the end of its
+container takes the new block in, as it would take any text after it. The
+block cursor then marks the new block. With no unit, `a` opens the editor at
+the end of the text, as `e` does.
+
 The editor sits outside the paths of the reader's bindings, so the reader's
 keys never reach it, and `/` and `ctrl-r` are the editor's. The reader's own
 search field closes, and its search, Source view, and inspectors wait until
@@ -262,8 +283,8 @@ returns to it, and commits it when it differs from the text before the edit.
 `lock_blocks` with a notice stops every change through the reader, which
 includes opening the editor, while a host needs the text to stay as it is,
 and `None` lifts the lock. Each change of the user that the lock refuses,
-from `e`, `Esc`, `ctrl-x`, or a script's `edit_block`, `commit_block`, or
-`discard_block`, shows the notice as an info notice, so the user learns why
+from `e`, `a`, `Esc`, `ctrl-x`, or a script's `edit_block`, `append_block`,
+`commit_block`, or `discard_block`, shows the notice as an info notice, so the user learns why
 nothing happened. A refused `apply_edit` returns its error to the host and
 shows nothing.
 
@@ -279,7 +300,7 @@ waits. `accepted_source` returns the reader's text, with every edit in it.
 An edit does not go through `replace`. The reader takes the new text as a
 new epoch, but keeps the frame on screen: the editor, or the rendered rows
 of a direct edit. When the new layout shows, the block cursor marks the unit
-at the edit's first byte, on the screen row where the frame showed the edited
+at the edit's first byte, or at the first line of a new block, on the screen row where the frame showed the edited
 block, and the editor closes. That is the editor's row, which it may have
 left to fit its text, or the unit's row, which is the top row for a unit
 that starts above the view. Until then, `j`, `k`, `e`, and the pointer do
