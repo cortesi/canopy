@@ -113,6 +113,23 @@ impl TextBuffer {
         self.rope.to_string()
     }
 
+    /// Return the position of the character that holds UTF-8 byte
+    /// `offset`. An offset past the end clamps to the end, and an offset in a
+    /// line's separator clamps to the end of that line.
+    pub fn position_of_offset(&self, offset: usize) -> TextPosition {
+        let index = self.rope.byte_to_char(offset.min(self.rope.len_bytes()));
+        let line = self.rope.char_to_line(index);
+        self.clamp_position(TextPosition::new(
+            line,
+            index - self.rope.line_to_char(line),
+        ))
+    }
+
+    /// Return the UTF-8 byte offset of `position`, clamped to the text.
+    pub fn offset_of_position(&self, position: TextPosition) -> usize {
+        self.rope.char_to_byte(self.position_to_char(position))
+    }
+
     /// Return the total number of logical lines.
     pub fn line_count(&self) -> usize {
         self.rope.len_lines()
@@ -708,6 +725,31 @@ mod tests {
             assert_eq!(buffer.text(), expected);
             assert_eq!(buffer.selection(), Selection::caret(after));
         }
+    }
+
+    #[test]
+    fn byte_offsets_and_positions_convert_both_ways() {
+        let buffer = TextBuffer::new("aé\r\nb🙂c\nd");
+        let cases = [
+            (0, TextPosition::new(0, 0)),
+            (1, TextPosition::new(0, 1)),
+            (3, TextPosition::new(0, 2)),
+            (5, TextPosition::new(1, 0)),
+            (6, TextPosition::new(1, 1)),
+            (10, TextPosition::new(1, 2)),
+            (12, TextPosition::new(2, 0)),
+        ];
+        for (offset, position) in cases {
+            assert_eq!(buffer.position_of_offset(offset), position, "{offset}");
+            assert_eq!(buffer.offset_of_position(position), offset, "{position:?}");
+        }
+        // A byte inside a character, a separator, or past the end clamps.
+        assert_eq!(buffer.position_of_offset(2), TextPosition::new(0, 1));
+        assert_eq!(buffer.position_of_offset(4), TextPosition::new(0, 2));
+        assert_eq!(buffer.position_of_offset(99), TextPosition::new(2, 1));
+        assert_eq!(buffer.offset_of_position(TextPosition::new(0, 9)), 3);
+        assert_eq!(buffer.offset_of_position(TextPosition::new(9, 0)), 12);
+        assert_eq!(buffer.offset_of_position(TextPosition::new(9, 9)), 13);
     }
 
     #[test]

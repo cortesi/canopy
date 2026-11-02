@@ -1164,6 +1164,19 @@ impl Editor {
         self.buffer.cursor()
     }
 
+    /// Return the position of the character that holds UTF-8 byte `offset`
+    /// of the text. An offset past the end clamps to the end, and an offset
+    /// in a line's separator clamps to the end of that line.
+    pub fn position_of_offset(&self, offset: usize) -> TextPosition {
+        self.buffer.position_of_offset(offset)
+    }
+
+    /// Return the UTF-8 byte offset of `position` in the text, clamped to
+    /// the text.
+    pub fn offset_of_position(&self, position: TextPosition) -> usize {
+        self.buffer.offset_of_position(position)
+    }
+
     /// Move the cursor to `position`, and scroll it into view. A position
     /// past the end of its line or of the text clamps to that end.
     pub fn set_cursor(&mut self, ctx: &mut dyn Context, position: TextPosition) {

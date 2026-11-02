@@ -250,6 +250,26 @@ fn assert_capture_matches(mode: EditMode, read_only: bool, setup: &[&str]) {
 }
 
 #[test]
+fn byte_offsets_place_the_cursor() {
+    let mut harness = build_harness("one\r\ntwo é\nthree", EditorConfig::new(), 20, 4);
+    let position = with_editor(&mut harness, |editor| editor.position_of_offset(9));
+    assert_eq!(position, TextPosition::new(1, 4));
+    harness
+        .with_root_widget_context(|_: &mut EditorHost, ctx| {
+            ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |editor, ctx| {
+                editor.set_cursor(ctx, position);
+                Ok(())
+            })
+        })
+        .unwrap();
+    assert_eq!(editor_cursor(&mut harness), position);
+    let offset = with_editor(&mut harness, |editor| {
+        editor.offset_of_position(editor.cursor())
+    });
+    assert_eq!(offset, 9);
+}
+
+#[test]
 fn key_capture_matches_event_handling_in_every_mode() {
     assert_capture_matches(EditMode::Text, false, &[]);
     assert_capture_matches(EditMode::Text, true, &[]);
