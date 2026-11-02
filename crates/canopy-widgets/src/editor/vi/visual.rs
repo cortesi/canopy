@@ -198,11 +198,26 @@ impl Editor {
 
     /// Enter visual mode of kind `mode`, with both ends at the cursor. A
     /// cursor on the end of a line moves to its last character first, as a
-    /// normal-mode cursor in Vim never rests there.
+    /// normal-mode cursor in Vim never rests there, and a cursor inside a
+    /// grapheme moves to its start.
     pub(in crate::editor) fn enter_visual(&mut self, mode: VisualMode) {
         let cursor = motion::clamp_to_char(&self.buffer, self.buffer.cursor());
+        let cursor = motion::grapheme_start(&self.buffer, cursor);
         self.vi.set_mode(ViMode::Visual(mode));
         self.buffer.set_cursor(cursor);
+    }
+
+    /// Move each end of a visual selection inside a grapheme to the start
+    /// of the grapheme, as when new text joins the char at an end.
+    pub(in crate::editor) fn snap_visual_ends(&mut self) {
+        if self.visual_mode().is_none() {
+            return;
+        }
+        let selection = self.buffer.selection();
+        self.buffer.set_selection(Selection::new(
+            motion::grapheme_start(&self.buffer, selection.anchor()),
+            motion::grapheme_start(&self.buffer, selection.head()),
+        ));
     }
 
     /// Leave visual mode, and collapse the selection at the cursor. A cursor

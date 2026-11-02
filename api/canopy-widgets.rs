@@ -4266,7 +4266,9 @@ pub mod editor {
     pub enum EditMode {
         /// Text entry mode with direct insertion.
         Text,
-        /// Vi-style modal editing.
+        /// Vi-style modal editing. Its keys follow Neovim with its default
+        /// options. Visual mode selects as Vim does with 'selection' set to
+        /// inclusive; [`Editor::selection`] gives the selected range.
         Vi,
     }
 
@@ -4731,9 +4733,10 @@ pub mod editor {
     /// Visual selection mode.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum VisualMode {
-        /// Character-wise visual mode.
+        /// Character-wise visual mode: the selection holds the characters at
+        /// both ends and every character between them.
         Character,
-        /// Line-wise visual mode.
+        /// Line-wise visual mode: the selection holds whole lines.
         Line,
     }
 

@@ -380,6 +380,7 @@ impl Editor {
         self.prepared_width = Some(prepared.width);
         if preserve {
             self.buffer.set_selection(selection);
+            self.snap_visual_ends();
         } else {
             self.vi = ViState::new();
             self.mouse = MouseState::new();

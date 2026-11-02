@@ -687,6 +687,33 @@ fn a_delete_that_joins_a_carriage_return_to_a_break_keeps_the_cursor_in_the_line
     assert_eq!(editor.cursor(), TextPosition::new(0, 2));
 }
 
+#[test]
+fn visual_mode_starts_at_the_start_of_a_grapheme() {
+    // Found by the `vi_keys` fuzz target: a char typed before a combining
+    // mark leaves the cursor inside the grapheme they form, and `v` started
+    // the selection there.
+    let editor = run("\u{73b}%c", (0, 0), "iX<Esc>v");
+    assert_eq!(editor.text(), "X\u{73b}%c");
+    assert_eq!(
+        state(&editor),
+        (range((0, 0), (0, 2)), TextPosition::new(0, 0))
+    );
+}
+
+#[test]
+fn a_publication_keeps_the_visual_ends_on_graphemes() {
+    let mut editor = run("ae", (0, 0), "v$");
+    let mut prepared = Editor::prepare_view("ae\u{301}x", editor.config().clone(), 20);
+    editor.publish_view(prepared, true);
+    assert_eq!(
+        state(&editor),
+        (range((0, 0), (0, 3)), TextPosition::new(0, 1))
+    );
+    prepared = Editor::prepare_view("ae\u{301}x", editor.config().clone(), 20);
+    editor.publish_view(prepared, true);
+    assert_eq!(editor.cursor(), TextPosition::new(0, 1));
+}
+
 /// Text for the properties: words, punctuation, blanks, line breaks, and
 /// multibyte graphemes.
 fn text_strategy() -> impl Strategy<Value = String> {

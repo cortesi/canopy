@@ -34,9 +34,10 @@ pub enum ViMode {
 /// Visual selection mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VisualMode {
-    /// Character-wise visual mode.
+    /// Character-wise visual mode: the selection holds the characters at
+    /// both ends and every character between them.
     Character,
-    /// Line-wise visual mode.
+    /// Line-wise visual mode: the selection holds whole lines.
     Line,
 }
 
