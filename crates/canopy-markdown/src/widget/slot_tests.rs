@@ -1034,3 +1034,43 @@ fn each_change_the_lock_refuses_shows_its_notice() {
         1
     );
 }
+
+#[test]
+fn keys_after_a_commit_reach_the_reader_until_its_layout_shows() {
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    press(&mut harness, "e");
+    harness.key('A').unwrap();
+    type_text(&mut harness, " new");
+    press(&mut harness, "Escape");
+    // At the start of the line, x in the editor would delete a char.
+    press(&mut harness, "0");
+    let editor = reader(&mut harness, |reader, _| Ok(reader.block_editor())).unwrap();
+    press(&mut harness, "Escape");
+    // The commit waits for its layout, and the keys before it shows go to
+    // the reader: x changes nothing, and j waits.
+    assert!(!reader(&mut harness, |reader, _| Ok(reader.block_open())));
+    press(&mut harness, "x");
+    press(&mut harness, "j");
+    let (text, focused) = reader(&mut harness, |reader, ctx| {
+        let text = ctx.with_widget(editor, |editor: &Editor| Ok(editor.text()))?;
+        Ok((
+            text,
+            ctx.focused_node() == Some(reader.nodes.as_ref().unwrap().rendered),
+        ))
+    });
+    assert_eq!(text, "## One new");
+    assert!(focused, "the rendered view holds the focus");
+    settle(&mut harness, &manual);
+    let edits = reader(&mut harness, |reader, _| Ok(reader.take_edits()));
+    assert_eq!(edits.len(), 1);
+    assert_eq!(edits[0].text, "## One new");
+    assert!(
+        reader(&mut harness, |reader, _| Ok(reader.accepted_source())).starts_with("## One new\n")
+    );
+    assert_eq!(
+        marked(&mut harness).unwrap().0,
+        0,
+        "j waited for the layout"
+    );
+}

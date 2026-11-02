@@ -21,7 +21,7 @@ use canopy::{
 use canopy_widgets::highlight::SyntectHighlighter;
 use canopy_widgets::{
     Answer, Closing, Confirm, ConfirmRequest, Container,
-    editor::{Editor, EditorConfig},
+    editor::{Editor, EditorConfig, Interaction},
 };
 
 use super::{BlockEdit, Markdown, invalid};
@@ -514,6 +514,23 @@ fn finish(reader: &mut Markdown, ctx: &mut dyn Context, target: &str) -> Result<
     reader.edit_text(ctx, edit, Some(row))?;
     if let Some(slot) = reader.slot.as_mut() {
         slot.committed = true;
+        // The committed editor shows until the new layout does, and takes
+        // no more keys: they go to the reader, whose keys that need the new
+        // layout wait for it.
+        let (editor, column) = (slot.editor, slot.column);
+        ctx.with_widget_mut(editor, |editor: &mut Editor, _| {
+            let config = editor
+                .config()
+                .clone()
+                .with_interaction(Interaction::Display);
+            editor.set_config(config);
+            Ok(())
+        })?;
+        if ctx.is_on_focus_path(column)
+            && let Some(nodes) = reader.nodes.as_ref()
+        {
+            ctx.set_focus(nodes.rendered)?;
+        }
     }
     reader.update_chrome(ctx)
 }
