@@ -75,9 +75,10 @@ bottom at the bottom of the view.
 While the marked unit continues past the view, `j` or `k` scrolls and the
 cursor stays. The step is a page less two rows, and at least one row. Page
 keys, `Space`, and the wheel scroll freely. When the marked unit leaves the
-view, the cursor marks the first unit with a row in view. A resize keeps the
-marked unit in view. A click on a unit, and a search match that becomes
-current, move the cursor to that unit.
+view, the cursor marks the first unit with a row in view. A resize or a new
+layout keeps the marked unit on its screen row where it can, and in view. A
+click on a unit, and a search match that becomes current, move the cursor to
+that unit.
 
 `MarkdownOptions::resting_mode` sets where the view rests. With Scroll, the
 default, `Esc` leaves the block cursor. With Interact, a new document opens in
@@ -89,9 +90,9 @@ shows, the reader marks the unit once it does. `selected_block` returns the
 marked unit.
 
 The object cursor works inside the block cursor. `Tab` and `shift-Tab` move
-it through the links, cards, and tables of the document, in source order. The
-block cursor follows to the object's unit, and a move to another unit drops
-the object. The active object takes an accent-tinted ground, which spans the
+it through the links, cards, and tables of the document, in source order, and
+enter the block cursor from Scroll. The block cursor follows to the object's
+unit, and a move to another unit drops the object. The active object takes an accent-tinted ground, which spans the
 full width of a card or table.
 
 `Enter` opens the active object. With none, it opens the marked unit's own

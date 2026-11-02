@@ -309,6 +309,157 @@ fn tab_carries_the_cursor_to_an_object_and_j_drops_it() {
     assert_eq!(marked(&mut harness).map(|(unit, _)| unit), Some(4));
 }
 
+/// Step the object cursor by `delta`, staying at the ends of the document,
+/// and return the marked unit and whether an object is active.
+fn object_step(harness: &mut Harness, delta: i32) -> (Option<usize>, Option<u64>) {
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            let node = reader.nodes.as_ref().unwrap().rendered;
+            ctx.with_widget_mut(node, |surface: &mut RenderedSurface, ctx| {
+                surface.object_next(ctx, delta, false)
+            })
+        })
+        .unwrap();
+    service(harness);
+    harness.with_root_widget(|reader: &mut Markdown| {
+        let mut state = reader.shared.borrow_mut();
+        (state.marked_index(), state.overlays.active_object)
+    })
+}
+
+#[test]
+fn the_object_cursor_steps_both_ways_from_the_marked_unit() {
+    let (mut harness, manual) = reader(DOCUMENT, Mode::Interact, 40, 40);
+    settle(&mut harness, &manual);
+    // The link lies in unit 1 and the code card is unit 4.
+    let (unit, link) = object_step(&mut harness, 1);
+    assert_eq!(unit, Some(1));
+    let (unit, code) = object_step(&mut harness, 1);
+    assert_eq!(unit, Some(4));
+    assert_ne!(code, link);
+    // Past the last object, the cursor stays.
+    assert_eq!(object_step(&mut harness, 1), (Some(4), code));
+    assert_eq!(object_step(&mut harness, -1), (Some(1), link));
+    assert_eq!(object_step(&mut harness, -1), (Some(1), link));
+    // With no active object, a step starts from the marked unit: forward at
+    // its first object at or after it, backward at its last before it.
+    for (marked, delta, expected) in [(2, 1, code), (2, -1, link), (5, -1, code)] {
+        press(&mut harness, "Escape");
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                let byte = reader.shared.borrow_mut().cursor_map().unwrap().0[marked]
+                    .range
+                    .start;
+                reader.select_block_at(ctx, byte)
+            })
+            .unwrap();
+        service(&mut harness);
+        assert_eq!(
+            object_step(&mut harness, delta).1,
+            expected,
+            "{marked} {delta}"
+        );
+    }
+    // A reader that never marked a unit steps back from the last object.
+    let (mut harness, manual) = reader(DOCUMENT, Mode::Scroll, 40, 40);
+    settle(&mut harness, &manual);
+    assert_eq!(object_step(&mut harness, -1), (Some(4), code));
+}
+
+/// Readers in a column, for focus traversal.
+struct Pair {
+    /// The readers to mount.
+    readers: Vec<Markdown>,
+}
+
+impl Widget for Pair {
+    fn name(&self) -> NodeName {
+        NodeName::convert("pair")
+    }
+    fn layout(&self) -> Layout {
+        Layout::fill().direction(Direction::Column)
+    }
+    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        for reader in self.readers.drain(..) {
+            let node = ctx.add_child(ctx.node_id(), reader)?;
+            ctx.set_layout_override(node.into(), Layout::fill().into())?;
+        }
+        Ok(())
+    }
+}
+
+impl Register for Pair {
+    fn register(setup: &mut Setup) -> Result<()> {
+        Markdown::register(setup)
+    }
+}
+
+#[test]
+fn the_object_cursor_leaves_each_end_toward_its_own_side() {
+    let (executor, manual) = MarkdownExecutor::manual(ExecutorOptions::default());
+    let readers = (0..3)
+        .map(|_| {
+            Markdown::new(
+                "[one](https://one.test)\n".into(),
+                MarkdownOptions {
+                    executor: executor.clone(),
+                    resting_mode: Mode::Interact,
+                    status_row: false,
+                    coalesce: Duration::ZERO,
+                    ..MarkdownOptions::default()
+                },
+            )
+            .unwrap()
+        })
+        .collect();
+    let mut harness = Harness::builder(Pair { readers })
+        .register::<Pair>()
+        .size(30, 12)
+        .build()
+        .unwrap();
+    let mut readers = Vec::new();
+    for _ in 0..16 {
+        harness.render().unwrap();
+        readers = harness
+            .with_root_widget_context(|_: &mut Pair, ctx| {
+                let nodes = ctx.find_nodes("**/markdown")?;
+                for node in &nodes {
+                    ctx.with_widget_mut(*node, |reader: &mut Markdown, ctx| {
+                        Widget::poll(reader, ctx).map(|_| ())
+                    })?;
+                }
+                Ok(nodes)
+            })
+            .unwrap();
+        manual.run_until_idle();
+    }
+    assert_eq!(readers.len(), 3);
+    let second = readers[1];
+    // From the middle reader's only object, Tab leaves for the next reader,
+    // and shift-Tab for a node before it.
+    let mut left = Vec::new();
+    for delta in [-1, 1] {
+        let focused = harness
+            .with_root_widget_context(|_: &mut Pair, ctx| {
+                let surface = ctx.with_widget(second, |reader: &Markdown| {
+                    Ok(reader.navigation_node().unwrap())
+                })?;
+                ctx.set_focus(surface)?;
+                ctx.with_widget_mut(second, |reader: &mut Markdown, ctx| {
+                    reader.shared.borrow_mut().overlays.active_object = None;
+                    reader.next_object(ctx, delta)?;
+                    reader.next_object(ctx, delta)
+                })?;
+                Ok(ctx.focused_node())
+            })
+            .unwrap();
+        assert_ne!(focused, None);
+        left.push(focused);
+    }
+    assert_eq!(left[1], Some(readers[2]), "Tab leaves for the next reader");
+    assert_ne!(left[0], left[1], "shift-Tab leaves the other way");
+}
+
 #[test]
 fn enter_opens_the_marked_units_card_and_y_copies_its_source() {
     let (mut harness, manual) = reader(DOCUMENT, Mode::Interact, 40, 40);
