@@ -638,20 +638,19 @@ impl<'a> Vim<'a> {
     /// closing punctuation may follow it, and then a blank, the end of the
     /// line, or the end of the text. If so, move `position` to the char
     /// after, past the end of a line, and return true.
+    ///
+    /// Each step starts on a char, never on the end of a line, so it always
+    /// moves, and Vim's test for the end of the text here never holds.
     fn ends_sentence(&mut self, position: &mut TextPosition) -> bool {
         let mut after = *position;
-        let mut at_end = false;
         loop {
-            if self.inc(&mut after) == -1 {
-                at_end = true;
-                break;
-            }
+            self.inc(&mut after);
             if !one_of(self.gchar(after), ")]\"'") {
                 break;
             }
         }
         let c = self.gchar(after);
-        if !(at_end || is_white(c) || c.is_none()) {
+        if !(is_white(c) || c.is_none()) {
             return false;
         }
         *position = after;
@@ -942,27 +941,24 @@ impl<'a> Vim<'a> {
         if !include && white_in_front {
             remaining -= 1;
         }
+        // Vim skips blank lines first for `ip` with a count above one, when
+        // the next line is blank. With a count of one, `ip` reaches this loop
+        // only from a line of text, so that skip never applies.
         while remaining > 0 {
             remaining -= 1;
             if end_line == line_count {
                 return false;
             }
-            let do_white = !include && self.line_white(end_line);
-            if include || !do_white {
+            end_line += 1;
+            // Skip to the end of the paragraph.
+            while end_line < line_count && !self.line_white(end_line) && !self.start_ps(end_line) {
                 end_line += 1;
-                // Skip to the end of the paragraph.
-                while end_line < line_count
-                    && !self.line_white(end_line)
-                    && !self.start_ps(end_line)
-                {
-                    end_line += 1;
-                }
             }
             if remaining == 0 && white_in_front && include {
                 break;
             }
             // Skip to the end of the blank lines after the paragraph.
-            if include || do_white {
+            if include {
                 while end_line < line_count && self.line_white(end_line) {
                     end_line += 1;
                 }
