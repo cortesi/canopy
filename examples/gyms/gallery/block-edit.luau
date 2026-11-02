@@ -61,4 +61,8 @@ shot("block-edit-discard", "Discard", "Ctrl-x asks before it discards the change
 press("d")
 committed()
 canopy.assert(gym("applied") == 1, "a discard gives the host no edit")
+press("L")
+press("e")
+canopy.assert(not gym("editing"), "a locked reader opens no editor")
+shot("block-edit-locked", "Locked", "While the host locks the blocks, e shows the host's notice instead of an editor.")
 return shots

@@ -1,7 +1,7 @@
 //! The block editor in the slot, driven through the reader's keys and
 //! commands, as a host with no bindings of its own drives it.
 
-use canopy::{render::TermBuf, testing::harness::Harness};
+use canopy::{render::TermBuf, runtime::NoticeLevel, testing::harness::Harness};
 use canopy_widgets::editor::{EditMode, EditorConfig, TextPosition, ViMode};
 
 use super::{
@@ -12,6 +12,9 @@ use crate::{
     executor::{ExecutorOptions, ManualExecutor, MarkdownExecutor},
     units::parse_units,
 };
+
+/// The notice of the tests' lock on block edits.
+const LOCKED: &str = "Blocks wait for the words";
 
 /// A document of a heading, a paragraph in a quote, a list, and a code
 /// block.
@@ -263,14 +266,14 @@ fn ctrl_x_is_the_editors_discard_and_a_hosts_key_otherwise() {
     let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
     settle(&mut harness, &manual);
     harness
-        .script(r#"canopy.bind("ctrl-x", { description = "Host" }, command.markdown.lock_blocks(true))"#)
+        .script(r#"canopy.bind("ctrl-x", { description = "Host" }, command.markdown.lock_blocks("Host"))"#)
         .unwrap();
     let locked = |harness: &mut Harness| reader(harness, |reader, _| Ok(reader.blocks_locked()));
     // With no editor open, the host's ctrl-x takes the key.
     press(&mut harness, "ctrl-x");
     assert!(locked(&mut harness));
     reader(&mut harness, |reader, _| {
-        reader.lock_blocks(false);
+        reader.lock_blocks(None);
         Ok(())
     });
     // In the editor, ctrl-x discards before the editor reads it, even in
@@ -344,7 +347,7 @@ fn apply_edit_refuses_what_it_cannot_make() {
     assert!(refused(&mut harness, epoch, 0..0, "x"));
     // A locked reader refuses too, and nothing changed.
     reader(&mut harness, |reader, _| {
-        reader.lock_blocks(true);
+        reader.lock_blocks(Some(LOCKED.into()));
         Ok(())
     });
     assert!(refused(&mut harness, epoch, 0..3, "ONE"));
@@ -353,7 +356,7 @@ fn apply_edit_refuses_what_it_cannot_make() {
     assert!(reader(&mut harness, |reader, _| Ok(reader.take_edits())).is_empty());
     // Unlocked, it edits.
     reader(&mut harness, |reader, ctx| {
-        reader.lock_blocks(false);
+        reader.lock_blocks(None);
         reader.apply_edit(ctx, epoch, 0, 3, "ONE".into())
     });
     let source = reader(&mut harness, |reader, _| Ok(reader.accepted_source()));
@@ -370,20 +373,20 @@ fn a_locked_reader_opens_commits_and_discards_nothing() {
     let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
     settle(&mut harness, &manual);
     reader(&mut harness, |reader, _| {
-        reader.lock_blocks(true);
+        reader.lock_blocks(Some(LOCKED.into()));
         Ok(())
     });
     press(&mut harness, "e");
     assert!(!reader(&mut harness, |reader, _| Ok(reader.block_open())));
     reader(&mut harness, |reader, _| {
-        reader.lock_blocks(false);
+        reader.lock_blocks(None);
         Ok(())
     });
     press(&mut harness, "e");
     harness.key('x').unwrap();
     service(&mut harness);
     reader(&mut harness, |reader, _| {
-        reader.lock_blocks(true);
+        reader.lock_blocks(Some(LOCKED.into()));
         Ok(())
     });
     press(&mut harness, "Escape");
@@ -967,5 +970,67 @@ fn a_document_that_is_still_arriving_cannot_be_edited() {
     assert_eq!(
         &*reader(&mut harness, |reader, _| Ok(reader.accepted_source())),
         "# Live\n\nmore"
+    );
+}
+
+#[test]
+fn each_change_the_lock_refuses_shows_its_notice() {
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    // The number of times the lock's notice has shown.
+    let shown = |harness: &Harness| -> u32 {
+        harness
+            .canopy
+            .notice_log()
+            .entries()
+            .iter()
+            .filter(|notice| notice.message == LOCKED && notice.level == NoticeLevel::Info)
+            .map(|notice| notice.repeats)
+            .sum()
+    };
+    let lock = |harness: &mut Harness, notice: Option<&str>| {
+        reader(harness, |reader, _| {
+            reader.lock_blocks(notice.map(str::to_owned));
+            Ok(())
+        });
+    };
+    lock(&mut harness, Some(LOCKED));
+    press(&mut harness, "e");
+    assert_eq!(shown(&harness), 1, "e");
+    harness.script("markdown.edit_block()").unwrap();
+    service(&mut harness);
+    assert_eq!(shown(&harness), 2, "edit_block from a script");
+    lock(&mut harness, None);
+    press(&mut harness, "e");
+    harness.key('x').unwrap();
+    service(&mut harness);
+    lock(&mut harness, Some(LOCKED));
+    press(&mut harness, "Escape");
+    assert_eq!(shown(&harness), 3, "Esc");
+    press(&mut harness, "ctrl-x");
+    assert_eq!(shown(&harness), 4, "ctrl-x");
+    harness.script("markdown.commit_block()").unwrap();
+    harness.script("markdown.discard_block(true)").unwrap();
+    assert_eq!(
+        shown(&harness),
+        6,
+        "commit_block and discard_block from a script"
+    );
+    // apply_edit returns its error to the host, with no notice.
+    let refused = reader(&mut harness, |reader, ctx| {
+        let epoch = reader.epoch();
+        Ok(reader.apply_edit(ctx, epoch, 0, 1, "x".into()).is_err())
+    });
+    assert!(refused);
+    assert_eq!(shown(&harness), 6, "apply_edit");
+    assert!(reader(&mut harness, |reader, _| Ok(reader.block_open())));
+    // Unlocked, the edit goes through and no notice shows.
+    lock(&mut harness, None);
+    press(&mut harness, "Escape");
+    settle(&mut harness, &manual);
+    assert_eq!(shown(&harness), 6);
+    assert_eq!(
+        reader(&mut harness, |reader, _| Ok(reader.take_edits())).len(),
+        1
     );
 }

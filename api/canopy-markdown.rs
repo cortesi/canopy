@@ -162,7 +162,8 @@ impl Markdown {
 
     /// Commit the block editor: record its text as an edit when it differs
     /// from the text before the edit, and close it once the edit's layout
-    /// shows. A commit with no change records nothing.
+    /// shows. A commit with no change records nothing. While the host locks
+    /// blocks, it shows the lock's notice.
     pub fn commit_block(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Complete one host effect; duplicate and replaced-document replies are
@@ -183,7 +184,8 @@ impl Markdown {
     pub fn copy_source(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Close the block editor and drop the changes since the last
-    /// checkpoint. With such changes, ask first unless `confirmed`.
+    /// checkpoint. With such changes, ask first unless `confirmed`. While
+    /// the host locks blocks, it shows the lock's notice.
     /// @param confirmed Whether to drop the changes without asking.
     pub fn discard_block(
         &mut self,
@@ -200,8 +202,8 @@ impl Markdown {
     /// Open the block editor on the marked unit, in place of its rows, at
     /// the start of its own text. With no unit, open an empty editor at the
     /// end of the text. It does nothing without a block editor in the
-    /// options, while the host locks blocks, an inspector is open, or an
-    /// edit awaits its layout.
+    /// options, while an inspector is open, or while an edit awaits its
+    /// layout. While the host locks blocks, it shows the lock's notice.
     pub fn edit_block(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Current document epoch.
@@ -262,11 +264,15 @@ impl Markdown {
     #[must_use]
     pub fn link_missing(&self, destination: &str) -> bool;
 
-    /// Stop, or allow again, every change through the reader: commit,
-    /// discard, `apply_edit`, and opening the block editor. A host locks the
-    /// reader while a captured voice target must stay valid.
-    /// @param locked Whether to stop changes.
-    pub fn lock_blocks(&mut self, locked: bool);
+    /// Stop every change through the reader, or allow them again with
+    /// `None`: commit, discard, `apply_edit`, and opening the block editor.
+    /// A host locks the reader while a captured voice target must stay
+    /// valid. Each change of the user that the lock refuses shows `notice`
+    /// as an info notice, so the user learns why `e`, `Esc`, or a discard
+    /// did nothing. A refused `apply_edit` returns its error and shows no
+    /// notice, since the host calls it.
+    /// @param notice The notice of the lock, or nil to unlock.
+    pub fn lock_blocks(&mut self, notice: Option<String>);
 
     /// The actual scrolling surface, when it is mounted.
     pub fn navigation_node(&self) -> Option<NodeId>;
@@ -573,7 +579,7 @@ impl Markdown {
     pub fn call_interact() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
-    pub fn call_lock_blocks(locked: bool) -> CommandCall;
+    pub fn call_lock_blocks(notice: Option<String>) -> CommandCall;
 
     /// Build a positional call with typed user arguments.
     pub fn call_next_object(delta: i32) -> CommandCall;

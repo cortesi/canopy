@@ -255,8 +255,9 @@ pub struct Markdown {
     confirm: Option<TypedId<Confirm>>,
     /// Edits of the text that the host has not taken, oldest first.
     edits: VecDeque<BlockEdit>,
-    /// Whether the host stops every change through the reader.
-    locked: bool,
+    /// The notice of the host's lock on every change through the reader,
+    /// which each change of the user that the lock refuses shows.
+    lock: Option<String>,
 }
 
 /// One edit of the reader's text, for the host to apply to its own copy of
@@ -464,7 +465,7 @@ impl Markdown {
             slot: None,
             confirm: None,
             edits: VecDeque::new(),
-            locked: false,
+            lock: None,
         }
     }
     /// Accept a complete UTF-8 chunk or reject it without changing the
@@ -875,21 +876,23 @@ impl Markdown {
     /// Open the block editor on the marked unit, in place of its rows, at
     /// the start of its own text. With no unit, open an empty editor at the
     /// end of the text. It does nothing without a block editor in the
-    /// options, while the host locks blocks, an inspector is open, or an
-    /// edit awaits its layout.
+    /// options, while an inspector is open, or while an edit awaits its
+    /// layout. While the host locks blocks, it shows the lock's notice.
     #[command]
     pub fn edit_block(&mut self, ctx: &mut dyn Context) -> Result<()> {
         slot::open(self, ctx)
     }
     /// Commit the block editor: record its text as an edit when it differs
     /// from the text before the edit, and close it once the edit's layout
-    /// shows. A commit with no change records nothing.
+    /// shows. A commit with no change records nothing. While the host locks
+    /// blocks, it shows the lock's notice.
     #[command]
     pub fn commit_block(&mut self, ctx: &mut dyn Context) -> Result<()> {
         slot::commit(self, ctx)
     }
     /// Close the block editor and drop the changes since the last
-    /// checkpoint. With such changes, ask first unless `confirmed`.
+    /// checkpoint. With such changes, ask first unless `confirmed`. While
+    /// the host locks blocks, it shows the lock's notice.
     /// @param confirmed Whether to drop the changes without asking.
     #[command]
     pub fn discard_block(&mut self, ctx: &mut dyn Context, confirmed: bool) -> Result<()> {
@@ -931,18 +934,31 @@ impl Markdown {
         }
         Ok(())
     }
-    /// Stop, or allow again, every change through the reader: commit,
-    /// discard, `apply_edit`, and opening the block editor. A host locks the
-    /// reader while a captured voice target must stay valid.
-    /// @param locked Whether to stop changes.
+    /// Stop every change through the reader, or allow them again with
+    /// `None`: commit, discard, `apply_edit`, and opening the block editor.
+    /// A host locks the reader while a captured voice target must stay
+    /// valid. Each change of the user that the lock refuses shows `notice`
+    /// as an info notice, so the user learns why `e`, `Esc`, or a discard
+    /// did nothing. A refused `apply_edit` returns its error and shows no
+    /// notice, since the host calls it.
+    /// @param notice The notice of the lock, or nil to unlock.
     #[command]
-    pub fn lock_blocks(&mut self, locked: bool) {
-        self.locked = locked;
+    pub fn lock_blocks(&mut self, notice: Option<String>) {
+        self.lock = notice;
     }
     /// Return whether the host stops changes through the reader.
     #[command]
     pub fn blocks_locked(&self) -> bool {
-        self.locked
+        self.lock.is_some()
+    }
+    /// Show the notice of the host's lock, and return whether the lock
+    /// holds.
+    fn refused_by_lock(&self, ctx: &mut dyn Context) -> Result<bool> {
+        let Some(notice) = &self.lock else {
+            return Ok(false);
+        };
+        ctx.notify(NoticePost::info(notice.clone()))?;
+        Ok(true)
     }
     /// Take the edits that the host has not applied, oldest first. The host
     /// applies each to its own text, in order, before it reads that text
@@ -971,7 +987,7 @@ impl Markdown {
         to: usize,
         text: String,
     ) -> Result<()> {
-        if self.locked {
+        if self.lock.is_some() {
             return Err(invalid("The host locked block edits"));
         }
         if self.block_open() {

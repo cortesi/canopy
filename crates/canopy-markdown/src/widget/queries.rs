@@ -214,7 +214,7 @@ pub(super) fn state(reader: &Markdown, ctx: &dyn ViewContext) -> Result<ArgValue
             }),
         ),
         ("edits", number(reader.edits.len())),
-        ("locked", ArgValue::Bool(reader.locked)),
+        ("locked", ArgValue::Bool(reader.blocks_locked())),
         ("inspector", inspector),
         ("action_status", text(&reader.action_status)),
         ("failure", optional_text(reader.failure.as_deref())),

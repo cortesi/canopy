@@ -287,8 +287,11 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
     let Some(config) = reader.options.block_editor.clone() else {
         return Ok(());
     };
+    if reader.refused_by_lock(ctx)? {
+        return Ok(());
+    }
     // The slot opens over the rendered view alone, once at a time.
-    if reader.locked || reader.inspector.is_some() || !reader.rendered_actions_available() {
+    if reader.inspector.is_some() || !reader.rendered_actions_available() {
         return Ok(());
     }
     let snapshot = reader.store.snapshot();
@@ -463,11 +466,14 @@ pub(super) fn close(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> 
 /// before the edit, and otherwise close it.
 pub(super) fn commit(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
     let target = match reader.slot.as_ref() {
-        Some(slot) if !slot.committed && !reader.locked => {
+        Some(slot) if !slot.committed => {
             ctx.with_widget(slot.editor, |editor: &Editor| Ok(slot.draft(editor)))?
         }
         _ => return Ok(()),
     };
+    if reader.refused_by_lock(ctx)? {
+        return Ok(());
+    }
     finish(reader, ctx, &target)
 }
 
@@ -475,12 +481,15 @@ pub(super) fn commit(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()>
 /// changes, ask first unless `confirmed`.
 pub(super) fn discard(reader: &mut Markdown, ctx: &mut dyn Context, confirmed: bool) -> Result<()> {
     let (kept, changed) = match reader.slot.as_ref() {
-        Some(slot) if !slot.committed && !reader.locked => {
+        Some(slot) if !slot.committed => {
             let draft = ctx.with_widget(slot.editor, |editor: &Editor| Ok(slot.draft(editor)))?;
             (slot.kept.clone(), draft != slot.kept)
         }
         _ => return Ok(()),
     };
+    if reader.refused_by_lock(ctx)? {
+        return Ok(());
+    }
     if changed && !confirmed {
         return ask_discard(reader, ctx);
     }

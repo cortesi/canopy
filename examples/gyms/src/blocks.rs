@@ -18,6 +18,18 @@ use crate::{fixed_row, flex_row};
 /// The document the gym edits.
 pub const DOCUMENT: &str = include_str!("../fixtures/blocks.md");
 
+/// The notice of the gym's lock on block edits.
+const LOCKED: &str = "The gym locked the blocks: L unlocks them";
+
+/// The gym's bindings, beside the reader's own.
+const BINDINGS: &str = r#"
+root.default_bindings()
+canopy.keymap({
+    path = "blocks_gym",
+    { key = "L", description = "Lock or unlock the blocks", action = command.blocks_gym.toggle_lock() },
+})
+"#;
+
 canopy::slot!(ReaderSlot: Markdown);
 canopy::slot!(StatusSlot: Text);
 
@@ -36,6 +48,8 @@ pub struct BlocksGym {
     text: String,
     /// The edits the host applied.
     applied: usize,
+    /// Whether the host locks the blocks.
+    locked: bool,
 }
 
 impl Default for BlocksGym {
@@ -51,6 +65,7 @@ impl BlocksGym {
         Self {
             text: DOCUMENT.to_owned(),
             applied: 0,
+            locked: false,
         }
     }
 
@@ -70,8 +85,9 @@ impl BlocksGym {
     /// Show what the host holds.
     fn show_status(&self, ctx: &mut dyn Context) -> Result<()> {
         let text = format!(
-            "Blocks · e edits the marked block · Esc commits · ctrl-x discards · {} edits applied",
-            self.applied
+            "Blocks · e edits the marked block · Esc commits · ctrl-x discards · L locks · {} edits applied{}",
+            self.applied,
+            if self.locked { " · locked" } else { "" }
         );
         ctx.with_slot::<StatusSlot, _>(ctx.node_id(), |status, _| {
             status.set_text(text);
@@ -110,6 +126,18 @@ impl BlocksGym {
     /// The number of edits the host applied.
     pub fn applied(&self) -> usize {
         self.applied
+    }
+    #[command]
+    /// Lock the blocks, as a host does while it waits for a voice edit, or
+    /// unlock them.
+    pub fn toggle_lock(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        self.locked = !self.locked;
+        let notice = self.locked.then(|| LOCKED.to_owned());
+        reader(ctx, |md, _| {
+            md.lock_blocks(notice);
+            Ok(())
+        })?;
+        self.show_status(ctx)
     }
 }
 
@@ -150,5 +178,5 @@ impl Register for BlocksGym {
 
 /// Add the gym's default bindings.
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.script("blocks", "root.default_bindings()")
+    builder.script("blocks", BINDINGS)
 }

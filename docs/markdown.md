@@ -259,8 +259,13 @@ and `discard_block` end the edit. `block_draft` returns the edit that a
 commit would make now, so a host can save the document as it would be after
 it. `checkpoint_block` then marks the editor's text as kept: a later discard
 returns to it, and commits it when it differs from the text before the edit.
-`lock_blocks` stops every change through the reader, which includes opening
-the editor, while a host needs the text to stay as it is.
+`lock_blocks` with a notice stops every change through the reader, which
+includes opening the editor, while a host needs the text to stay as it is,
+and `None` lifts the lock. Each change of the user that the lock refuses,
+from `e`, `Esc`, `ctrl-x`, or a script's `edit_block`, `commit_block`, or
+`discard_block`, shows the notice as an info notice, so the user learns why
+nothing happened. A refused `apply_edit` returns its error to the host and
+shows nothing.
 
 A commit with changes records a `BlockEdit`: the epoch of the text that its
 range addresses, the byte range, and the new text. A commit with no change
