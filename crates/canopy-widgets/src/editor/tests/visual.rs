@@ -797,17 +797,20 @@ fn a_publication_keeps_the_visual_ends_on_graphemes() {
 }
 
 /// The texts of the sweep of text objects in `tests/vim_diff.rs`.
-const SWEEP_TEXTS: [&str; 3] = [
+const SWEEP_TEXTS: [&str; 5] = [
     "Hello there.  This is a test.  Another one!\nThe (end.)  A \"quote.\"  Last",
     "first para\nstill first\n\n\nsecond para\n  \nthird one\nends here",
     "this is a test, of words.  foo-bar baz_qux 世界 x",
+    "Start (it.)  Then \"x.\"  \n  \n  Indented? Yes!\nno end",
+    "a.b. c! d\n\u{c}Feed. x\n\n\n'quoted.'  )y. z",
 ];
 
 /// The keys of the sweep in `tests/vim_diff.rs`.
-const SWEEP_KEYS: [&str; 32] = [
-    "viw", "viwiw", "vhiw", "Viw", "vaw", "vawaw", "vhaw", "Vaw", "vis", "visis", "vhis", "Vis",
-    "vas", "vasas", "vhas", "Vas", "vip", "vipip", "vhip", "Vip", "vap", "vapap", "vhap", "Vap",
-    "vw", "vb", "ve", "vww", "vbb", "vee", "vwb", "veb",
+const SWEEP_KEYS: [&str; 48] = [
+    "viw", "viwiw", "vhiw", "vliw", "v$iw", "Viw", "vaw", "vawaw", "vhaw", "vlaw", "v$aw", "Vaw",
+    "vis", "visis", "vhis", "vlis", "v$is", "Vis", "vas", "vasas", "vhas", "vlas", "v$as", "Vas",
+    "vip", "vipip", "vhip", "vlip", "v$ip", "Vip", "vap", "vapap", "vhap", "vlap", "v$ap", "Vap",
+    "Vhiw", "Vhaw", "Vliw", "Vlaw", "vw", "vb", "ve", "vww", "vbb", "vee", "vwb", "veb",
 ];
 
 /// Parse one row of the recorded table: the mode, the cursor, and the
@@ -828,19 +831,23 @@ fn recorded(row: &str) -> (Option<ViMode>, TextPosition, TextRange) {
     )
 }
 
-#[test]
-fn the_sweep_matches_the_recorded_outcomes_of_neovim() {
+/// Replay the cases of the sweep on [`SWEEP_TEXTS`]`[only]` against
+/// Neovim's recorded outcomes. The rows of the other texts pass unread.
+fn replay_sweep(only: usize) {
     // Neovim's outcomes of the sweep of `tests/vim_diff.rs`, which rewrites
     // the table, in the order of the loops below.
     let table = include_str!("../../../tests/vim/sweep.txt");
     let mut rows = table.lines().filter(|row| !row.starts_with('#'));
     let config = EditorConfig::new().with_mode(EditMode::Vi);
     let mut failures = Vec::new();
-    for text in SWEEP_TEXTS {
+    for (index, text) in SWEEP_TEXTS.into_iter().enumerate() {
         for (line, content) in text.split('\n').enumerate() {
             for column in grapheme_starts(content) {
                 for keys in SWEEP_KEYS {
                     let row = rows.next().expect("a recorded outcome for each case");
+                    if index != only {
+                        continue;
+                    }
                     let expected = recorded(row);
                     let editor = run_with(config.clone(), text, (line, column), keys);
                     let actual = (
@@ -859,6 +866,31 @@ fn the_sweep_matches_the_recorded_outcomes_of_neovim() {
     }
     assert!(rows.next().is_none(), "one recorded outcome for each case");
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn the_sweep_of_sentences_matches_neovim() {
+    replay_sweep(0);
+}
+
+#[test]
+fn the_sweep_of_paragraphs_matches_neovim() {
+    replay_sweep(1);
+}
+
+#[test]
+fn the_sweep_of_words_matches_neovim() {
+    replay_sweep(2);
+}
+
+#[test]
+fn the_sweep_of_indents_and_quotes_matches_neovim() {
+    replay_sweep(3);
+}
+
+#[test]
+fn the_sweep_of_form_feeds_and_empty_lines_matches_neovim() {
+    replay_sweep(4);
 }
 
 /// Text for the properties: words, punctuation, blanks, line breaks, and

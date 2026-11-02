@@ -673,10 +673,14 @@ impl<'a> Vim<'a> {
 
     /// The body of [`Self::current_word`], which leaves the cursor in
     /// `self`.
+    ///
+    /// With a count of one, a selection either starts on one char or grows
+    /// by one word, never both. So the end that Vim marks exclusive after a
+    /// grown selection never meets the blanks that a new `aw` takes, and the
+    /// port leaves that flag out.
     fn current_word_inner(&mut self, area: &mut VisualArea, include: bool) -> bool {
         let mut count = 1;
         let mut start = TextPosition::new(0, 0);
-        let mut inclusive = true;
         let mut include_white = false;
 
         // A selection of one char selects the word or the blanks at the
@@ -705,7 +709,6 @@ impl<'a> Vim<'a> {
 
         // Extend by more words.
         while count > 0 {
-            inclusive = true;
             if self.cursor < area.anchor {
                 // The cursor is at the start: move it back.
                 if self.decl_cursor() == -1 {
@@ -727,14 +730,10 @@ impl<'a> Vim<'a> {
                     return false;
                 }
                 if include != (self.cls() == 0) {
-                    if !self.fwd_word(true) && count > 1 {
-                        return false;
-                    }
+                    self.fwd_word(true);
                     // Stop on the last blank, not on the first char of the
                     // next line.
-                    if !self.oneleft() {
-                        inclusive = false;
-                    }
+                    self.oneleft();
                 } else if !self.end_word(true, true) {
                     return false;
                 }
@@ -742,7 +741,7 @@ impl<'a> Vim<'a> {
             count -= 1;
         }
 
-        if include_white && (self.cls() != 0 || (self.cursor.column == 0 && !inclusive)) {
+        if include_white && self.cls() != 0 {
             // No blanks follow the word, so take the blanks before it, but
             // not an indent.
             let end = self.cursor;

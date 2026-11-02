@@ -381,19 +381,25 @@ fn generate(rng: &mut Rng) -> Case {
     }
 }
 
-/// The texts of the sweep of text objects, from Vim's help.
-const SWEEP_TEXTS: [&str; 3] = [
+/// The texts of the sweep: three from Vim's help, and two of the edges of
+/// sentences: closing marks, indents, form feeds, and empty lines.
+const SWEEP_TEXTS: [&str; 5] = [
     "Hello there.  This is a test.  Another one!\nThe (end.)  A \"quote.\"  Last",
     "first para\nstill first\n\n\nsecond para\n  \nthird one\nends here",
     "this is a test, of words.  foo-bar baz_qux 世界 x",
+    "Start (it.)  Then \"x.\"  \n  \n  Indented? Yes!\nno end",
+    "a.b. c! d\n\u{c}Feed. x\n\n\n'quoted.'  )y. z",
 ];
 
 /// The keys of the sweep: each text object once, twice, from a selection
-/// of two characters, and from a line selection, then word motions.
-const SWEEP_KEYS: [&str; 32] = [
-    "viw", "viwiw", "vhiw", "Viw", "vaw", "vawaw", "vhaw", "Vaw", "vis", "visis", "vhis", "Vis",
-    "vas", "vasas", "vhas", "Vas", "vip", "vipip", "vhip", "Vip", "vap", "vapap", "vhap", "Vap",
-    "vw", "vb", "ve", "vww", "vbb", "vee", "vwb", "veb",
+/// of two characters in both directions, from the end of a line, and from a
+/// line selection, then word objects that grow line selections, then word
+/// motions.
+const SWEEP_KEYS: [&str; 48] = [
+    "viw", "viwiw", "vhiw", "vliw", "v$iw", "Viw", "vaw", "vawaw", "vhaw", "vlaw", "v$aw", "Vaw",
+    "vis", "visis", "vhis", "vlis", "v$is", "Vis", "vas", "vasas", "vhas", "vlas", "v$as", "Vas",
+    "vip", "vipip", "vhip", "vlip", "v$ip", "Vip", "vap", "vapap", "vhap", "vlap", "v$ap", "Vap",
+    "Vhiw", "Vhaw", "Vliw", "Vlaw", "vw", "vb", "ve", "vww", "vbb", "vee", "vwb", "veb",
 ];
 
 /// Every sequence of [`SWEEP_KEYS`] from every start in [`SWEEP_TEXTS`]. The
