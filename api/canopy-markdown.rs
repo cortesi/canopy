@@ -36,7 +36,7 @@ use canopy_widgets::{
     editor::{LineNumbers, TextPosition, WrapMode},
     table::PreparedTable,
 };
-use canopy_xmark::{Alignment, BlockQuoteKind};
+use canopy_xmark::BlockQuoteKind;
 use image::RgbaImage;
 use url::Url;
 

@@ -54,7 +54,7 @@ Draw pictures and large text with block mosaic characters.
 - Publish: crates.io
 - Workspace dependencies: none
 - Workspace dependents: canopy-widgets, mosaic-score
-- Items: 58
+- Items: 59
 - Exposes: none
 
 ## canopy-options-derive
@@ -97,7 +97,7 @@ Built-in widgets for canopy applications.
 - Workspace dependencies: canopy, canopy-mosaic, canopy-xmark (optional)
 - Workspace dependents: canopy-markdown, canopy-options, canopyctl, gyms, hello, todo
 - Unnameable: crate::image_view::ZoomDirection
-- Items: 1069
+- Items: 1071
 - Exposes: canopy, canopy-mosaic, grep-regex, image, syntect
 
 ## canopy-markdown

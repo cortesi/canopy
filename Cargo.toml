@@ -25,6 +25,13 @@ opt-level = 3
 [profile.dev.package.zune-jpeg]
 opt-level = 3
 
+# Rasterizing SVG drawings is several times slower unoptimized.
+[profile.dev.package.tiny-skia]
+opt-level = 3
+
+[profile.dev.package.resvg]
+opt-level = 3
+
 # The mosaic score filters millions of pixels for each item.
 [profile.dev.package.mosaic-score]
 opt-level = 3

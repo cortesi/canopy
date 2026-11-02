@@ -1510,7 +1510,7 @@ pub mod commands {
 
     impl<T> FromArgValue for Option<T> where T: FromArgValue {}
 
-    impl<T> FromArgValue for T where T: CommandArg {}
+    impl<T> FromArgValue for T where T: crate::commands::CommandArg {}
 
     impl<T> FromArgValue for Vec<T> where T: FromArgValue {}
 

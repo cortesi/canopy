@@ -109,11 +109,11 @@ pub trait OptionEnum: 'static + Copy + PartialEq {
     fn variants() -> &'static [Variant];
 }
 
-impl OptionEnum for Glyphs {
+impl crate::OptionEnum for Glyphs {
     const ALL: &'static [Self] = _;
 }
 
-impl OptionEnum for LineNumbers {
+impl crate::OptionEnum for LineNumbers {
     const ALL: &'static [Self] = _;
 }
 
@@ -277,7 +277,7 @@ impl<G: 'static + Clone + PartialEq> Follower<G> {
     #[must_use]
     pub fn standalone() -> Self
     where
-        G: OptionGroup + Send + Sync;
+        G: crate::OptionGroup + Send + Sync;
 
     /// Return the values the widget applied last and the current values, if
     /// they differ, and remember the current values as applied.
@@ -551,7 +551,7 @@ impl Options {
     /// Wrap `app`, and own the options of `store`.
     pub fn new<T, W>(store: &Store<T>, app: W) -> Self
     where
-        T: OptionGroup + Send + Sync,
+        T: crate::OptionGroup + Send + Sync,
         W: 'static + Widget;
 
     /// Open the options panel.
@@ -692,7 +692,7 @@ impl !Sync for OptionsHandle {}
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Order<E> {/* private fields */}
 
-impl<E: OptionEnum> Order<E> {
+impl<E: crate::OptionEnum> Order<E> {
     /// Return the variants in order.
     pub fn iter(&self) -> impl '_ + Iterator<Item = E>;
 
@@ -701,11 +701,11 @@ impl<E: OptionEnum> Order<E> {
     pub fn with_first(&self, variant: E) -> Self;
 }
 
-impl<E: OptionEnum> FromIterator<E> for Order<E> {}
+impl<E: crate::OptionEnum> FromIterator<E> for Order<E> {}
 
-impl<E: OptionEnum> LeafValue for Order<E> {}
+impl<E: crate::OptionEnum> LeafValue for Order<E> {}
 
-impl<E: OptionEnum> OptionField for Order<E> {}
+impl<E: crate::OptionEnum> OptionField for Order<E> {}
 
 /// The schema of a root group: its tree, and an index of its leaves by path.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -735,14 +735,14 @@ impl Schema {
 
     /// Build the schema of `T`.
     #[must_use]
-    pub fn of<T: OptionGroup>() -> Self;
+    pub fn of<T: crate::OptionGroup>() -> Self;
 }
 
 /// A set of the variants of an [`OptionEnum`], in declaration order.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Set<E> {/* private fields */}
 
-impl<E: OptionEnum> Set<E> {
+impl<E: crate::OptionEnum> Set<E> {
     /// Return a set of every variant.
     #[must_use]
     pub fn all() -> Self;
@@ -770,11 +770,11 @@ impl<E: OptionEnum> Set<E> {
     pub fn set(&mut self, variant: E, member: bool);
 }
 
-impl<E: OptionEnum> FromIterator<E> for Set<E> {}
+impl<E: crate::OptionEnum> FromIterator<E> for Set<E> {}
 
-impl<E: OptionEnum> LeafValue for Set<E> {}
+impl<E: crate::OptionEnum> LeafValue for Set<E> {}
 
-impl<E: OptionEnum> OptionField for Set<E> {}
+impl<E: crate::OptionEnum> OptionField for Set<E> {}
 
 /// The reason that a value cannot go into a path.
 #[derive(Clone, Debug, Display, Eq, Error, PartialEq)]
@@ -809,7 +809,7 @@ impl<G> Deref for Snapshot<G> {
 #[derive(Clone, Default)]
 pub struct Store<T> {/* private fields */}
 
-impl<T: OptionGroup + Send + Sync> Store<T> {
+impl<T: crate::OptionGroup + Send + Sync> Store<T> {
     /// Return the current value.
     #[must_use]
     pub fn current(&self) -> Arc<T>;
@@ -871,18 +871,18 @@ pub fn check_range(value: &Value, min: i64, max: i64) -> Result<(), SetError>;
 /// Return a document that lists every option of `T` with its help text and
 /// its default, each entry commented out, so a copy can set any of them.
 #[must_use]
-pub fn default_document<T: OptionGroup>() -> String;
+pub fn default_document<T: crate::OptionGroup>() -> String;
 
 /// Convert a choice value into an enum.
 #[doc(hidden)]
-pub fn enum_from_value<E: OptionEnum>(value: &Value) -> Result<E, String>;
+pub fn enum_from_value<E: crate::OptionEnum>(value: &Value) -> Result<E, String>;
 
 /// Return the schema item of a group field with type `T`.
 ///
 /// A group that is declared global makes each of its leaves global.
 #[doc(hidden)]
 #[must_use]
-pub fn group_item<T: OptionGroup>(meta: FieldMeta) -> Item;
+pub fn group_item<T: crate::OptionGroup>(meta: FieldMeta) -> Item;
 
 /// Join a path prefix and a name with a dot.
 #[doc(hidden)]

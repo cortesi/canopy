@@ -38,7 +38,6 @@ use canopy::{
     tree::FocusDirection,
 };
 use canopy_mosaic::{Cell, Tier};
-use grep_regex::{error::Error, matcher::RegexMatcher};
 use image::RgbaImage;
 use syntect::{SyntaxReference, SyntaxSet};
 
@@ -1099,14 +1098,21 @@ impl Widget for Container {}
 pub struct DecodedImage {/* private fields */}
 
 impl DecodedImage {
+    /// Scale the image as [`Self::scale`] does, except that a small drawing
+    /// grows to fit `bounds`, so it stays sharp in a view that zooms it.
+    pub fn fit(self, bounds: Size) -> canopy::error::Result<ImagePreview>;
+
     /// Decode the image at `path` under the preview limits: at most 32 *
-    /// 1024 * 1024 source pixels and a 128 MiB decoder budget. Callers
-    /// should also bound the encoded file size.
+    /// 1024 * 1024 source pixels and a 128 MiB decoder budget. A file named
+    /// `.svg` parses as a drawing: a source of at most 16 MiB, which renders
+    /// text with the system fonts, reads no file that it links to, and
+    /// draws the images it embeds within the same pixel limit, all together.
+    /// Callers should also bound the encoded file size.
     pub fn read(path: &Path) -> canopy::error::Result<Self>;
 
     /// Scale the image to fit `bounds` pixels, preserving its aspect ratio,
-    /// with each edge capped at 1024 pixels. Small images keep their pixels.
-    /// Zero bounds are invalid.
+    /// with each edge capped at 1024 pixels. Small images keep their pixels,
+    /// and a small drawing keeps its own size. Zero bounds are invalid.
     pub fn scale(self, bounds: Size) -> canopy::error::Result<ImagePreview>;
 }
 
@@ -1549,7 +1555,8 @@ impl ImageView {
     pub fn fit(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Create a new image view widget from encoded image bytes, such as a
-    /// PNG that an application embeds. The format comes from the bytes.
+    /// PNG that an application embeds. The format comes from the bytes, and
+    /// markup in no raster format parses as an SVG drawing, at its own size.
     pub fn from_bytes(bytes: &[u8]) -> canopy::error::Result<Self>;
 
     /// Create a new image view widget from a file path.
@@ -1582,10 +1589,11 @@ impl ImageView {
 
     /// Load a thumbnail within `bounds`, preserving its aspect ratio.
     ///
-    /// Small images keep their original pixels. Larger images are averaged
-    /// with premultiplied colors, so transparency does not bleed. Zooming
-    /// uses the thumbnail; use [`Self::set_path`] to retain full-resolution
-    /// zooming instead.
+    /// Small images keep their original pixels, and a drawing renders to
+    /// fit `bounds`, as [`DecodedImage::fit`] does. Larger images are
+    /// averaged with premultiplied colors, so transparency does not bleed.
+    /// Zooming uses the thumbnail; use [`Self::set_path`] to zoom a raster
+    /// image at its full resolution instead.
     ///
     /// The source is limited to 32 * 1024 * 1024 pixels and the decoder has a
     /// 128 MiB allocation budget. Conversion can allocate one additional RGBA
@@ -3881,6 +3889,9 @@ pub fn image_cells(
     tier: Tier,
 ) -> Vec<Cell<[u8; 3]>>;
 
+/// Return whether `path` names an SVG drawing by its extension.
+pub fn is_svg_path(path: &Path) -> bool;
+
 /// Return whether `node` has the keys under `keys`, for a widget that is its
 /// own pane.
 ///
@@ -3891,8 +3902,8 @@ pub fn image_cells(
 pub fn pane_has_keys(ctx: &dyn ViewContext, node: NodeId, keys: &PaneKeys) -> bool;
 
 /// Decode the image at `path` as a preview that fits `bounds` pixels, under
-/// the same bounds as [`ImageView::set_preview_path`]: at most 32 * 1024 *
-/// 1024 source pixels, a 128 MiB decoder budget, and 1024 pixels an edge.
+/// the limits of [`DecodedImage::read`] and 1024 pixels an edge, as
+/// [`DecodedImage::scale`] does: a small drawing keeps its own size.
 /// Callers should also bound the encoded file size.
 pub fn read_preview(path: &Path, bounds: Size) -> canopy::error::Result<RgbaImage>;
 

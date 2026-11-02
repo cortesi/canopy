@@ -16,8 +16,13 @@ use canopy_mosaic::{
     rgb_into,
 };
 use image::{DynamicImage, ImageDecoder, RgbaImage};
+use resvg::usvg::Tree;
 
 use crate::mosaic::{cycle, tier_for};
+
+mod svg;
+
+pub use svg::is_svg_path;
 
 /// Direction for zoom commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, CommandEnum)]
@@ -44,6 +49,9 @@ const PREVIEW_MAX_PIXELS: u64 = 32 * 1024 * 1024;
 const PREVIEW_DECODE_BYTES: u64 = 128 * 1024 * 1024;
 /// Largest retained thumbnail edge, regardless of caller-provided bounds.
 const PREVIEW_MAX_EDGE: u32 = 1024;
+/// Largest edge of a drawing read at full resolution, which has no pixels of
+/// its own.
+const DRAWING_MAX_EDGE: u32 = 4096;
 /// Matrix pixels across and down a cell.
 const MATRIX: usize = 8;
 
@@ -52,15 +60,24 @@ fn image_error(err: impl fmt::Display) -> Error {
     Error::Invalid(format!("image error: {err}"))
 }
 
-/// Decode an image file into RGBA pixels.
+/// Decode an image file into RGBA pixels. A drawing keeps its own size,
+/// within 4096 pixels an edge.
 fn read_rgba(path: &Path) -> Result<RgbaImage> {
+    if svg::is_svg_path(path) {
+        return full_drawing(&svg::read(path)?);
+    }
     let image = image::open(path).map_err(image_error)?;
     Ok(image.into_rgba8())
 }
 
+/// Rasterize a drawing at its own size, within 4096 pixels an edge.
+fn full_drawing(tree: &Tree) -> Result<RgbaImage> {
+    svg::rasterize(tree, Size::new(DRAWING_MAX_EDGE, DRAWING_MAX_EDGE), false)
+}
+
 /// Decode the image at `path` as a preview that fits `bounds` pixels, under
-/// the same bounds as [`ImageView::set_preview_path`]: at most 32 * 1024 *
-/// 1024 source pixels, a 128 MiB decoder budget, and 1024 pixels an edge.
+/// the limits of [`DecodedImage::read`] and 1024 pixels an edge, as
+/// [`DecodedImage::scale`] does: a small drawing keeps its own size.
 /// Callers should also bound the encoded file size.
 pub fn read_preview(path: &Path, bounds: Size) -> Result<RgbaImage> {
     let bounds = preview_bounds(bounds)?;
@@ -88,15 +105,31 @@ fn preview_bounds(bounds: Size) -> Result<Size> {
 /// previews can give up on a stale request between them. The decode itself
 /// cannot stop part way.
 pub struct DecodedImage {
-    /// The decoded pixels, in their source format.
-    image: DynamicImage,
+    /// The decoded source.
+    source: Source,
+}
+
+/// What a decoded image holds.
+enum Source {
+    /// Pixels, in their source format.
+    Raster(DynamicImage),
+    /// An SVG drawing, which rasterizes at the size that a preview asks for.
+    Vector(Box<Tree>),
 }
 
 impl DecodedImage {
     /// Decode the image at `path` under the preview limits: at most 32 *
-    /// 1024 * 1024 source pixels and a 128 MiB decoder budget. Callers
-    /// should also bound the encoded file size.
+    /// 1024 * 1024 source pixels and a 128 MiB decoder budget. A file named
+    /// `.svg` parses as a drawing: a source of at most 16 MiB, which renders
+    /// text with the system fonts, reads no file that it links to, and
+    /// draws the images it embeds within the same pixel limit, all together.
+    /// Callers should also bound the encoded file size.
     pub fn read(path: &Path) -> Result<Self> {
+        if svg::is_svg_path(path) {
+            return Ok(Self {
+                source: Source::Vector(Box::new(svg::read(path)?)),
+            });
+        }
         let mut reader = image::ImageReader::open(path).map_err(image_error)?;
         let mut limits = image::Limits::default();
         limits.max_alloc = Some(PREVIEW_DECODE_BYTES);
@@ -115,16 +148,33 @@ impl DecodedImage {
         limits.reserve(decoder.total_bytes()).map_err(image_error)?;
         decoder.set_limits(limits).map_err(image_error)?;
         let image = DynamicImage::from_decoder(decoder).map_err(image_error)?;
-        Ok(Self { image })
+        Ok(Self {
+            source: Source::Raster(image),
+        })
     }
 
     /// Scale the image to fit `bounds` pixels, preserving its aspect ratio,
-    /// with each edge capped at 1024 pixels. Small images keep their pixels.
-    /// Zero bounds are invalid.
+    /// with each edge capped at 1024 pixels. Small images keep their pixels,
+    /// and a small drawing keeps its own size. Zero bounds are invalid.
     pub fn scale(self, bounds: Size) -> Result<ImagePreview> {
+        self.preview(bounds, false)
+    }
+
+    /// Scale the image as [`Self::scale`] does, except that a small drawing
+    /// grows to fit `bounds`, so it stays sharp in a view that zooms it.
+    pub fn fit(self, bounds: Size) -> Result<ImagePreview> {
+        self.preview(bounds, true)
+    }
+
+    /// Scale the image to fit `bounds`, growing a drawing when `grow` is set.
+    fn preview(self, bounds: Size, grow: bool) -> Result<ImagePreview> {
         let bounds = preview_bounds(bounds)?;
+        let image = match self.source {
+            Source::Raster(image) => thumbnail(image, bounds),
+            Source::Vector(tree) => svg::rasterize(&tree, bounds, grow)?,
+        };
         Ok(ImagePreview {
-            image: Arc::new(thumbnail(self.image, bounds)),
+            image: Arc::new(image),
         })
     }
 }
@@ -575,8 +625,12 @@ impl ImageView {
     }
 
     /// Create a new image view widget from encoded image bytes, such as a
-    /// PNG that an application embeds. The format comes from the bytes.
+    /// PNG that an application embeds. The format comes from the bytes, and
+    /// markup in no raster format parses as an SVG drawing, at its own size.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        if image::guess_format(bytes).is_err() && bytes.trim_ascii_start().starts_with(b"<") {
+            return Ok(Self::new(&full_drawing(&svg::parse(bytes)?)?));
+        }
         let image = image::load_from_memory(bytes).map_err(image_error)?;
         Ok(Self::new(&image.into_rgba8()))
     }
@@ -629,10 +683,11 @@ impl ImageView {
 
     /// Load a thumbnail within `bounds`, preserving its aspect ratio.
     ///
-    /// Small images keep their original pixels. Larger images are averaged
-    /// with premultiplied colors, so transparency does not bleed. Zooming
-    /// uses the thumbnail; use [`Self::set_path`] to retain full-resolution
-    /// zooming instead.
+    /// Small images keep their original pixels, and a drawing renders to
+    /// fit `bounds`, as [`DecodedImage::fit`] does. Larger images are
+    /// averaged with premultiplied colors, so transparency does not bleed.
+    /// Zooming uses the thumbnail; use [`Self::set_path`] to zoom a raster
+    /// image at its full resolution instead.
     ///
     /// The source is limited to 32 * 1024 * 1024 pixels and the decoder has a
     /// 128 MiB allocation budget. Conversion can allocate one additional RGBA
@@ -642,7 +697,7 @@ impl ImageView {
     /// preserved. Callers should also bound the encoded file size.
     pub fn set_preview_path(&mut self, path: impl AsRef<Path>, bounds: Size) -> Result<()> {
         let bounds = preview_bounds(bounds)?;
-        self.set_preview(DecodedImage::read(path.as_ref())?.scale(bounds)?);
+        self.set_preview(DecodedImage::read(path.as_ref())?.fit(bounds)?);
         Ok(())
     }
 
@@ -743,6 +798,7 @@ impl Register for ImageView {
 mod tests {
     use std::{fs, io::Cursor, sync::Arc};
 
+    use base64::{Engine, engine::general_purpose::STANDARD};
     use canopy::{
         Canopy, CanopyBuilder, ContextExt,
         render::{Glyphs, TermBuf},
@@ -840,6 +896,158 @@ mod tests {
             let full = ImageView::from_path(&path)?;
             assert_eq!(full.image_size(), Size::new(512, 256));
         }
+        Ok(())
+    }
+
+    /// A drawing of `width` by `height` user units: a green left half on a
+    /// transparent ground.
+    fn drawing(width: u32, height: u32) -> String {
+        let half = width / 2;
+        format!(
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">
+                <rect width="{half}" height="{height}" fill="#50a028"/>
+            </svg>"##
+        )
+    }
+
+    /// Check that the left half of `image` is green and the right half clear.
+    fn assert_drawn(image: &RgbaImage) {
+        let (width, height) = image.dimensions();
+        let (color, alpha) = average(image, 0, 0, width / 2, height);
+        assert!((alpha - 1.0).abs() < 0.01, "left half opaque: {alpha}");
+        let green = [0x50, 0xa0, 0x28];
+        assert!(
+            color
+                .iter()
+                .zip(green)
+                .all(|(have, want)| have.abs_diff(want) <= 2),
+            "{color:?}"
+        );
+        let (_, alpha) = average(image, width / 2 + 1, 0, width, height);
+        assert!(alpha < 0.01, "right half clear: {alpha}");
+    }
+
+    #[test]
+    fn drawings_keep_their_size_in_a_preview_and_grow_to_fill_a_view() -> Result<()> {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("small.SVG");
+        fs::write(&path, drawing(40, 20)).unwrap();
+        let kept = DecodedImage::read(&path)?.scale(Size::new(64, 64))?;
+        assert_eq!(kept.size(), Size::new(40, 20));
+        assert_drawn(&kept.image);
+        let filled = DecodedImage::read(&path)?.fit(Size::new(64, 64))?;
+        assert_eq!(filled.size(), Size::new(64, 32));
+        assert_drawn(&filled.image);
+        assert_eq!(
+            read_preview(&path, Size::new(64, 64))?.dimensions(),
+            (40, 20)
+        );
+
+        let mut view = ImageView::empty();
+        view.set_preview_path(&path, Size::new(64, 64))?;
+        assert_eq!(view.image_size(), Size::new(64, 32));
+        view.set_path(&path)?;
+        assert_eq!(view.image_size(), Size::new(40, 20));
+        assert_drawn(&view.image);
+
+        let large = directory.path().join("large.svg");
+        fs::write(&large, drawing(20_000, 10_000)).unwrap();
+        let shrunk = DecodedImage::read(&large)?.scale(Size::new(4096, 4096))?;
+        assert_eq!(shrunk.size(), Size::new(1024, 512), "edges stay capped");
+        let full = ImageView::from_path(&large)?;
+        assert_eq!(full.image_size(), Size::new(4096, 2048));
+        Ok(())
+    }
+
+    #[test]
+    fn drawings_load_from_bytes_and_embedded_images_but_not_linked_files() -> Result<()> {
+        let view = ImageView::from_bytes(drawing(40, 20).as_bytes())?;
+        assert_eq!(view.image_size(), Size::new(40, 20));
+        assert_drawn(&view.image);
+
+        let directory = tempfile::tempdir().unwrap();
+        let red = RgbaImage::from_pixel(4, 4, Rgba([255, 0, 0, 255]));
+        red.save(directory.path().join("red.png")).unwrap();
+        let mut png = Vec::new();
+        red.write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        let encoded = STANDARD.encode(&png);
+        let path = directory.path().join("images.svg");
+        fs::write(
+            &path,
+            format!(
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4">
+                    <image width="4" height="4" href="data:image/png;base64,{encoded}"/>
+                    <image x="4" width="4" height="4" href="red.png"/>
+                </svg>"#
+            ),
+        )
+        .unwrap();
+        let image = read_preview(&path, Size::new(8, 8))?;
+        let ([r, _, _], alpha) = average(&image, 0, 0, 4, 4);
+        assert!(r > 250 && alpha > 0.99, "the embedded image draws");
+        let (_, alpha) = average(&image, 4, 0, 8, 4);
+        assert!(alpha < 0.01, "the linked file is never read");
+
+        let broken = directory.path().join("broken.svg");
+        fs::write(&broken, "<svg").unwrap();
+        let error = DecodedImage::read(&broken)
+            .err()
+            .expect("a broken drawing fails");
+        assert!(error.to_string().contains("svg error"), "{error}");
+        let error = ImageView::from_bytes(b"<svg")
+            .err()
+            .expect("broken markup fails");
+        assert!(error.to_string().contains("svg error"), "{error}");
+        Ok(())
+    }
+
+    #[test]
+    fn drawings_stay_within_their_source_and_pixel_limits() -> Result<()> {
+        let directory = tempfile::tempdir().unwrap();
+        // Each use of an embedded image counts: eight of 2048 * 2048 pixels
+        // fill the budget, and the ninth does not draw.
+        let red = RgbaImage::from_pixel(2048, 2048, Rgba([255, 0, 0, 255]));
+        let mut png = Vec::new();
+        red.write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        let uses: String = (0..9)
+            .map(|i| format!(r##"<use href="#red" x="{}"/>"##, i * 4))
+            .collect();
+        let path = directory.path().join("uses.svg");
+        fs::write(
+            &path,
+            format!(
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="36" height="4">
+                    <defs><image id="red" width="4" height="4"
+                        href="data:image/png;base64,{}"/></defs>
+                    {uses}
+                </svg>"#,
+                STANDARD.encode(&png)
+            ),
+        )
+        .unwrap();
+        let image = read_preview(&path, Size::new(36, 4))?;
+        let (_, alpha) = average(&image, 28, 0, 32, 4);
+        assert!(alpha > 0.99, "the eighth use draws");
+        let (_, alpha) = average(&image, 32, 0, 36, 4);
+        assert!(alpha < 0.01, "the ninth use is over the budget");
+
+        // Gzipped data, which could expand without bound, does not parse.
+        let gzipped = [0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00];
+        assert!(ImageView::from_bytes(&gzipped).is_err());
+        let compressed = directory.path().join("compressed.svg");
+        fs::write(&compressed, gzipped).unwrap();
+        assert!(DecodedImage::read(&compressed).is_err());
+
+        let large = directory.path().join("large.svg");
+        let mut source = drawing(4, 4).into_bytes();
+        source.resize(16 * 1024 * 1024 + 1, b' ');
+        fs::write(&large, source).unwrap();
+        let error = DecodedImage::read(&large)
+            .err()
+            .expect("a large source fails");
+        assert!(error.to_string().contains("limited"), "{error}");
         Ok(())
     }
 
