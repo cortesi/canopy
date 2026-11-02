@@ -362,6 +362,33 @@ fn word_objects_take_words_or_blanks() {
 }
 
 #[test]
+fn word_motions_cross_line_ends_indents_and_empty_lines() {
+    // The outcomes are Neovim's.
+    let chars = VisualMode::Character;
+    assert_selects("abc\n  def", (0, 1), "v$w", chars, ((0, 1), (1, 3)), (1, 2));
+    assert_selects("foo\n  bar", (0, 0), "vw", chars, ((0, 0), (1, 3)), (1, 2));
+    assert_selects("foo\n\nbar", (0, 2), "ve", chars, ((0, 2), (2, 3)), (2, 2));
+    assert_selects("abc\n  def", (1, 3), "v0b", chars, ((0, 0), (1, 4)), (0, 0));
+    // Word objects grow backward from a cursor before the anchor.
+    assert_selects(
+        "ab cd ef",
+        (0, 7),
+        "vhawaw",
+        chars,
+        ((0, 0), (0, 8)),
+        (0, 0),
+    );
+    assert_selects(
+        "ab cd ef",
+        (0, 7),
+        "vhiwiwiw",
+        chars,
+        ((0, 2), (0, 8)),
+        (0, 2),
+    );
+}
+
+#[test]
 fn words_and_sentences_cross_into_the_last_lines() {
     // The outcomes are Neovim's.
     let chars = VisualMode::Character;
