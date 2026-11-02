@@ -24,6 +24,7 @@ for _, path in reader_paths do
         { key = "N", description = "Previous match", action = command.markdown.search_next(-1) },
         { key = "e", description = "Edit block", action = command.markdown.edit_block() },
         { key = "a", description = "Append block", action = command.markdown.append_block() },
+        { key = "d", description = "Delete block", action = command.markdown.delete_block() },
         -- Dormant intents let a source view keep the host's focus traversal,
         -- where a disabled command would take Tab.
         { key = "Enter", description = "Inspect the selected Rendered object", action = "markdown.activate" },

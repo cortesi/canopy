@@ -191,6 +191,13 @@ impl Markdown {
     /// Copy the exact displayed source, including its final newline.
     pub fn copy_source(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
+    /// Delete the marked unit as one edit, with the blank lines that set it
+    /// apart on one side, so the units around it stay apart. The block
+    /// cursor then marks the unit after it, or else the one before it. It
+    /// does nothing where `edit_block` does nothing, or outside the block
+    /// cursor, and shows the lock's notice as it does.
+    pub fn delete_block(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
     /// Close the block editor and drop the changes since the last
     /// checkpoint. With such changes, ask first unless `confirmed`. While
     /// the host locks blocks, it shows the lock's notice.
@@ -557,6 +564,9 @@ impl Markdown {
     pub fn call_copy_source() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
+    pub fn call_delete_block() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
     pub fn call_discard_block(confirmed: bool) -> CommandCall;
 
     /// Build a positional call with typed user arguments.
@@ -693,6 +703,9 @@ impl Markdown {
 
     /// Return the command spec for this command.
     pub fn spec_copy_source() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_delete_block() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_discard_block() -> &'static CommandSpec;

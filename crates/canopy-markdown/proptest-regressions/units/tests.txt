@@ -8,3 +8,9 @@ cc ff3017879f7ed6428e76e7071524e6eb3254a8261cb39fbfc6b1c90a358dd28b # shrinks to
 cc 648f7ad10bc0a8eab0f320cdb1ee3aef7dac7961af51b7150ac88d205def6ded # shrinks to text = "# a\n\n- [ ] <div>\n  a\n  </div>\n\n1. - ^lone\n   - # a\n2. ^lone", index = 3
 cc c803b7a0164232ccb331558325f851ee733243fbeac64bd712e3bd2d443f68d4 # shrinks to text = "# a\n\n- # a\n\n  # a\n- # a\n\n  # a\n- > ```", index = 5
 cc 8f2d452a842858c7cc0ba156a0df20a32793ff70de1566cecfcdccc5ae09f1aa # shrinks to text = "---\ntitle: A\n---\n\n- # a\n- - ^lone\n\n    # a\n\n> [!note]\n> > [!note]\n> >     code", index = 4
+cc 453aa10f07bfae8526e66724fe56ea9e97e31794a2fbb470292195d92318ef87 # shrinks to text = "---\ntitle: A\n---\n\n- # a\n\n  - ^lone\n\n    - [ ] ```\n      ```\n    - [ ] # a", index = 3
+cc f8f0f6522bb83e9354a1558cce36f6c404e97db2d74d6e159502250e63d9fa81 # shrinks to text = "---\ntitle: A\n---\n\n> - # a\n> - # a\n\n> # a\n>\n> # a\n\n> > # a\n> >\n> > > ![alt](image.png)\n> > >\n> > > # a\n\n> [!note]", index = 7
+cc 256b5d0c70481caa6d815bf2ef0a6835f06cbe782bd9e3583f742a968655ae4d # shrinks to text = "> > # a\n> >\n> > ![alt](image.png)\n\n> # a\n\n- > [ref]: https://example.test\n  >\n  > # a\n\n  > [!note]", index = 3
+cc 9c05f9d03194c6b5eef0aa6021e6666052b2193ede2b7766c40413cbe515b1e5 # shrinks to text = "---\ntitle: A\n---\n\n> # a\n>\n> - [^1]: a\n> - [^1]: a\n>\n>   # a\n\n> a\n> 1. [[wiki]]\n> 2. # a", index = 6
+cc 176625c71fe4a8d9e8d80aa557902f4b7287ab5118bd8f57f48360685c254d7e # shrinks to text = "> [!note]\n> - > [!note]\n> - > ```\n> [!note]", index = 1
+cc 8e274ea3383b0c10d056dcf4ffd937e438a903acbcfd9e31a0b9e26793ba339f # shrinks to text = "---\ntitle: A\n---\n\n- # a\n- ^lone\n\n# a\n\n![alt](image.png)\n\n- - # a\n\n    [ref]: https://example.test", index = 5

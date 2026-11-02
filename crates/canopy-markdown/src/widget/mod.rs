@@ -889,6 +889,15 @@ impl Markdown {
     pub fn append_block(&mut self, ctx: &mut dyn Context) -> Result<()> {
         slot::open(self, ctx, slot::Opening::After)
     }
+    /// Delete the marked unit as one edit, with the blank lines that set it
+    /// apart on one side, so the units around it stay apart. The block
+    /// cursor then marks the unit after it, or else the one before it. It
+    /// does nothing where `edit_block` does nothing, or outside the block
+    /// cursor, and shows the lock's notice as it does.
+    #[command]
+    pub fn delete_block(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        slot::delete(self, ctx)
+    }
     /// Commit the block editor: record its text as an edit when it differs
     /// from the text before the edit, and close it once the edit's layout
     /// shows. A commit with no change records nothing. While the host locks

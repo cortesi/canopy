@@ -384,6 +384,124 @@ fn a_new_block_at_the_end_starts_after_a_blank_line() {
     }
 }
 
+/// The source after a deletion of unit `index` of `text`.
+fn deleted(text: &str, index: usize) -> String {
+    let document = testing::parse(text);
+    delete_unit(&document, &edit_units(&document), index)
+        .unwrap()
+        .apply(text)
+}
+
+#[test]
+fn a_deletion_keeps_the_blocks_around_the_unit_apart() {
+    let cases: &[(&str, usize, &str)] = &[
+        // Of blank lines on both sides, those with fewer quote markers stay.
+        ("a\n\nb\n\nc\n", 1, "a\n\nc\n"),
+        ("> a\n>\n> b\n>\n> c\n", 1, "> a\n>\n> c\n"),
+        ("> a\n>\n> b\n\nc\n", 1, "> a\n\nc\n"),
+        ("> > a\n> >\n> > b\n>\n> c\n", 1, "> > a\n>\n> c\n"),
+        // A blank line on one side alone stays.
+        ("a\n\n---\nb\n", 1, "a\n\nb\n"),
+        ("para\n# H\n\nnext\n", 1, "para\n\nnext\n"),
+        ("- a\n- b\n- c\n", 1, "- a\n- c\n"),
+        ("a\n1. b\n2. c\n", 1, "a\n\n2. c\n"),
+        // The first and last units go with the blank lines beside them.
+        ("a\n\nb\n", 0, "b\n"),
+        ("a\n\nb\n", 1, "a\n"),
+        ("a\n", 0, ""),
+        // With no blank line on either side, a blank line takes its place.
+        ("para\n# H\n    code\n", 1, "para\n\n    code\n"),
+        ("> a\n> # H\n> b\n", 1, "> a\n>\n> b\n"),
+        // Only the unit's own lines go, so a nested list stays.
+        ("- a\n  - b\n", 0, "  - b\n"),
+        ("a\r\n\r\nb\r\n\r\nc\r\n", 1, "a\r\n\r\nc\r\n"),
+    ];
+    for (text, index, expected) in cases {
+        assert_eq!(&deleted(text, *index), expected, "{text:?} {index}");
+    }
+}
+
+/// Check a deletion of unit `index` of `text`, whose document and units
+/// these are: every other unit keeps its kind and its own text. The title
+/// line of a callout whose only block goes becomes a unit of its own, so
+/// the check leaves callout titles out.
+///
+/// Only the unit's own lines go, so blocks nested under it lose their
+/// parent, and the check skips a unit whose next line of text has a deeper
+/// indent. The spec's corner cases change the blocks around a deletion
+/// in other ways too, such as a block that set two code blocks apart, so
+/// the spec examples have no check of deletions. Fences and raw HTML blocks
+/// have none either, as one may run to the end of its container.
+fn check_delete_in(
+    text: &str,
+    document: &DocumentSnapshot,
+    units: &[EditUnit],
+    index: usize,
+) -> Result<(), String> {
+    let Some(unit) = units.get(index) else {
+        return Ok(());
+    };
+    let indent = |at: usize| {
+        let line = &text[at..];
+        line.len() - line.trim_start_matches(['>', ' ', '\t']).len()
+    };
+    let next = next_text_start(text, unit.range.end);
+    if next < text.len() && indent(next) > indent(unit.range.start) {
+        return Ok(());
+    }
+    // A fence or raw HTML block may run to the end of its container, and
+    // the text around it then reads otherwise without it.
+    if matches!(
+        unit.kind,
+        EditKind::FencedCode | EditKind::Html | EditKind::Source
+    ) {
+        return Ok(());
+    }
+    let new = delete_unit(document, units, index)
+        .ok_or("no splice")?
+        .apply(text);
+    // A paragraph that becomes the first block of its list item becomes a
+    // unit of the item's kind.
+    let titles = |unit: &&EditUnit| unit.kind != EditKind::CalloutTitle;
+    let paragraph = |(kind, own): (EditKind, Option<String>)| {
+        let kind = if kind == EditKind::ListItem {
+            EditKind::Paragraph
+        } else {
+            kind
+        };
+        (kind, own)
+    };
+    let before: Vec<_> = units
+        .iter()
+        .enumerate()
+        .filter(|(other, unit)| *other != index && titles(unit))
+        .map(|(_, unit)| paragraph(shape(text, unit)))
+        .collect();
+    let after: Vec<_> = parse_units(&new)
+        .iter()
+        .filter(titles)
+        .map(|unit| paragraph(shape(&new, unit)))
+        .collect();
+    if after != before {
+        return Err(format!(
+            "a deletion of unit {index} of {text:?} changes the other units, {before:?} to {after:?}: {new:?}"
+        ));
+    }
+    Ok(())
+}
+
+/// The kind and the own text of `unit` of `text`. A list item of a lone
+/// block id loses its own text when its list turns loose, as the id then
+/// names the block before it, so such an id counts as no own text.
+fn shape(text: &str, unit: &EditUnit) -> (EditKind, Option<String>) {
+    let own = unit.own.clone().map(|own| text[own].to_owned());
+    let id = own.as_deref().is_some_and(|own| {
+        own.strip_prefix('^')
+            .is_some_and(|id| !id.is_empty() && id.chars().all(|c| c.is_alphanumeric() || c == '-'))
+    });
+    (unit.kind, own.filter(|_| !id))
+}
+
 /// The words of the new blocks of the checks.
 const FRESH: &str = "Fresh words";
 
@@ -436,17 +554,6 @@ fn check_new_block_in(
     {
         return Ok(());
     }
-    // A list item of a lone block id loses its own text when its list turns
-    // loose, as the id then names the block before it.
-    let shape = |text: &str, unit: &EditUnit| {
-        let own = unit.own.clone().map(|own| text[own].to_owned());
-        let id = own.as_deref().is_some_and(|own| {
-            own.strip_prefix('^').is_some_and(|id| {
-                !id.is_empty() && id.chars().all(|c| c.is_alphanumeric() || c == '-')
-            })
-        });
-        (unit.kind, own.filter(|_| !id))
-    };
     let before: Vec<_> = units.iter().map(|unit| shape(text, unit)).collect();
     let mut after: Vec<_> = grown.iter().map(|unit| shape(&new, unit)).collect();
     if after.len() != before.len() + 1 {
@@ -533,6 +640,12 @@ proptest! {
         own in any::<bool>(),
     ) {
         check_edit(&text, index, &replacement, own).map_err(TestCaseError::fail)?;
+    }
+
+    #[test]
+    fn a_deletion_of_any_unit_keeps_the_others(text in document(), index in 0..8usize) {
+        let document = testing::parse(&text);
+        check_delete_in(&text, &document, &edit_units(&document), index).map_err(TestCaseError::fail)?;
     }
 
     #[test]

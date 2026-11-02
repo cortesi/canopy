@@ -299,11 +299,14 @@ fn e_does_nothing_in_a_reader_without_a_block_editor() {
     });
     settle(&mut harness, &manual);
     let before = screen(&harness);
-    press(&mut harness, "e");
-    assert!(!reader(&mut harness, |reader, _| Ok(reader.block_open())));
-    assert_eq!(screen(&harness), before);
+    for key in ["e", "a", "d"] {
+        press(&mut harness, key);
+        assert!(!reader(&mut harness, |reader, _| Ok(reader.block_open())));
+        assert_eq!(screen(&harness), before, "{key}");
+    }
     reader(&mut harness, |reader, ctx| reader.edit_block(ctx));
     assert!(!reader(&mut harness, |reader, _| Ok(reader.block_open())));
+    assert!(reader(&mut harness, |reader, _| Ok(reader.take_edits())).is_empty());
 }
 
 #[test]
@@ -454,6 +457,39 @@ fn a_opens_an_empty_editor_after_the_marked_unit_and_its_commit_adds_a_block() {
     assert_eq!(&source[selected.range], "> new words");
     let (_, rows) = marked(&mut harness).unwrap();
     assert_eq!(rows.start - view(&mut harness).0, row);
+}
+
+#[test]
+fn d_deletes_the_marked_unit_and_marks_the_next_on_its_row() {
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    press(&mut harness, "j");
+    let (_, rows) = marked(&mut harness).unwrap();
+    let row = rows.start - view(&mut harness).0;
+    press(&mut harness, "d");
+    // One edit drops the quote and the blank line after it.
+    let start = DOCUMENT.find("> alpha").unwrap();
+    let end = DOCUMENT.find("- item a").unwrap();
+    let edits = reader(&mut harness, |reader, _| Ok(reader.take_edits()));
+    assert_eq!(edits.len(), 1);
+    assert_eq!(edits[0].range, start..end);
+    assert_eq!(edits[0].text, "");
+    settle(&mut harness, &manual);
+    // The next unit takes the deleted unit's row.
+    let source = reader(&mut harness, |reader, _| Ok(reader.accepted_source()));
+    let selected = reader(&mut harness, |reader, _| Ok(reader.selected_block())).unwrap();
+    assert_eq!(&source[selected.range], "- item a");
+    let (_, rows) = marked(&mut harness).unwrap();
+    assert_eq!(rows.start - view(&mut harness).0, row);
+    // The last unit goes with the blank line before it, and the cursor
+    // marks the unit before it.
+    press(&mut harness, "G");
+    press(&mut harness, "d");
+    settle(&mut harness, &manual);
+    let source = reader(&mut harness, |reader, _| Ok(reader.accepted_source()));
+    assert!(source.ends_with("c2\n```\n"), "{source:?}");
+    let selected = reader(&mut harness, |reader, _| Ok(reader.selected_block())).unwrap();
+    assert_eq!(&source[selected.range], "```\nc1\nc2\n```");
 }
 
 #[test]
@@ -1068,25 +1104,30 @@ fn each_change_the_lock_refuses_shows_its_notice() {
         });
     };
     lock(&mut harness, Some(LOCKED));
+    press(&mut harness, "d");
+    assert_eq!(shown(&harness), 1, "d");
+    assert!(reader(&mut harness, |reader, _| Ok(reader.take_edits())).is_empty());
+    lock(&mut harness, None);
+    lock(&mut harness, Some(LOCKED));
     press(&mut harness, "e");
-    assert_eq!(shown(&harness), 1, "e");
+    assert_eq!(shown(&harness), 2, "e");
     harness.script("markdown.edit_block()").unwrap();
     service(&mut harness);
-    assert_eq!(shown(&harness), 2, "edit_block from a script");
+    assert_eq!(shown(&harness), 3, "edit_block from a script");
     lock(&mut harness, None);
     press(&mut harness, "e");
     harness.key('x').unwrap();
     service(&mut harness);
     lock(&mut harness, Some(LOCKED));
     press(&mut harness, "Escape");
-    assert_eq!(shown(&harness), 3, "Esc");
+    assert_eq!(shown(&harness), 4, "Esc");
     press(&mut harness, "ctrl-x");
-    assert_eq!(shown(&harness), 4, "ctrl-x");
+    assert_eq!(shown(&harness), 5, "ctrl-x");
     harness.script("markdown.commit_block()").unwrap();
     harness.script("markdown.discard_block(true)").unwrap();
     assert_eq!(
         shown(&harness),
-        6,
+        7,
         "commit_block and discard_block from a script"
     );
     // apply_edit returns its error to the host, with no notice.
@@ -1095,13 +1136,13 @@ fn each_change_the_lock_refuses_shows_its_notice() {
         Ok(reader.apply_edit(ctx, epoch, 0, 1, "x".into()).is_err())
     });
     assert!(refused);
-    assert_eq!(shown(&harness), 6, "apply_edit");
+    assert_eq!(shown(&harness), 7, "apply_edit");
     assert!(reader(&mut harness, |reader, _| Ok(reader.block_open())));
     // Unlocked, the edit goes through and no notice shows.
     lock(&mut harness, None);
     press(&mut harness, "Escape");
     settle(&mut harness, &manual);
-    assert_eq!(shown(&harness), 6);
+    assert_eq!(shown(&harness), 7);
     assert_eq!(
         reader(&mut harness, |reader, _| Ok(reader.take_edits())).len(),
         1

@@ -38,9 +38,10 @@ canopy::slot!(StatusSlot: Text);
 const BINDINGS: &str = r#"
 root.default_bindings()
 markdown.default_bindings()
--- The gym's reader edits no blocks, and its a appends a stream chunk.
+-- The gym's reader edits no blocks, so its a and d take the gym's keys.
 for _, path in { "**/markdown/", "**/markdown_reader/search_bar/**/", "**/markdown_body/markdown_rendered/", "**/markdown_body/markdown_source/" } do
     canopy.unbind_key("a", { path = path })
+    canopy.unbind_key("d", { path = path })
 end
 canopy.keymap({
     path = "markdown_gym",

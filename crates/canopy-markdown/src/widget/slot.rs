@@ -29,7 +29,7 @@ use crate::{
     presentation::PaintOverlays,
     source_store::Lifecycle,
     surface::{PendingMark, RenderedSurface, SurfaceState},
-    units::{EditUnit, NewBlock, line_terminator, unit_at},
+    units::{EditUnit, NewBlock, delete_unit, line_terminator, unit_at},
 };
 
 /// Flex weight of the rows above the slot, far above the weight of the rows
@@ -318,20 +318,18 @@ pub(super) enum Opening {
     After,
 }
 
-/// Open the slot on the marked unit, or empty for a new block after it, as
-/// `opening` says. With no unit, open it empty at the end of the text.
-pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context, opening: Opening) -> Result<()> {
+/// Return whether the user can change a block now. The reader needs a block
+/// editor in its options, no lock, no inspector or open slot, and the layout
+/// of its current text. A lock shows its notice.
+fn editable(reader: &Markdown, ctx: &mut dyn Context) -> Result<bool> {
     // Without a block editor in its options, the reader cannot edit, and
-    // its `e` and `a` do nothing.
-    let Some(config) = reader.options.block_editor.clone() else {
-        return Ok(());
-    };
-    if reader.refused_by_lock(ctx)? {
-        return Ok(());
+    // its `e`, `a`, and `d` do nothing.
+    if reader.options.block_editor.is_none() || reader.refused_by_lock(ctx)? {
+        return Ok(false);
     }
-    // The slot opens over the rendered view alone, once at a time.
+    // A change works on the rendered view alone, once at a time.
     if reader.inspector.is_some() || !reader.rendered_actions_available() {
-        return Ok(());
+        return Ok(false);
     }
     let snapshot = reader.store.snapshot();
     if !matches!(snapshot.lifecycle, Lifecycle::Complete(_)) {
@@ -339,23 +337,29 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context, opening: Openin
             "A document that is still arriving cannot be edited",
         ));
     }
-    let Some(nodes) = reader.nodes.as_ref() else {
-        return Ok(());
-    };
-    let (body, rendered, search) = (nodes.body, nodes.rendered, nodes.search);
     // The units must be those of the current text, or the edit's range would
     // address another text. A new text that has not shown leaves the rendered
     // actions unavailable too, and an edit's text sets `awaiting`.
-    {
-        let state = reader.shared.borrow();
-        let shown = state
-            .presentation
-            .as_ref()
-            .is_some_and(|p| p.document.source.epoch == snapshot.epoch);
-        if !shown || state.awaiting {
-            return Ok(());
-        }
+    let state = reader.shared.borrow();
+    let shown = state
+        .presentation
+        .as_ref()
+        .is_some_and(|p| p.document.source.epoch == snapshot.epoch);
+    Ok(reader.nodes.is_some() && shown && !state.awaiting)
+}
+
+/// Open the slot on the marked unit, or empty for a new block after it, as
+/// `opening` says. With no unit, open it empty at the end of the text.
+pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context, opening: Opening) -> Result<()> {
+    if !editable(reader, ctx)? {
+        return Ok(());
     }
+    let (Some(config), Some(nodes)) = (reader.options.block_editor.clone(), reader.nodes.as_ref())
+    else {
+        return Ok(());
+    };
+    let snapshot = reader.store.snapshot();
+    let (body, rendered, search) = (nodes.body, nodes.rendered, nodes.search);
     // The block cursor marks the unit to edit.
     if reader.shared.borrow().mode != crate::Mode::Interact {
         ctx.with_widget_mut(rendered, |surface: &mut RenderedSurface, ctx| {
@@ -482,6 +486,57 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context, opening: Openin
     })?;
     ctx.set_focus(editor.into())?;
     reader.update_chrome(ctx)
+}
+
+/// Delete the marked unit, as one edit for the host. The block cursor then
+/// marks the unit after it, on the deleted unit's screen row, or else the
+/// unit before it.
+pub(super) fn delete(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
+    if !editable(reader, ctx)? {
+        return Ok(());
+    }
+    let Some(rendered) = reader.nodes.as_ref().map(|nodes| nodes.rendered) else {
+        return Ok(());
+    };
+    let view = ctx
+        .view_of(rendered)
+        .map(|view| (view.scroll.y, view.content.h));
+    let (edit, first, row) = {
+        let mut state = reader.shared.borrow_mut();
+        let (Some((_, rows)), Some(index), Some(p)) = (
+            state.marked_unit(),
+            state.marked_index(),
+            state.presentation.clone(),
+        ) else {
+            return Ok(());
+        };
+        let Some((units, _)) = state.cursor_map() else {
+            return Ok(());
+        };
+        let Some(splice) = delete_unit(&p.document, &units, index) else {
+            return Ok(());
+        };
+        let (first, row) = match units.get(index + 1) {
+            Some(next) => (
+                next.range.start - splice.range.len() + splice.text.len(),
+                view.and_then(|(top, height)| screen_row(&rows, top, height)),
+            ),
+            None => (
+                index
+                    .checked_sub(1)
+                    .and_then(|before| units.get(before))
+                    .map_or(0, |before| before.range.start),
+                None,
+            ),
+        };
+        let edit = BlockEdit {
+            epoch: p.document.source.epoch,
+            range: splice.range,
+            text: splice.text,
+        };
+        (edit, first, row)
+    };
+    reader.edit_text(ctx, edit, first, row)
 }
 
 /// Lay out the parts for the current presentation: fit the rows above the

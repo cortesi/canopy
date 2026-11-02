@@ -265,6 +265,14 @@ container takes the new block in, as it would take any text after it. The
 block cursor then marks the new block. With no unit, `a` opens the editor at
 the end of the text, as `e` does.
 
+`d`, or `delete_block`, deletes the marked unit as one edit, with the blank
+lines that set it apart on one side. With blank lines on both sides, the side
+with fewer quote markers stays, as it sets apart more blocks. With text on
+both sides, a blank line of the unit's quotes takes its place, unless the unit
+is a list item right after another. Only the unit's own lines go, so a nested
+list loses its parent item. The block cursor then marks the next unit, on the
+deleted unit's row, or else the unit before it.
+
 The editor sits outside the paths of the reader's bindings, so the reader's
 keys never reach it, and `/` and `ctrl-r` are the editor's. The reader's own
 search field closes, and its search, Source view, and inspectors wait until
@@ -283,8 +291,9 @@ returns to it, and commits it when it differs from the text before the edit.
 `lock_blocks` with a notice stops every change through the reader, which
 includes opening the editor, while a host needs the text to stay as it is,
 and `None` lifts the lock. Each change of the user that the lock refuses,
-from `e`, `a`, `Esc`, `ctrl-x`, or a script's `edit_block`, `append_block`,
-`commit_block`, or `discard_block`, shows the notice as an info notice, so the user learns why
+from `e`, `a`, `d`, `Esc`, `ctrl-x`, or a script's `edit_block`,
+`append_block`, `delete_block`, `commit_block`, or `discard_block`, shows the
+notice as an info notice, so the user learns why
 nothing happened. A refused `apply_edit` returns its error to the host and
 shows nothing.
 

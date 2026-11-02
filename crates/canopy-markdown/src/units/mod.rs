@@ -255,7 +255,7 @@ impl NewBlock {
             .strip_prefix(terminator)
             .map(|rest| &rest[..line_text_end(rest, 0)]);
         let trail = match next {
-            Some(line) if !line.trim_start_matches(['>', ' ', '\t']).is_empty() => {
+            Some(line) if !is_blank(line) => {
                 format!("{terminator}{blank}")
             }
             _ => String::new(),
@@ -289,6 +289,132 @@ impl NewBlock {
             })
             .collect();
         format!("{}{}{}", self.lead, lines.join(self.terminator), self.trail)
+    }
+}
+
+/// Return the splice that deletes `unit` of `document`, with the blank lines
+/// that set it apart on one side, so the blocks around it stay apart. With
+/// blank lines on both sides, the side with fewer quote markers stays, as it
+/// sets apart more blocks. A blank line on one side alone stays. With text on
+/// both sides, a blank line of the unit's quotes takes its place, except for
+/// a list item right after another, as the next line then has a marker of
+/// its own. The first unit of a text goes with the blank lines after it, and
+/// the last with those before it. A line of only quote markers is blank.
+/// `units` are the units of `document`, and `index` the unit's place in them.
+pub(crate) fn delete_unit(
+    document: &DocumentSnapshot,
+    units: &[EditUnit],
+    index: usize,
+) -> Option<Splice> {
+    let unit = units.get(index)?;
+    let source = document.source.text();
+    let Range { start, end } = unit.range;
+    let following = next_text_start(&source, end);
+    let previous = previous_text_end(&source, start);
+    let range = match previous {
+        None => start..following,
+        Some(previous) if following == source.len() => previous..end,
+        Some(previous) => match (
+            blank_run(&source, previous, start),
+            blank_run(&source, end, following),
+        ) {
+            (Some(before), Some(after)) if before <= after => start..following,
+            (Some(_), Some(_)) => previous..end,
+            (None, None)
+                if !(unit.kind == EditKind::ListItem
+                    && index
+                        .checked_sub(1)
+                        .and_then(|before| units.get(before))
+                        .is_some_and(|before| {
+                            before.kind == EditKind::ListItem && before.range.end == previous
+                        })) =>
+            {
+                let prefix = block_prefix(document, unit.blocks.start);
+                return Some(Splice {
+                    range: start..end,
+                    text: prefix.trim_end_matches([' ', '\t']).to_owned(),
+                });
+            }
+            _ => start..end + terminator_at(&source, end),
+        },
+    };
+    Some(Splice {
+        range,
+        text: String::new(),
+    })
+}
+
+/// Return the fewest quote markers on a blank line between the line whose
+/// text ends at `from` and the line that starts at `to`, or `None` with no
+/// line between them.
+fn blank_run(source: &str, from: usize, to: usize) -> Option<usize> {
+    let first = from + terminator_at(source, from);
+    let last = to.checked_sub(terminator_before(source, to))?;
+    (first <= last).then(|| {
+        lines(&source[first..last])
+            .iter()
+            .map(|line| line.matches('>').count())
+            .min()
+            .unwrap_or(0)
+    })
+}
+
+/// Return whether `line` is blank: it holds nothing but quote markers and
+/// blanks.
+fn is_blank(line: &str) -> bool {
+    line.trim_start_matches(['>', ' ', '\t']).is_empty()
+}
+
+/// Return the length of the line terminator at byte `at` of `source`, or 0
+/// where none starts.
+fn terminator_at(source: &str, at: usize) -> usize {
+    let rest = &source[at..];
+    if rest.starts_with("\r\n") {
+        2
+    } else {
+        usize::from(rest.starts_with(['\n', '\r']))
+    }
+}
+
+/// Return the length of the line terminator that ends just before byte `at`
+/// of `source`, a line start, or 0 at the start of the text.
+fn terminator_before(source: &str, at: usize) -> usize {
+    let before = &source[..at];
+    if before.ends_with("\r\n") {
+        2
+    } else {
+        usize::from(before.ends_with(['\n', '\r']))
+    }
+}
+
+/// Return the end of the text of the last line before the line that starts
+/// at `at` that is not blank, or `None` when every line before it is blank.
+fn previous_text_end(source: &str, mut at: usize) -> Option<usize> {
+    while at > 0 {
+        let end = at - terminator_before(source, at);
+        let start = line_start(source, end);
+        if !is_blank(&source[start..end]) {
+            return Some(end);
+        }
+        at = start;
+    }
+    None
+}
+
+/// Return the start of the first line after the line that ends at `at` that
+/// is not blank, or the end of the text.
+fn next_text_start(source: &str, mut at: usize) -> usize {
+    loop {
+        let width = terminator_at(source, at);
+        if width == 0 {
+            return source.len();
+        }
+        let start = at + width;
+        let end = line_text_end(source, start);
+        if !is_blank(&source[start..end]) {
+            return start;
+        }
+        at = end;
     }
 }
 
