@@ -500,6 +500,7 @@ dependencies = [
  "proptest",
  "resvg",
  "ropey",
+ "serde_json",
  "syntect",
  "tempfile",
  "textwrap",

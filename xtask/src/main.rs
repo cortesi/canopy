@@ -91,6 +91,16 @@ enum Task {
         #[arg(long)]
         check: bool,
     },
+    /// Compare vi visual mode of the editor with Neovim, which must be on
+    /// the path: the curated cases, and generated ones.
+    VimDiff {
+        /// The number of generated cases.
+        #[arg(long, default_value_t = 5000)]
+        cases: u64,
+        /// The seed of the generator.
+        #[arg(long)]
+        seed: Option<u64>,
+    },
 }
 
 /// Run the `cargo xtask` entry point.
@@ -110,6 +120,7 @@ fn main() -> ExitCode {
             cases,
             seed,
         } => soak::run(&root, &suites, cases, seed),
+        Task::VimDiff { cases, seed } => run_vim_diff(&root, cases, seed),
         Task::Score { args } => {
             let mut command = vec!["run", "--quiet", "-p", "mosaic-score", "--"];
             command.extend(args.iter().map(String::as_str));
@@ -280,6 +291,51 @@ fn run_bench_check(workspace_root: &Path) -> bool {
             "--all-features",
         ],
     )
+}
+
+/// Run the ignored Neovim comparison of `canopy-widgets` with `cases`
+/// generated cases.
+fn run_vim_diff(workspace_root: &Path, cases: u64, seed: Option<u64>) -> bool {
+    let mut command = cargo_env::command("cargo");
+    command
+        .args([
+            "test",
+            "-p",
+            "canopy-widgets",
+            "--all-features",
+            "--test",
+            "vim_diff",
+            "--",
+            "--ignored",
+            "--nocapture",
+        ])
+        .env("VIM_DIFF_CASES", cases.to_string());
+    if let Some(seed) = seed {
+        command.env("VIM_DIFF_SEED", seed.to_string());
+    }
+    run_command(
+        command.current_dir(workspace_root),
+        "cargo test --test vim_diff",
+    )
+}
+
+/// Run `command`, which `label` names in messages, with inherited output.
+fn run_command(command: &mut Command, label: &str) -> bool {
+    match command
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+    {
+        Ok(status) if status.success() => true,
+        Ok(status) => {
+            eprintln!("Command `{label}` failed with status {status}");
+            false
+        }
+        Err(error) => {
+            eprintln!("Failed to run `{label}`: {error}");
+            false
+        }
+    }
 }
 
 /// Discover smoke-suite directories from tracked `.canopyctl.toml` files.
