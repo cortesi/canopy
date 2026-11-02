@@ -31,6 +31,9 @@ use crate::{
     view_search,
 };
 
+/// Visual mode.
+mod visual;
+
 canopy::slot!(EditorSlot: Editor);
 
 /// Host widget that mounts an editor as its only child.
@@ -1110,9 +1113,11 @@ fn read_only_history_commands_preserve_text_selection_and_history() {
 
 #[test]
 fn visual_change_enters_insert_and_undoes_as_one_edit() {
+    // The selection holds the characters at both ends, and a change of
+    // whole lines keeps one line for the new text.
     for (text, keys, expected) in [
-        ("abc", vec!['v', 'l'], "Xbc"),
-        ("one\ntwo", vec!['V'], "Xtwo"),
+        ("abc", vec!['v', 'l'], "Xc"),
+        ("one\ntwo", vec!['V'], "X\ntwo"),
     ] {
         let config = EditorConfig::new().with_mode(EditMode::Vi);
         let mut harness = build_harness(text, config, 20, 3);

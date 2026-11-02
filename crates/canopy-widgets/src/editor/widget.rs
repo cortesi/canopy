@@ -168,6 +168,18 @@ struct RenderLineContext<'a, 'b> {
     /// The logical line the last display row drew, which the line's other
     /// rows reuse.
     line: Option<LineText>,
+    /// What the frame paints as selected.
+    selection: SelectionPaint,
+}
+
+/// What one frame paints as selected.
+struct SelectionPaint {
+    /// The selected range.
+    range: TextRange,
+    /// In visual mode, the span of positions whose line breaks are
+    /// selected, both ends included. The end of a line in the span paints
+    /// one selected cell after the text.
+    breaks: Option<(TextPosition, TextPosition)>,
 }
 
 /// The text of one logical line.
@@ -210,7 +222,13 @@ struct CellStyles {
 
 impl<'a, 'b> RenderLineContext<'a, 'b> {
     /// Construct a new render context, resolving the fixed cell styles once.
-    fn new(r: &'a mut Render<'b>, view_rect: Rect, origin: Point, gutter_width: u32) -> Self {
+    fn new(
+        r: &'a mut Render<'b>,
+        view_rect: Rect,
+        origin: Point,
+        gutter_width: u32,
+        selection: SelectionPaint,
+    ) -> Self {
         let styles = CellStyles {
             text: r.resolve_style("text"),
             selection: r.resolve_style("selection"),
@@ -224,6 +242,7 @@ impl<'a, 'b> RenderLineContext<'a, 'b> {
             gutter_width,
             styles,
             line: None,
+            selection,
         }
     }
 }
@@ -376,13 +395,34 @@ impl Editor {
     }
 
     /// Return the selection endpoints in logical character coordinates.
+    ///
+    /// The range of the selection is half-open. In vi visual mode it holds
+    /// what Vim's inclusive selection holds: a character selection holds
+    /// the characters at both ends, so a new selection holds the character
+    /// at the cursor. An end on the end of a line holds the line break, if
+    /// one follows. A line selection runs from the start of its first line
+    /// to the end of its last line, without the line break after it. The
+    /// head is the end at the cursor, so it lies after the cursor when the
+    /// cursor follows the anchor.
     pub fn selection(&self) -> Selection {
-        self.buffer.selection()
+        match self.visual_mode() {
+            Some(mode) => self.visual_selection(mode),
+            None => self.buffer.selection(),
+        }
     }
 
     /// Replace selection endpoints without scrolling or taking focus.
+    ///
+    /// In vi visual mode, the selection names the range to select, in the
+    /// form that [`Self::selection`] returns, so the two round-trip. A
+    /// character selection then holds the characters of the range, or the
+    /// character at an empty range. A line selection holds the lines of the
+    /// range, and its ends keep their columns.
     pub fn set_selection(&mut self, selection: Selection) {
-        self.buffer.set_selection(selection);
+        match self.visual_mode() {
+            Some(mode) => self.set_visual_selection(mode, selection),
+            None => self.buffer.set_selection(selection),
+        }
         self.update_preferred_column();
     }
 
@@ -923,6 +963,11 @@ impl Editor {
         Ok(match event.action {
             mouse::Action::Down if event.button == mouse::Button::Left => {
                 ctx.set_focus(ctx.node_id())?;
+                // A click ends visual mode, so the pointer selects plain
+                // ranges.
+                if self.visual_mode().is_some() {
+                    self.vi.set_mode(ViMode::Normal);
+                }
                 match self.mouse.click_state.count(content_point) {
                     2 => {
                         let range = word_range(&self.buffer, pos);
@@ -1002,12 +1047,15 @@ impl Editor {
                 })
             }
         };
-        let selection = self.buffer.selection();
-        let selection_range = selection.range();
-        let selection_active = !selection.is_empty();
+        let selection_range = ctx.selection.range;
+        let selection_active = !selection_range.is_empty();
         let selection_on_line = selection_active
             && line_idx >= selection_range.start.line
             && line_idx <= selection_range.end.line;
+        let line_break_selected = ctx.selection.breaks.is_some_and(|(first, last)| {
+            let end = TextPosition::new(line_idx, line.chars);
+            first <= end && end <= last
+        }) && segment.end_char >= line.chars;
         let line_start_sel = if selection_on_line && selection_range.start.line == line_idx {
             selection_range.start.column
         } else {
@@ -1084,7 +1132,25 @@ impl Editor {
                     chosen
                 }
             },
-        )
+        )?;
+        if line_break_selected {
+            // The cell after the text shows that the selection holds the
+            // line break.
+            let text_end = ctx.gutter_width.saturating_add(run_paint::column(
+                segment.end_col.saturating_sub(segment.start_col),
+            ));
+            if let Some(draw) = text_end.checked_sub(ctx.view_rect.tl.x)
+                && draw < ctx.view_rect.w
+            {
+                let cell = Point {
+                    x: ctx.origin.x.saturating_add(draw),
+                    y: line_y,
+                };
+                ctx.r
+                    .put_cell(selection_style.resolve_at(line_rect, cell), cell, ' ')?;
+            }
+        }
+        Ok(())
     }
 
     /// Move the cursor.
@@ -1191,9 +1257,16 @@ impl Editor {
     }
 
     /// Switch a vi editor to `mode`, as its keys would. Leaving insert mode
-    /// records the insert for repetition. A text editor ignores the call.
+    /// records the insert for repetition. Leaving visual mode moves a
+    /// cursor on the end of a line to its last character, and a switch
+    /// between the kinds of visual selection keeps both ends. A text editor
+    /// ignores the call.
     pub fn set_vi_mode(&mut self, mode: ViMode) {
         if self.config.mode != EditMode::Vi || self.vi.mode() == mode {
+            return;
+        }
+        if let (ViMode::Visual(_), ViMode::Visual(visual)) = (self.vi.mode(), mode) {
+            self.vi.set_mode(ViMode::Visual(visual));
             return;
         }
         match self.vi.mode() {
@@ -1214,16 +1287,22 @@ impl Editor {
         }
     }
 
-    /// Undo the last edit.
+    /// Undo the last edit. Visual mode ends first.
     #[command]
     pub fn undo(&mut self, _ctx: &mut dyn Context) {
+        if self.visual_mode().is_some() {
+            self.exit_visual();
+        }
         self.undo_edit();
         self.update_preferred_column();
     }
 
-    /// Redo the last undone edit.
+    /// Redo the last undone edit. Visual mode ends first.
     #[command]
     pub fn redo(&mut self, _ctx: &mut dyn Context) {
+        if self.visual_mode().is_some() {
+            self.exit_visual();
+        }
         self.redo_edit();
         self.update_preferred_column();
     }
@@ -1398,6 +1477,16 @@ impl Editor {
         rows
     }
 
+    /// Make the next search match from the cursor current, and return its
+    /// start: the first match after the cursor in the direction of the
+    /// search, or before it when `reverse` is set, wrapping around the text.
+    pub(super) fn search_from_cursor(&mut self, reverse: bool) -> Option<TextPosition> {
+        let cursor = self.buffer.cursor();
+        self.search
+            .next_from(&self.buffer, cursor, reverse)
+            .map(|range| range.start)
+    }
+
     /// Put the cursor on the current search match and scroll it into view.
     ///
     /// The match lands near the middle of the view, as
@@ -1449,7 +1538,12 @@ impl Widget for Editor {
         self.search.update(&self.buffer);
 
         {
-            let mut line_ctx = RenderLineContext::new(r, view_rect, origin, gutter_width);
+            let selection = SelectionPaint {
+                range: self.selection().range(),
+                breaks: self.visual_mode().map(|mode| self.visual_break_span(mode)),
+            };
+            let mut line_ctx =
+                RenderLineContext::new(r, view_rect, origin, gutter_width, selection);
             for row in 0..view_rect.h {
                 let display_line = view_rect.tl.y.saturating_add(row) as usize;
                 if display_line >= self.layout.total_lines() {

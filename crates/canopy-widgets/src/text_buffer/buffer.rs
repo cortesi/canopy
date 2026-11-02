@@ -393,17 +393,6 @@ impl TextBuffer {
         self.selection = Selection::caret(TextPosition::new(cursor.line, line_len));
     }
 
-    /// Move the cursor to the first non-whitespace character in the line.
-    pub fn move_line_first_non_ws(&mut self) {
-        let cursor = self.selection.head();
-        let column = self
-            .line_text(cursor.line)
-            .chars()
-            .take_while(|ch| ch.is_whitespace())
-            .count();
-        self.selection = Selection::caret(TextPosition::new(cursor.line, column));
-    }
-
     /// Return the display column for a position.
     pub fn column_for_position(&self, pos: TextPosition, tab_stop: usize) -> usize {
         let line_text = self.line_text(pos.line);

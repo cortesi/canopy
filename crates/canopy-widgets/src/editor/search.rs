@@ -7,6 +7,7 @@ use canopy::{
     input::key,
     render::Render,
     style::roles,
+    text,
 };
 
 use super::widget::{Editor, prompt_text};
@@ -230,6 +231,35 @@ impl SearchState {
         self.matches.get(next).map(|range| range.start)
     }
 
+    /// Make the next match from `from` current and return it, as Vim's `n`
+    /// finds it: the first match that starts after `from` in the direction
+    /// of the search, or the opposite direction with `reverse`. The search
+    /// wraps around the ends of the text.
+    pub fn next_from(
+        &mut self,
+        buffer: &TextBuffer,
+        from: TextPosition,
+        reverse: bool,
+    ) -> Option<TextRange> {
+        self.update(buffer);
+        let count = self.matches.len();
+        if count == 0 {
+            return None;
+        }
+        let forward = (self.direction == SearchDirection::Forward) != reverse;
+        let index = if forward {
+            let after = self.matches.partition_point(|range| range.start <= from);
+            if after < count { after } else { 0 }
+        } else {
+            self.matches
+                .partition_point(|range| range.start < from)
+                .checked_sub(1)
+                .unwrap_or(count - 1)
+        };
+        self.current = Some(index);
+        self.matches.get(index).copied()
+    }
+
     /// Return the index of the first match at or after `from`, wrapping to
     /// the first match when none follows.
     fn first_at_or_after(&self, from: TextPosition) -> Option<usize> {
@@ -267,7 +297,8 @@ fn find_matches_from(buffer: &TextBuffer, query: &str, start: TextPosition) -> V
 /// optionally ignoring ASCII case.
 ///
 /// ASCII case folding keeps every byte offset, so match columns index the
-/// original text.
+/// original text. A match starts and ends on grapheme boundaries, as in Vim,
+/// so `e` does not match the `e` of an `e` with a combining accent.
 fn find_matches_in(
     buffer: &TextBuffer,
     query: &str,
@@ -298,9 +329,20 @@ fn find_matches_in(
         } else {
             0
         };
+        let boundaries = grapheme_boundaries(&line);
+        let on_boundary = |byte: usize| {
+            boundaries
+                .as_ref()
+                .is_none_or(|bytes| bytes.binary_search(&byte).is_ok())
+        };
         while let Some(found) = line[offset..].find(query) {
             let byte_start = offset.saturating_add(found);
             let byte_end = byte_start.saturating_add(query.len());
+            if !(on_boundary(byte_start) && on_boundary(byte_end)) {
+                // The match splits a grapheme: look again from the next char.
+                offset = byte_start + line[byte_start..].chars().next().map_or(1, char::len_utf8);
+                continue;
+            }
             let start_col = line[..byte_start].chars().count();
             let end_col = line[..byte_end].chars().count();
             out.push(TextRange::new(
@@ -313,9 +355,33 @@ fn find_matches_in(
     out
 }
 
+/// Return the byte offsets of the grapheme boundaries of `line`, both ends
+/// included, or `None` for ASCII, where every byte is a boundary.
+fn grapheme_boundaries(line: &str) -> Option<Vec<usize>> {
+    if line.is_ascii() {
+        return None;
+    }
+    let mut bytes: Vec<usize> = text::grapheme_indices(line).map(|(byte, _)| byte).collect();
+    bytes.push(line.len());
+    Some(bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_match_never_splits_a_grapheme() {
+        let buffer = TextBuffer::new("e\u{301}x ex e");
+        let starts: Vec<usize> = find_matches(&buffer, "e")
+            .iter()
+            .map(|range| range.start.column)
+            .collect();
+        assert_eq!(starts, [4, 7]);
+        assert_eq!(find_matches(&buffer, "e\u{301}").len(), 1);
+        assert!(find_matches(&buffer, "\u{301}").is_empty());
+        assert_eq!(find_matches(&buffer, "x").len(), 2);
+    }
 
     #[test]
     fn search_finds_matches() {
@@ -324,6 +390,33 @@ mod tests {
         assert_eq!(matches.len(), 2);
         assert_eq!(matches[0].start.line, 0);
         assert_eq!(matches[1].start.line, 1);
+    }
+
+    #[test]
+    fn next_from_finds_the_match_after_a_position_and_wraps() {
+        let buffer = TextBuffer::new("ab ab\nab");
+        let at = |line, column| TextPosition::new(line, column);
+        let mut state = SearchState::new();
+        state.set_query(&buffer, "ab", SearchDirection::Forward);
+        let start = |state: &mut SearchState, from, reverse| {
+            state
+                .next_from(&buffer, from, reverse)
+                .map(|range| range.start)
+        };
+        assert_eq!(start(&mut state, at(0, 0), false), Some(at(0, 3)));
+        assert_eq!(state.current_index(), Some(1));
+        assert_eq!(start(&mut state, at(0, 1), false), Some(at(0, 3)));
+        assert_eq!(start(&mut state, at(1, 0), false), Some(at(0, 0)));
+        assert_eq!(start(&mut state, at(0, 3), true), Some(at(0, 0)));
+        assert_eq!(start(&mut state, at(0, 0), true), Some(at(1, 0)));
+        assert_eq!(start(&mut state, at(0, 4), true), Some(at(0, 3)));
+
+        state.set_query(&buffer, "ab", SearchDirection::Backward);
+        assert_eq!(start(&mut state, at(0, 3), false), Some(at(0, 0)));
+        assert_eq!(start(&mut state, at(0, 3), true), Some(at(1, 0)));
+
+        state.set_query(&buffer, "zz", SearchDirection::Forward);
+        assert_eq!(start(&mut state, at(0, 0), false), None);
     }
 
     #[test]
@@ -515,9 +608,7 @@ impl Editor {
         match prompt {
             PromptState::Search { direction, query } => {
                 self.search.set_query(&self.buffer, query, direction);
-                if let Some(pos) = self.search.current_match().map(|range| range.start) {
-                    self.set_cursor(ctx, pos);
-                }
+                self.jump_to_match(ctx, false);
             }
             PromptState::ReplaceQuery { query } => {
                 self.prompt = Some(PromptState::ReplaceWith {

@@ -1,3 +1,10 @@
+/// Character classes of word motions.
+mod class;
+/// Vim's word, sentence, and paragraph motions and text objects.
+mod motion;
+/// Visual mode.
+mod visual;
+
 use std::mem;
 
 use canopy::{
@@ -5,12 +12,13 @@ use canopy::{
     input::{Event, key},
 };
 use unicode_segmentation::UnicodeSegmentation;
+pub(super) use visual::VisualCommand;
 
 use super::{
     search::{PromptCommand, SearchDirection},
-    widget::{Editor, is_word_char},
+    widget::Editor,
 };
-use crate::text_buffer::{Selection, TextPosition, TextRange};
+use crate::text_buffer::{TextPosition, TextRange};
 
 /// Vi mode state for the editor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +51,9 @@ pub enum PendingKey {
     Yank,
     /// Waiting for a `g` sequence.
     G,
+    /// Waiting for the kind of a visual-mode text object: inner without
+    /// blanks, or with them when the flag is set.
+    Object(bool),
 }
 
 /// Repeatable edit actions.
@@ -95,7 +106,7 @@ pub(super) enum InsertCommand {
     Move(MoveCommand),
 }
 
-/// A caret movement shared by insert and visual modes.
+/// A caret movement of insert mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum MoveCommand {
     /// Move left.
@@ -108,37 +119,43 @@ pub(super) enum MoveCommand {
     Down,
 }
 
-/// One visual-mode vi action.
+/// A cursor motion of normal and visual modes, as in Vim.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum VisualCommand {
-    /// Leave visual mode.
-    Exit,
-    /// Delete the selection.
-    Delete,
-    /// Yank the selection.
-    Yank,
-    /// Change the selection.
-    Change,
-    /// Indent the selection right or left.
-    Indent(bool),
-    /// Move the selection edge.
-    Move(MoveCommand),
-}
-
-impl VisualCommand {
-    /// Whether this command changes the buffer.
-    fn edits(self) -> bool {
-        matches!(self, Self::Delete | Self::Change | Self::Indent(_))
-    }
+pub(super) enum Motion {
+    /// `h`: one grapheme left. Normal mode crosses to the line before.
+    Left,
+    /// `l`: one grapheme right. Normal mode crosses to the next line, and
+    /// visual mode reaches the end of the line.
+    Right,
+    /// `k`: one line up, at the column that vertical moves keep.
+    Up,
+    /// `j`: one line down, at the column that vertical moves keep.
+    Down,
+    /// `0`: the start of the line.
+    LineStart,
+    /// `^`: the first char of the line that is not a blank.
+    FirstNonBlank,
+    /// `$`: the end of the line. Vertical moves then keep to line ends.
+    LineEnd,
+    /// `w`: the start of the next word.
+    WordForward,
+    /// `b`: the start of the word before.
+    WordBackward,
+    /// `e`: the end of the word.
+    WordEnd,
+    /// `gg`: the first line, at the column that vertical moves keep.
+    Top,
+    /// `G`: the last line, at the column that vertical moves keep.
+    Bottom,
+    /// `gj` and `gk`: display rows down or up.
+    Row(isize),
 }
 
 /// One pending multi-key vi command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum PendingCommand {
-    /// Jump to the first line.
-    GotoTop,
-    /// Move by display lines.
-    MoveDisplay(isize),
+    /// Move the cursor.
+    Motion(Motion),
     /// Delete the current line.
     DeleteLine,
     /// Change the current line.
@@ -189,20 +206,8 @@ pub(super) enum PlainCommand {
     Redo,
     /// Repeat the last edit.
     Repeat,
-    /// Move the caret.
-    Move(MoveCommand),
-    /// Move to the start of the line.
-    LineStart,
-    /// Move to the end of the line.
-    LineEnd,
-    /// Move to the first non-blank character.
-    FirstNonBlank,
-    /// Move forward one word.
-    WordForward,
-    /// Move back one word.
-    WordBackward,
-    /// Move to the word end.
-    WordEnd,
+    /// Move the cursor.
+    Motion(Motion),
     /// Set a pending multi-key prefix.
     SetPending(PendingKey),
     /// Yank the current line.
@@ -215,8 +220,6 @@ pub(super) enum PlainCommand {
     DeleteToEnd,
     /// Change to the line end.
     ChangeToEnd,
-    /// Jump to the last line.
-    GotoLastLine,
 }
 
 impl PlainCommand {
@@ -349,28 +352,6 @@ impl ViState {
 }
 
 impl Editor {
-    /// Enter visual mode and initialize selection.
-    pub(super) fn enter_visual(&mut self, mode: VisualMode) {
-        let cursor = self.buffer.cursor();
-        self.vi.set_mode(ViMode::Visual(mode));
-        let selection = match mode {
-            VisualMode::Line => {
-                let start = TextPosition::new(cursor.line, 0);
-                let end = self.buffer.line_end_position(cursor.line, false);
-                Selection::new(start, end)
-            }
-            VisualMode::Character => Selection::new(cursor, cursor),
-        };
-        self.buffer.set_selection(selection);
-    }
-
-    /// Exit visual mode and collapse selection.
-    pub(super) fn exit_visual(&mut self) {
-        let cursor = self.buffer.cursor();
-        self.vi.set_mode(ViMode::Normal);
-        self.buffer.set_selection(Selection::caret(cursor));
-    }
-
     /// Classify one key in vi mode, accounting for prompt state and pending
     /// prefixes, without running its effect.
     pub(super) fn vi_command(&self, key: key::Key) -> Option<ViCommand> {
@@ -382,7 +363,8 @@ impl Editor {
         let read_only = self.config.interaction.read_only();
         match self.vi.mode() {
             ViMode::Insert => self.insert_command(key).map(ViCommand::Insert),
-            ViMode::Visual(mode) => Self::visual_command(key)
+            ViMode::Visual(mode) => self
+                .visual_command(mode, key)
                 .filter(|command| !(read_only && command.edits()))
                 .map(|command| ViCommand::Visual(mode, command)),
             ViMode::Normal => self.normal_command(key).map(ViCommand::Normal),
@@ -403,25 +385,6 @@ impl Editor {
             key::KeyCode::Right => InsertCommand::Move(MoveCommand::Right),
             key::KeyCode::Up => InsertCommand::Move(MoveCommand::Up),
             key::KeyCode::Down => InsertCommand::Move(MoveCommand::Down),
-            _ => return None,
-        })
-    }
-
-    /// Classify one visual-mode key.
-    fn visual_command(key: key::Key) -> Option<VisualCommand> {
-        Some(match key.key {
-            key::KeyCode::Esc => VisualCommand::Exit,
-            key::KeyCode::Char('d' | 'x') => VisualCommand::Delete,
-            key::KeyCode::Char('y') => VisualCommand::Yank,
-            key::KeyCode::Char('c') => VisualCommand::Change,
-            key::KeyCode::Char('>') => VisualCommand::Indent(true),
-            key::KeyCode::Char('<') => VisualCommand::Indent(false),
-            key::KeyCode::Char('h') | key::KeyCode::Left => VisualCommand::Move(MoveCommand::Left),
-            key::KeyCode::Char('l') | key::KeyCode::Right => {
-                VisualCommand::Move(MoveCommand::Right)
-            }
-            key::KeyCode::Char('j') | key::KeyCode::Down => VisualCommand::Move(MoveCommand::Down),
-            key::KeyCode::Char('k') | key::KeyCode::Up => VisualCommand::Move(MoveCommand::Up),
             _ => return None,
         })
     }
@@ -459,9 +422,9 @@ impl Editor {
             _ => return None,
         };
         Some(match (pending, character) {
-            (PendingKey::G, 'g') => PendingCommand::GotoTop,
-            (PendingKey::G, 'j') => PendingCommand::MoveDisplay(1),
-            (PendingKey::G, 'k') => PendingCommand::MoveDisplay(-1),
+            (PendingKey::G, 'g') => PendingCommand::Motion(Motion::Top),
+            (PendingKey::G, 'j') => PendingCommand::Motion(Motion::Row(1)),
+            (PendingKey::G, 'k') => PendingCommand::Motion(Motion::Row(-1)),
             (PendingKey::Delete, 'd') => PendingCommand::DeleteLine,
             (PendingKey::Change, 'c') => PendingCommand::ChangeLine,
             (PendingKey::Yank, 'y') => PendingCommand::YankLine,
@@ -478,10 +441,10 @@ impl Editor {
         }
         Some(match key.key {
             key::KeyCode::Esc => PlainCommand::ClearPending,
-            key::KeyCode::Left => PlainCommand::Move(MoveCommand::Left),
-            key::KeyCode::Right => PlainCommand::Move(MoveCommand::Right),
-            key::KeyCode::Up => PlainCommand::Move(MoveCommand::Up),
-            key::KeyCode::Down => PlainCommand::Move(MoveCommand::Down),
+            key::KeyCode::Left => PlainCommand::Motion(Motion::Left),
+            key::KeyCode::Right => PlainCommand::Motion(Motion::Right),
+            key::KeyCode::Up => PlainCommand::Motion(Motion::Up),
+            key::KeyCode::Down => PlainCommand::Motion(Motion::Down),
             key::KeyCode::Char('i') => PlainCommand::BeginInsert,
             key::KeyCode::Char('a') => PlainCommand::AppendAfter,
             key::KeyCode::Char('I') => PlainCommand::InsertLineStart,
@@ -498,16 +461,16 @@ impl Editor {
             key::KeyCode::Char('u') => PlainCommand::Undo,
             key::KeyCode::Char('r') if key.mods.ctrl => PlainCommand::Redo,
             key::KeyCode::Char('.') => PlainCommand::Repeat,
-            key::KeyCode::Char('h') => PlainCommand::Move(MoveCommand::Left),
-            key::KeyCode::Char('l') => PlainCommand::Move(MoveCommand::Right),
-            key::KeyCode::Char('j') => PlainCommand::Move(MoveCommand::Down),
-            key::KeyCode::Char('k') => PlainCommand::Move(MoveCommand::Up),
-            key::KeyCode::Char('0') => PlainCommand::LineStart,
-            key::KeyCode::Char('$') => PlainCommand::LineEnd,
-            key::KeyCode::Char('^') => PlainCommand::FirstNonBlank,
-            key::KeyCode::Char('w') => PlainCommand::WordForward,
-            key::KeyCode::Char('b') => PlainCommand::WordBackward,
-            key::KeyCode::Char('e') => PlainCommand::WordEnd,
+            key::KeyCode::Char('h') => PlainCommand::Motion(Motion::Left),
+            key::KeyCode::Char('l') => PlainCommand::Motion(Motion::Right),
+            key::KeyCode::Char('j') => PlainCommand::Motion(Motion::Down),
+            key::KeyCode::Char('k') => PlainCommand::Motion(Motion::Up),
+            key::KeyCode::Char('0') => PlainCommand::Motion(Motion::LineStart),
+            key::KeyCode::Char('$') => PlainCommand::Motion(Motion::LineEnd),
+            key::KeyCode::Char('^') => PlainCommand::Motion(Motion::FirstNonBlank),
+            key::KeyCode::Char('w') => PlainCommand::Motion(Motion::WordForward),
+            key::KeyCode::Char('b') => PlainCommand::Motion(Motion::WordBackward),
+            key::KeyCode::Char('e') => PlainCommand::Motion(Motion::WordEnd),
             key::KeyCode::Char('g') => PlainCommand::SetPending(PendingKey::G),
             key::KeyCode::Char('d') => PlainCommand::SetPending(PendingKey::Delete),
             key::KeyCode::Char('c') => PlainCommand::SetPending(PendingKey::Change),
@@ -518,7 +481,7 @@ impl Editor {
             key::KeyCode::Char('x') => PlainCommand::DeleteChar,
             key::KeyCode::Char('D') => PlainCommand::DeleteToEnd,
             key::KeyCode::Char('C') => PlainCommand::ChangeToEnd,
-            key::KeyCode::Char('G') => PlainCommand::GotoLastLine,
+            key::KeyCode::Char('G') => PlainCommand::Motion(Motion::Bottom),
             _ => return None,
         })
     }
@@ -552,7 +515,7 @@ impl Editor {
 
     /// Clear a pending vi prefix when its follow-up key is not part of it.
     fn reset_unmatched_pending(&mut self) {
-        if self.prompt.is_none() && self.vi.mode() == ViMode::Normal && self.vi.pending().is_some()
+        if self.prompt.is_none() && self.vi.mode() != ViMode::Insert && self.vi.pending().is_some()
         {
             self.vi.set_pending(None);
         }
@@ -616,16 +579,8 @@ impl Editor {
             PlainCommand::Search(direction) => {
                 self.start_search_prompt(direction);
             }
-            PlainCommand::NextMatch => {
-                if let Some(pos) = self.search.move_next(&self.buffer, false) {
-                    self.set_cursor(ctx, pos);
-                }
-            }
-            PlainCommand::PrevMatch => {
-                if let Some(pos) = self.search.move_next(&self.buffer, true) {
-                    self.set_cursor(ctx, pos);
-                }
-            }
+            PlainCommand::NextMatch => self.jump_to_match(ctx, false),
+            PlainCommand::PrevMatch => self.jump_to_match(ctx, true),
             PlainCommand::ReplaceMode => {
                 self.start_replace_prompt();
             }
@@ -647,55 +602,7 @@ impl Editor {
                 self.repeat_last_edit();
                 self.ensure_cursor_visible(ctx);
             }
-            PlainCommand::Move(MoveCommand::Left) => {
-                let moved = self.buffer.move_left(true);
-                if moved {
-                    self.update_preferred_column();
-                    self.ensure_cursor_visible(ctx);
-                }
-            }
-            PlainCommand::Move(MoveCommand::Right) => {
-                let moved = self.buffer.move_right(true);
-                if moved {
-                    self.update_preferred_column();
-                    self.ensure_cursor_visible(ctx);
-                }
-            }
-            PlainCommand::Move(MoveCommand::Down) => {
-                self.move_vertical(1);
-                self.ensure_cursor_visible(ctx);
-            }
-            PlainCommand::Move(MoveCommand::Up) => {
-                self.move_vertical(-1);
-                self.ensure_cursor_visible(ctx);
-            }
-            PlainCommand::LineStart => {
-                self.buffer.move_line_start();
-                self.update_preferred_column();
-                self.ensure_cursor_visible(ctx);
-            }
-            PlainCommand::LineEnd => {
-                self.buffer.move_line_end();
-                self.update_preferred_column();
-                self.ensure_cursor_visible(ctx);
-            }
-            PlainCommand::FirstNonBlank => {
-                self.buffer.move_line_first_non_ws();
-                self.update_preferred_column();
-                self.ensure_cursor_visible(ctx);
-            }
-            PlainCommand::WordForward => {
-                self.move_word_forward();
-                self.ensure_cursor_visible(ctx);
-            }
-            PlainCommand::WordBackward => {
-                self.move_word_backward();
-                self.ensure_cursor_visible(ctx);
-            }
-            PlainCommand::WordEnd => {
-                self.move_word_end();
-                self.ensure_cursor_visible(ctx);
-            }
+            PlainCommand::Motion(motion) => self.apply_motion(motion, ctx),
             PlainCommand::SetPending(pending) => {
                 self.vi.set_pending(Some(pending));
             }
@@ -725,23 +632,13 @@ impl Editor {
                 self.record_and_apply(RepeatableEdit::ChangeToEnd);
                 self.ensure_cursor_visible(ctx);
             }
-            PlainCommand::GotoLastLine => {
-                let last_line = self.buffer.line_count().saturating_sub(1);
-                self.set_cursor(ctx, TextPosition::new(last_line, 0));
-            }
         }
     }
 
     /// Run one pending-prefix command.
     fn execute_pending(&mut self, command: PendingCommand, ctx: &mut dyn Context) {
         match command {
-            PendingCommand::GotoTop => {
-                self.set_cursor(ctx, TextPosition::new(0, 0));
-            }
-            PendingCommand::MoveDisplay(direction) => {
-                self.move_row(direction, ctx);
-                self.ensure_cursor_visible(ctx);
-            }
+            PendingCommand::Motion(motion) => self.apply_motion(motion, ctx),
             PendingCommand::DeleteLine => {
                 self.record_and_apply(RepeatableEdit::DeleteLine);
                 self.ensure_cursor_visible(ctx);
@@ -810,104 +707,6 @@ impl Editor {
                 self.ensure_cursor_visible(ctx);
             }
         }
-    }
-
-    /// Yank the visual selection, whole lines in line mode, and return the
-    /// range it covers.
-    fn yank_selection(&mut self, mode: VisualMode) -> TextRange {
-        let linewise = matches!(mode, VisualMode::Line);
-        let mut range = self.buffer.selection().range();
-        if linewise {
-            range = self.linewise_range(range);
-        }
-        self.set_yank(range, linewise);
-        range
-    }
-
-    /// Run one visual-mode command.
-    fn execute_visual(&mut self, mode: VisualMode, command: VisualCommand, ctx: &mut dyn Context) {
-        match command {
-            VisualCommand::Exit => self.exit_visual(),
-            VisualCommand::Delete => {
-                if self.config.interaction.read_only() {
-                    self.exit_visual();
-                    return;
-                }
-                let range = self.yank_selection(mode);
-                self.replace_range(range, "");
-                self.update_preferred_column();
-                self.exit_visual();
-                self.vi.set_last_edit(RepeatableEdit::DeleteChar);
-            }
-            VisualCommand::Yank => {
-                self.yank_selection(mode);
-                self.exit_visual();
-            }
-            VisualCommand::Change => {
-                if self.config.interaction.read_only() {
-                    self.exit_visual();
-                    return;
-                }
-                let range = self.yank_selection(mode);
-                self.begin_text_entry_transaction();
-                self.replace_range(range, "");
-                self.exit_visual();
-                self.vi.begin_insert();
-                self.vi.set_last_edit(RepeatableEdit::ChangeLine);
-            }
-            VisualCommand::Indent(right) => {
-                self.indent_selection(right, mode);
-            }
-            VisualCommand::Move(MoveCommand::Left) => {
-                let anchor = self.buffer.selection().anchor();
-                let moved = self.buffer.move_left(true);
-                if moved {
-                    self.update_visual_selection(anchor, mode);
-                    self.ensure_cursor_visible(ctx);
-                }
-            }
-            VisualCommand::Move(MoveCommand::Right) => {
-                let anchor = self.buffer.selection().anchor();
-                let moved = self.buffer.move_right(true);
-                if moved {
-                    self.update_visual_selection(anchor, mode);
-                    self.ensure_cursor_visible(ctx);
-                }
-            }
-            VisualCommand::Move(MoveCommand::Down) => {
-                let anchor = self.buffer.selection().anchor();
-                self.move_vertical(1);
-                self.update_visual_selection(anchor, mode);
-                self.ensure_cursor_visible(ctx);
-            }
-            VisualCommand::Move(MoveCommand::Up) => {
-                let anchor = self.buffer.selection().anchor();
-                self.move_vertical(-1);
-                self.update_visual_selection(anchor, mode);
-                self.ensure_cursor_visible(ctx);
-            }
-        }
-    }
-
-    /// Extend the current selection in visual mode.
-    pub(super) fn extend_selection(&mut self, mode: VisualMode) {
-        let mut selection = self.buffer.selection();
-        selection.set_head(self.buffer.cursor());
-        if let VisualMode::Line = mode {
-            let range = selection.range();
-            let start = TextPosition::new(range.start.line, 0);
-            let end = self.buffer.line_end_position(range.end.line, false);
-            self.buffer.set_selection(Selection::new(start, end));
-        } else {
-            self.buffer.set_selection(selection);
-        }
-    }
-
-    /// Update a visual selection while preserving the anchor.
-    pub(super) fn update_visual_selection(&mut self, anchor: TextPosition, mode: VisualMode) {
-        let head = self.buffer.cursor();
-        self.buffer.set_selection(Selection::new(anchor, head));
-        self.extend_selection(mode);
     }
 
     /// Expand a range to full line boundaries, including trailing newline.
@@ -1010,186 +809,6 @@ impl Editor {
             transaction.insert_text(&content);
         }
         self.update_preferred_column();
-    }
-
-    /// Indent or outdent the selected lines.
-    pub(super) fn indent_selection(&mut self, indent: bool, mode: VisualMode) {
-        if self.config.interaction.read_only() {
-            return;
-        }
-        if !self.config.multiline {
-            return;
-        }
-        let range = self.buffer.selection().range();
-        let start_line = range.start.line;
-        let end_line = range.end.line;
-        let tab = " ".repeat(self.config.tab_stop.max(1));
-        let tab_stop = self.config.tab_stop;
-        {
-            let mut transaction = self.buffer.transaction();
-            for line in start_line..=end_line {
-                let line_start = TextPosition::new(line, 0);
-                if indent {
-                    transaction.replace_range(TextRange::new(line_start, line_start), &tab);
-                } else {
-                    let line_text = transaction.line_text(line);
-                    let remove = line_text
-                        .chars()
-                        .take(tab_stop)
-                        .take_while(|c| *c == ' ')
-                        .count();
-                    if remove > 0 {
-                        let end = TextPosition::new(line, remove);
-                        transaction.replace_range(TextRange::new(line_start, end), "");
-                    }
-                }
-            }
-        }
-        if let VisualMode::Line = mode {
-            self.extend_selection(mode);
-        }
-    }
-
-    /// Move to the start of the next word crossing line boundaries.
-    pub(super) fn move_word_forward(&mut self) {
-        let mut line = self.buffer.cursor().line;
-        let mut column = self.buffer.cursor().column;
-        let line_count = self.buffer.line_count().max(1);
-        let mut crossed_line = false;
-
-        loop {
-            let line_text = self.buffer.line_text(line);
-            let chars: Vec<char> = line_text.chars().collect();
-            let len = chars.len();
-            if column >= len {
-                if line + 1 >= line_count {
-                    self.buffer.set_cursor(TextPosition::new(line, len));
-                    self.update_preferred_column();
-                    return;
-                }
-                line = line.saturating_add(1);
-                column = 0;
-                crossed_line = true;
-                continue;
-            }
-
-            if !crossed_line && is_word_char(chars[column]) {
-                while column < len && is_word_char(chars[column]) {
-                    column = column.saturating_add(1);
-                }
-            }
-            while column < len && !is_word_char(chars[column]) {
-                column = column.saturating_add(1);
-            }
-
-            if column < len {
-                self.buffer.set_cursor(TextPosition::new(line, column));
-                self.update_preferred_column();
-                return;
-            }
-
-            if line + 1 >= line_count {
-                self.buffer.set_cursor(TextPosition::new(line, len));
-                self.update_preferred_column();
-                return;
-            }
-            line = line.saturating_add(1);
-            column = 0;
-            crossed_line = true;
-        }
-    }
-
-    /// Move to the start of the previous word crossing line boundaries.
-    pub(super) fn move_word_backward(&mut self) {
-        let mut line = self.buffer.cursor().line;
-        let mut column = self.buffer.cursor().column;
-
-        loop {
-            let line_text = self.buffer.line_text(line);
-            let chars: Vec<char> = line_text.chars().collect();
-            let len = chars.len();
-            let mut idx = column.min(len);
-            if idx == 0 {
-                if line == 0 {
-                    self.buffer.set_cursor(TextPosition::new(0, 0));
-                    self.update_preferred_column();
-                    return;
-                }
-                line = line.saturating_sub(1);
-                column = self.buffer.line_char_len(line);
-                continue;
-            }
-
-            idx = idx.saturating_sub(1);
-            while idx > 0 && !is_word_char(chars[idx]) {
-                idx = idx.saturating_sub(1);
-            }
-
-            if !is_word_char(chars[idx]) {
-                if line == 0 {
-                    self.buffer.set_cursor(TextPosition::new(0, 0));
-                    self.update_preferred_column();
-                    return;
-                }
-                line = line.saturating_sub(1);
-                column = self.buffer.line_char_len(line);
-                continue;
-            }
-
-            while idx > 0 && is_word_char(chars[idx.saturating_sub(1)]) {
-                idx = idx.saturating_sub(1);
-            }
-
-            self.buffer.set_cursor(TextPosition::new(line, idx));
-            self.update_preferred_column();
-            return;
-        }
-    }
-
-    /// Move to the next word end after the cursor, crossing line boundaries.
-    pub(super) fn move_word_end(&mut self) {
-        let mut line = self.buffer.cursor().line;
-        // Start past the cursor, so that a cursor already at a word's end
-        // moves on to the next one.
-        let mut column = self.buffer.cursor().column.saturating_add(1);
-        let line_count = self.buffer.line_count().max(1);
-
-        loop {
-            let line_text = self.buffer.line_text(line);
-            let chars: Vec<char> = line_text.chars().collect();
-            let len = chars.len();
-            if column >= len {
-                if line + 1 >= line_count {
-                    self.buffer.set_cursor(TextPosition::new(line, len));
-                    self.update_preferred_column();
-                    return;
-                }
-                line = line.saturating_add(1);
-                column = 0;
-                continue;
-            }
-
-            let mut idx = column;
-            while idx < len && !is_word_char(chars[idx]) {
-                idx = idx.saturating_add(1);
-            }
-            if idx >= len {
-                if line + 1 >= line_count {
-                    self.buffer.set_cursor(TextPosition::new(line, len));
-                    self.update_preferred_column();
-                    return;
-                }
-                line = line.saturating_add(1);
-                column = 0;
-                continue;
-            }
-            while idx + 1 < len && is_word_char(chars[idx + 1]) {
-                idx = idx.saturating_add(1);
-            }
-            self.buffer.set_cursor(TextPosition::new(line, idx));
-            self.update_preferred_column();
-            return;
-        }
     }
 
     /// Apply a repeatable edit using normal-mode key semantics.

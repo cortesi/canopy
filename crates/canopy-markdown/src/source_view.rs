@@ -532,8 +532,12 @@ impl MarkdownSource {
             return Err(SourceError::NonAppend);
         }
         let (anchor, head) = self.selection_bytes();
+        // A visual selection keeps its own ends, which the preserved prefix
+        // holds. Its range can still change: an end on the last line break
+        // holds the break that new text adds.
+        let visual = matches!(self.editor.vi_mode(), Some(ViMode::Visual(_)));
         self.editor.publish_view(prepared.editor, preserve);
-        if preserve {
+        if preserve && !visual {
             self.editor.set_selection(Selection::new(
                 prepared.map.position(anchor),
                 prepared.map.position(head),
@@ -616,9 +620,16 @@ impl MarkdownSource {
     }
     /// Return the source byte at the display cursor.
     pub fn source_anchor(&self) -> SourceAnchor {
+        // The head of a visual selection lies after the cursor when the
+        // cursor follows the anchor.
+        let byte = if matches!(self.editor.vi_mode(), Some(ViMode::Visual(_))) {
+            self.map.byte(self.editor.cursor())
+        } else {
+            self.selection_bytes().1
+        };
         SourceAnchor {
             epoch: self.epoch,
-            byte: self.selection_bytes().1,
+            byte,
         }
     }
     /// Return the source location at a prepared content point, such as the
@@ -1016,6 +1027,35 @@ mod tests {
         source.publish(prepared(4, 0, "new")).unwrap();
         assert_eq!(source.selection_range(), 0..0);
         assert_eq!(source.source_anchor(), SourceAnchor { epoch: 4, byte: 0 });
+    }
+
+    #[test]
+    fn a_visual_selection_copies_both_ends_and_survives_an_append() {
+        let source = MarkdownSource::from_prepared(prepared(2, 0, "one two\nthree"));
+        let mut harness = Harness::builder(source).size(12, 3).build().unwrap();
+        harness
+            .with_root_widget_context(|_: &mut MarkdownSource, ctx| {
+                ctx.set_focus(ctx.node_id())?;
+                Ok(())
+            })
+            .unwrap();
+        // `v` selects the character at the cursor, and `e` extends to the end
+        // of the word.
+        harness.keys(['w', 'v', 'e']).unwrap();
+        harness.with_root_widget(|source: &mut MarkdownSource| {
+            assert_eq!(source.selection_range(), 4..7);
+            assert_eq!(source.copy_selection(20).unwrap(), "two");
+            assert_eq!(source.source_anchor().byte, 6, "the anchor is the cursor");
+            source
+                .publish(prepared(2, 1, "one two\nthree\nfour"))
+                .unwrap();
+            assert_eq!(source.selection_range(), 4..7);
+            assert_eq!(source.source_anchor().byte, 6);
+        });
+        harness.key(key::KeyCode::Esc).unwrap();
+        harness.with_root_widget(|source: &mut MarkdownSource| {
+            assert!(source.selection_range().is_empty());
+        });
     }
 
     #[test]

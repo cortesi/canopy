@@ -4399,7 +4399,7 @@ pub mod editor {
         /// Undo history belongs to the replaced buffer and is discarded.
         pub fn publish_view(&mut self, prepared: PreparedEditorView, preserve: bool);
 
-        /// Redo the last undone edit.
+        /// Redo the last undone edit. Visual mode ends first.
         pub fn redo(&mut self, _ctx: &mut dyn Context);
 
         /// Replace `range` with `text` as one undo step, and put the cursor after
@@ -4439,6 +4439,15 @@ pub mod editor {
         pub fn search_position(&self) -> usize;
 
         /// Return the selection endpoints in logical character coordinates.
+        ///
+        /// The range of the selection is half-open. In vi visual mode it holds
+        /// what Vim's inclusive selection holds: a character selection holds
+        /// the characters at both ends, so a new selection holds the character
+        /// at the cursor. An end on the end of a line holds the line break, if
+        /// one follows. A line selection runs from the start of its first line
+        /// to the end of its last line, without the line break after it. The
+        /// head is the end at the cursor, so it lies after the cursor when the
+        /// cursor follows the anchor.
         pub fn selection(&self) -> Selection;
 
         /// Return whether the pointer currently owns an unfinished selection.
@@ -4475,19 +4484,28 @@ pub mod editor {
         pub fn set_matches_preserving_position(&mut self, matches: Vec<TextRange>);
 
         /// Replace selection endpoints without scrolling or taking focus.
+        ///
+        /// In vi visual mode, the selection names the range to select, in the
+        /// form that [`Self::selection`] returns, so the two round-trip. A
+        /// character selection then holds the characters of the range, or the
+        /// character at an empty range. A line selection holds the lines of the
+        /// range, and its ends keep their columns.
         pub fn set_selection(&mut self, selection: Selection);
 
         /// Replace the buffer contents.
         pub fn set_text(&mut self, text: impl Into<String>);
 
         /// Switch a vi editor to `mode`, as its keys would. Leaving insert mode
-        /// records the insert for repetition. A text editor ignores the call.
+        /// records the insert for repetition. Leaving visual mode moves a
+        /// cursor on the end of a line to its last character, and a switch
+        /// between the kinds of visual selection keeps both ends. A text editor
+        /// ignores the call.
         pub fn set_vi_mode(&mut self, mode: ViMode);
 
         /// Return the buffer contents.
         pub fn text(&self) -> String;
 
-        /// Undo the last edit.
+        /// Undo the last edit. Visual mode ends first.
         pub fn undo(&mut self, _ctx: &mut dyn Context);
 
         /// Return the vi mode, or `None` for a text editor.
