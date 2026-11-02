@@ -4261,6 +4261,9 @@ pub mod editor {
     //! the editor. Buffer mechanics, such as positions, ranges, and edits, belong
     //! on the shared text buffer.
 
+    /// The style of the ranges that a host marks with [`Editor::set_marks`].
+    pub const MARK_STYLE: &str = "editor/mark";
+
     /// Editing mode for the editor widget.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum EditMode {
@@ -4356,6 +4359,9 @@ pub mod editor {
         /// text only in insert mode, and a read-only editor never takes it.
         /// @param text Text to insert.
         pub fn insert(&mut self, ctx: &mut dyn Context, text: String);
+
+        /// Return the ranges that the host marks, or none once the marks end.
+        pub fn marks(&self) -> &[TextRange];
 
         /// Move the cursor.
         /// @param dir The direction to move the cursor.
@@ -4472,6 +4478,13 @@ pub mod editor {
         /// contents. Repeated changes before rendering prepare only the final
         /// state.
         pub fn set_highlighter(&mut self, highlighter: Option<Box<dyn Highlighter>>);
+
+        /// Mark `ranges` of the text with [`MARK_STYLE`], under the selection
+        /// and the search matches. A host marks text that it put in place, or
+        /// text that it is about to change. The marks last until the editor takes
+        /// a key, its text changes, or the host marks other ranges. A range may
+        /// span lines.
+        pub fn set_marks(&mut self, ranges: Vec<TextRange>);
 
         /// Highlight precomputed match ranges.
         ///

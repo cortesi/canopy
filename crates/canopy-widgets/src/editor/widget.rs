@@ -103,7 +103,13 @@ pub struct Editor {
     pub(super) highlight_cache: HighlightCache,
     /// Fixed geometry of a prepared view until its next publication.
     prepared_width: Option<u32>,
+    /// The ranges that the host marks, and the revision of the text that
+    /// they address.
+    marks: (Vec<TextRange>, u64),
 }
+
+/// The style of the ranges that a host marks with [`Editor::set_marks`].
+pub const MARK_STYLE: &str = "editor/mark";
 
 /// Owned text and wrapping prepared before publication to a read-only editor.
 ///
@@ -218,6 +224,8 @@ struct CellStyles {
     search_current: Style,
     /// Style for other search matches.
     search_match: Style,
+    /// Style for the ranges that the host marks.
+    mark: Style,
 }
 
 impl<'a, 'b> RenderLineContext<'a, 'b> {
@@ -234,6 +242,7 @@ impl<'a, 'b> RenderLineContext<'a, 'b> {
             selection: r.resolve_style("selection"),
             search_current: r.resolve_style(view_search::CURRENT),
             search_match: r.resolve_style(view_search::MATCH),
+            mark: r.resolve_style(MARK_STYLE),
         };
         Self {
             r,
@@ -315,6 +324,25 @@ impl Editor {
             highlighter: None,
             highlight_cache: HighlightCache::new(),
             prepared_width: None,
+            marks: (Vec::new(), 0),
+        }
+    }
+
+    /// Mark `ranges` of the text with [`MARK_STYLE`], under the selection
+    /// and the search matches. A host marks text that it put in place, or
+    /// text that it is about to change. The marks last until the editor takes
+    /// a key, its text changes, or the host marks other ranges. A range may
+    /// span lines.
+    pub fn set_marks(&mut self, ranges: Vec<TextRange>) {
+        self.marks = (ranges, self.buffer.revision());
+    }
+
+    /// Return the ranges that the host marks, or none once the marks end.
+    pub fn marks(&self) -> &[TextRange] {
+        if self.marks.1 == self.buffer.revision() {
+            &self.marks.0
+        } else {
+            &[]
         }
     }
 
@@ -1068,6 +1096,25 @@ impl Editor {
             line.chars
         };
 
+        let marked: Vec<(usize, usize)> = self
+            .marks()
+            .iter()
+            .filter(|range| range.start.line <= line_idx && line_idx <= range.end.line)
+            .map(|range| {
+                let start = if range.start.line == line_idx {
+                    range.start.column
+                } else {
+                    0
+                };
+                let end = if range.end.line == line_idx {
+                    range.end.column
+                } else {
+                    line.chars
+                };
+                (start, end)
+            })
+            .collect();
+
         let highlight_spans: &[HighlightSpan] = match &self.highlighter {
             Some(highlighter) => self.highlight_cache.spans_for_line(line_idx, || {
                 highlighter.highlight_line(line_idx, &line.text)
@@ -1090,6 +1137,7 @@ impl Editor {
         let selection_style = ctx.styles.selection.clone();
         let search_current_style = ctx.styles.search_current.clone();
         let search_match_style = ctx.styles.search_match.clone();
+        let mark_style = ctx.styles.mark.clone();
 
         run_paint::paint_run(
             ctx.r,
@@ -1115,6 +1163,11 @@ impl Editor {
                     .any(|range| g_start < range.end.column && g_end > range.start.column)
                 {
                     search_match_style.clone()
+                } else if marked
+                    .iter()
+                    .any(|&(start, end)| g_start < end && g_end > start)
+                {
+                    mark_style.clone()
                 } else {
                     let mut chosen = text_style.clone();
                     while let Some(span) = highlight_spans.get(span_idx) {
@@ -1627,6 +1680,9 @@ impl Widget for Editor {
     }
 
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
+        if matches!(event, Event::Key(_)) {
+            self.marks.0.clear();
+        }
         if let Event::Mouse(mouse_event) = event {
             let handled = self.handle_mouse_event(mouse_event, ctx)?;
             if handled {

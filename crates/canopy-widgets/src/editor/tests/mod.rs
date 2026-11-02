@@ -23,7 +23,7 @@ use super::{
     vi::ViMode,
 };
 use crate::{
-    editor::{EditMode, Editor, EditorConfig, Interaction, LineNumbers, WrapMode},
+    editor::{EditMode, Editor, EditorConfig, Interaction, LineNumbers, MARK_STYLE, WrapMode},
     highlight::{HighlightSpan, Highlighter},
     regex_search::{match_ranges, smart_matcher},
     scrollbar::ScrollbarGlyphs,
@@ -1849,6 +1849,94 @@ fn restored_matches_keep_the_view_and_the_current_match() {
     assert_eq!(position, 0);
     let (_, position, _) = run_search(&mut harness, |editor, ctx| editor.search_next(ctx, 1));
     assert_eq!(position, 1);
+}
+
+#[test]
+fn marks_paint_across_lines_under_the_selection() {
+    let config = EditorConfig::new().with_wrap(WrapMode::None);
+    let mut harness = build_harness("one two\nthree\nfour", config, 10, 3);
+    with_editor(&mut harness, |editor| {
+        editor.set_marks(vec![TextRange::new(
+            TextPosition::new(0, 4),
+            TextPosition::new(1, 2),
+        )]);
+    });
+    harness.render().unwrap();
+    let mark = harness.canopy.style().resolve(MARK_STYLE);
+    let text = harness.canopy.style().resolve("editor/text");
+    assert_ne!(
+        mark.bg, text.bg,
+        "the theme gives marks a ground of their own"
+    );
+    let ground =
+        |harness: &Harness, x: u32, y: u32| harness.buf().get(Point { x, y }).unwrap().style.bg;
+    let marked = mark.bg.solid_color().unwrap();
+    // The mark runs from its start to the end of its first line, and from
+    // the start of its last line to its end.
+    assert_ne!(ground(&harness, 3, 0), marked);
+    for (x, y) in [(4, 0), (6, 0), (0, 1), (1, 1)] {
+        assert_eq!(ground(&harness, x, y), marked, "cell {x},{y}");
+    }
+    assert_ne!(ground(&harness, 2, 1), marked);
+    assert_ne!(ground(&harness, 0, 2), marked);
+
+    // The selection paints over a mark.
+    with_editor(&mut harness, |editor| {
+        editor.set_marks(vec![TextRange::new(
+            TextPosition::new(0, 0),
+            TextPosition::new(0, 7),
+        )]);
+        editor.buffer.set_selection(Selection::new(
+            TextPosition::new(0, 1),
+            TextPosition::new(0, 3),
+        ));
+    });
+    harness.render().unwrap();
+    let selected = harness.canopy.style().resolve("editor/selection");
+    assert_eq!(ground(&harness, 1, 0), selected.bg.solid_color().unwrap());
+    assert_eq!(ground(&harness, 5, 0), marked);
+}
+
+#[test]
+fn marks_end_at_a_key_or_a_change_of_the_text() {
+    let mut harness = build_harness("one two", EditorConfig::new(), 10, 1);
+    let range = TextRange::new(TextPosition::new(0, 0), TextPosition::new(0, 3));
+    with_editor(&mut harness, |editor| editor.set_marks(vec![range]));
+    assert_eq!(
+        with_editor(&mut harness, |editor| editor.marks().to_vec()),
+        [range]
+    );
+
+    // A key the editor takes ends the marks, even one that changes nothing.
+    harness.key('l').unwrap();
+    assert!(with_editor(&mut harness, |editor| editor
+        .marks()
+        .is_empty()));
+
+    // So does a change of the text that the marks address.
+    with_editor(&mut harness, |editor| editor.set_marks(vec![range]));
+    harness
+        .with_root_widget_context(|_root: &mut EditorHost, ctx| {
+            ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |editor, ctx| {
+                editor.replace(ctx, range, "ONE");
+                Ok(())
+            })
+        })
+        .unwrap();
+    assert!(with_editor(&mut harness, |editor| editor
+        .marks()
+        .is_empty()));
+
+    // New marks take the place of the old.
+    let other = TextRange::new(TextPosition::new(0, 4), TextPosition::new(0, 7));
+    with_editor(&mut harness, |editor| {
+        editor.set_marks(vec![range]);
+        editor.set_marks(vec![other]);
+    });
+    assert_eq!(
+        with_editor(&mut harness, |editor| editor.marks().to_vec()),
+        [other]
+    );
 }
 
 #[test]

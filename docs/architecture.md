@@ -86,7 +86,7 @@ changing the contract.
 `default-features = false`; Input, List, Root, Help, and Editor remain
 available. Input and Editor share a crate-private text buffer; `editor`
 re-exports only `TextPosition` and `TextRange`, which `Editor::set_matches`
-takes. Every widget is exported at the crate root once, and a module is public
+and `Editor::set_marks` take. Every widget is exported at the crate root once, and a module is public
 only when it carries a family of supporting types: `editor`, `highlight`,
 `font`, `terminal`, `scrollbar`, `diff`, `list`, `paged`, and `mosaic`. Every widget measures
 text with `canopy::text::width`, and tab-aware cells with
