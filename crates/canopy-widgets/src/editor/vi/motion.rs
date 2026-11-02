@@ -192,6 +192,7 @@ impl<'a> Vim<'a> {
     /// Return the graphemes of `line`, reading them once for consecutive
     /// calls.
     fn map(&mut self, line: usize) -> &LineMap {
+        debug_assert!(line < self.line_count(), "line {line} is past the text");
         let buffer = self.buffer;
         let cached = self.line.take().filter(|map| map.index == line);
         self.line

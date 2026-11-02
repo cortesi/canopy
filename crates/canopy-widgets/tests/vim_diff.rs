@@ -396,12 +396,13 @@ const SWEEP_TEXTS: [&str; 6] = [
 /// The keys of the sweep: each text object once, twice, from a selection
 /// of two characters in both directions, from the end of a line, and from a
 /// line selection, then word objects that grow line selections, then word
-/// motions.
-const SWEEP_KEYS: [&str; 48] = [
+/// motions, then paragraphs that grow selections of two lines.
+const SWEEP_KEYS: [&str; 52] = [
     "viw", "viwiw", "vhiw", "vliw", "v$iw", "Viw", "vaw", "vawaw", "vhaw", "vlaw", "v$aw", "Vaw",
     "vis", "visis", "vhis", "vlis", "v$is", "Vis", "vas", "vasas", "vhas", "vlas", "v$as", "Vas",
     "vip", "vipip", "vhip", "vlip", "v$ip", "Vip", "vap", "vapap", "vhap", "vlap", "v$ap", "Vap",
-    "Vhiw", "Vhaw", "Vliw", "Vlaw", "vw", "vb", "ve", "vww", "vbb", "vee", "vwb", "veb",
+    "Vhiw", "Vhaw", "Vliw", "Vlaw", "vw", "vb", "ve", "vww", "vbb", "vee", "vwb", "veb", "vjip",
+    "vkip", "vjap", "vkap",
 ];
 
 /// Every sequence of [`SWEEP_KEYS`] from every start in [`SWEEP_TEXTS`]. The

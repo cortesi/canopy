@@ -729,8 +729,16 @@ fn set_selection_round_trips_in_visual_mode() {
             "{keys} on {text:?}"
         );
     }
-    // A range sets the ends of a character selection.
+    // A range sets the ends of a character selection, in either direction.
     let mut editor = run("abc def", (0, 0), "v");
+    editor.set_selection(Selection::new(
+        TextPosition::new(0, 1),
+        TextPosition::new(0, 4),
+    ));
+    assert_eq!(
+        state(&editor),
+        (range((0, 1), (0, 4)), TextPosition::new(0, 3))
+    );
     editor.set_selection(Selection::new(
         TextPosition::new(0, 5),
         TextPosition::new(0, 2),
@@ -891,11 +899,12 @@ const SWEEP_TEXTS: [&str; 6] = [
 ];
 
 /// The keys of the sweep in `tests/vim_diff.rs`.
-const SWEEP_KEYS: [&str; 48] = [
+const SWEEP_KEYS: [&str; 52] = [
     "viw", "viwiw", "vhiw", "vliw", "v$iw", "Viw", "vaw", "vawaw", "vhaw", "vlaw", "v$aw", "Vaw",
     "vis", "visis", "vhis", "vlis", "v$is", "Vis", "vas", "vasas", "vhas", "vlas", "v$as", "Vas",
     "vip", "vipip", "vhip", "vlip", "v$ip", "Vip", "vap", "vapap", "vhap", "vlap", "v$ap", "Vap",
-    "Vhiw", "Vhaw", "Vliw", "Vlaw", "vw", "vb", "ve", "vww", "vbb", "vee", "vwb", "veb",
+    "Vhiw", "Vhaw", "Vliw", "Vlaw", "vw", "vb", "ve", "vww", "vbb", "vee", "vwb", "veb", "vjip",
+    "vkip", "vjap", "vkap",
 ];
 
 /// Parse one row of the recorded table: the mode, the cursor, and the
