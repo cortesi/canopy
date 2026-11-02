@@ -1,7 +1,11 @@
 use proptest::prelude::*;
 
 use super::*;
-use crate::testing::{self, check_edit, check_units, document, hostile_text, spec_examples};
+use crate::{
+    document::{ParseLimits, parse_document},
+    source_store::SourceStore,
+    testing::{self, check_edit, check_units, document, hostile_text, spec_examples},
+};
 
 /// The kinds of the units of `text`.
 fn kinds(text: &str) -> Vec<EditKind> {
@@ -157,6 +161,8 @@ fn a_replace_of_own_text_keeps_the_structure_of_its_block() {
         ("a ^id\n", 0, "x", "x ^id\n"),
         ("> a\r\n> b\r\n", 0, "x\ny", "> x\r\n> y\r\n"),
         ("> a\r\n", 0, "x\r\ny", "> x\r\n> y\r\n"),
+        (">a\n", 0, "x", ">x\n"),
+        ("> a\r> b", 0, "x\ny", "> x\r> y"),
         ("a\nb\n", 0, "", "\n"),
         // List items: new lines line up under the text.
         ("- a\n- b\n", 1, "x\ny", "- a\n- x\n  y\n"),
@@ -168,6 +174,7 @@ fn a_replace_of_own_text_keeps_the_structure_of_its_block() {
         ("-\ta\n", 0, "x\ny", "-\tx\n \ty\n"),
         // Footnotes: the label becomes blanks.
         ("[^1]: a\n", 0, "x\ny", "[^1]: x\n      y\n"),
+        ("[^1]: > a\n", 0, "x\ny", "[^1]: > x\n      > y\n"),
         ("[^a>b]: a\n", 0, "x\ny", "[^a>b]: x\n        y\n"),
         // ATX headings: line breaks become spaces, and marks stay apart.
         ("# a\n", 0, "x\ny", "# x y\n"),
@@ -192,6 +199,7 @@ fn a_replace_of_own_text_keeps_the_structure_of_its_block() {
         ("> ```\n> ```\n", 0, "x\ny", "> ```\n> x\n> y\n> ```\n"),
         ("```", 0, "x", "```\nx"),
         ("```\n```\n", 0, "", "```\n```\n"),
+        ("```\n\n```\n", 0, "x", "```\nx\n```\n"),
         ("```\r\na\r\n```\r\n", 0, "x\ny", "```\r\nx\r\ny\r\n```\r\n"),
         // Indented code: new lines take the indent.
         ("    a\n    b\n", 0, "x\ny", "    x\n    y\n"),
@@ -212,6 +220,33 @@ fn a_replace_of_own_text_keeps_the_structure_of_its_block() {
         );
         check_edit(before, *index, replacement, true).unwrap();
     }
+}
+
+#[test]
+fn a_replace_takes_the_terminator_of_its_unit() {
+    // A unit of one line takes the terminator after it, and a unit at the
+    // end of the text takes the first terminator of the text.
+    assert_eq!(replaced("a\n\nb\r\n", 1, "x\ny"), "a\n\nx\r\ny\r\n");
+    assert_eq!(replaced("a\r\n\r\nb", 1, "x\ny"), "a\r\n\r\nx\r\ny");
+    assert_eq!(replaced("a", 0, "x\ny"), "x\ny");
+}
+
+#[test]
+fn own_text_moves_inside_its_lines_and_onto_characters() {
+    let text = "aé\nb";
+    // Byte 2 lies inside "é", which starts at byte 1.
+    assert_eq!(inside(text, 2..9, &(0..3)), 1..3);
+    assert_eq!(inside(text, 5..9, &(0..3)), 3..3);
+    assert_eq!(inside(text, 0..0, &(1..3)), 1..1);
+}
+
+#[test]
+fn a_block_of_no_bytes_takes_its_whole_line() {
+    let store = SourceStore::static_text("a\n\nb\n").unwrap();
+    let mut document = parse_document(&store.snapshot(), &ParseLimits::default(), None);
+    document.blocks[1].source = 3..3;
+    let units = edit_units(&document);
+    assert_eq!(units[1].range, 3..4);
 }
 
 #[test]
