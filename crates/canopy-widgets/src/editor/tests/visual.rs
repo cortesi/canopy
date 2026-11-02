@@ -4,7 +4,9 @@
 //! `tests/vim_diff.rs` compares many more cases with Neovim. These examples
 //! and properties run in the routine loop.
 
-use canopy::text;
+use std::cell::RefCell;
+
+use canopy::{Canopy, text};
 use proptest::{
     prelude::*,
     test_runner::{Config, RngSeed},
@@ -53,12 +55,27 @@ fn tokens(keys: &str) -> Vec<String> {
     out
 }
 
+thread_local! {
+    /// One application gives the context of every run on a thread, since
+    /// building one costs more than the keys.
+    static APP: RefCell<Canopy> =
+        RefCell::new(CanopyBuilder::new().build().expect("an empty application builds"));
+}
+
 /// Run `keys` on a vi editor of `text` with its cursor at `line:column`,
 /// with no render, and return the editor.
 fn run_with(config: EditorConfig, text: &str, start: (usize, usize), keys: &str) -> Editor {
-    let mut app = CanopyBuilder::new()
-        .build()
-        .expect("an empty application builds");
+    APP.with(|app| run_in(&mut app.borrow_mut(), config, text, start, keys))
+}
+
+/// Run `keys` as [`run_with`] does, in the context of `app`.
+fn run_in(
+    app: &mut Canopy,
+    config: EditorConfig,
+    text: &str,
+    start: (usize, usize),
+    keys: &str,
+) -> Editor {
     let mut editor = Editor::with_config(text, config);
     app.with_root_context(|ctx| {
         editor.set_cursor(ctx, TextPosition::new(start.0, start.1));
@@ -342,6 +359,49 @@ fn word_objects_take_words_or_blanks() {
     assert_selects(text, (0, 1), "vawaw", chars, ((0, 0), (0, 8)), (0, 7));
     // A line selection becomes a character selection.
     assert_selects(text, (0, 6), "Viw", chars, ((0, 5), (0, 7)), (0, 6));
+}
+
+#[test]
+fn words_and_sentences_cross_into_the_last_lines() {
+    // The outcomes are Neovim's.
+    let chars = VisualMode::Character;
+    assert_selects(
+        "foo bar\nbaz",
+        (0, 6),
+        "vw",
+        chars,
+        ((0, 6), (1, 1)),
+        (1, 0),
+    );
+    assert_selects("a\nfoo\nbar", (1, 2), "vw", chars, ((1, 2), (2, 1)), (2, 0));
+    assert_selects("abc.\n", (1, 0), "vis", chars, ((0, 3), (1, 0)), (0, 3));
+    assert_selects("abc.\n", (1, 0), "vas", chars, ((0, 3), (1, 0)), (0, 3));
+    assert_selects("abc. d\n\n", (2, 0), "vis", chars, ((1, 0), (2, 0)), (1, 0));
+    assert_selects("abc. d\n\n", (1, 0), "vis", chars, ((0, 4), (2, 0)), (0, 4));
+    assert_selects(
+        "abc. d\n\n",
+        (0, 5),
+        "visis",
+        chars,
+        ((0, 5), (0, 6)),
+        (0, 5),
+    );
+    assert_selects("x\n\nabc", (1, 0), "vas", chars, ((1, 0), (2, 3)), (2, 2));
+}
+
+#[test]
+fn a_form_feed_at_a_line_start_starts_a_paragraph() {
+    // The outcomes are Neovim's.
+    let lines = VisualMode::Line;
+    let chars = VisualMode::Character;
+    let text = "abc\n\u{c}def\nghi";
+    assert_selects(text, (0, 1), "vip", lines, ((0, 0), (0, 3)), (0, 0));
+    assert_selects(text, (2, 1), "vip", lines, ((1, 0), (2, 3)), (2, 0));
+    assert_selects(text, (2, 1), "vap", lines, ((1, 0), (2, 3)), (2, 0));
+    let text = "one. two\n\u{c}three four";
+    assert_selects(text, (1, 3), "vis", chars, ((0, 7), (1, 1)), (0, 7));
+    let text = "one two\n\u{c}three four";
+    assert_selects(text, (0, 5), "vas", chars, ((0, 0), (0, 7)), (0, 6));
 }
 
 #[test]
@@ -658,15 +718,10 @@ fn a_selected_line_break_paints_a_cell_after_the_text() {
 fn a_typed_form_feed_stays_inside_its_line() {
     // Found by the `vi_keys` fuzz target: the rope broke lines at a form
     // feed, and the cursor left the text.
-    let mut editor = run("a", (0, 0), "otwo\u{c}{hree\u{0}<Esc>");
+    let editor = run("a", (0, 0), "otwo\u{c}{hree\u{0}<Esc>");
     assert_eq!(editor.text(), "a\ntwo\u{c}{hree\u{0}");
     assert_eq!(editor.cursor(), TextPosition::new(1, 10));
-    let mut app = CanopyBuilder::new().build().expect("an application");
-    app.with_root_context(|ctx| {
-        editor.undo(ctx);
-        Ok(())
-    })
-    .expect("undo runs");
+    let editor = run("a", (0, 0), "otwo\u{c}{hree\u{0}<Esc>u");
     assert_eq!(editor.text(), "a");
 }
 
@@ -712,6 +767,67 @@ fn a_publication_keeps_the_visual_ends_on_graphemes() {
     prepared = Editor::prepare_view("ae\u{301}x", editor.config().clone(), 20);
     editor.publish_view(prepared, true);
     assert_eq!(editor.cursor(), TextPosition::new(0, 1));
+}
+
+/// The texts of the sweep of text objects in `tests/vim_diff.rs`.
+const SWEEP_TEXTS: [&str; 3] = [
+    "Hello there.  This is a test.  Another one!\nThe (end.)  A \"quote.\"  Last",
+    "first para\nstill first\n\n\nsecond para\n  \nthird one\nends here",
+    "this is a test, of words.  foo-bar baz_qux 世界 x",
+];
+
+/// The keys of each case of the sweep, before and after its text object.
+const SWEEP_KEYS: [(&str, usize); 4] = [("v", 1), ("v", 2), ("vh", 1), ("V", 1)];
+
+/// The text objects of the sweep.
+const SWEEP_OBJECTS: [&str; 6] = ["iw", "aw", "is", "as", "ip", "ap"];
+
+#[test]
+fn text_objects_match_the_recorded_outcomes_of_neovim() {
+    // Neovim's outcomes of the sweep of `tests/vim_diff.rs`, which rewrites
+    // the table, in the order of the loops below.
+    let table = include_str!("../../../tests/vim/objects.txt");
+    let mut rows = table.lines().filter(|row| !row.starts_with('#'));
+    let config = EditorConfig::new().with_mode(EditMode::Vi);
+    let mut failures = Vec::new();
+    for text in SWEEP_TEXTS {
+        for (line, content) in text.split('\n').enumerate() {
+            for column in grapheme_starts(content) {
+                for object in SWEEP_OBJECTS {
+                    for (start, times) in SWEEP_KEYS {
+                        let keys = format!("{start}{}", object.repeat(times));
+                        let row = rows.next().expect("a recorded outcome for each case");
+                        let mut fields = row.split(' ');
+                        let mode = match fields.next() {
+                            Some("V") => VisualMode::Line,
+                            _ => VisualMode::Character,
+                        };
+                        let numbers: Vec<usize> = fields
+                            .map(|field| field.parse().expect("a number"))
+                            .collect();
+                        let expected = (
+                            Some(ViMode::Visual(mode)),
+                            TextPosition::new(numbers[0], numbers[1]),
+                            range((numbers[2], numbers[3]), (numbers[4], numbers[5])),
+                        );
+                        let editor = run_with(config.clone(), text, (line, column), &keys);
+                        let actual = (
+                            editor.vi_mode(),
+                            editor.cursor(),
+                            editor.selection().range(),
+                        );
+                        if actual != expected {
+                            failures.push(format!(
+                                "{keys} at {line}:{column} in {text:?}: {actual:?}, Neovim {expected:?}"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(rows.next().is_none(), "one recorded outcome for each case");
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
 /// Text for the properties: words, punctuation, blanks, line breaks, and

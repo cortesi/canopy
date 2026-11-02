@@ -148,7 +148,9 @@ pub(super) fn first_non_blank(buffer: &TextBuffer, line: usize) -> usize {
     while index + 1 < map.firsts.len() && is_white(Some(map.firsts[index])) {
         index += 1;
     }
-    map.starts[index.min(map.starts.len() - 1)]
+    // The index stays below the count of graphemes, or 0 on an empty line,
+    // so it names a start.
+    map.starts[index]
 }
 
 /// Vim's view of a buffer: a cursor, and the steps and character classes

@@ -381,11 +381,53 @@ fn generate(rng: &mut Rng) -> Case {
     }
 }
 
-/// The examples of Vim's help, and cases at the edges.
+/// The texts of the sweep of text objects, from Vim's help.
+const SWEEP_TEXTS: [&str; 3] = [
+    "Hello there.  This is a test.  Another one!\nThe (end.)  A \"quote.\"  Last",
+    "first para\nstill first\n\n\nsecond para\n  \nthird one\nends here",
+    "this is a test, of words.  foo-bar baz_qux 世界 x",
+];
+
+/// The keys of each case of the sweep, before and after its text object.
+const SWEEP_KEYS: [(&str, usize); 4] = [("v", 1), ("v", 2), ("vh", 1), ("V", 1)];
+
+/// Every text object from every start in [`SWEEP_TEXTS`]: once, twice, from
+/// a selection of two characters, and from a line selection. The recorded
+/// table of `src/editor/tests/visual.rs` builds the same cases in the same
+/// order.
+fn object_sweep() -> Vec<Case> {
+    let mut cases = Vec::new();
+    for text in SWEEP_TEXTS {
+        for (line, content) in text.split('\n').enumerate() {
+            let mut columns = grapheme_columns(content);
+            if columns.is_empty() {
+                columns.push(0);
+            }
+            for column in columns {
+                for object in OBJECTS {
+                    for (start, times) in SWEEP_KEYS {
+                        let mut keys = Vec::new();
+                        push_chars(&mut keys, start);
+                        for _ in 0..times {
+                            push_chars(&mut keys, object);
+                        }
+                        cases.push(Case {
+                            text: text.to_string(),
+                            line,
+                            column,
+                            keys,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    cases
+}
+
+/// The examples of Vim's help, cases at the edges, and the sweep of text
+/// objects.
 fn curated() -> Vec<Case> {
-    let sentences = "Hello there.  This is a test.  Another one!\nThe (end.)  A \"quote.\"  Last";
-    let paragraphs = "first para\nstill first\n\n\nsecond para\n  \nthird one\nends here";
-    let words = "this is a test, of words.  foo-bar baz_qux 世界 x";
     let mut cases = vec![
         // One char, in both directions and on every kind of place.
         Case::new("abc", 0, 0, &["v"]),
@@ -491,50 +533,7 @@ fn curated() -> Vec<Case> {
         Case::new("abc def", 0, 1, &["v", "i", "<Esc>", "l"]),
         Case::new("abc def", 0, 1, &["v", "g", "<Esc>", "l"]),
     ];
-    // Every text object from every start in three texts, once and twice.
-    for text in [sentences, paragraphs, words] {
-        for (line, content) in text.split('\n').enumerate() {
-            let mut columns = grapheme_columns(content);
-            if columns.is_empty() {
-                columns.push(0);
-            }
-            for column in columns {
-                for object in OBJECTS {
-                    let mut keys = vec!["v".to_string()];
-                    push_chars(&mut keys, object);
-                    cases.push(Case {
-                        text: text.to_string(),
-                        line,
-                        column,
-                        keys: keys.clone(),
-                    });
-                    push_chars(&mut keys, object);
-                    cases.push(Case {
-                        text: text.to_string(),
-                        line,
-                        column,
-                        keys: keys.clone(),
-                    });
-                    let mut back = vec!["v".to_string(), "h".to_string()];
-                    push_chars(&mut back, object);
-                    cases.push(Case {
-                        text: text.to_string(),
-                        line,
-                        column,
-                        keys: back,
-                    });
-                    let mut lines = vec!["V".to_string()];
-                    push_chars(&mut lines, object);
-                    cases.push(Case {
-                        text: text.to_string(),
-                        line,
-                        column,
-                        keys: lines,
-                    });
-                }
-            }
-        }
-    }
+    cases.extend(object_sweep());
     cases
 }
 
@@ -705,6 +704,40 @@ fn run_vim(cases: &[Case]) -> Vec<Value> {
     results
 }
 
+/// Write Neovim's outcome of each case of the sweep of text objects to
+/// `tests/vim/objects.txt`, one line each: the mode, the cursor, and the
+/// selected range, as numbers.
+fn record_sweep(sweep: &[Case], results: &[Value]) {
+    let mut table = String::from(
+        "# Neovim's outcome of each case of the sweep of text objects in\n\
+         # tests/vim_diff.rs, in order: the mode, the cursor line and column, and\n\
+         # the start and end of the selected range. Rewrite with\n\
+         # VIM_DIFF_RECORD=1 cargo xtask vim-diff --cases 0\n",
+    );
+    for (case, result) in sweep.iter().zip(results) {
+        let outcome = vim_outcome(result).expect("Neovim runs each case of the sweep");
+        let mode = match outcome.mode {
+            ViMode::Visual(VisualMode::Character) => 'v',
+            ViMode::Visual(VisualMode::Line) => 'V',
+            other => panic!("the sweep ends in visual mode, not {other:?}: {case:?}"),
+        };
+        let range = outcome.selection.expect("a visual selection");
+        writeln!(
+            table,
+            "{mode} {} {} {} {} {} {}",
+            outcome.cursor.line,
+            outcome.cursor.column,
+            range.start.line,
+            range.start.column,
+            range.end.line,
+            range.end.column
+        )
+        .expect("a table");
+    }
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/vim/objects.txt");
+    fs::write(path, table).expect("the table writes");
+}
+
 /// Return whether `nvim` runs.
 fn nvim_available() -> bool {
     Command::new("nvim")
@@ -735,9 +768,13 @@ mod tests {
 
         let mut cases = curated();
         let curated_count = cases.len();
+        let sweep = object_sweep();
         let mut rng = Rng(seed | 1);
         cases.extend((0..count).map(|_| generate(&mut rng)));
         let results = run_vim(&cases);
+        if env::var_os("VIM_DIFF_RECORD").is_some() {
+            record_sweep(&sweep, &results[curated_count - sweep.len()..curated_count]);
+        }
 
         let mut failures = Vec::new();
         for (case, result) in cases.iter().zip(&results) {
