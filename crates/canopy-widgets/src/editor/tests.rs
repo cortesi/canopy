@@ -2241,3 +2241,103 @@ fn search_context_keeps_the_match_visible_in_a_single_row_view() {
     harness.render().unwrap();
     assert_eq!(editor_view_scroll(&mut harness).y, 30);
 }
+
+/// Replace `range` with `text` through the mounted editor.
+fn replace_in(harness: &mut Harness, range: TextRange, text: &str) {
+    harness
+        .with_root_widget_context(|_root: &mut EditorHost, ctx| {
+            ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |editor, ctx| {
+                editor.replace(ctx, range, text);
+                Ok(())
+            })
+        })
+        .expect("editor missing");
+}
+
+/// Return the range from column `start` to column `end` of the first line.
+fn first_line(start: usize, end: usize) -> TextRange {
+    TextRange::new(TextPosition::new(0, start), TextPosition::new(0, end))
+}
+
+#[test]
+fn replace_is_one_undo_step_in_vi_normal_mode() {
+    let config = EditorConfig::new().with_mode(EditMode::Vi);
+    let mut harness = build_harness("one two three", config, 40, 5);
+
+    replace_in(&mut harness, first_line(4, 7), "many words");
+
+    assert_eq!(editor_text(&mut harness), "one many words three");
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 14));
+    assert_eq!(
+        with_editor(&mut harness, |editor| editor.vi_mode()),
+        Some(ViMode::Normal)
+    );
+    harness.key('u').expect("undo");
+    assert_eq!(editor_text(&mut harness), "one two three");
+}
+
+#[test]
+fn replace_stands_apart_from_an_open_insert() {
+    let config = EditorConfig::new().with_mode(EditMode::Vi);
+    let mut harness = build_harness("end", config, 40, 5);
+    harness.key('i').expect("insert");
+    harness.type_text("typed ").expect("type");
+
+    replace_in(&mut harness, first_line(0, 0), "said ");
+    assert_eq!(
+        with_editor(&mut harness, |editor| editor.vi_mode()),
+        Some(ViMode::Insert)
+    );
+    harness.type_text("more ").expect("type");
+    harness.key(key::KeyCode::Esc).expect("normal");
+
+    assert_eq!(editor_text(&mut harness), "said more typed end");
+    // The typing after the replace, the replace, and the typing before it are
+    // three steps.
+    harness.key('u').expect("undo");
+    assert_eq!(editor_text(&mut harness), "said typed end");
+    harness.key('u').expect("undo");
+    assert_eq!(editor_text(&mut harness), "typed end");
+    harness.key('u').expect("undo");
+    assert_eq!(editor_text(&mut harness), "end");
+}
+
+#[test]
+fn replace_stands_apart_from_later_typing_in_text_mode() {
+    let config = EditorConfig::new().with_mode(EditMode::Text);
+    let mut harness = build_harness("end", config, 40, 5);
+
+    replace_in(&mut harness, first_line(0, 0), "said ");
+    harness.type_text("more ").expect("type");
+    assert_eq!(editor_text(&mut harness), "said more end");
+
+    with_editor(&mut harness, |editor| {
+        editor.commit_text_entry_transaction();
+        editor.undo_edit()
+    });
+    assert_eq!(editor_text(&mut harness), "said end");
+    with_editor(&mut harness, Editor::undo_edit);
+    assert_eq!(editor_text(&mut harness), "end");
+}
+
+#[test]
+fn replace_leaves_a_read_only_editor_alone() {
+    let config = EditorConfig::new()
+        .with_mode(EditMode::Text)
+        .with_interaction(Interaction::View);
+    let mut harness = build_harness("kept", config, 40, 5);
+
+    replace_in(&mut harness, first_line(0, 4), "gone");
+
+    assert_eq!(editor_text(&mut harness), "kept");
+}
+
+#[test]
+fn replace_keeps_one_line_in_a_single_line_editor() {
+    let config = EditorConfig::new().with_multiline(false);
+    let mut harness = build_harness("x", config, 40, 5);
+
+    replace_in(&mut harness, first_line(0, 1), "one\ntwo");
+
+    assert!(!editor_text(&mut harness).contains('\n'));
+}

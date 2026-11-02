@@ -4393,6 +4393,15 @@ pub mod editor {
         /// Redo the last undone edit.
         pub fn redo(&mut self, _ctx: &mut dyn Context);
 
+        /// Replace `range` with `text` as one undo step, and put the cursor after
+        /// the new text.
+        ///
+        /// The edit stands alone in the undo history: an open entry ends first, and
+        /// text typed later starts a new step. The call works in both edit modes,
+        /// leaves the vi mode unchanged, and records nothing for vi repetition. A
+        /// read-only editor ignores it.
+        pub fn replace(&mut self, ctx: &mut dyn Context, range: TextRange, text: &str);
+
         /// Highlight precomputed match ranges without moving the view, as when
         /// the text reloads beneath a held search.
         ///

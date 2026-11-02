@@ -1135,6 +1135,30 @@ impl Editor {
         self.ensure_cursor_visible(ctx);
     }
 
+    /// Replace `range` with `text` as one undo step, and put the cursor after
+    /// the new text.
+    ///
+    /// The edit stands alone in the undo history: an open entry ends first, and
+    /// text typed later starts a new step. The call works in both edit modes,
+    /// leaves the vi mode unchanged, and records nothing for vi repetition. A
+    /// read-only editor ignores it.
+    pub fn replace(&mut self, ctx: &mut dyn Context, range: TextRange, text: &str) {
+        let text = self.normalize_insert_text(text);
+        if self.config.interaction.read_only() {
+            return;
+        }
+        self.commit_text_entry_transaction();
+        let inserting = self.vi_mode() == Some(ViMode::Insert);
+        if self.replace_range(range, &text) {
+            self.commit_text_entry_transaction();
+        }
+        if inserting {
+            self.begin_text_entry_transaction();
+        }
+        self.update_preferred_column();
+        self.ensure_cursor_visible(ctx);
+    }
+
     /// Return the cursor position.
     pub fn cursor(&self) -> TextPosition {
         self.buffer.cursor()
