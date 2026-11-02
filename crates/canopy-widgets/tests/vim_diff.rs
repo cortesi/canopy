@@ -381,14 +381,16 @@ fn generate(rng: &mut Rng) -> Case {
     }
 }
 
-/// The texts of the sweep: three from Vim's help, and two of the edges of
-/// sentences: closing marks, indents, form feeds, and empty lines.
-const SWEEP_TEXTS: [&str; 5] = [
+/// The texts of the sweep: three from Vim's help, two of the edges of
+/// sentences (closing marks, indents, form feeds, and empty lines), and one
+/// whose sentences start with a period, where Vim searches again.
+const SWEEP_TEXTS: [&str; 6] = [
     "Hello there.  This is a test.  Another one!\nThe (end.)  A \"quote.\"  Last",
     "first para\nstill first\n\n\nsecond para\n  \nthird one\nends here",
     "this is a test, of words.  foo-bar baz_qux 世界 x",
     "Start (it.)  Then \"x.\"  \n  \n  Indented? Yes!\nno end",
     "a.b. c! d\n\u{c}Feed. x\n\n\n'quoted.'  )y. z",
+    ". a.\n.a \"b.\" c\n\n.\n x",
 ];
 
 /// The keys of the sweep: each text object once, twice, from a selection

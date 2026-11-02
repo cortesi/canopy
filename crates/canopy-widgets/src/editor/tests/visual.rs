@@ -813,12 +813,13 @@ fn a_publication_keeps_the_visual_ends_on_graphemes() {
 }
 
 /// The texts of the sweep of text objects in `tests/vim_diff.rs`.
-const SWEEP_TEXTS: [&str; 5] = [
+const SWEEP_TEXTS: [&str; 6] = [
     "Hello there.  This is a test.  Another one!\nThe (end.)  A \"quote.\"  Last",
     "first para\nstill first\n\n\nsecond para\n  \nthird one\nends here",
     "this is a test, of words.  foo-bar baz_qux 世界 x",
     "Start (it.)  Then \"x.\"  \n  \n  Indented? Yes!\nno end",
     "a.b. c! d\n\u{c}Feed. x\n\n\n'quoted.'  )y. z",
+    ". a.\n.a \"b.\" c\n\n.\n x",
 ];
 
 /// The keys of the sweep in `tests/vim_diff.rs`.
@@ -907,6 +908,11 @@ fn the_sweep_of_indents_and_quotes_matches_neovim() {
 #[test]
 fn the_sweep_of_form_feeds_and_empty_lines_matches_neovim() {
     replay_sweep(4);
+}
+
+#[test]
+fn the_sweep_of_sentences_that_start_with_a_period_matches_neovim() {
+    replay_sweep(5);
 }
 
 /// Text for the properties: words, punctuation, blanks, line breaks, and
