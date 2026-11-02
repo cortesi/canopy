@@ -701,14 +701,18 @@ fn parse_tree(
         let appended = previous.source.epoch == source.epoch
             && previous.source.len() < source.len()
             && previous.degraded.is_none();
+        // The parse of another epoch, such as the text before an edit,
+        // addresses other bytes.
+        if !appended {
+            return None;
+        }
         let keep = cache.roots.len().checked_sub(1).filter(|keep| *keep > 0)?;
         let last = cache.roots[keep].range.start;
         let settle = text[..last].rfind(['\n', '\r']).map_or(0, |at| at + 1);
         // Comments and inline footnotes reach across blocks: a comment's
         // markers pair over the whole text, and an inline footnote's note
         // ends the document.
-        let safe = appended
-            && settle > 0
+        let safe = settle > 0
             && cache.roots[keep - 1].range.end <= settle
             && !text.contains("%%")
             && !text.contains("^[")
@@ -2119,6 +2123,17 @@ mod tests {
         }
         out
     }
+    #[test]
+    fn a_parse_of_another_epoch_is_never_resumed() {
+        // An edit makes a shorter text in a new epoch, while the reader still
+        // holds the parse of the longer one.
+        let long = complete("# One\n\nalpha beta gamma delta\n\nlast paragraph here\n");
+        let short = SourceStore::static_text("x\n").unwrap();
+        let document = parse_document(&short.snapshot(), &ParseLimits::default(), Some(&long));
+        assert_eq!(document.blocks.len(), 1);
+        assert_eq!(document.units[0].text, "x");
+    }
+
     #[test]
     fn cell_spans_place_each_cell_in_its_tables_text() {
         let doc = complete(
