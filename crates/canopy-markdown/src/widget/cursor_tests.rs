@@ -670,6 +670,25 @@ fn without_a_margin_the_marked_rows_take_the_cursor_ground() {
 }
 
 #[test]
+fn a_document_without_units_marks_nothing() {
+    for text in ["", "[a]: https://a.test\n"] {
+        let (mut harness, manual) = reader(text, Mode::Interact, 30, 8);
+        settle(&mut harness, &manual);
+        for key in ["j", "k", "g", "G", "Tab", "Escape"] {
+            press(&mut harness, key);
+        }
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| reader.select_block_at(ctx, 0))
+            .unwrap();
+        service(&mut harness);
+        assert_eq!(marked(&mut harness), None, "{text:?}");
+        assert!(bar_rows(&mut harness).is_empty());
+        let unit = harness.with_root_widget(|reader: &mut Markdown| reader.selected_block());
+        assert_eq!(unit, None);
+    }
+}
+
+#[test]
 fn state_reports_the_marked_unit() {
     let (mut harness, manual) = reader(DOCUMENT, Mode::Interact, 40, 40);
     settle(&mut harness, &manual);
