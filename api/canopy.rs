@@ -127,6 +127,18 @@ pub trait Context: ViewContext + Context {
     /// keeps the notice. Returns whether the toast showed.
     fn end_toast(&mut self, id: NoticeId) -> bool;
 
+    /// Make `mode` the newest active keymap mode, as `canopy.enter_mode`
+    /// does. A mode that is already active moves to the top. A widget uses
+    /// this to give keys a meaning in one state only: a key that the newest
+    /// mode does not bind falls through to the older modes, then to the
+    /// default bindings, then to the widgets.
+    ///
+    /// # Errors
+    ///
+    /// Fails for an empty name, and while a menu waits for its key. A failed
+    /// call changes nothing.
+    fn enter_mode(&mut self, mode: &str) -> crate::error::Result<()>;
+
     /// Request a cooperative shutdown with the provided status code.
     fn exit(&mut self, code: i32);
 
@@ -139,6 +151,16 @@ pub trait Context: ViewContext + Context {
         scope: FocusScope,
         direction: FocusDirection,
     ) -> crate::error::Result<ChangeOutcome>;
+
+    /// Remove `mode` from the active keymap modes, wherever it is in the
+    /// stack, as `canopy.leave_mode` does. Leaving a mode that is not active
+    /// changes nothing.
+    ///
+    /// # Errors
+    ///
+    /// Fails for an empty name, and for the name of a menu that waits for
+    /// its key.
+    fn leave_mode(&mut self, mode: &str) -> crate::error::Result<()>;
 
     /// Post a notice to the notice log.
     ///

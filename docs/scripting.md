@@ -280,7 +280,9 @@ newest active mode, or the empty string for the default mode, and
 newest mode does not bind falls through to the older modes and then to the
 default tier. No call clears every mode, so a script changes only the modes it
 names. Rust uses the same words: `Canopy::mode`, `enter_mode`, `leave_mode`,
-and `active_modes`.
+and `active_modes`. A widget enters and leaves modes through
+`Context::enter_mode` and `Context::leave_mode`, so a key can have a meaning
+only while the widget is in some state.
 
 A menu is a mode that takes only the next key: it offers a choice of keys. Bind
 the key that opens one to `canopy.menu(mode)`:

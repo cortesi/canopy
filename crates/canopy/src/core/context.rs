@@ -823,6 +823,28 @@ pub trait Context: ViewContext + sealed::Context {
     /// Request a cooperative shutdown with the provided status code.
     fn exit(&mut self, code: i32);
 
+    /// Make `mode` the newest active keymap mode, as `canopy.enter_mode`
+    /// does. A mode that is already active moves to the top. A widget uses
+    /// this to give keys a meaning in one state only: a key that the newest
+    /// mode does not bind falls through to the older modes, then to the
+    /// default bindings, then to the widgets.
+    ///
+    /// # Errors
+    ///
+    /// Fails for an empty name, and while a menu waits for its key. A failed
+    /// call changes nothing.
+    fn enter_mode(&mut self, mode: &str) -> Result<()>;
+
+    /// Remove `mode` from the active keymap modes, wherever it is in the
+    /// stack, as `canopy.leave_mode` does. Leaving a mode that is not active
+    /// changes nothing.
+    ///
+    /// # Errors
+    ///
+    /// Fails for an empty name, and for the name of a menu that waits for
+    /// its key.
+    fn leave_mode(&mut self, mode: &str) -> Result<()>;
+
     /// Add an effect to a node that will be applied during rendering.
     /// Effects stack and inherit through the tree.
     fn push_effect(&mut self, node: NodeId, effect: Effect) -> Result<()>;
@@ -1391,6 +1413,14 @@ impl Context for NodeCtx<&mut Core> {
 
     fn set_hidden(&mut self, node: NodeId, hidden: bool) -> Result<ChangeOutcome> {
         self.core.set_hidden(node, hidden)
+    }
+
+    fn enter_mode(&mut self, mode: &str) -> Result<()> {
+        self.core.input_map.enter_mode(mode)
+    }
+
+    fn leave_mode(&mut self, mode: &str) -> Result<()> {
+        self.core.input_map.leave_mode(mode)
     }
 
     fn exit(&mut self, code: i32) {

@@ -1244,6 +1244,53 @@ fn mode_binding_target_switches_modes() -> Result<()> {
 }
 
 #[test]
+fn a_widget_enters_and_leaves_a_mode_through_its_context() -> Result<()> {
+    let mut canopy = app();
+    canopy.eval_script(
+        r#"
+        canopy.keymap({
+            mode = "voice",
+            { key = "r", description = "Replace", action = function() canopy.enter_mode("replaced") end },
+        })
+        "#,
+    )?;
+    let ran = |canopy: &Canopy| {
+        canopy
+            .route_trace()
+            .iter()
+            .any(|entry| entry.kind == RouteTraceKind::RunBinding)
+    };
+
+    // Outside the mode, the key binds nothing.
+    canopy.key(None, 'r')?;
+    assert!(!ran(&canopy));
+
+    canopy.with_root_context(|context| context.enter_mode("voice"))?;
+    assert_eq!(canopy.mode(), "voice");
+    canopy.key(None, 'r')?;
+    assert!(ran(&canopy));
+    assert_eq!(canopy.core.input_map.active_modes(), ["replaced", "voice"]);
+
+    canopy.with_root_context(|context| {
+        context.leave_mode("replaced")?;
+        context.leave_mode("voice")?;
+        // Leaving a mode that is not active changes nothing.
+        context.leave_mode("voice")
+    })?;
+    assert_eq!(canopy.mode(), "");
+    canopy.key(None, 'r')?;
+    assert!(!ran(&canopy));
+
+    assert!(
+        canopy
+            .with_root_context(|context| context.enter_mode(""))
+            .is_err(),
+        "an empty name fails"
+    );
+    Ok(())
+}
+
+#[test]
 fn a_transient_mode_takes_the_next_key_before_widgets() -> Result<()> {
     let mut canopy = app();
     canopy.eval_script(
