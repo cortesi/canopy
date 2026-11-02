@@ -2,7 +2,7 @@
 //
 // Package: canopy-markdown
 // Publish: crates.io
-// Declared features: default, syntax
+// Declared features: default, syntax, testing
 // Workspace dependencies: canopy, canopy-widgets, canopy-xmark
 // Workspace dependents: gyms
 
@@ -2349,4 +2349,122 @@ pub mod source_view {
         /// Markdown uses `md`; unknown languages remain plain text.
         pub language: Option<Arc<str>>,
     }
+}
+
+pub mod units {
+    //! The whole source lines of each block, and spoken replaces of their text.
+    //! Edit units: the source lines that an editor of one block changes.
+    //!
+    //! An edit unit holds the whole source lines of one block of a
+    //! [`DocumentSnapshot`], so it keeps the markers of the block's quotes and
+    //! lists. Blocks whose lines overlap make one unit. Text with no block, such
+    //! as a link reference definition or a lone block id, has no unit. Units come
+    //! from the document alone, not from its layout.
+    //!
+    //! A unit's range starts at the start of its first line and ends at the end
+    //! of the text of its last line, before that line's terminator. So a splice
+    //! of a unit never splits a CRLF pair. The terminators inside a unit are part
+    //! of it.
+
+    /// The kind of block that an edit unit holds.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub enum EditKind {
+        /// A paragraph. Its own text follows the markers of its first line.
+        Paragraph,
+        /// The text of a list item. Its own text follows the item's marker and
+        /// any task box.
+        ListItem,
+        /// The text of a footnote definition. Its own text follows the label.
+        Footnote,
+        /// A heading of `#` marks. Its own text lies between the marks and any
+        /// closing marks.
+        AtxHeading,
+        /// A heading over a line of `=` or `-`. Its own text is the text lines,
+        /// without the underline.
+        SetextHeading,
+        /// A callout or alert of only its marker line. Its own text is the title.
+        CalloutTitle,
+        /// Code between fences. Its own text is the lines between the fences.
+        FencedCode,
+        /// Code indented four columns. Its own text is the code lines.
+        IndentedCode,
+        /// A table.
+        Table,
+        /// A thematic rule.
+        Rule,
+        /// An HTML block.
+        Html,
+        /// Front matter, which reads as a table when it holds simple
+        /// properties.
+        FrontMatter,
+        /// An image alone in its paragraph.
+        Image,
+        /// An Obsidian `![[note]]` embed alone in its paragraph.
+        Embed,
+        /// Text the reader shows as source: a receiving construct, or text past
+        /// a parse bound.
+        Source,
+        /// Blocks that share a line, as one unit.
+        Merged,
+    }
+
+    /// The whole source lines of one block, or of blocks that share lines.
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+    pub struct EditUnit {
+        /// UTF-8 source bytes from the start of the first line to the end of
+        /// the text of the last line.
+        pub range: Range<usize>,
+        /// The bytes that a spoken replace changes, within `range`, or `None`
+        /// for a unit with no own text. [`replace_own_text`] keeps the
+        /// structure around them.
+        pub own: Option<Range<usize>>,
+        /// The kind of block the unit holds.
+        pub kind: EditKind,
+        /// The indices of the unit's blocks in [`DocumentSnapshot::blocks`].
+        pub blocks: Range<usize>,
+    }
+
+    /// A replacement of one source range.
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+    pub struct Splice {
+        /// The UTF-8 source bytes to replace.
+        pub range: Range<usize>,
+        /// The text that takes their place.
+        pub text: String,
+    }
+
+    impl Splice {
+        /// Return `source` with this splice applied.
+        ///
+        /// # Panics
+        ///
+        /// Panics if the range lies outside `source` or off its character
+        /// boundaries.
+        pub fn apply(&self, source: &str) -> String;
+    }
+
+    /// Return the edit units of `document`, in source order.
+    pub fn edit_units(document: &DocumentSnapshot) -> Vec<EditUnit>;
+
+    /// Parse `text` as a complete document with the default parse limits, and
+    /// return its edit units. A text past a limit reads as one source unit.
+    pub fn parse_units(text: &str) -> Vec<EditUnit>;
+
+    /// Return the splice that puts `replacement` in place of the own text of
+    /// `unit` in `source`, keeping the structure of its block. Return `None`
+    /// for a unit with no own text.
+    ///
+    /// Line breaks in `replacement` take the line terminator of the unit. Each
+    /// new line of a paragraph, list item, or footnote takes the prefix of the
+    /// block's continuation lines: its quote markers, and blanks in place of its
+    /// list marker. A heading or callout title turns line breaks into spaces.
+    /// Each new line of code takes the prefix of the block's code lines. Line
+    /// breaks at the end of `replacement` are dropped, except in code.
+    pub fn replace_own_text(source: &str, unit: &EditUnit, replacement: &str) -> Option<Splice>;
+
+    /// Return the index of the unit whose range holds `byte`, counting the end
+    /// of a unit's last line as inside it. With none, return the first unit
+    /// after `byte`, or else the last unit before it. Return `None` only when
+    /// `units` is empty.
+    pub fn unit_at(units: &[EditUnit], byte: usize) -> Option<usize>;
 }

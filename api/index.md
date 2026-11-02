@@ -105,10 +105,10 @@ Built-in widgets for canopy applications.
 Interactive Markdown reading and exact source viewing for Canopy.
 
 - Publish: crates.io
-- Declared features: default, syntax
+- Declared features: default, syntax, testing
 - Workspace dependencies: canopy, canopy-widgets, canopy-xmark
 - Workspace dependents: gyms
-- Items: 325
+- Items: 333
 - Exposes: canopy, canopy-widgets, canopy-xmark, image, url
 
 ## canopy-options

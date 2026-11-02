@@ -8,7 +8,7 @@ use canopy_xmark::{
     percent_decode, split_destination, split_wikilink,
 };
 
-use crate::source_store::SourceSnapshot;
+use crate::{source_store::SourceSnapshot, units::EditKind};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Bounds on semantic tree construction and rich table adaptation.
@@ -337,8 +337,28 @@ pub struct DocumentSnapshot {
     estimated_bytes: usize,
     /// The parse, which the next appended revision reuses.
     parse: Option<Arc<ParseCache>>,
+    /// What edit units need of each block's syntax, in the order of
+    /// `blocks`.
+    syntax: Vec<LeafSyntax>,
 }
+
+/// What edit units need of one block's syntax, as the parser read it: its
+/// edit kind, and the bytes of its own text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct LeafSyntax {
+    /// The kind of edit unit the block makes alone.
+    pub(crate) kind: EditKind,
+    /// The bytes of the block's own text, if it has any. They may still lie
+    /// outside the block's lines or off character boundaries, which edit
+    /// units correct.
+    pub(crate) own: Option<Range<usize>>,
+}
+
 impl DocumentSnapshot {
+    /// What edit units need of the syntax of block `index`.
+    pub(crate) fn syntax(&self, index: usize) -> Option<&LeafSyntax> {
+        self.syntax.get(index)
+    }
     /// Conservative owned semantic-model bytes, excluding accepted source and
     /// flattened parser input. This worker-computed observation is constant
     /// time.
@@ -368,6 +388,9 @@ impl DocumentSnapshot {
             self.unit_index
                 .capacity()
                 .saturating_mul(2 * (size_of::<(u64, usize)>() + size_of::<usize>())),
+            self.syntax
+                .capacity()
+                .saturating_mul(size_of::<LeafSyntax>()),
         ] {
             bytes = bytes.saturating_add(allocation);
         }
@@ -794,6 +817,9 @@ struct Leaf {
     /// block before it, which the id names. The paragraph itself shows
     /// nothing.
     names: Option<BlockAnchor>,
+    /// Whether the leaf stands for a callout of only its marker line, whose
+    /// text is the callout's title.
+    title: bool,
 }
 /// Flatten semantic leaves while retaining container metadata.
 fn collect<N: Borrow<Node>>(nodes: &[N], context: &Context, out: &mut Vec<Leaf>) {
@@ -884,6 +910,7 @@ fn collect<N: Borrow<Node>>(nodes: &[N], context: &Context, out: &mut Vec<Leaf>)
                         },
                         context: c.clone(),
                         names: None,
+                        title: true,
                     });
                 }
                 // A callout's own title stands in place of its kind.
@@ -919,12 +946,14 @@ fn collect<N: Borrow<Node>>(nodes: &[N], context: &Context, out: &mut Vec<Leaf>)
                         id: id.to_string(),
                         source: nodes[previous].borrow().range.clone(),
                     }),
+                    title: false,
                 });
             }
             _ if is_block(node) => out.push(Leaf {
                 node: node.clone(),
                 context: context.clone(),
                 names: None,
+                title: false,
             }),
             _ => {
                 if node.tag.is_some() {
@@ -934,6 +963,7 @@ fn collect<N: Borrow<Node>>(nodes: &[N], context: &Context, out: &mut Vec<Leaf>)
                         node: node.clone(),
                         context: context.clone(),
                         names: None,
+                        title: false,
                     });
                 }
             }
@@ -955,6 +985,7 @@ fn flush_inline(inline: &mut Vec<Node>, context: &Context, out: &mut Vec<Leaf>) 
         },
         context: context.clone(),
         names: None,
+        title: false,
     });
 }
 /// Identify parser constructs that establish reading-unit boundaries.
@@ -1252,6 +1283,9 @@ impl Builder<'_> {
                 .count();
         }
         self.quotes.clone_from(&context.quotes);
+        self.document
+            .syntax
+            .push(leaf_syntax(leaf, &kind, literal, text));
         self.document.blocks.push(Block {
             id,
             source: range.clone(),
@@ -1367,6 +1401,10 @@ impl Builder<'_> {
             list_marker: None,
             provisional: false,
         });
+        self.document.syntax.push(LeafSyntax {
+            kind: EditKind::Source,
+            own: None,
+        });
         self.document
             .unit_index
             .insert(unit_id, self.document.units.len());
@@ -1427,6 +1465,155 @@ fn source_leaf(raw: &str) -> Interpreted {
         true,
     )
 }
+/// What edit units need of a leaf's syntax: its edit kind and its own text.
+/// A `literal` leaf shows its receiving source as it stands.
+fn leaf_syntax(leaf: &Leaf, kind: &BlockKind, literal: bool, text: &str) -> LeafSyntax {
+    let range = &leaf.node.range;
+    let kind = if literal {
+        EditKind::Source
+    } else {
+        match (leaf.node.tag.as_ref(), kind) {
+            (Some(Tag::CodeBlock(CodeBlockKind::Fenced(_))), _) => EditKind::FencedCode,
+            (Some(Tag::CodeBlock(CodeBlockKind::Indented)), _) => EditKind::IndentedCode,
+            (Some(Tag::MetadataBlock(_)), _) => EditKind::FrontMatter,
+            (Some(Tag::HtmlBlock), _) => EditKind::Html,
+            (_, BlockKind::Table(_)) => EditKind::Table,
+            (_, BlockKind::Rule) => EditKind::Rule,
+            (_, BlockKind::Source { .. }) => EditKind::Source,
+            (_, BlockKind::Image(_)) => EditKind::Image,
+            (_, BlockKind::Embed(_)) => EditKind::Embed,
+            (Some(Tag::Heading { .. }), _) if atx_opening(&text[range.start..]).is_some() => {
+                EditKind::AtxHeading
+            }
+            (Some(Tag::Heading { .. }), _) => EditKind::SetextHeading,
+            (_, BlockKind::Footnote { .. }) => EditKind::Footnote,
+            _ if leaf.title => EditKind::CalloutTitle,
+            _ if leaf.context.marker.is_some() => EditKind::ListItem,
+            _ => EditKind::Paragraph,
+        }
+    };
+    let own = match kind {
+        EditKind::Paragraph | EditKind::Footnote | EditKind::SetextHeading => {
+            inline_extent(&leaf.node.children)
+        }
+        // A task of no text takes its text after its box.
+        EditKind::ListItem => inline_extent(&leaf.node.children).or_else(|| {
+            let task = leaf.node.children.iter().rfind(|node| {
+                matches!(
+                    node.event,
+                    Some(Event::TaskListMarker(_) | Event::TaskState(_))
+                )
+            })?;
+            Some(task.range.end..task.range.end)
+        }),
+        EditKind::AtxHeading => inline_extent(&leaf.node.children).or_else(|| {
+            let at = range.start + atx_opening(&text[range.start..]).unwrap_or(0);
+            Some(at..at)
+        }),
+        EditKind::CalloutTitle => callout_title(text, range.start),
+        EditKind::IndentedCode => code_extent(&leaf.node.children, text),
+        // A fence of no lines takes its first line at the end of its
+        // opening line.
+        EditKind::FencedCode => code_extent(&leaf.node.children, text).or_else(|| {
+            let at = line_text_end(text, range.start);
+            Some(at..at)
+        }),
+        _ => None,
+    };
+    LeafSyntax { kind, own }
+}
+
+/// Return the length of the ATX heading opening at the start of `line`: up
+/// to three spaces, one to six `#` marks, and the spaces or tabs after them.
+/// Return `None` if `line` opens no ATX heading.
+fn atx_opening(line: &str) -> Option<usize> {
+    let bytes = line.as_bytes();
+    let indent = bytes.iter().take(4).take_while(|&&b| b == b' ').count();
+    if indent > 3 {
+        return None;
+    }
+    let marks = bytes[indent..].iter().take_while(|&&b| b == b'#').count();
+    let after = indent + marks;
+    if !(1..=6).contains(&marks)
+        || !matches!(bytes.get(after), None | Some(b' ' | b'\t' | b'\n' | b'\r'))
+    {
+        return None;
+    }
+    let space = bytes[after..]
+        .iter()
+        .take_while(|&&b| b == b' ' || b == b'\t')
+        .count();
+    Some(after + space)
+}
+
+/// Return the bytes of a leaf's readable inline content: from its first
+/// child to its last, without a task marker before it, a block id after
+/// it, or line breaks and blanks at its ends.
+fn inline_extent(children: &[Node]) -> Option<Range<usize>> {
+    let content = |node: &&Node| {
+        !matches!(
+            node.event,
+            Some(
+                Event::SoftBreak
+                    | Event::HardBreak
+                    | Event::TaskListMarker(_)
+                    | Event::TaskState(_)
+            )
+        )
+    };
+    let first = children.iter().find(content)?;
+    let last = children
+        .iter()
+        .rev()
+        .filter(|node| !matches!(node.event, Some(Event::BlockId(_))))
+        .find(content)?;
+    (first.range.start <= last.range.end).then_some(first.range.start..last.range.end)
+}
+
+/// Return the bytes of a code block's lines: from its first line to the end
+/// of the text of its last, or `None` for a block of no lines.
+fn code_extent(children: &[Node], text: &str) -> Option<Range<usize>> {
+    let start = children.first()?.range.start;
+    let mut end = children.last()?.range.end;
+    if text[..end].ends_with("\r\n") {
+        end -= 2;
+    } else if text[..end].ends_with(['\n', '\r']) {
+        end -= 1;
+    }
+    (start <= end).then_some(start..end)
+}
+
+/// Return the bytes of the title on the marker line of a callout that starts
+/// at `start`: after `[!label]` and any fold sign, and before blanks at the
+/// end of the line. A callout of no title gives an empty range at the end of
+/// its marker.
+fn callout_title(text: &str, start: usize) -> Option<Range<usize>> {
+    let end = line_text_end(text, start);
+    let line = &text[start..end];
+    let open = line.find("[!")?;
+    let close = open + line[open..].find(']')? + 1;
+    let after = line[close..]
+        .strip_prefix(['-', '+'])
+        .unwrap_or(&line[close..]);
+    let title = after.trim_start_matches([' ', '\t']);
+    let from = start + (line.len() - title.len());
+    let to = start + line.trim_end_matches([' ', '\t']).len();
+    Some(if from < to {
+        from..to
+    } else {
+        let at = start + (line.len() - after.len());
+        at..at
+    })
+}
+
+/// Return the end of the text of the line that holds byte `at`: the first
+/// line terminator at or after it, or the end of `text`.
+pub(crate) fn line_text_end(text: &str, at: usize) -> usize {
+    text[at..]
+        .find(['\n', '\r'])
+        .map_or(text.len(), |offset| at + offset)
+}
+
 /// The unique GitHub id the parser gave a heading, or "" for a heading of no
 /// text.
 fn heading_id(tag: Option<&Tag<'_>>) -> String {
@@ -1725,6 +1912,7 @@ pub fn parse_document(
             unit_index: HashMap::new(),
             estimated_bytes: 0,
             parse: None,
+            syntax: Vec::new(),
         },
         previous,
         limits,
@@ -1785,6 +1973,7 @@ pub fn parse_document(
                     children: Vec::new(),
                 },
                 names: None,
+                title: false,
                 context: Context {
                     depth: quote_depth,
                     quote_depth,

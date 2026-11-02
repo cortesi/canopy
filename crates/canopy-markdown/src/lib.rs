@@ -23,6 +23,11 @@ pub mod source_store;
 pub mod source_view;
 /// The rendered reading surface.
 mod surface;
+/// Proptest strategies and invariant checks that other tests share.
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
+/// The whole source lines of each block, and spoken replaces of their text.
+pub mod units;
 /// The document controller and view control.
 mod widget;
 

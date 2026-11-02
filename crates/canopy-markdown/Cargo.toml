@@ -12,6 +12,8 @@ doctest = false
 [features]
 default = ["syntax"]
 syntax = ["canopy-widgets/syntax"]
+# Proptest strategies and invariant checks that other tests share.
+testing = ["dep:proptest"]
 
 [dependencies]
 canopy-xmark.workspace = true
@@ -23,9 +25,11 @@ grep-matcher = "0.1.9"
 grep-regex = "0.1.14"
 unicode-segmentation.workspace = true
 thiserror.workspace = true
+proptest = { workspace = true, optional = true }
 
 [dev-dependencies]
 canopy = { workspace = true, features = ["testing"] }
+proptest.workspace = true
 
 [lints]
 workspace = true
