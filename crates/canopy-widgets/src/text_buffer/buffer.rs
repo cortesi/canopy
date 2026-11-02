@@ -274,8 +274,8 @@ impl TextBuffer {
         self.rope.remove(start_char..end_char);
         self.rope.insert(start_char, text);
 
-        let edit = Edit::new(range, deleted, text.to_string());
-        let new_cursor = advance_position(range.start, text);
+        let edit = Edit::new(start_char, deleted, text.to_string());
+        let new_cursor = self.char_to_position(start_char.saturating_add(text.chars().count()));
         self.selection = Selection::caret(new_cursor);
         self.record_edit(edit, before);
         self.bump_revision(range, text);
@@ -465,6 +465,16 @@ impl TextBuffer {
         TextPosition::new(line, column)
     }
 
+    /// Convert a rope char index to a text position. An index inside the
+    /// break of a line, as between the two chars of a CRLF pair, maps to the
+    /// end of the line.
+    fn char_to_position(&self, char: usize) -> TextPosition {
+        let char = char.min(self.rope.len_chars());
+        let line = self.rope.char_to_line(char);
+        let column = char - self.rope.line_to_char(line);
+        TextPosition::new(line, column.min(self.line_char_len(line)))
+    }
+
     /// Convert a text position to a rope char index.
     fn position_to_char(&self, pos: TextPosition) -> usize {
         let pos = self.clamp_position(pos);
@@ -498,10 +508,8 @@ impl TextBuffer {
             EditDirection::Redo => (edit.deleted.as_str(), edit.inserted.as_str()),
         };
 
-        let start = edit.range.start;
-        let end = advance_position(start, remove_text);
-        let start_char = self.position_to_char(start);
-        let end_char = self.position_to_char(end);
+        let start_char = edit.start;
+        let end_char = start_char.saturating_add(remove_text.chars().count());
         self.rope.remove(start_char..end_char);
         self.rope.insert(start_char, insert_text);
         self.revision = self.revision.saturating_add(1);
@@ -542,21 +550,6 @@ enum EditDirection {
     Undo,
     /// Apply edits in the redo direction.
     Redo,
-}
-
-/// Advance a position by the text contents.
-fn advance_position(start: TextPosition, text: &str) -> TextPosition {
-    let mut line = start.line;
-    let mut column = start.column;
-    for (idx, part) in text.split('\n').enumerate() {
-        if idx == 0 {
-            column = column.saturating_add(part.chars().count());
-        } else {
-            line = line.saturating_add(1);
-            column = part.chars().count();
-        }
-    }
-    TextPosition::new(line, column)
 }
 
 /// Convert a char index to a display column.
@@ -770,6 +763,55 @@ mod tests {
         assert_eq!(buffer.text(), "ab");
         assert_eq!(buffer.cursor(), TextPosition::new(0, 1));
         assert_eq!(TextBuffer::new("\r\n").line_text(0), "");
+    }
+
+    #[test]
+    fn undo_restores_a_carriage_return_that_a_line_break_joined() {
+        // Found by the `vi_keys` fuzz target: a line break after a final
+        // carriage return makes a CRLF pair, and undo at the old line and
+        // column removed the carriage return too.
+        let mut buffer = TextBuffer::new("ab\r");
+        buffer.set_cursor(TextPosition::new(0, 3));
+        buffer.insert_text("\nx");
+        assert_eq!(buffer.text(), "ab\r\nx");
+        assert_eq!(buffer.line_text(0), "ab");
+        assert!(buffer.undo());
+        assert_eq!(buffer.text(), "ab\r");
+        assert!(buffer.redo());
+        assert_eq!(buffer.text(), "ab\r\nx");
+    }
+
+    #[test]
+    fn a_delete_that_makes_a_crlf_pair_leaves_the_cursor_in_the_line() {
+        // Found by the `vi_keys` fuzz target: deleting the char between a
+        // carriage return and a line break left the cursor between the two.
+        let mut buffer = TextBuffer::new("ab\rx\ny");
+        buffer.set_cursor(TextPosition::new(0, 4));
+        assert!(buffer.delete_backward(true));
+        assert_eq!(buffer.text(), "ab\r\ny");
+        assert_eq!(buffer.line_text(0), "ab");
+        assert_eq!(buffer.cursor(), TextPosition::new(0, 2));
+        assert!(buffer.undo());
+        assert_eq!(buffer.text(), "ab\rx\ny");
+    }
+
+    #[test]
+    fn only_lf_and_crlf_break_lines() {
+        // A form feed typed in a vi editor once started a line in the rope
+        // that the buffer's positions did not count.
+        let text = "a\u{c}b\u{b}c\u{85}d\u{2028}e\u{2029}f\rg";
+        let mut buffer = TextBuffer::new(text);
+        assert_eq!(buffer.line_count(), 1);
+        assert_eq!(buffer.line_text(0), text);
+        buffer.set_cursor(TextPosition::new(0, 2));
+        buffer.insert_text("x\u{c}\ry");
+        assert_eq!(buffer.cursor(), TextPosition::new(0, 6));
+        assert_eq!(buffer.line_count(), 1);
+        assert!(buffer.undo());
+        assert_eq!(buffer.text(), text);
+        let crlf = TextBuffer::new("a\r\nb\nc");
+        assert_eq!(crlf.line_count(), 3);
+        assert_eq!(crlf.line_text(0), "a");
     }
 
     proptest! {

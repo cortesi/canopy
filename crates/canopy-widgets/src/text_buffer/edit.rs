@@ -1,21 +1,25 @@
-use super::{Selection, TextRange};
+use super::Selection;
 
 /// A single text edit applied to the buffer.
+///
+/// The edit starts at a char offset, not at a line and column: an edit can
+/// change which chars break lines, as a line break after a carriage return
+/// does, and an offset still names the same place when undo replays it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Edit {
-    /// Range replaced by the edit (before applying it).
-    pub range: TextRange,
-    /// Text removed from the range.
+    /// Char offset where the edit starts.
+    pub start: usize,
+    /// Text removed at the start.
     pub deleted: String,
-    /// Text inserted in place of the range.
+    /// Text inserted in place of the removed text.
     pub inserted: String,
 }
 
 impl Edit {
     /// Construct a new edit.
-    pub fn new(range: TextRange, deleted: String, inserted: String) -> Self {
+    pub fn new(start: usize, deleted: String, inserted: String) -> Self {
         Self {
-            range,
+            start,
             deleted,
             inserted,
         }

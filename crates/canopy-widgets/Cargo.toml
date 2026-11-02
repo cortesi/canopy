@@ -43,7 +43,9 @@ resvg = { version = "0.49.0", optional = true, default-features = false, feature
     "system-fonts",
     "text",
 ] }
-ropey = "1.6.1"
+# Lines break at LF and CRLF alone, as the buffer's positions and Vim count
+# them: CR, form feed, and the Unicode separators stay inside a line.
+ropey = { version = "1.6.1", default-features = false, features = ["simd"] }
 # The syntax definitions come from two-face, so syntect's own set is left
 # out rather than shipping two copies of it. `yaml-load` reads the bundled Luau
 # grammar, which two-face lacks.
