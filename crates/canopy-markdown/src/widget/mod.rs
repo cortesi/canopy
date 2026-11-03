@@ -1130,29 +1130,35 @@ impl Markdown {
     }
     /// End the innermost thing in the rendered view: the text selection,
     /// then the object cursor, and then the block cursor, unless the view
-    /// rests in it.
+    /// rests in it. Return whether anything ended, so a host can give an Esc
+    /// that ends nothing a meaning of its own.
     #[command]
-    pub fn escape(&mut self, ctx: &mut dyn Context) -> Result<()> {
+    pub fn escape(&mut self, ctx: &mut dyn Context) -> Result<bool> {
         // Esc that the block editor leaves, with no other work, commits it.
         if self.slot.is_some() {
-            return slot::commit(self, ctx);
+            slot::commit(self, ctx)?;
+            return Ok(true);
         }
+        let mut ended = false;
         if self.bar_drag {
             ctx.release_mouse()?;
             self.bar_drag = false;
+            ended = true;
         }
         if let Some(nodes) = &self.nodes {
             if self.active == ViewType::Rendered {
-                ctx.with_widget_mut(nodes.rendered, |surface: &mut RenderedSurface, ctx| {
-                    surface.escape(ctx)
-                })?;
+                ended |= ctx
+                    .with_widget_mut(nodes.rendered, |surface: &mut RenderedSurface, ctx| {
+                        surface.escape(ctx)
+                    })?;
             } else if let Some(source) = nodes.source {
                 ctx.with_widget_mut(source, |source: &mut MarkdownSource, ctx| {
                     source.cancel_drag(ctx)
                 })?;
             }
         }
-        self.update_chrome(ctx)
+        self.update_chrome(ctx)?;
+        Ok(ended)
     }
     /// Visit the next actionable object in the block cursor, which moves to
     /// the object's unit, or leave through normal focus traversal.

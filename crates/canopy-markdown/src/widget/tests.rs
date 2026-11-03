@@ -2832,15 +2832,18 @@ fn an_item_is_what_interact_or_a_selection_chose() {
     assert_eq!(status, "Failed: no clipboard");
 
     // Esc drops the link, and the marked unit is the item. A second Esc
-    // leaves the block cursor, which drops it too.
-    harness
-        .with_unique(|reader: &mut Markdown, ctx| reader.escape(ctx))
-        .unwrap();
+    // leaves the block cursor, which drops it too. A third ends nothing, and
+    // says so.
+    let escape = |harness: &mut Harness| {
+        harness
+            .with_unique(|reader: &mut Markdown, ctx| reader.escape(ctx))
+            .unwrap()
+    };
+    assert!(escape(&mut harness), "the link ends");
     assert!(has_item(&mut harness), "the marked unit stays the item");
-    harness
-        .with_unique(|reader: &mut Markdown, ctx| reader.escape(ctx))
-        .unwrap();
+    assert!(escape(&mut harness), "the block cursor ends");
     assert!(!has_item(&mut harness), "leaving Interact drops the unit");
+    assert!(!escape(&mut harness), "nothing is left to end");
 }
 
 #[test]

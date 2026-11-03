@@ -226,8 +226,9 @@ impl Markdown {
 
     /// End the innermost thing in the rendered view: the text selection,
     /// then the object cursor, and then the block cursor, unless the view
-    /// rests in it.
-    pub fn escape(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
+    /// rests in it. Return whether anything ended, so a host can give an Esc
+    /// that ends nothing a meaning of its own.
+    pub fn escape(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<bool>;
 
     /// Apply final EOF interpretation, including an explicitly aborted outcome.
     pub fn finish(
