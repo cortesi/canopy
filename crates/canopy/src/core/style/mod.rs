@@ -331,8 +331,17 @@ impl GradientSpec {
         self.drift.filter(|drift| !drift.period().is_zero())
     }
 
-    /// Return the position of a point along the gradient, 0.0 to 1.0.
+    /// Return the position of a point along the gradient, 0.0 to 1.0. The
+    /// point stands for the middle of its cell.
     fn ratio_at(&self, rect: geom::Rect, point: geom::Point) -> f32 {
+        let x = point.x.saturating_sub(rect.tl.x) as f32 + 0.5;
+        let y = point.y.saturating_sub(rect.tl.y) as f32 + 0.5;
+        self.ratio_within(rect, x, y)
+    }
+
+    /// Return the position along the gradient, 0.0 to 1.0, of `(x, y)`
+    /// within `rect`, in cells from its top left corner.
+    fn ratio_within(&self, rect: geom::Rect, local_x: f32, local_y: f32) -> f32 {
         if rect.w == 0 || rect.h == 0 {
             return 0.0;
         }
@@ -351,8 +360,6 @@ impl GradientSpec {
             },
         );
 
-        let local_x = point.x.saturating_sub(rect.tl.x) as f32 + 0.5;
-        let local_y = point.y.saturating_sub(rect.tl.y) as f32 + 0.5;
         let dot = dir_x * local_x + dir_y * local_y;
         if (max_dot - min_dot).abs() < f32::EPSILON {
             0.0
@@ -412,6 +419,19 @@ impl Paint {
         match self {
             Self::Solid(color) => Some(*color),
             Self::Gradient(_) | Self::Animated(_) => None,
+        }
+    }
+
+    /// Resolve the paint at `(x, y)` within `rect`, in cells from its top
+    /// left corner, at rest. Unlike [`Self::resolve`], which takes the middle
+    /// of a cell, the position can fall anywhere, so a gradient resolves finer
+    /// than a cell. A position outside `rect` takes the color at its nearest
+    /// end.
+    pub fn resolve_within(&self, rect: geom::Rect, x: f32, y: f32) -> Color {
+        match self {
+            Self::Solid(color) => *color,
+            Self::Gradient(spec) => spec.color_for_ratio(spec.ratio_within(rect, x, y)),
+            Self::Animated(animation) => animation.rest(),
         }
     }
 

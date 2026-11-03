@@ -10,7 +10,7 @@ use canopy::{
     render::Render,
 };
 
-use crate::chart::{self, Base, Braille, Scale, Segment, Tint};
+use crate::chart::{self, Base, Braille, Scale, Segment, Shade, Tint};
 
 /// Values a sparkline keeps by default.
 const HISTORY: usize = 1024;
@@ -35,7 +35,8 @@ enum Look {
 /// unless [`Sparkline::with_history`] sets another limit.
 ///
 /// `Sparkline` pushes the `sparkline` layer and paints its bars in the `bar`
-/// part and its line in the `line` part.
+/// part and its line in the `line` part. A gradient on `bar` spans each bar's
+/// height, unless [`Sparkline::with_shade`] shades the bars by value.
 pub struct Sparkline {
     /// The values, oldest first.
     values: VecDeque<Option<f64>>,
@@ -47,6 +48,8 @@ pub struct Sparkline {
     max: Option<f64>,
     /// Most values that the sparkline keeps.
     history: usize,
+    /// How the paint of the bars colors them.
+    shade: Shade,
 }
 
 impl Sparkline {
@@ -68,6 +71,7 @@ impl Sparkline {
             rows: 1,
             max: None,
             history: HISTORY,
+            shade: Shade::Span,
         }
     }
 
@@ -91,6 +95,15 @@ impl Sparkline {
     pub fn with_history(mut self, history: usize) -> Self {
         self.history = history.max(1);
         self.trim();
+        self
+    }
+
+    /// Sets how the paint of `bar` colors the bars. With [`Shade::Value`],
+    /// each bar takes the color that a gradient up the bars shows at its tip,
+    /// so the color tells the value finer than a row.
+    #[must_use]
+    pub fn with_shade(mut self, shade: Shade) -> Self {
+        self.shade = shade;
         self
     }
 
@@ -178,7 +191,7 @@ impl Sparkline {
             match value {
                 Some(value) => {
                     let rect = Rect::new(x, area.tl.y, 1, area.h);
-                    let bar = [Segment::new(value, "bar")];
+                    let bar = [Segment::new(value, "bar").with_shade(self.shade)];
                     chart::column(render, rect, Base::Bottom, &scale, &bar, Tint::None)?;
                 }
                 None => render.text("gap", Line::new(x, bottom, 1), "·")?,
@@ -249,7 +262,11 @@ impl Widget for Sparkline {
 
 #[cfg(test)]
 mod tests {
-    use canopy::{layout::Constraint, testing::harness::Harness};
+    use canopy::{
+        layout::Constraint,
+        style::{Color, GradientSpec, GradientStop, Paint},
+        testing::harness::Harness,
+    };
 
     use super::*;
 
@@ -323,6 +340,46 @@ mod tests {
         let sparkline = Sparkline::line().with_values([Some(0.0), Some(3.0), None, Some(3.0)]);
         // Dots rise from the bottom row of the cell to the top row.
         assert_eq!(rows(sparkline, 2, 1), ["⡜⠈"]);
+    }
+
+    #[test]
+    fn bars_shaded_by_value_take_one_color_each() -> Result<()> {
+        let low = Color::Rgb { r: 0, g: 0, b: 200 };
+        let high = Color::Rgb { r: 200, g: 0, b: 0 };
+        // The ramp runs from the top row down, so a span shade colors the two
+        // rows of a full bar apart.
+        let ramp = Paint::gradient(GradientSpec::with_stops(
+            90.0,
+            vec![GradientStop::new(0.0, high), GradientStop::new(1.0, low)],
+        ));
+        let colors = |shade: Shade| -> Result<[Color; 3]> {
+            let sparkline = Sparkline::bars()
+                .with_rows(2)
+                .with_max(4.0)
+                .with_shade(shade)
+                .with_values([4.0, 2.0]);
+            let ramp = ramp.clone();
+            let mut harness = Harness::builder(sparkline)
+                .size(2, 2)
+                .configure(move |setup| {
+                    setup.widget_styles(move |_, rules| {
+                        rules.fg("sparkline/bar", ramp.clone()).apply();
+                    });
+                    Ok(())
+                })
+                .build()?;
+            harness.render()?;
+            let fg = |x, y| harness.buf().get(Point { x, y }).expect("cell").style.fg;
+            Ok([fg(0, 0), fg(0, 1), fg(1, 1)])
+        };
+        let [top, bottom, half] = colors(Shade::Span)?;
+        assert_ne!(top, bottom, "a span shade ramps up the bar");
+        assert_eq!(half, bottom);
+        let [top, bottom, half] = colors(Shade::Value)?;
+        assert_eq!([top, bottom], [high, high], "a full bar takes the high end");
+        let middle = ramp.resolve_within(Rect::new(0, 0, 1, 2), 0.5, 1.0);
+        assert_eq!(half, middle, "a half bar takes the color halfway up");
+        Ok(())
     }
 
     #[test]

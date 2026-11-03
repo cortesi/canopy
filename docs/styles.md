@@ -194,11 +194,17 @@ its foreground and the next as its background. A column that grows down swaps
 the two, because it draws the top of a cell with the lower block of the rest of
 the cell. Cells that no segment fills are blank on the ground: the background of
 the empty path beneath the layers. A gradient on a segment's style spans the
-whole bar, so its colour at a cell tells how far along the cell is.
+whole bar, so its colour at a cell tells how far along the cell is. A segment
+built `with_shade(Shade::Value)` takes one colour instead: the colour of that
+gradient at the segment's exact end. A gradient along the bar then maps values
+to colours finer than a cell, so a sparkline three rows high still shows each
+level in its own colour. `Paint::resolve_within` resolves a paint anywhere in a
+cell for such uses.
 
 - `Sparkline` pushes `sparkline`. Its bars paint `bar`, and a missing value
-  paints `·` in `gap` among them. Its braille line paints `line`, and a missing
-  value breaks the line.
+  paints `·` in `gap` among them. `Sparkline::with_shade` sets the shade of
+  the bars. Its braille line paints `line`, and a missing value breaks the
+  line.
 - `Meter` pushes `meter`. A single value paints `fill`, the rest of the bar
   paints `track`, and the label paints `label`. Stacked values paint the style
   paths they name.

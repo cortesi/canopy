@@ -13,13 +13,16 @@
 //! Cells that no segment fills are blank on the ground: the background of the
 //! empty style path under the current layers. A track instead fills the rest
 //! of a bar with its own color. A gradient paint resolves over the whole bar
-//! or column, so its color at a cell tells how far along the cell is.
+//! or column, so its color at a cell tells how far along the cell is. A
+//! segment that shades by [`Shade::Value`] takes one color instead: the
+//! gradient's color at the exact end of the segment, so its color tells its
+//! value finer than a cell, however few cells it covers.
 
 use canopy::{
     error::Result,
     geom::{Line, Point, Rect, Size},
     render::Render,
-    style::{AttrSet, Mix, Paint, Style},
+    style::{AttrSet, Color, Mix, Paint, Style},
 };
 
 /// Eighths in one cell.
@@ -113,23 +116,50 @@ impl Scale {
     }
 }
 
-/// One part of a stacked bar or column: a value and the style path whose
-/// foreground paint colors it.
+/// How the paint of a segment's style colors the segment.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Shade {
+    /// The paint resolves at the middle of each cell over the whole bar or
+    /// column, so a gradient's color at a cell tells how far along the cell
+    /// is.
+    #[default]
+    Span,
+    /// The segment takes one color: the color of the paint over the whole
+    /// bar or column at the segment's exact end, which
+    /// [`Paint::resolve_within`] resolves. A gradient along the bar then maps
+    /// values to colors finer than a cell: each bar takes the color at its
+    /// tip, so a column of a high value takes the high color from its foot.
+    Value,
+}
+
+/// One part of a stacked bar or column: a value, the style path whose
+/// foreground paint colors it, and how that paint colors it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Segment {
     /// The value of the part. A value that is not above zero draws nothing.
     pub value: f64,
     /// The style path of the part's color.
     pub style: String,
+    /// How the paint colors the part.
+    pub shade: Shade,
 }
 
 impl Segment {
-    /// Returns a segment of `value` in the color of `style`.
+    /// Returns a segment of `value` in the color of `style`, shaded by
+    /// [`Shade::Span`].
     pub fn new(value: f64, style: impl Into<String>) -> Self {
         Self {
             value,
             style: style.into(),
+            shade: Shade::Span,
         }
+    }
+
+    /// Sets how the paint colors the segment.
+    #[must_use]
+    pub fn with_shade(mut self, shade: Shade) -> Self {
+        self.shade = shade;
+        self
     }
 }
 
@@ -325,7 +355,7 @@ fn paint_run(
         return Ok(());
     }
     let ground = ground(render);
-    let tones = tones(render, scale, segments, cells, rest, &ground);
+    let tones = tones(render, rect, fill, scale, segments, rest, &ground);
     let tint = match tint {
         Tint::Mute(amount) if amount > 0.0 => Some((ground, amount.min(1.0))),
         Tint::Light(amount) if amount > 0.0 => Some((render.resolve_style("").fg, amount.min(1.0))),
@@ -408,12 +438,17 @@ fn paint_run(
 /// Neighbors that draw the same join into one tone.
 fn tones(
     render: &Render<'_>,
+    rect: Rect,
+    fill: Fill,
     scale: &Scale,
     segments: &[Segment],
-    cells: u32,
     rest: Rest,
     ground: &Paint,
 ) -> Vec<Tone> {
+    let cells = match fill {
+        Fill::Right => rect.w,
+        Fill::Up | Fill::Down => rect.h,
+    };
     let span = cells.saturating_mul(EIGHTHS);
     let mut tones = Vec::with_capacity(segments.len() + 1);
     let mut sum = 0.0;
@@ -424,11 +459,16 @@ fn tones(
         }
         let end = scale.eighths(sum, cells);
         if end > start {
+            let paint = render.resolve_style(&segment.style).fg;
+            let paint = match segment.shade {
+                Shade::Span => paint,
+                Shade::Value => Paint::solid(tip_color(&paint, rect, fill, sum / scale.max())),
+            };
             push_tone(
                 &mut tones,
                 Tone {
                     end,
-                    paint: render.resolve_style(&segment.style).fg,
+                    paint,
                     ground: false,
                 },
             );
@@ -451,6 +491,24 @@ fn tones(
         push_tone(&mut tones, rest);
     }
     tones
+}
+
+/// Returns the color of `paint` over `rect` where a run that fills in `fill`
+/// direction ends after `reach` of its length, from zero to one.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "a position within a cell rectangle needs no more precision than f32"
+)]
+fn tip_color(paint: &Paint, rect: Rect, fill: Fill, reach: f64) -> Color {
+    let reach = reach.clamp(0.0, 1.0) as f32;
+    let (width, height) = (rect.w as f32, rect.h as f32);
+    let (x, y) = match fill {
+        Fill::Right => (reach * width, height / 2.0),
+        Fill::Up => (width / 2.0, (1.0 - reach) * height),
+        Fill::Down => (width / 2.0, reach * height),
+    };
+    paint.resolve_within(rect, x, y)
 }
 
 /// Adds a tone to a run, or extends the last tone when both draw the same.
@@ -766,6 +824,13 @@ mod tests {
                     .fg("c", C)
                     .fg("track", T)
                     .fg("ramp", Paint::gradient(ramp))
+                    .fg(
+                        "rise",
+                        Paint::gradient(GradientSpec::with_stops(
+                            90.0,
+                            vec![GradientStop::new(0.0, C), GradientStop::new(1.0, A)],
+                        )),
+                    )
                     .apply();
             });
             Ok(())
@@ -997,6 +1062,39 @@ mod tests {
             );
         }
         assert_ne!(cell(&harness, 0, 1).1.fg, cell(&harness, 7, 1).1.fg);
+    }
+
+    #[test]
+    fn a_segment_shaded_by_value_takes_the_color_at_its_end() {
+        // The ramp rises from A at the foot of a column to C at its top.
+        let ramp = Paint::gradient(GradientSpec::with_stops(
+            90.0,
+            vec![GradientStop::new(0.0, C), GradientStop::new(1.0, A)],
+        ));
+        // Two columns of 2 rows: a quarter and a full column of the ramp.
+        let harness = painted(2, 2, |r| {
+            let scale = Scale::linear(4.0);
+            for (x, value) in [(0, 1.0), (1, 4.0)] {
+                column(
+                    r,
+                    Rect::new(x, 0, 1, 2),
+                    Base::Bottom,
+                    &scale,
+                    &[Segment::new(value, "rise").with_shade(Shade::Value)],
+                    Tint::None,
+                )?;
+            }
+            Ok(())
+        });
+        let quarter = cell(&harness, 0, 1);
+        assert_eq!(quarter.0, '▄');
+        let tip = ramp.resolve_within(Rect::new(0, 0, 1, 2), 0.5, 1.5);
+        assert_eq!(
+            quarter.1.fg, tip,
+            "a quarter column takes the color a quarter up"
+        );
+        let full = [cell(&harness, 1, 0).1.fg, cell(&harness, 1, 1).1.fg];
+        assert_eq!(full, [C, C], "a full column takes the top color throughout");
     }
 
     #[test]

@@ -3137,7 +3137,8 @@ impl<T> Widget for Selector<T> where T: 'static + ItemLabel {}
 /// unless [`Sparkline::with_history`] sets another limit.
 ///
 /// `Sparkline` pushes the `sparkline` layer and paints its bars in the `bar`
-/// part and its line in the `line` part.
+/// part and its line in the `line` part. A gradient on `bar` spans each bar's
+/// height, unless [`Sparkline::with_shade`] shades the bars by value.
 pub struct Sparkline {/* private fields */}
 
 impl Sparkline {
@@ -3171,6 +3172,12 @@ impl Sparkline {
     /// Sets the height in rows. A height below one is one row.
     #[must_use]
     pub fn with_rows(self, rows: u32) -> Self;
+
+    /// Sets how the paint of `bar` colors the bars. With [`Shade::Value`],
+    /// each bar takes the color that a gradient up the bars shows at its tip,
+    /// so the color tells the value finer than a row.
+    #[must_use]
+    pub fn with_shade(self, shade: Shade) -> Self;
 
     /// Replaces the values. Each value is a number, or `None` for a gap.
     #[must_use]
@@ -3928,7 +3935,10 @@ pub mod chart {
     //! Cells that no segment fills are blank on the ground: the background of the
     //! empty style path under the current layers. A track instead fills the rest
     //! of a bar with its own color. A gradient paint resolves over the whole bar
-    //! or column, so its color at a cell tells how far along the cell is.
+    //! or column, so its color at a cell tells how far along the cell is. A
+    //! segment that shades by [`Shade::Value`] takes one color instead: the
+    //! gradient's color at the exact end of the segment, so its color tells its
+    //! value finer than a cell, however few cells it covers.
 
     /// The side of its area that a column grows from.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -4043,19 +4053,42 @@ pub mod chart {
         pub fn ticks(&self, count: usize) -> Vec<f64>;
     }
 
-    /// One part of a stacked bar or column: a value and the style path whose
-    /// foreground paint colors it.
+    /// One part of a stacked bar or column: a value, the style path whose
+    /// foreground paint colors it, and how that paint colors it.
     #[derive(Clone, Debug, PartialEq)]
     pub struct Segment {
         /// The value of the part. A value that is not above zero draws nothing.
         pub value: f64,
         /// The style path of the part's color.
         pub style: String,
+        /// How the paint colors the part.
+        pub shade: Shade,
     }
 
     impl Segment {
-        /// Returns a segment of `value` in the color of `style`.
+        /// Returns a segment of `value` in the color of `style`, shaded by
+        /// [`Shade::Span`].
         pub fn new(value: f64, style: impl Into<String>) -> Self;
+
+        /// Sets how the paint colors the segment.
+        #[must_use]
+        pub fn with_shade(self, shade: Shade) -> Self;
+    }
+
+    /// How the paint of a segment's style colors the segment.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub enum Shade {
+        /// The paint resolves at the middle of each cell over the whole bar or
+        /// column, so a gradient's color at a cell tells how far along the cell
+        /// is.
+        #[default]
+        Span,
+        /// The segment takes one color: the color of the paint over the whole
+        /// bar or column at the segment's exact end, which
+        /// [`Paint::resolve_within`] resolves. A gradient along the bar then maps
+        /// values to colors finer than a cell: each bar takes the color at its
+        /// tip, so a column of a high value takes the high color from its foot.
+        Value,
     }
 
     /// A change of the segment colors of a column: toward the ground to set it

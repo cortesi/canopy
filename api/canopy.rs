@@ -5692,6 +5692,13 @@ pub mod style {
         /// Resolve the paint at a location, at rest.
         pub fn resolve(&self, rect: Rect, point: Point) -> Color;
 
+        /// Resolve the paint at `(x, y)` within `rect`, in cells from its top
+        /// left corner, at rest. Unlike [`Self::resolve`], which takes the middle
+        /// of a cell, the position can fall anywhere, so a gradient resolves finer
+        /// than a cell. A position outside `rect` takes the color at its nearest
+        /// end.
+        pub fn resolve_within(&self, rect: Rect, x: f32, y: f32) -> Color;
+
         /// Construct a solid paint.
         pub fn solid(color: Color) -> Self;
 
