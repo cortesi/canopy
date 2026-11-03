@@ -368,6 +368,124 @@ fn a_new_block_lies_in_the_containers_of_the_unit_before_it() {
     }
 }
 
+/// The seed of a new item after unit `index` of `text`, and the source with
+/// the item of `typed` in place.
+fn item_appended(text: &str, index: usize, typed: &str) -> (String, String) {
+    let document = testing::parse(text);
+    let block = NewBlock::item_after(&document, &edit_units(&document)[index])
+        .unwrap_or_else(|| panic!("unit {index} of {text:?} is a list item"));
+    let mut out = text.to_owned();
+    out.insert_str(block.at, &block.text(typed));
+    (block.seed, out)
+}
+
+#[test]
+fn a_new_item_follows_its_item_at_the_same_level() {
+    let cases: &[(&str, usize, &str, &str, &str)] = &[
+        // A tight list takes the item on the next line.
+        ("- a\n- b\n", 0, "- ", "- new", "- a\n- new\n- b\n"),
+        ("- a\n- b\n", 1, "- ", "- new", "- a\n- b\n- new\n"),
+        ("* a\n", 0, "* ", "* new", "* a\n* new\n"),
+        // An ordered list takes the next number and the same delimiter.
+        ("1. a\n2. b\n", 0, "2. ", "2. new", "1. a\n2. new\n2. b\n"),
+        ("9) a\n", 0, "10) ", "10) new", "9) a\n10) new\n"),
+        // A loose list sets the item apart with blank lines.
+        ("- a\n\n- b\n", 0, "- ", "- new", "- a\n\n- new\n\n- b\n"),
+        // The item follows the nested blocks of its item.
+        (
+            "- a\n  - x\n- b\n",
+            0,
+            "- ",
+            "- new",
+            "- a\n  - x\n- new\n- b\n",
+        ),
+        // A nested item stays nested, and a quoted one quoted.
+        (
+            "- a\n  - x\n- b\n",
+            1,
+            "- ",
+            "- new",
+            "- a\n  - x\n  - new\n- b\n",
+        ),
+        (
+            "> - a\n> - b\n",
+            0,
+            "- ",
+            "- new",
+            "> - a\n> - new\n> - b\n",
+        ),
+        // A task takes an open box.
+        (
+            "- [x] done\n",
+            0,
+            "- [ ] ",
+            "- [ ] next",
+            "- [x] done\n- [ ] next\n",
+        ),
+        // Later lines take the indent of the item's text.
+        (
+            "- a\n- b\n",
+            0,
+            "- ",
+            "- new\nmore",
+            "- a\n- new\n  more\n- b\n",
+        ),
+        // The seed alone adds nothing.
+        ("- a\n- b\n", 0, "- ", "- ", "- a\n- b\n"),
+        ("- a\n- b\n", 0, "- ", "-   \n", "- a\n- b\n"),
+    ];
+    for (text, index, seed, typed, expected) in cases {
+        let (got_seed, got) = item_appended(text, *index, typed);
+        assert_eq!(&got_seed, seed, "{text:?} {index}");
+        assert_eq!(&got, expected, "{text:?} {index} {typed:?}");
+    }
+}
+
+#[test]
+fn a_new_item_with_no_marker_is_a_paragraph_in_the_containers_of_its_item() {
+    let cases: &[(&str, usize, &str, &str)] = &[
+        // A paragraph after a top-level item splits the list.
+        ("- a\n- b\n", 0, "para", "- a\n\npara\n\n- b\n"),
+        ("- a\n- b\n", 1, "para", "- a\n- b\n\npara\n"),
+        ("1. a\n2. b\n", 0, "one\ntwo", "1. a\n\none\ntwo\n\n2. b\n"),
+        ("- a\n\n- b\n", 0, "para", "- a\n\npara\n\n- b\n"),
+        // After a nested item, the paragraph lies in the item that holds it.
+        (
+            "- a\n  - x\n- b\n",
+            1,
+            "para",
+            "- a\n  - x\n\n  para\n\n- b\n",
+        ),
+        // A quoted list keeps its quote.
+        ("> - a\n", 0, "para", "> - a\n>\n> para\n"),
+        // Text that only looks like a marker is a paragraph too.
+        ("- a\n", 0, "*bold* text", "- a\n\n*bold* text\n"),
+        ("- a\n", 0, "1.5 more", "- a\n\n1.5 more\n"),
+        // An indented marker is still an item, and nothing adds nothing.
+        ("- a\n", 0, "  - x", "- a\n  - x\n"),
+        ("- a\n", 0, "", "- a\n"),
+    ];
+    for (text, index, typed, expected) in cases {
+        let (_, got) = item_appended(text, *index, typed);
+        assert_eq!(&got, expected, "{text:?} {index} {typed:?}");
+    }
+    // The paragraph parses as one, apart from the items around it.
+    let (item, paragraph) = (EditKind::ListItem, EditKind::Paragraph);
+    assert_eq!(kinds("- a\n\npara\n\n- b\n"), [item, paragraph, item]);
+    assert_eq!(
+        kinds("- a\n  - x\n\n  para\n\n- b\n"),
+        [item, item, paragraph, item]
+    );
+}
+
+#[test]
+fn a_block_that_is_no_list_item_has_no_new_item() {
+    let document = testing::parse("para\n\n# H\n");
+    for unit in edit_units(&document) {
+        assert_eq!(NewBlock::item_after(&document, &unit), None, "{unit:?}");
+    }
+}
+
 #[test]
 fn a_new_block_at_the_end_starts_after_a_blank_line() {
     for (source, lead) in [

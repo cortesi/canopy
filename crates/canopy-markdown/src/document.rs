@@ -343,7 +343,7 @@ pub struct DocumentSnapshot {
 }
 
 /// What edit units need of one block's syntax, as the parser read it: its
-/// edit kind, and the bytes of its own text.
+/// edit kind, the bytes of its own text, and the item of a list item's text.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct LeafSyntax {
     /// The kind of edit unit the block makes alone.
@@ -352,6 +352,19 @@ pub(crate) struct LeafSyntax {
     /// outside the block's lines or off character boundaries, which edit
     /// units correct.
     pub(crate) own: Option<Range<usize>>,
+    /// The list item whose text the block is, for a block of the
+    /// [`EditKind::ListItem`] kind.
+    pub(crate) item: Option<ItemSyntax>,
+}
+
+/// What a new item after a list item needs of it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ItemSyntax {
+    /// The source bytes of the whole item, from its marker, with its nested
+    /// blocks.
+    pub(crate) range: Range<usize>,
+    /// Whether blank lines set the items of its list apart.
+    pub(crate) loose: bool,
 }
 
 impl DocumentSnapshot {
@@ -805,6 +818,10 @@ struct Context {
     alerts: Vec<Alert>,
     /// Generated list marker for the containing item.
     marker: Option<String>,
+    /// The containing list item.
+    item: Option<ItemSyntax>,
+    /// Whether blank lines set apart the items of the innermost list.
+    loose: bool,
     /// Source start of the enclosing construct.
     enclosing: usize,
     /// Label of the containing footnote definition.
@@ -831,9 +848,16 @@ fn collect<N: Borrow<Node>>(nodes: &[N], context: &Context, out: &mut Vec<Leaf>)
         let node = node.borrow();
         match node.tag.as_ref() {
             Some(Tag::List(number)) => {
+                // A loose list holds the text of its items in paragraphs.
+                let loose = node.children.iter().any(|item| {
+                    item.children
+                        .iter()
+                        .any(|child| matches!(child.tag, Some(Tag::Paragraph)))
+                });
                 for (index, item) in node.children.iter().enumerate() {
                     let mut c = context.clone();
                     c.depth += 1;
+                    c.loose = loose;
                     c.marker = Some(number.map_or_else(
                         || {
                             match c.depth {
@@ -853,6 +877,10 @@ fn collect<N: Borrow<Node>>(nodes: &[N], context: &Context, out: &mut Vec<Leaf>)
                 let start = out.len();
                 let mut c = context.clone();
                 c.enclosing = node.range.start;
+                c.item = Some(ItemSyntax {
+                    range: node.range.clone(),
+                    loose: c.loose,
+                });
                 let mut inline = Vec::new();
                 for child in &node.children {
                     if is_block(child) {
@@ -1408,6 +1436,7 @@ impl Builder<'_> {
         self.document.syntax.push(LeafSyntax {
             kind: EditKind::Source,
             own: None,
+            item: None,
         });
         self.document
             .unit_index
@@ -1524,7 +1553,10 @@ fn leaf_syntax(leaf: &Leaf, kind: &BlockKind, literal: bool, text: &str) -> Leaf
         }),
         _ => None,
     };
-    LeafSyntax { kind, own }
+    let item = (kind == EditKind::ListItem)
+        .then(|| leaf.context.item.clone())
+        .flatten();
+    LeafSyntax { kind, own, item }
 }
 
 /// Return the length of the ATX heading opening at the start of `line`: up

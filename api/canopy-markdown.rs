@@ -114,9 +114,14 @@ impl Markdown {
     /// Open an empty block editor after the marked unit, in insert mode for
     /// a vi editor. A commit puts its text after the unit as a new block,
     /// with a blank line between them, in the quotes and list items of the
-    /// unit's first block. A blank text adds nothing. With no unit, the new
-    /// block goes at the end of the text. It does nothing where `edit_block`
-    /// does nothing, and shows the lock's notice as it does.
+    /// unit's first block. After the text of a list item, the editor opens
+    /// on the marker of the next item instead, with the next number of an
+    /// ordered list and an open box after a task, and a commit puts the item
+    /// after the whole item, at its level. A text whose marker the user
+    /// deleted is a paragraph there instead, in the containers of the item.
+    /// A blank text, or a marker alone, adds nothing. With no unit, the new
+    /// block goes at the end of the text. It does nothing where
+    /// `edit_block` does nothing, and shows the lock's notice as it does.
     pub fn append_block(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Replace bytes `from..to` of the text of `epoch` with `text`, as a

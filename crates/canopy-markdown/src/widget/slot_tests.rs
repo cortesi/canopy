@@ -520,10 +520,60 @@ fn the_draft_of_a_new_block_is_its_source() {
     type_text(&mut harness, "more");
     let at = DOCUMENT.find("- item a").unwrap() + "- item a".len();
     let edit = reader(&mut harness, |reader, ctx| Ok(reader.block_draft(ctx))).unwrap();
-    // The new paragraph lies in the list item, and the next item keeps a
-    // blank line before it.
+    // After a list item, the new block is the next item of the tight list.
     assert_eq!(edit.range, at..at);
-    assert_eq!(edit.text, "\n\n  more\n");
+    assert_eq!(edit.text, "\n- more");
+}
+
+#[test]
+fn a_new_item_without_its_marker_is_a_paragraph_after_its_item() {
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    press(&mut harness, "j");
+    press(&mut harness, "j");
+    press(&mut harness, "a");
+    press(&mut harness, "Backspace");
+    press(&mut harness, "Backspace");
+    type_text(&mut harness, "para");
+    press(&mut harness, "Escape");
+    press(&mut harness, "Escape");
+    // The paragraph splits the list, with blank lines around it.
+    let at = DOCUMENT.find("- item a").unwrap() + "- item a".len();
+    let edits = reader(&mut harness, |reader, _| Ok(reader.take_edits()));
+    assert_eq!(edits.len(), 1);
+    assert_eq!(edits[0].range, at..at);
+    assert_eq!(edits[0].text, "\n\npara\n");
+    settle(&mut harness, &manual);
+    // The cursor marks the paragraph.
+    let source = reader(&mut harness, |reader, _| Ok(reader.accepted_source()));
+    let selected = reader(&mut harness, |reader, _| Ok(reader.selected_block())).unwrap();
+    assert_eq!(&source[selected.range], "para");
+}
+
+#[test]
+fn a_new_item_opens_on_its_marker_and_lands_at_the_level_of_its_item() {
+    let text = "Intro\n\n1. one\n   - inner\n2. two\n";
+    let (mut harness, manual) = editing(text, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    press(&mut harness, "j");
+    press(&mut harness, "a");
+    // The editor opens on the next marker, with the cursor after it.
+    let (draft, cursor, mode) = editor_state(&mut harness);
+    assert_eq!(draft, "2. ");
+    assert_eq!(cursor, TextPosition::new(0, 3));
+    assert_eq!(mode, Some(ViMode::Insert));
+    type_text(&mut harness, "new");
+    press(&mut harness, "Escape");
+    press(&mut harness, "Escape");
+    // The item follows the nested list of its item, at its level.
+    let at = text.find("   - inner").unwrap() + "   - inner".len();
+    let edits = reader(&mut harness, |reader, _| Ok(reader.take_edits()));
+    assert_eq!(edits.len(), 1);
+    assert_eq!(edits[0].range, at..at);
+    assert_eq!(edits[0].text, "\n2. new");
+    settle(&mut harness, &manual);
+    let source = reader(&mut harness, |reader, _| Ok(reader.accepted_source()));
+    assert_eq!(&*source, "Intro\n\n1. one\n   - inner\n2. new\n2. two\n");
 }
 
 #[test]

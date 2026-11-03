@@ -212,14 +212,22 @@ pub(crate) struct NewBlock {
     pub(crate) at: usize,
     /// The text before the block's lines: the breaks that start a block.
     pub(crate) lead: String,
-    /// The prefix of each line of the block: the markers of its quotes, and
-    /// blanks in place of the markers of its list items.
+    /// The text that the block's editor opens with: the marker of a new list
+    /// item, or nothing.
+    pub(crate) seed: String,
+    /// The prefix of the block's first line.
+    first: String,
+    /// The prefix of each line of the block after its first: the markers of
+    /// its quotes, and blanks in place of the markers of its list items.
     prefix: String,
     /// The text after the block's lines: a blank line when a line follows
     /// with no blank line between, so that line stays out of the block.
     trail: String,
     /// The line terminator of the block's lines.
     terminator: &'static str,
+    /// For a new list item, the paragraph that a text with no list marker
+    /// makes instead, in the containers of the item.
+    paragraph: Option<Box<Self>>,
 }
 
 impl NewBlock {
@@ -237,9 +245,12 @@ impl NewBlock {
         Self {
             at,
             lead,
+            seed: String::new(),
+            first: String::new(),
             prefix: String::new(),
             trail: String::new(),
             terminator,
+            paragraph: None,
         }
     }
 
@@ -263,33 +274,189 @@ impl NewBlock {
         Self {
             at,
             lead: format!("{terminator}{blank}{terminator}"),
+            seed: String::new(),
+            first: prefix.clone(),
             prefix,
             trail,
             terminator,
+            paragraph: None,
         }
     }
 
+    /// Return a new item after the list item that `unit` of `document` is the
+    /// text of, at the same level: after the item's nested blocks, with the
+    /// item's marker, the next number of an ordered list, and an open task
+    /// box after a task. The block's text starts with that marker, its seed.
+    /// A blank line sets it apart in a loose list. A text with no marker is a
+    /// paragraph there instead, in the containers of the item: after a list
+    /// that it splits, in the item that holds a nested list, or in a quote,
+    /// with blank lines around it. Return `None` for a unit that is no list
+    /// item's text.
+    pub(crate) fn item_after(document: &DocumentSnapshot, unit: &EditUnit) -> Option<Self> {
+        if unit.kind != EditKind::ListItem {
+            return None;
+        }
+        let item = document.syntax(unit.blocks.start)?.item.clone()?;
+        let source = document.source.text();
+        let start = item.range.start;
+        if start > source.len() || !source.is_char_boundary(start) {
+            return None;
+        }
+        let rest = &source[start..];
+        let width = marker_width(rest)?;
+        let seed = format!(
+            "{}{}{}",
+            next_marker(&rest[..width]),
+            marker_gap(&rest[width..]),
+            if task_box(&rest[width..]) { "[ ] " } else { "" }
+        );
+        // The containers of the item: the text before its marker, with
+        // blanks in place of the markers of the items it lies in.
+        let first = continuation(&source[line_start(&source, start)..start]);
+        let prefix = format!("{first}{}", " ".repeat(seed.chars().count()));
+        // The item ends with the lines of its last block.
+        let at = document.blocks[unit.blocks.start..]
+            .iter()
+            .take_while(|block| block.source.start < item.range.end)
+            .map(|block| block_lines(&source, &block.source).end)
+            .max()
+            .unwrap_or(unit.range.end)
+            .max(unit.range.end);
+        let terminator = line_terminator(&source, &unit.range);
+        let blank = first.trim_end_matches([' ', '\t']).to_owned();
+        let next = source[at..]
+            .strip_prefix(terminator)
+            .map(|rest| &rest[..line_text_end(rest, 0)]);
+        // A line that follows takes a blank line, so it stays out of a
+        // paragraph, and apart from an item of a loose list.
+        let apart = match next {
+            Some(line) if !is_blank(line) => format!("{terminator}{blank}"),
+            _ => String::new(),
+        };
+        let paragraph = Self {
+            at,
+            lead: format!("{terminator}{blank}{terminator}"),
+            seed: String::new(),
+            first: first.clone(),
+            prefix: first.clone(),
+            trail: apart.clone(),
+            terminator,
+            paragraph: None,
+        };
+        let (lead, trail) = if item.loose {
+            (format!("{terminator}{blank}{terminator}"), apart)
+        } else {
+            (terminator.to_owned(), String::new())
+        };
+        Some(Self {
+            at,
+            lead,
+            seed,
+            first,
+            prefix,
+            trail,
+            terminator,
+            paragraph: Some(Box::new(paragraph)),
+        })
+    }
+
+    /// Return the paragraph that `text` makes in place of a new item, when
+    /// its first line has no list marker.
+    fn paragraph_of(&self, text: &str) -> Option<&Self> {
+        self.paragraph
+            .as_deref()
+            .filter(|_| !starts_item(lines(text)[0]))
+    }
+
+    /// Return the source byte where the block of `text` starts, after its
+    /// lead.
+    pub(crate) fn start(&self, text: &str) -> usize {
+        let block = self.paragraph_of(text).unwrap_or(self);
+        block.at + block.lead.len()
+    }
+
     /// Return the source text that puts a block of `text` here, or an empty
-    /// text when `text` is blank. Each line takes the prefix, and a blank
-    /// line takes it without its trailing blanks. Line breaks at the end of
-    /// `text` are dropped.
+    /// text when `text` holds nothing past the seed. The first line takes the
+    /// first prefix and each other line the prefix, and a blank line takes
+    /// it without its trailing blanks. Line breaks at the end of `text` are
+    /// dropped.
     pub(crate) fn text(&self, text: &str) -> String {
-        if text.trim().is_empty() {
+        if let Some(paragraph) = self.paragraph_of(text) {
+            return paragraph.text(text);
+        }
+        let body = text.strip_prefix(self.seed.as_str()).unwrap_or(text);
+        if body.trim().is_empty() {
             return String::new();
         }
-        let blank = self.prefix.trim_end_matches([' ', '\t']);
         let lines: Vec<String> = lines(trim_breaks(text))
             .into_iter()
-            .map(|line| {
-                if line.trim().is_empty() {
-                    blank.to_owned()
+            .enumerate()
+            .map(|(index, line)| {
+                let prefix = if index == 0 {
+                    &self.first
                 } else {
-                    format!("{}{line}", self.prefix)
+                    &self.prefix
+                };
+                if line.trim().is_empty() {
+                    prefix.trim_end_matches([' ', '\t']).to_owned()
+                } else {
+                    format!("{prefix}{line}")
                 }
             })
             .collect();
         format!("{}{}{}", self.lead, lines.join(self.terminator), self.trail)
     }
+}
+
+/// Return the width of the list marker at the start of `text`: a bullet of
+/// `-`, `*`, or `+`, or up to nine digits with a `.` or `)`.
+fn marker_width(text: &str) -> Option<usize> {
+    if text.starts_with(['-', '*', '+']) {
+        return Some(1);
+    }
+    let digits = text.len() - text.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+    ((1..=9).contains(&digits) && text[digits..].starts_with(['.', ')'])).then_some(digits + 1)
+}
+
+/// Return whether `line` starts with a list marker after its indent: a
+/// marker with a blank or nothing after it.
+fn starts_item(line: &str) -> bool {
+    let line = line.trim_start_matches([' ', '\t']);
+    marker_width(line).is_some_and(|width| {
+        let rest = &line[width..];
+        rest.is_empty() || rest.starts_with([' ', '\t'])
+    })
+}
+
+/// Return the marker of the item after one with `marker`: the same bullet,
+/// or the next number with the same delimiter.
+fn next_marker(marker: &str) -> String {
+    let (number, delimiter) = marker.split_at(marker.len() - 1);
+    match number.parse::<u64>() {
+        Ok(number) => format!("{}{delimiter}", number.saturating_add(1)),
+        Err(_) => marker.to_owned(),
+    }
+}
+
+/// Return the blanks between a marker and the item's text, from `text`
+/// after the marker: the item's own, from one to four, or one space.
+fn marker_gap(text: &str) -> String {
+    let gap: String = text.chars().take_while(|c| *c == ' ').take(4).collect();
+    let rest = &text[gap.len()..];
+    if gap.is_empty() || rest.is_empty() || rest.starts_with(['\n', '\r']) {
+        " ".to_owned()
+    } else {
+        gap
+    }
+}
+
+/// Return whether `text` after a marker starts with a task box.
+fn task_box(text: &str) -> bool {
+    let rest = text.trim_start_matches([' ', '\t']);
+    ["[ ]", "[x]", "[X]"].iter().any(|box_| {
+        rest.strip_prefix(box_)
+            .is_some_and(|after| after.is_empty() || after.starts_with([' ', '\t', '\n', '\r']))
+    })
 }
 
 /// Return the splice that deletes `unit` of `document`, with the blank lines
