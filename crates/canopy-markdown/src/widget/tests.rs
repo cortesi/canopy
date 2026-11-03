@@ -868,6 +868,92 @@ fn changed_query_clears_source_highlights_before_work_and_cached_return() {
     }
 }
 
+/// Return the keys of the open copy menu whose commands can run, in order.
+fn copy_menu(harness: &Harness) -> Vec<String> {
+    let snapshot = harness.canopy.available_bindings(None).unwrap();
+    let mut keys = snapshot
+        .bindings
+        .into_iter()
+        .filter(|binding| binding.tier.mode() == Some("copy"))
+        .filter(|binding| {
+            binding
+                .command
+                .as_ref()
+                .and_then(|command| command.availability.as_ref())
+                .and_then(|availability| availability.status.as_ref())
+                == Some(&CommandStatus::Enabled)
+        })
+        .map(|binding| binding.input.to_string())
+        .collect::<Vec<_>>();
+    keys.sort();
+    keys
+}
+
+/// Return the text of each copy the reader asks its host for.
+fn copied_texts(harness: &mut Harness) -> Vec<String> {
+    harness.with_root_widget(|reader: &mut Markdown| {
+        reader
+            .take_requests(8)
+            .into_iter()
+            .filter_map(|request| match request.action {
+                HostAction::CopyText(text) => Some(text),
+                _ => None,
+            })
+            .collect()
+    })
+}
+
+#[test]
+fn y_opens_a_copy_menu_of_what_the_reader_can_copy() {
+    let text = "first\n\nsecond\n";
+    let (mut harness, manual) = fixture(text, ViewType::Rendered, false, true, false);
+    settle(&mut harness, &manual);
+
+    // With nothing selected, the menu offers the whole source alone.
+    harness.key('y').unwrap();
+    assert_eq!(harness.canopy.mode(), "copy");
+    assert_eq!(copy_menu(&harness), ["s"]);
+    harness.key('s').unwrap();
+    settle(&mut harness, &manual);
+    assert_eq!(copied_texts(&mut harness), [text]);
+
+    // The block cursor marks the first block, which this copies.
+    harness.key('i').unwrap();
+    harness.key('y').unwrap();
+    assert_eq!(copy_menu(&harness), ["s", "t"]);
+    harness.key('t').unwrap();
+    settle(&mut harness, &manual);
+    let copied = copied_texts(&mut harness);
+    assert!(
+        matches!(&copied[..], [block] if block.starts_with("first") && !block.contains("second")),
+        "{copied:?}"
+    );
+    assert_eq!(harness.canopy.mode(), "", "a key closes the menu");
+}
+
+#[test]
+fn y_over_an_inspector_opens_its_copy_menu() {
+    let text = "α\r\n\timmutable\n";
+    let (mut harness, manual) = fixture(text, ViewType::Source, false, true, false);
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.inspect_source(ctx))
+        .unwrap();
+    manual.run_until_idle();
+    harness.canopy.turn(TurnInput::Prepare).unwrap();
+
+    // The menu adds all to the reader's keys, which the inspector's modal
+    // admits. With no selection, this and all both take the whole content.
+    harness.key('y').unwrap();
+    assert_eq!(harness.canopy.mode(), "copy");
+    assert_eq!(copy_menu(&harness), ["a", "s", "t"]);
+    harness.key('a').unwrap();
+    service(&mut harness);
+    settle(&mut harness, &manual);
+    assert_eq!(copied_texts(&mut harness), [text]);
+    harness.with_root_widget(|reader: &mut Markdown| assert!(reader.inspector.is_some()));
+}
+
 #[test]
 fn source_copy_jobs_keep_frozen_bytes_and_fifo_order_across_append() {
     let initial = "α\r\n\tstart\n";

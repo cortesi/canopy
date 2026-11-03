@@ -1030,12 +1030,6 @@ impl Register for Inspector {
                 BindingPhase::BeforeWidget,
             ),
             (
-                "ctrl-y",
-                "Copy complete content",
-                Self::call_copy_all(),
-                BindingPhase::BeforeWidget,
-            ),
-            (
                 "ctrl-o",
                 "Open URL",
                 Self::call_open_url(),

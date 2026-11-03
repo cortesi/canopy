@@ -2085,9 +2085,9 @@ impl Markdown {
         }
         Ok(())
     }
-    /// Copy the active selection or selected object's default payload.
-    #[command(enabled = "copy_status")]
-    pub fn copy(&mut self, ctx: &mut dyn Context) -> Result<()> {
+    /// Copy the reader's own item: the text selection, else the active
+    /// object's default payload, else the marked unit's exact source.
+    fn copy(&mut self, ctx: &mut dyn Context) -> Result<()> {
         if self.displayed.is_none() || self.slot.is_some() {
             return Ok(());
         }
@@ -2176,6 +2176,7 @@ impl Markdown {
                         || shared.marked_unit().is_some()))))
     }
     /// Copy the item [`Self::has_item`] finds. With none, copy nothing.
+    #[command(enabled = "item_status")]
     pub fn copy_item(&mut self, ctx: &mut dyn Context) -> Result<()> {
         if !self.has_item(ctx)? {
             return Ok(());
@@ -2202,6 +2203,14 @@ impl Markdown {
             None,
             snapshot.revision,
         )
+    }
+    /// Admit `copy_item` while [`Self::has_item`] finds an item.
+    fn item_status(&self, ctx: &dyn ViewContext) -> Result<CommandStatus> {
+        Ok(if self.has_item(ctx)? {
+            CommandStatus::Enabled
+        } else {
+            CommandStatus::Disabled("Nothing is selected".into())
+        })
     }
     /// Admit copying only with a host service and a displayed source revision.
     fn copy_status(&self, _: &dyn ViewContext) -> Result<CommandStatus> {

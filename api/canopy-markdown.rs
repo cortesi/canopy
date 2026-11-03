@@ -187,9 +187,6 @@ impl Markdown {
         reply: HostReply,
     ) -> canopy::error::Result<()>;
 
-    /// Copy the active selection or selected object's default payload.
-    pub fn copy(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
-
     /// Copy the item [`Self::has_item`] finds. With none, copy nothing.
     pub fn copy_item(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
@@ -564,7 +561,7 @@ impl Markdown {
     pub fn call_commit_block() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
-    pub fn call_copy() -> CommandCall;
+    pub fn call_copy_item() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
     pub fn call_copy_source() -> CommandCall;
@@ -705,7 +702,7 @@ impl Markdown {
     pub fn spec_commit_block() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
-    pub fn spec_copy() -> &'static CommandSpec;
+    pub fn spec_copy_item() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_copy_source() -> &'static CommandSpec;

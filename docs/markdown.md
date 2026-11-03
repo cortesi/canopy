@@ -17,7 +17,8 @@ Registration binds no keys. The reader's keys are a Luau script, which a host's
 configuration runs with `markdown.default_bindings()`, or replaces with keymaps
 of its own. The script is `crates/canopy-markdown/src/widget/bindings.luau`, and
 it lists every key that this document names. The keys of an inspector, other
-than its `y`, belong to its framework group, and bind at registration. `ready()` reports whether the active view has caught up with accepted input,
+than its `y` and its copy menu, belong to its framework group, and bind at
+registration. `ready()` reports whether the active view has caught up with accepted input,
 geometry, and search. The outgoing view remains usable during preparation.
 
 Create one `MarkdownExecutor` per host and clone it into the `MarkdownOptions` of
@@ -103,8 +104,10 @@ full width of a card or table.
 
 `Enter` opens the active object. With none, it opens the marked unit's own
 card, such as its code or table, or else the first object in the unit. `y`
+opens the copy menu, which lists only what can be copied now. Its `t` (this)
 and `Markdown::copy_item` copy the text selection, else the active object,
-else the marked unit's exact source. `v` starts a text selection at the active
+else the marked unit's exact source, and show only when there is one. Its `s`
+(source) copies the whole document's exact source. `v` starts a text selection at the active
 object, or else at the start of the marked unit. `Esc` clears the text
 selection first, and then the active object. It then leaves the block cursor
 if the view rests in Scroll.
@@ -141,9 +144,11 @@ hides otherwise. The inspector takes focus until it closes, and the document's
 scrollbars hide while it covers the document. Its modal admits the host's
 bindings scoped to the reader, and the keys of a menu they open, so a host's
 menus still reach it; bindings with no path stay out, so a table keeps its own
-keys. Its `y`, which copies its selection, is an application binding scoped
-to it, so a host can take the key; its other keys belong to its framework
-group. A menu the host opens over it shows its keys as it does over the
+keys. Its `y` opens the copy menu, where `t` (this) copies what it selects, or
+else its whole content, `a` (all) copies its whole content, and the reader's
+`s` (source) still copies the whole document. These are application bindings
+scoped to it, so a host can take the keys; its other keys belong to its
+framework group. A menu the host opens over it shows its keys as it does over the
 reader. A table numbers its rows while source shows line numbers, so one
 preference toggles both. `Markdown::has_item` reports whether the reader has
 an item to copy: its text selection, the active object, the unit the block

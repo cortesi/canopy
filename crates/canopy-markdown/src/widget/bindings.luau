@@ -18,7 +18,7 @@ for _, path in reader_paths do
         { key = "v", description = "Select text", action = command.markdown.select_text() },
         { key = "Escape", description = "Exit", action = command.markdown.escape() },
         { key = "/", description = "Search", action = command.markdown.start_search() },
-        { key = "y", description = "Copy", action = command.markdown.copy() },
+        { key = "y", description = "Copy", action = canopy.menu("copy") },
         { key = "f", description = "Follow tail", action = command.markdown.follow() },
         { key = "n", description = "Next match", action = command.markdown.search_next(1) },
         { key = "N", description = "Previous match", action = command.markdown.search_next(-1) },
@@ -39,9 +39,16 @@ for _, path in reader_paths do
         path = path,
         phase = "before_widget",
         { key = "ctrl-r", description = "Rendered or source", action = command.markdown.toggle_view_type() },
-        { key = "ctrl-y", description = "Copy source", action = command.markdown.copy_source() },
         { key = "ctrl-s", description = "Inspect source", action = command.markdown.inspect_source() },
         { key = "ctrl-o", description = "Return from jump", action = command.markdown.return_from_jump() },
+    })
+    -- y opens the copy menu. It lists only what can be copied now: this is
+    -- the item the reader selects, and source is the whole document.
+    canopy.keymap({
+        mode = "copy",
+        path = path,
+        { key = "t", description = "this", action = command.markdown.copy_item() },
+        { key = "s", description = "source", action = command.markdown.copy_source() },
     })
 end
 
@@ -70,9 +77,19 @@ canopy.keymap({
     { key = "ctrl-x", description = "Discard", action = command.markdown.discard_block(false) },
 })
 
--- The inspector's copy. Its scoped modal admits it, so a host can give the
--- key to its own copy action.
+-- The inspector's copy menu. Its scoped modal admits these keys, and the
+-- reader's, so a host can give y to its own menu, and source still copies
+-- the whole document. The y runs before the inspector's table, which would
+-- take it. This is what the inspector selects, or else its whole content,
+-- and all is the whole content.
 canopy.keymap({
     path = "**/markdown_inspector/**/",
-    { key = "y", description = "Copy selection", action = command.markdown_inspector.copy_selection() },
+    phase = "before_widget",
+    { key = "y", description = "Copy", action = canopy.menu("copy") },
+})
+canopy.keymap({
+    mode = "copy",
+    path = "**/markdown_inspector/**/",
+    { key = "t", description = "this", action = command.markdown_inspector.copy_selection() },
+    { key = "a", description = "all", action = command.markdown_inspector.copy_all() },
 })
