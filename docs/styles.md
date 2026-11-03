@@ -73,9 +73,12 @@ time maps to the stops, and `AnimationStart` when the first run starts.
 a gradient whose ends match shows a crest that runs back and forth, which suits
 a busy indicator.
 
-Repeating motion holds at rest while the operator is idle or the terminal lacks
-focus. A busy indicator must move while the operator waits, so its animation or
-gradient takes `with_pause(Pause::Never)`.
+Repeating motion holds at rest while the terminal lacks focus, and after five
+minutes without input, so an application left open wakes for nothing. An
+operator who reads or thinks gives no input, so the idle pause is long. The
+primary cursor stops blinking and shows steady after ten seconds without input,
+as desktop cursors do. A busy indicator must move while the operator waits, so
+its animation or gradient takes `with_pause(Pause::Never)`.
 
 ```rust
 setup.widget_styles(|palette, rules| {

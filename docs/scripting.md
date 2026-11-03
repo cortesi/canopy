@@ -647,7 +647,7 @@ reads.
 `canopy.set_cursor_look(role, look)` replaces parts of a cursor role's look in
 every theme, for example `{ color = "#98c379", motion = "steady" }`.
 `canopy.set_motion(options)` replaces the given motion settings: `enabled`,
-`max_fps`, and `idle_ms`.
+`max_fps`, `idle_ms`, and `blink_ms`.
 `canopy.glyphs()` returns the block mosaic characters that the terminal draws
 well, `full` by default or `blocks`, and `canopy.set_glyphs(glyphs)` sets them. Image
 views, font banners, and big text choose their symbols from the setting, and a

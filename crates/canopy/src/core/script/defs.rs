@@ -295,6 +295,8 @@ pub(super) fn register_framework_declarations(
                 .doc("Most samples a second of continuous motion."),
             declaration::Field::new("idle_ms", declaration::Type::Number.optional())
                 .doc("Milliseconds without input after which repeating motion rests."),
+            declaration::Field::new("blink_ms", declaration::Type::Number.optional())
+                .doc("Milliseconds without input after which the cursor stops blinking."),
         ]),
     ));
     builder.alias(declaration::Alias::new(

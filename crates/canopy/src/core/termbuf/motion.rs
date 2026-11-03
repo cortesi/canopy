@@ -71,7 +71,7 @@ impl MotionStyle {
                 if !clocks.focused {
                     return mix_styles(*on, *off, UNFOCUSED_CURSOR);
                 }
-                if clocks.paused {
+                if clocks.cursor_rests {
                     return *on;
                 }
                 let elapsed = clocks.now.saturating_duration_since(clocks.cursor);
@@ -91,7 +91,7 @@ impl MotionStyle {
             .flatten()
             .min(),
             Self::Cursor { motion, .. } => {
-                if clocks.paused || !clocks.focused {
+                if clocks.cursor_rests || !clocks.focused {
                     return None;
                 }
                 motion.next_change(clocks.cursor, clocks.now, sample)
@@ -216,6 +216,13 @@ impl TermBuf {
     /// Return whether any grapheme moves.
     pub(crate) fn has_motion(&self) -> bool {
         !self.motion.is_empty()
+    }
+
+    /// Return whether a cursor moves.
+    pub(crate) fn has_cursor_motion(&self) -> bool {
+        self.motion
+            .values()
+            .any(|record| matches!(record.style, MotionStyle::Cursor { .. }))
     }
 
     /// Write the current style of every moving grapheme.

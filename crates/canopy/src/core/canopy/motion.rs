@@ -17,8 +17,13 @@ pub struct MotionSettings {
     pub enabled: bool,
     /// Most samples a second of motion that changes continuously.
     pub max_fps: u32,
-    /// Time without input after which repeating motion pauses at rest.
+    /// Time without input after which repeating motion pauses at rest, so an
+    /// application left open wakes for nothing. It is long, because an
+    /// operator who reads or thinks gives no input and still watches.
     pub idle_pause: Duration,
+    /// Time without input after which the primary cursor stops blinking and
+    /// shows steady, as desktop cursors do.
+    pub blink_pause: Duration,
 }
 
 impl Default for MotionSettings {
@@ -26,7 +31,8 @@ impl Default for MotionSettings {
         Self {
             enabled: true,
             max_fps: 30,
-            idle_pause: Duration::from_secs(10),
+            idle_pause: Duration::from_secs(300),
+            blink_pause: Duration::from_secs(10),
         }
     }
 }
@@ -81,13 +87,15 @@ impl MotionState {
         let epoch = *self.epoch.get_or_insert(now);
         let last_input = self.last_input.unwrap_or(epoch);
         let cursor = last_input.max(self.cursor_since.unwrap_or(epoch));
-        let idle = now.saturating_duration_since(last_input) >= self.settings.idle_pause;
+        let quiet = now.saturating_duration_since(last_input);
+        let paused = self.unfocused || quiet >= self.settings.idle_pause;
         MotionClocks {
             now,
             epoch,
             last_input,
             cursor,
-            paused: self.unfocused || idle,
+            paused,
+            cursor_rests: paused || quiet >= self.settings.blink_pause,
             focused: !self.unfocused,
         }
     }
@@ -173,10 +181,19 @@ impl Canopy {
             return;
         };
         let mut next = buffer.next_motion_change(&clocks, sample);
-        // Repeating motion comes to rest when the idle pause begins.
-        if !clocks.paused {
-            let idle = clocks.last_input + self.motion.settings.idle_pause;
-            next = Some(next.map_or(idle, |next| next.min(idle)));
+        // Repeating motion comes to rest when the idle pause begins, and a
+        // blinking cursor when the blink pause begins.
+        let settings = self.motion.settings;
+        let pauses = [
+            (!clocks.paused, settings.idle_pause),
+            (
+                !clocks.cursor_rests && buffer.has_cursor_motion(),
+                settings.blink_pause,
+            ),
+        ];
+        for (_, pause) in pauses.into_iter().filter(|(ahead, _)| *ahead) {
+            let rest = clocks.last_input + pause;
+            next = Some(next.map_or(rest, |next| next.min(rest)));
         }
         // A deadline never lands in the past, so the driver cannot spin.
         self.motion.next_sample = next.map(|next| next.max(now + Duration::from_millis(1)));

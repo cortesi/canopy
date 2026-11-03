@@ -51,8 +51,9 @@ pub enum AnimationStart {
 /// When repeating motion holds at rest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Pause {
-    /// While the operator is idle or the terminal lacks focus. Decoration
-    /// pauses so, and costs nothing while nobody watches it.
+    /// While the terminal lacks focus, or after the operator has given no
+    /// input for the idle pause, minutes by default. Decoration pauses so,
+    /// and costs nothing while nobody watches it.
     #[default]
     Idle,
     /// Never. A busy indicator moves for as long as it shows, so that the
@@ -109,8 +110,12 @@ pub(crate) struct MotionClocks {
     /// Start of the primary cursor's motion: its last change, or the last
     /// input event if that is later.
     pub cursor: Instant,
-    /// Whether repeating motion holds at rest, while idle or unfocused.
+    /// Whether repeating motion holds at rest, after the idle pause or while
+    /// unfocused.
     pub paused: bool,
+    /// Whether the primary cursor holds at rest: after the blink pause, or
+    /// while repeating motion does.
+    pub cursor_rests: bool,
     /// Whether the terminal has focus.
     pub focused: bool,
 }
@@ -125,6 +130,7 @@ impl MotionClocks {
             last_input: now,
             cursor: now,
             paused: false,
+            cursor_rests: false,
             focused: true,
         }
     }

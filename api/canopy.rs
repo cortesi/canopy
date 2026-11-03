@@ -4168,8 +4168,13 @@ pub mod render {
         pub enabled: bool,
         /// Most samples a second of motion that changes continuously.
         pub max_fps: u32,
-        /// Time without input after which repeating motion pauses at rest.
+        /// Time without input after which repeating motion pauses at rest, so an
+        /// application left open wakes for nothing. It is long, because an
+        /// operator who reads or thinks gives no input and still watches.
         pub idle_pause: Duration,
+        /// Time without input after which the primary cursor stops blinking and
+        /// shows steady, as desktop cursors do.
+        pub blink_pause: Duration,
     }
 
     /// A render backend that discards all output.
@@ -5748,8 +5753,9 @@ pub mod style {
     /// When repeating motion holds at rest.
     #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub enum Pause {
-        /// While the operator is idle or the terminal lacks focus. Decoration
-        /// pauses so, and costs nothing while nobody watches it.
+        /// While the terminal lacks focus, or after the operator has given no
+        /// input for the idle pause, minutes by default. Decoration pauses so,
+        /// and costs nothing while nobody watches it.
         #[default]
         Idle,
         /// Never. A busy indicator moves for as long as it shows, so that the

@@ -254,6 +254,21 @@ fn repeating_motion_rests_after_the_idle_pause() -> Result<()> {
 }
 
 #[test]
+fn decoration_moves_on_while_the_operator_reads() -> Result<()> {
+    // A minute without input passes the blink pause, and the loop still moves.
+    let (mut canopy, clock) = live(Spot::new("moving", "x"), 2, Some(blink()))?;
+    let mut backend = TestRender::new();
+    canopy.turn(TurnInput::Prepare)?;
+    canopy.emit_frame(&mut backend)?;
+    clock.advance(Duration::from_secs(60) + ms(100))?;
+    assert!(canopy.turn(TurnInput::Wake)?.motion);
+    canopy.emit_frame(&mut backend)?;
+    assert_eq!(emitted(&canopy, 0).fg, Color::Blue);
+    assert!(canopy.next_deadline().is_some());
+    Ok(())
+}
+
+#[test]
 fn a_busy_loop_moves_on_through_the_idle_pause() -> Result<()> {
     let busy = Paint::animated(
         Animation::blink(Color::Red, Color::Blue, ms(100), ms(100)).with_pause(Pause::Never),
@@ -298,7 +313,8 @@ fn a_fade_runs_once_from_the_first_frame_that_shows_it() -> Result<()> {
     canopy.emit_frame(&mut backend)?;
     assert_eq!(emitted(&canopy, 0).fg.rgb(), (0, 0, 0));
     // Only the idle pause remains, and a finished fade records no motion.
-    assert_eq!(canopy.next_deadline(), Some(t0 + ms(10_000)));
+    let idle = MotionSettings::default().idle_pause;
+    assert_eq!(canopy.next_deadline(), Some(t0 + idle));
     canopy.style_mut();
     canopy.turn(TurnInput::Prepare)?;
     assert!(!canopy.published_buf().expect("published").has_motion());
@@ -395,6 +411,30 @@ fn a_blinking_cursor_hides_then_restarts_on_input() -> Result<()> {
 }
 
 #[test]
+fn a_cursor_shows_steady_after_the_blink_pause() -> Result<()> {
+    let (mut canopy, clock, _) = cursor_row()?;
+    canopy.set_motion(MotionSettings {
+        blink_pause: ms(250),
+        ..MotionSettings::default()
+    });
+    let palette = themes::default_dark();
+    let mut backend = TestRender::new();
+    let t0 = clock.now();
+    canopy.turn(TurnInput::Prepare)?;
+    canopy.emit_frame(&mut backend)?;
+    // The blink pause comes before the cursor would hide.
+    assert_eq!(canopy.next_deadline(), Some(t0 + ms(250)));
+    clock.advance(cursor::BLINK_ON)?;
+    canopy.turn(TurnInput::Wake)?;
+    canopy.emit_frame(&mut backend)?;
+    assert_eq!(emitted(&canopy, 1).bg, palette.green, "the cursor stays");
+    // Only the idle pause is ahead, and the cursor wakes nothing.
+    let idle = MotionSettings::default().idle_pause;
+    assert_eq!(canopy.next_deadline(), Some(t0 + idle));
+    Ok(())
+}
+
+#[test]
 fn an_unfocused_terminal_dims_the_primary_cursor_and_pauses() -> Result<()> {
     let (mut canopy, _clock, _) = cursor_row()?;
     let palette = themes::default_dark();
@@ -453,8 +493,12 @@ fn script_motion_settings_replace_only_the_given_fields() -> Result<()> {
             enabled: true,
             max_fps: 12,
             idle_pause: ms(500),
+            ..MotionSettings::default()
         }
     );
+    canopy.eval_script("canopy.set_motion({ blink_ms = 2500 })")?;
+    assert_eq!(canopy.motion().blink_pause, ms(2500));
+    assert_eq!(canopy.motion().idle_pause, ms(500));
     canopy.eval_script("canopy.set_motion({ enabled = false })")?;
     assert!(!canopy.motion().enabled);
     assert!(

@@ -857,7 +857,12 @@ fn host_set_motion<'s>(
     const OWNER: &str = "motion options";
     let mut args = HostArgCursor::new(scope, args);
     let options = args.required::<Table<'_>>("options")?;
-    let fields = option_fields(scope, &options, OWNER, &["enabled", "max_fps", "idle_ms"])?;
+    let fields = option_fields(
+        scope,
+        &options,
+        OWNER,
+        &["enabled", "max_fps", "idle_ms", "blink_ms"],
+    )?;
     let number = |name: &str, value: ScopedValue<'s>| match value {
         ScopedValue::Integer(_) | ScopedValue::Number(_) => {
             let number = f64::from_lua(value, scope)?;
@@ -877,6 +882,10 @@ fn host_set_motion<'s>(
     let mut enabled = None;
     let mut max_fps = None;
     let mut idle = None;
+    let mut blink = None;
+    let millis = |name: &str, value| -> StdResult<Duration, RuntimeError> {
+        Ok(Duration::from_secs_f64(number(name, value)? / 1000.0))
+    };
     for (name, value) in fields {
         match name.as_str() {
             "enabled" => match value {
@@ -897,7 +906,8 @@ fn host_set_motion<'s>(
                 }
                 max_fps = Some(fps.min(f64::from(u32::MAX)) as u32);
             }
-            _ => idle = Some(Duration::from_secs_f64(number(&name, value)? / 1000.0)),
+            "idle_ms" => idle = Some(millis(&name, value)?),
+            _ => blink = Some(millis(&name, value)?),
         }
     }
     with_current_canopy(scope, |canopy, _| {
@@ -905,6 +915,7 @@ fn host_set_motion<'s>(
         settings.enabled = enabled.unwrap_or(settings.enabled);
         settings.max_fps = max_fps.unwrap_or(settings.max_fps);
         settings.idle_pause = idle.unwrap_or(settings.idle_pause);
+        settings.blink_pause = blink.unwrap_or(settings.blink_pause);
         canopy.set_motion(settings);
         Ok(())
     })?;
