@@ -139,7 +139,7 @@ pub(super) struct BindingRow {
     sort: (u8, String),
     /// Label shown in the input column.
     label: String,
-    /// Action text, including any reason it is unavailable.
+    /// Action text.
     description: String,
 }
 
@@ -147,12 +147,13 @@ pub(super) struct BindingRow {
 ///
 /// Mouse inputs sort after every key, so the familiar key list keeps its order
 /// and the pointer rows gather at the end. An input that shares an action with
-/// a key joins that action's row rather than repeating it.
+/// a key joins that action's row rather than repeating it. A binding whose
+/// command cannot run now is left out, as its input does nothing.
 pub(super) fn snapshot_rows(snapshot: &BindingSnapshot) -> Vec<BindingRow> {
     let mice = snapshot
         .mouse_bindings
         .iter()
-        .filter(|binding| binding.show_in_help)
+        .filter(|binding| binding.show_in_help && acts(binding))
         .map(|binding| BindingRow {
             sort: (MOUSE_SORT_GROUP, binding.input.to_string()),
             label: binding.input.to_string(),
@@ -164,11 +165,12 @@ pub(super) fn snapshot_rows(snapshot: &BindingSnapshot) -> Vec<BindingRow> {
         .collect()
 }
 
-/// Return the rows for key bindings alone.
+/// Return the rows for key bindings alone, leaving out those whose command
+/// cannot run now.
 pub(super) fn key_rows_of(bindings: &[AvailableBinding<Key>]) -> Vec<BindingRow> {
     bindings
         .iter()
-        .filter(|binding| binding.show_in_help)
+        .filter(|binding| binding.show_in_help && acts(binding))
         .map(|binding| BindingRow {
             sort: key_sort_key(binding.input),
             label: Key::label(&binding.input),
@@ -396,26 +398,27 @@ fn binding_lines(
 /// terminal or font draws it wider than the cells it is counted in.
 const MENU_MARKER: &str = "...";
 
-/// Show the action and useful availability feedback, leaving diagnostics to
-/// inspection APIs. A binding that opens a menu carries [`MENU_MARKER`].
+/// Return whether `binding` acts now: it runs no command, such as a menu,
+/// a script, or an intent, or its command is enabled here. A disabled
+/// binding still takes its input, so it does nothing, and help leaves it out.
+fn acts<I>(binding: &AvailableBinding<I>) -> bool {
+    binding.command.as_ref().is_none_or(|command| {
+        matches!(
+            command
+                .availability
+                .as_ref()
+                .and_then(|availability| availability.status.as_ref()),
+            Some(CommandStatus::Enabled)
+        )
+    })
+}
+
+/// Show the action, leaving diagnostics to inspection APIs. A binding that
+/// opens a menu carries [`MENU_MARKER`].
 pub(super) fn binding_description<I>(binding: &AvailableBinding<I>) -> String {
     let mut description = binding.description.clone();
     if binding.action == BindingActionKind::Menu {
         description.push_str(MENU_MARKER);
-    }
-    let Some(command) = &binding.command else {
-        return description;
-    };
-    match command
-        .availability
-        .as_ref()
-        .and_then(|availability| availability.status.as_ref())
-    {
-        Some(CommandStatus::Disabled(reason)) => {
-            description.push_str(&format!(" — Unavailable: {reason}"));
-        }
-        None => description.push_str(" — Unavailable here"),
-        Some(CommandStatus::Enabled) => {}
     }
     description
 }

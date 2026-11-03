@@ -825,7 +825,7 @@ impl Markdown {
     /// Enter the block cursor without pausing follow until the cursor moves.
     /// It marks the first unit with a row in view, or the unit it marked
     /// before if that unit still shows.
-    #[command]
+    #[command(enabled = "interact_status")]
     pub fn interact(&mut self, ctx: &mut dyn Context) -> Result<()> {
         self.set_mode(ctx, Mode::Interact)
     }
@@ -875,7 +875,7 @@ impl Markdown {
     /// end of the text. It does nothing without a block editor in the
     /// options, while an inspector is open, or while an edit awaits its
     /// layout. While the host locks blocks, it shows the lock's notice.
-    #[command]
+    #[command(enabled = "block_status")]
     pub fn edit_block(&mut self, ctx: &mut dyn Context) -> Result<()> {
         slot::open(self, ctx, slot::Opening::Unit)
     }
@@ -890,7 +890,7 @@ impl Markdown {
     /// A blank text, or a marker alone, adds nothing. With no unit, the new
     /// block goes at the end of the text. It does nothing where
     /// `edit_block` does nothing, and shows the lock's notice as it does.
-    #[command]
+    #[command(enabled = "block_status")]
     pub fn append_block(&mut self, ctx: &mut dyn Context) -> Result<()> {
         slot::open(self, ctx, slot::Opening::After)
     }
@@ -899,7 +899,7 @@ impl Markdown {
     /// cursor then marks the unit after it, or else the one before it. It
     /// does nothing where `edit_block` does nothing, or outside the block
     /// cursor, and shows the lock's notice as it does.
-    #[command]
+    #[command(enabled = "block_status")]
     pub fn delete_block(&mut self, ctx: &mut dyn Context) -> Result<()> {
         slot::delete(self, ctx)
     }
@@ -1180,7 +1180,7 @@ impl Markdown {
         Ok(())
     }
     /// Resume tail following explicitly.
-    #[command]
+    #[command(enabled = "follow_status")]
     pub fn follow(&mut self, ctx: &mut dyn Context) -> Result<()> {
         if self.inspector.is_some() || self.slot.is_some() {
             return Ok(());
@@ -1522,7 +1522,7 @@ impl Markdown {
         self.query_error.as_deref()
     }
     /// Visit a retained match in the active representation.
-    #[command]
+    #[command(enabled = "search_step_status")]
     pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32) -> Result<()> {
         if self.slot.is_some() {
             return Ok(());
@@ -2211,6 +2211,41 @@ impl Markdown {
             CommandStatus::Disabled("No document revision has been displayed".into())
         } else {
             CommandStatus::Enabled
+        })
+    }
+    /// Admit `interact` outside the block cursor.
+    fn interact_status(&self, _: &dyn ViewContext) -> Result<CommandStatus> {
+        Ok(if self.shared.borrow().mode == Mode::Interact {
+            CommandStatus::Disabled("The block cursor is on".into())
+        } else {
+            CommandStatus::Enabled
+        })
+    }
+    /// Admit the commands that change blocks when the options hold a block
+    /// editor. Without one they do nothing.
+    fn block_status(&self, _: &dyn ViewContext) -> Result<CommandStatus> {
+        Ok(if self.options.block_editor.is_some() {
+            CommandStatus::Enabled
+        } else {
+            CommandStatus::Disabled("Blocks need a block editor".into())
+        })
+    }
+    /// Admit `follow` while the reader can follow and does not.
+    fn follow_status(&self, _: &dyn ViewContext) -> Result<CommandStatus> {
+        Ok(if self.inspector.is_some() || self.slot.is_some() {
+            CommandStatus::Disabled("Following waits for the inspector or block editor".into())
+        } else if self.shared.borrow().follow == Follow::Following {
+            CommandStatus::Disabled("The reader follows its tail".into())
+        } else {
+            CommandStatus::Enabled
+        })
+    }
+    /// Admit `search_next` while a search has matches to visit.
+    fn search_step_status(&self, _: &dyn ViewContext) -> Result<CommandStatus> {
+        Ok(if self.slot.is_none() && self.search_matches() > 0 {
+            CommandStatus::Enabled
+        } else {
+            CommandStatus::Disabled("No search matches".into())
         })
     }
     /// Expose active-surface admission for explicit Rendered commands.

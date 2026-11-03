@@ -188,7 +188,7 @@ fn mouse_rows_follow_the_keys_and_share_an_action_with_them() {
 }
 
 #[test]
-fn a_disabled_mouse_binding_shows_its_reason() {
+fn a_disabled_mouse_binding_is_left_out() {
     let mut click = mouse_binding(1, "LeftDown", "Activate");
     click.command = Some(BindingCommand {
         call: CommandCall {
@@ -205,10 +205,8 @@ fn a_disabled_mouse_binding_shows_its_reason() {
     });
     let list = list_with_mice(Vec::new(), vec![click]);
     let lines = list.display_lines(60);
-    assert_eq!(
-        lines[0].text.trim(),
-        "Activate — Unavailable: nothing selected"
-    );
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0].text, "No key bindings in this context");
 }
 
 #[test]
@@ -542,7 +540,7 @@ fn separators_read_apart_from_the_keys() -> Result<()> {
 }
 
 #[test]
-fn command_help_keeps_user_feedback_without_command_diagnostics() {
+fn command_help_lists_only_commands_that_can_run() {
     use canopy::{
         commands::{
             ArgValue, CommandArgs, CommandAvailability, CommandCall, CommandId, CommandRequirement,
@@ -565,15 +563,13 @@ fn command_help_keeps_user_feedback_without_command_diagnostics() {
             missing_requirements: vec![CommandRequirement::Mouse],
         }),
     });
+    // A disabled command takes its key and does nothing, so help leaves it
+    // out.
     let list = list_with(vec![binding.clone()]);
-    let text = list
-        .display_lines(100)
-        .into_iter()
-        .map(|line| line.text)
-        .collect::<Vec<_>>()
-        .join(" ");
-    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    assert_eq!(text, "Delete selection — Unavailable: no selection");
+    assert_eq!(
+        list.display_lines(100)[0].text,
+        "No key bindings in this context"
+    );
     // Input dispatch supplies event context that passive discovery lacks.
     binding
         .command
