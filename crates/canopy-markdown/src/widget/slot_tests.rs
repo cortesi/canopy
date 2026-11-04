@@ -965,6 +965,53 @@ fn the_rows_around_the_editor_keep_their_images() {
 }
 
 #[test]
+fn a_commit_keeps_the_images() {
+    let text = "![Local](pics/a.png)\n\nAfter.\n";
+    let (mut harness, manual) = editing_with(text, EditMode::Vi, 40, 20, |options| {
+        options.resources = true;
+    });
+    settle(&mut harness, &manual);
+    let requests = reader(
+        &mut harness,
+        |reader, _| Ok(reader.take_resource_requests()),
+    );
+    reader(&mut harness, |reader, ctx| {
+        reader.supply_resource(
+            ctx,
+            requests[0].id,
+            Resource::Image(super::tests::two_tone()),
+        )
+    });
+    settle(&mut harness, &manual);
+    press(&mut harness, "j");
+    let (_, rows) = marked(&mut harness).unwrap();
+    // The cells of the rows above the unit, with their styles.
+    let image = |harness: &Harness| -> Vec<String> {
+        let screen = harness.buf();
+        (0..rows.start)
+            .flat_map(|y| (0..40).map(move |x| (x, y)))
+            .map(|(x, y)| format!("{:?}", screen.get(Point::new(x, y))))
+            .collect()
+    };
+    let before = image(&harness);
+    press(&mut harness, "e");
+    press(&mut harness, "A");
+    type_text(&mut harness, " More.");
+    press(&mut harness, "Escape");
+    press(&mut harness, "Escape");
+    settle(&mut harness, &manual);
+    assert!(!reader(&mut harness, |reader, _| Ok(reader.block_open())));
+    // The new text keeps the image that the host supplied, and asks for
+    // nothing again.
+    assert_eq!(image(&harness), before);
+    let again = reader(
+        &mut harness,
+        |reader, _| Ok(reader.take_resource_requests()),
+    );
+    assert!(again.is_empty());
+}
+
+#[test]
 fn a_commit_keeps_the_unit_where_the_editor_moved_to_fit() {
     let paras = |range: Range<u32>| -> String { range.map(|n| format!("para {n}\n\n")).collect() };
     let text = format!("{}```\ncode\n```\n\n{}", paras(0..7), paras(7..20));

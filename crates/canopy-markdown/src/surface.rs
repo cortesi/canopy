@@ -2,6 +2,7 @@
 
 use std::{
     cell::RefCell,
+    mem,
     ops::Range,
     rc::Rc,
     sync::{Arc, Weak},
@@ -382,7 +383,14 @@ impl RenderedSurface {
             }
         } else {
             cleared = state.overlays.selection.is_some();
-            state.overlays = PaintOverlays::default();
+            // The images that the host supplied outlive a new text, as the
+            // reader's answers do: it does not ask for them again. A new
+            // document drops both.
+            let images = mem::take(&mut state.overlays.images);
+            state.overlays = PaintOverlays {
+                images,
+                ..PaintOverlays::default()
+            };
             state.mode = state.resting;
             state.marked = None;
             state.drag_anchor = None;
