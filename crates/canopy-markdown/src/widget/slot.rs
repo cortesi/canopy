@@ -14,14 +14,14 @@ use canopy::{
     commands::CommandTarget,
     error::Result,
     geom::Rect,
-    layout::{Edges, Layout, RevealAlign},
+    layout::{Layout, RevealAlign},
     render::Render,
 };
 #[cfg(feature = "syntax")]
 use canopy_widgets::highlight::SyntectHighlighter;
 use canopy_widgets::{
     Answer, Closing, Confirm, ConfirmRequest, Container,
-    editor::{Editor, EditorConfig, Interaction, ViMode},
+    editor::{Editor, EditorConfig, Interaction, ViMode, WrapMode},
 };
 
 use super::{BlockEdit, Markdown, invalid};
@@ -29,7 +29,7 @@ use crate::{
     presentation::PaintOverlays,
     source_store::Lifecycle,
     surface::{PendingMark, RenderedSurface, SurfaceState},
-    units::{EditUnit, NewBlock, delete_unit, line_terminator, unit_at},
+    units::{EditKind, EditUnit, NewBlock, delete_unit, line_terminator, unit_at},
 };
 
 /// Flex weight of the rows above the slot, far above the weight of the rows
@@ -63,6 +63,9 @@ pub(super) struct OpenSlot {
     pub(super) new_block: Option<NewBlock>,
     /// The line terminator of the unit, which new lines take.
     terminator: &'static str,
+    /// Whether the unit is prose, which the editor wraps at the reader's
+    /// prose width. Code, tables, and the other cards take the body width.
+    prose: bool,
     /// The text of `range` when the slot opened.
     original: String,
     /// The text that a discard returns to: the last checkpoint.
@@ -286,9 +289,27 @@ fn above_layout(limit: u32) -> Layout {
 }
 
 /// Return the configuration of the slot's editor: the host's, growing with
-/// its text, so the slot takes the height of the text.
+/// its text, so the slot takes the height of the text, and breaking rows
+/// only after blanks, as the reader breaks them.
 fn slot_config(config: &EditorConfig) -> EditorConfig {
-    config.clone().with_auto_grow(true)
+    config
+        .clone()
+        .with_auto_grow(true)
+        .with_wrap(WrapMode::Spaces)
+}
+
+/// Return whether a unit of `kind` is prose, which the reader wraps at its
+/// prose width, rather than a card, which takes the body width.
+fn is_prose(kind: EditKind) -> bool {
+    !matches!(
+        kind,
+        EditKind::FencedCode
+            | EditKind::IndentedCode
+            | EditKind::Table
+            | EditKind::Html
+            | EditKind::FrontMatter
+            | EditKind::Source
+    )
 }
 
 /// Return the byte, in the unit's text, where the editor opens: the start of
@@ -378,7 +399,7 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context, opening: Openin
     }
     let top = ctx.view_of(rendered).map_or(0, |view| view.scroll.y);
     let source = snapshot.text();
-    let (range, new_block, cursor, row, terminator, tall) = {
+    let (range, new_block, cursor, row, terminator, tall, prose) = {
         let mut state = reader.shared.borrow_mut();
         let presentation = state.presentation.clone();
         match (state.marked_unit(), presentation) {
@@ -388,7 +409,8 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context, opening: Openin
                 let row = rows.start.saturating_sub(top);
                 let terminator = line_terminator(&source, &unit.range);
                 let tall = rows.start < top;
-                (unit.range, None, cursor, row, terminator, tall)
+                let prose = is_prose(unit.kind);
+                (unit.range, None, cursor, row, terminator, tall, prose)
             }
             (Some((unit, _)), Some(p)) => {
                 // After a list item's text, the new block is the next item.
@@ -405,6 +427,7 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context, opening: Openin
                     row,
                     terminator,
                     false,
+                    true,
                 )
             }
             (_, presentation) => {
@@ -412,7 +435,7 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context, opening: Openin
                 let end = source.len();
                 let terminator = line_terminator(&source, &(end..end));
                 let row = presentation.map_or(0, |p| p.height().saturating_sub(top));
-                (end..end, Some(block), 0, row, terminator, false)
+                (end..end, Some(block), 0, row, terminator, false, true)
             }
         }
     };
@@ -461,13 +484,6 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context, opening: Openin
         )));
         Ok(())
     })?;
-    ctx.set_layout_override(
-        editor.into(),
-        Layout::column()
-            .flex_horizontal(1)
-            .padding(Edges::new(0, 1, 0, 0))
-            .into(),
-    )?;
     let below = ctx.add_child(
         column,
         EditRows {
@@ -489,6 +505,7 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context, opening: Openin
         range,
         new_block,
         terminator,
+        prose,
         original,
         kept: opening_text,
         row,
@@ -573,13 +590,29 @@ pub(super) fn layout_parts(reader: &Markdown, ctx: &mut dyn Context) -> Result<(
     };
     let (above, bar, row) = (slot.above, slot.bar, slot.row);
     let new_at = slot.new_block.as_ref().map(|block| block.at);
-    let (rows, inset) = {
+    let (rows, inset, width) = {
         let mut state = reader.shared.borrow_mut();
-        let inset = state.presentation.as_ref().map_or(0, |p| p.inset());
+        let presentation = state.presentation.as_ref();
+        let inset = presentation.map_or(0, |p| p.inset());
+        let width = presentation.map(|p| {
+            if slot.prose {
+                p.prose_width()
+            } else {
+                p.body_width()
+            }
+        });
         let rows = slot_rows(&mut state, new_at).map_or(0, |rows| rows.above);
-        (rows, inset)
+        (rows, inset, width)
     };
     ctx.set_layout_override(above, above_layout(row.min(rows)).into())?;
+    // The editor wraps its text where the reader wraps it, and keeps one more
+    // column for the caret, where the reader keeps its scrollbar's column,
+    // so the text keeps its rows as the block opens.
+    let editor = width.map_or_else(
+        || Layout::column().flex_horizontal(1),
+        |width| Layout::column().fixed_width(width.saturating_add(1)),
+    );
+    ctx.set_layout_override(slot.editor.into(), editor.into())?;
     ctx.set_layout_override(bar, Layout::fill().fixed_width(inset).into())?;
     ctx.set_hidden(bar, inset == 0)?;
     Ok(())

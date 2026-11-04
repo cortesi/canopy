@@ -622,7 +622,7 @@ impl Editor {
     /// the caret: one for an editor that accepts focus, so a caret after a
     /// word at the wrap width still shows, and none for a display.
     fn caret_column(&self) -> u32 {
-        u32::from(self.config.wrap == WrapMode::Soft && self.config.interaction.focusable())
+        u32::from(self.config.wrap.wraps() && self.config.interaction.focusable())
     }
 
     /// Return how the layout wraps lines for a content width. The text
@@ -1651,7 +1651,7 @@ impl Widget for Editor {
     fn reveal_anchor(&self, view: Size) -> Option<Rect> {
         let mut cursor = self.cursor_point(view.w);
         // Soft-wrapped text never scrolls sideways.
-        if self.config.wrap == WrapMode::Soft {
+        if self.config.wrap.wraps() {
             cursor.x = 0;
         }
         Some(Rect::new(cursor.x, cursor.y, 1, 1))
@@ -1674,7 +1674,7 @@ impl Widget for Editor {
                 .saturating_add(1)
                 .saturating_add(gutter)
                 .max(view.w.max(1)),
-            WrapMode::Soft => view.w.max(1),
+            WrapMode::Soft | WrapMode::Spaces => view.w.max(1),
         };
         Size::new(width.max(1), (line_count as u32).max(1))
     }

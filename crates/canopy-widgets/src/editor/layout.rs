@@ -35,7 +35,7 @@ impl Wrap {
     fn caret_limit(self) -> usize {
         match self.mode {
             WrapMode::None => usize::MAX,
-            WrapMode::Soft => self.width,
+            WrapMode::Soft | WrapMode::Spaces => self.width,
         }
     }
 }
@@ -334,7 +334,7 @@ pub fn point_for_position(buffer: &TextBuffer, position: TextPosition, wrap: Wra
     let layout_of = |index| layout_line(&buffer.line_text(index), wrap);
     let row = match wrap.mode {
         WrapMode::None => line,
-        WrapMode::Soft => (0..line)
+        WrapMode::Soft | WrapMode::Spaces => (0..line)
             .map(|index| layout_of(index).display_lines())
             .sum(),
     };
@@ -387,6 +387,21 @@ fn is_blank(grapheme: &str) -> bool {
     matches!(grapheme, " " | "\t")
 }
 
+/// Return the byte offsets of `text` where a row may break when it breaks
+/// only after blanks: each grapheme that follows a blank and is not one.
+fn blank_breaks(text: &str) -> Vec<usize> {
+    let mut breaks = Vec::new();
+    let mut after_blank = false;
+    for (byte, grapheme) in text::grapheme_indices(text) {
+        let blank = is_blank(grapheme);
+        if after_blank && !blank {
+            breaks.push(byte);
+        }
+        after_blank = blank;
+    }
+    breaks
+}
+
 /// Build layout segments for a single logical line.
 ///
 /// Soft wrapping fills each row with graphemes. When a grapheme does not
@@ -400,7 +415,7 @@ pub fn layout_line(text: &str, wrap: Wrap) -> LineLayout {
     let wrap_width = wrap.width.max(1);
     // Printable ASCII is one column per byte, so a line of it that needs no
     // breaks is one segment.
-    if text::printable_ascii(text) && (wrap.mode != WrapMode::Soft || text.len() <= wrap_width) {
+    if text::printable_ascii(text) && (!wrap.mode.wraps() || text.len() <= wrap_width) {
         let end = Mark {
             char: text.len(),
             col: text.len(),
@@ -419,8 +434,13 @@ fn layout_graphemes(text: &str, wrap: Wrap) -> LineLayout {
     // A grapheme takes no more columns than bytes, except a tab, so a short
     // line without tabs fits its row and needs no breaks.
     let fits = text.len() <= wrap_width && !text.contains('\t');
-    let mut breaks =
-        (wrap.mode == WrapMode::Soft && !fits).then(|| LINE_BREAKS.segment_str(text).peekable());
+    let mut breaks = (wrap.mode.wraps() && !fits).then(|| {
+        let breaks: Box<dyn Iterator<Item = usize>> = match wrap.mode {
+            WrapMode::Spaces => Box::new(blank_breaks(text).into_iter()),
+            _ => Box::new(LINE_BREAKS.segment_str(text)),
+        };
+        breaks.peekable()
+    });
     let mut segments = Vec::new();
     let mut next = Mark { char: 0, col: 0 };
     let mut start = next;
@@ -507,7 +527,7 @@ mod tests {
     fn an_ascii_line_lays_out_as_its_graphemes_do() {
         for text in ["", "a", "hello world", "the quick brown fox jumps", "  x  "] {
             for width in [1, 3, 5, 11, 40] {
-                for mode in [WrapMode::None, WrapMode::Soft] {
+                for mode in [WrapMode::None, WrapMode::Soft, WrapMode::Spaces] {
                     for caret in [false, true] {
                         let wrap = Wrap::new(mode, width, 4, caret);
                         assert_eq!(
@@ -527,6 +547,26 @@ mod tests {
         let layout = layout_line(line, soft(2));
         assert_eq!(layout.segments.len(), 3);
         assert_eq!(layout.display_width, 5);
+    }
+
+    #[test]
+    fn spaces_wrap_breaks_only_after_blanks() {
+        let rows = |text: &str, width| -> Vec<String> {
+            let chars: Vec<char> = text.chars().collect();
+            layout_line(text, Wrap::new(WrapMode::Spaces, width, 4, true))
+                .segments
+                .iter()
+                .map(|segment| chars[segment.start_char..segment.end_char].iter().collect())
+                .collect()
+        };
+        assert_eq!(rows("the quick brown fox", 10), ["the quick ", "brown fox"]);
+        // A hyphen or a slash keeps its word whole.
+        assert_eq!(
+            rows("a well-known and/or", 11),
+            ["a ", "well-known ", "and/or"]
+        );
+        // A word wider than a row still breaks between graphemes.
+        assert_eq!(rows("abcdefgh", 3), ["abc", "def", "gh"]);
     }
 
     #[test]

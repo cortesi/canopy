@@ -35,6 +35,17 @@ pub enum WrapMode {
     /// at the end of the upper row. An editor that accepts focus keeps the
     /// last column of the view for the caret.
     Soft,
+    /// Soft wrapping as [`WrapMode::Soft`] wraps, but rows break only after
+    /// blanks, as prose readers break them: a hyphen or a slash keeps its
+    /// word whole.
+    Spaces,
+}
+
+impl WrapMode {
+    /// Return whether rows break at the view width.
+    pub fn wraps(self) -> bool {
+        self != Self::None
+    }
 }
 
 /// How an editor takes input.

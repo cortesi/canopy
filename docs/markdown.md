@@ -255,6 +255,11 @@ at the same fraction of the unit. With no unit, `e` opens an empty editor at
 the end of the text, and its commit adds the line breaks that start a new
 block. A resize lays out the same text again around the editor.
 
+The editor wraps prose where the reader wraps it: at the prose width, and only
+after blanks. A paragraph of plain text keeps its rows. Code, tables, and
+the other cards take the body width. Source that the reader shows otherwise,
+such as inline markup or the line breaks inside a paragraph, shows as written.
+
 `a`, or `append_block`, opens an empty editor after the marked unit, in insert
 mode for a vi editor. The editor takes the screen row where the next unit
 started, with the rows between the two units above and below it, so it shows

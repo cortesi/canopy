@@ -165,6 +165,15 @@ pub struct GeometryKey {
     pub mosaic: Tier,
 }
 impl GeometryKey {
+    /// Return the inset that holds the cursor's bar, and the columns after
+    /// it, before the scrollbar's, without the centered margin. A width of
+    /// three columns or less has no inset. A hostile viewport cannot cause
+    /// an unbounded decoration allocation.
+    fn edges(&self) -> (u32, u32) {
+        let width = self.width.min(65535);
+        let inset = if width > 3 { 2 } else { 0 };
+        (inset, width.saturating_sub(inset + u32::from(width > 0)))
+    }
     /// Return how far a centered document moves its margin in, so the prose
     /// column sits centered and every block starts at the margin. Outside
     /// centered mode the margin stays at the canvas edge.
@@ -172,10 +181,20 @@ impl GeometryKey {
         if !self.centered {
             return 0;
         }
-        let width = self.width.min(65535);
-        let inset = if width > 3 { 2 } else { 0 };
-        let body = width.saturating_sub(inset + u32::from(width > 0));
+        let (_, body) = self.edges();
         body.saturating_sub(self.prose_width.clamp(1, 65535)) / 2
+    }
+    /// Return the columns before every block, the centered margin and the
+    /// inset, and the body after them, before the scrollbar's column.
+    fn frame(&self) -> (u32, u32) {
+        let (inset, body) = self.edges();
+        let margin = self.margin();
+        (inset + margin, body.saturating_sub(margin))
+    }
+    /// Return the columns that the prose of a block outside any list or
+    /// quote wraps at: the body, up to the prose width.
+    fn prose(&self) -> u32 {
+        self.frame().1.min(self.prose_width.clamp(1, 65535))
     }
 }
 impl Default for GeometryKey {
@@ -754,12 +773,17 @@ impl PresentationSnapshot {
     /// inset that holds the cursor's bar, or none at a width of three columns
     /// or less.
     pub(crate) fn inset(&self) -> u32 {
-        let width = self.geometry.width.min(65535);
-        if width > 3 {
-            self.geometry.margin() + 2
-        } else {
-            0
-        }
+        self.geometry.frame().0
+    }
+    /// Return the columns that the prose of a block outside any list or
+    /// quote wraps at, from the inset.
+    pub(crate) fn prose_width(&self) -> u32 {
+        self.geometry.prose()
+    }
+    /// Return the columns of the body from the inset, before the scrollbar's
+    /// column, which cards take.
+    pub(crate) fn body_width(&self) -> u32 {
+        self.geometry.frame().1
     }
     /// Return the column of the cursor's bar: the left edge of the centered
     /// margin.
@@ -1374,12 +1398,8 @@ fn prepare_block(
         embed: image_info,
         missing,
     } = inputs;
-    // A hostile viewport cannot cause an unbounded decoration allocation.
-    let width = geometry.width.min(65535);
-    let inset = if width > 3 { 2 } else { 0 };
-    let body = width.saturating_sub(inset + u32::from(width > 0));
+    let (inset, body) = geometry.frame();
     let margin = geometry.margin();
-    let (inset, body) = (inset + margin, body.saturating_sub(margin));
     let mut rows = Vec::new();
     let ground = if block.provisional {
         "markdown/provisional"
@@ -1630,7 +1650,7 @@ fn prepare_block(
                     HEADING_MARKER_ROLES[level - 1],
                 );
             }
-            let prose = body.min(geometry.prose_width.clamp(1, 65535));
+            let prose = geometry.prose();
             let text_start = rows.len();
             // A first-level heading draws in big text, without markers,
             // wrapped over as many lines as it needs. Each row reads as the

@@ -1285,3 +1285,28 @@ fn keys_after_a_commit_reach_the_reader_until_its_layout_shows() {
         "j waited for the layout"
     );
 }
+
+#[test]
+fn a_block_opens_in_place_with_the_rows_of_the_reader() {
+    // A paragraph in a view wider than the prose width, so the prose width
+    // sets its rows. Its first row ends at column 44, so the hyphen of the
+    // next word would fit there, but the reader moves the whole word down.
+    let long = "The editor keeps the rows of the reader here well-known words and/or \
+                paths, so that nothing moves as the block opens. "
+        .repeat(4);
+    let text = format!("Short.\n\n{}\n\nAfter.\n", long.trim_end());
+    let (mut harness, manual) = editing_with(&text, EditMode::Vi, 100, 30, |options| {
+        options.prose_width = 50;
+    });
+    settle(&mut harness, &manual);
+    press(&mut harness, "j");
+    let (_, rows) = marked(&mut harness).unwrap();
+    assert!(rows.len() > 4, "the paragraph wraps over {rows:?}");
+    let screen = |harness: &Harness| harness.tbuf().lines();
+    let before = screen(&harness);
+    press(&mut harness, "e");
+    assert!(reader(&mut harness, |reader, _| Ok(reader.block_open())));
+    // Every row shows the same text: only the bar beside the block changes
+    // its colour.
+    assert_eq!(screen(&harness), before);
+}
