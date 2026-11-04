@@ -345,7 +345,16 @@ letters, the light box-drawing lines, and `× ÷ ≤ ≥ ° · — … ↑ ↓ �
   takes the fewer rows, then the lower scale, then the narrower text, then the
   smaller face.
 - `MaxRows(n)` fits within at most `n` rows.
+- `LineRows(n)` fits each line within at most `n` rows. Every line takes that
+  rendering, and the text takes the rows of all its lines.
 - `Exact { face, scale }` takes one face at one scale, on the half grid.
+
+A newline starts a line. With `with_wrap(true)`, a line also breaks at a space
+where it would pass the width of the area. A word wider than the area breaks
+between its characters. A fit then takes the largest capitals whose wrapped
+lines fit the area. The Markdown reader draws a first-level heading this way.
+It takes `LineRows(2)` where the octants allow it, so a long title wraps over
+lines of big text.
 
 A fit measures the text itself. A line box runs from the cap height down to the
 baseline and grows for the ascenders and descenders that the text has, so a

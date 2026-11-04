@@ -277,10 +277,21 @@ fn a_first_level_heading_draws_in_big_text_that_reads_as_the_heading() {
             .chars()
             .all(|c| matches!(c, '▀' | '▄' | '█' | ' '))
     );
-    // A title too wide for the view, and ASCII, keep the text heading.
+    // A title too wide for the view wraps in big text: lines two rows high,
+    // one blank row apart, each row in the view and read as the heading.
     let wide = format!("# {}\n", "Wide ".repeat(12));
     let p = big(&wide, 40, Tier::Full, GlyphPreset::Unicode);
-    assert!(row_text(&p, 0).starts_with("# Wide"));
+    let heading = p.row(0).unwrap().runs[0].reading.clone();
+    assert!(heading.is_some());
+    assert_eq!(row_text(&p, 2), "");
+    for row in [0, 1, 3, 4] {
+        let runs = &p.row(row).unwrap().runs;
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].reading, heading);
+        assert!(!runs[0].text.contains("Wide"));
+        assert!(row_text(&p, row).chars().count() <= 40);
+    }
+    // ASCII keeps the text heading.
     let p = big("# Title\n", 40, Tier::Full, GlyphPreset::Ascii);
     assert_eq!(row_text(&p, 0), "# Title");
 }

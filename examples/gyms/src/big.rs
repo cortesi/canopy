@@ -64,6 +64,8 @@ enum Mode {
     Fit,
     /// [`BigSize::MaxRows`].
     MaxRows,
+    /// [`BigSize::LineRows`].
+    LineRows,
     /// [`BigSize::Exact`].
     Exact,
 }
@@ -90,8 +92,10 @@ enum Setting {
     Face,
     /// The scale of an exact size and of the ladder.
     Scale,
-    /// The rows of a capped fit.
+    /// The rows of a capped fit, or of each line.
     MaxRows,
+    /// Whether the preview's lines wrap at spaces.
+    Wrap,
     /// [`BigWeight`].
     Weight,
     /// Horizontal alignment.
@@ -113,12 +117,13 @@ enum Setting {
 }
 
 /// The settings, in the order of the panel.
-const SETTINGS: [Setting; 14] = [
+const SETTINGS: [Setting; 15] = [
     Setting::View,
     Setting::Size,
     Setting::Face,
     Setting::Scale,
     Setting::MaxRows,
+    Setting::Wrap,
     Setting::Weight,
     Setting::Align,
     Setting::Vertical,
@@ -139,6 +144,7 @@ impl Setting {
             Self::Face => "face",
             Self::Scale => "scale",
             Self::MaxRows => "max rows",
+            Self::Wrap => "wrap",
             Self::Weight => "weight",
             Self::Align => "align",
             Self::Vertical => "vertical",
@@ -165,8 +171,10 @@ struct State {
     face: usize,
     /// Scale of an exact size and of the ladder.
     scale: u32,
-    /// Rows of a capped fit.
+    /// Rows of a capped fit, or of each line.
     max_rows: u32,
+    /// Whether the preview's lines wrap at spaces.
+    wrap: bool,
     /// The weight.
     weight: BigWeight,
     /// Horizontal alignment.
@@ -197,6 +205,7 @@ impl State {
             face: 0,
             scale: 1,
             max_rows: 6,
+            wrap: false,
             weight: BigWeight::Bold,
             align: Align::Start,
             vertical: Align::Start,
@@ -219,6 +228,7 @@ impl State {
         match self.mode {
             Mode::Fit => BigSize::Fit,
             Mode::MaxRows => BigSize::MaxRows(self.max_rows),
+            Mode::LineRows => BigSize::LineRows(self.max_rows),
             Mode::Exact => BigSize::Exact {
                 face: self.face(),
                 scale: self.scale,
@@ -230,10 +240,10 @@ impl State {
     fn applies(&self, setting: Setting) -> bool {
         let preview = self.view == View::Preview;
         match setting {
-            Setting::Size | Setting::Width | Setting::Height => preview,
+            Setting::Size | Setting::Width | Setting::Height | Setting::Wrap => preview,
             Setting::Face => preview && self.mode == Mode::Exact,
             Setting::Scale => !preview || self.mode == Mode::Exact,
-            Setting::MaxRows => preview && self.mode == Mode::MaxRows,
+            Setting::MaxRows => preview && matches!(self.mode, Mode::MaxRows | Mode::LineRows),
             _ => true,
         }
     }
@@ -251,12 +261,14 @@ impl State {
             Setting::Size => match self.mode {
                 Mode::Fit => "fit",
                 Mode::MaxRows => "max rows",
+                Mode::LineRows => "line rows",
                 Mode::Exact => "exact",
             }
             .to_owned(),
             Setting::Face => face_name(self.face()).to_owned(),
             Setting::Scale => format!("×{}", self.scale),
             Setting::MaxRows => self.max_rows.to_string(),
+            Setting::Wrap => if self.wrap { "on" } else { "off" }.to_owned(),
             Setting::Weight => weight_name(self.weight).to_owned(),
             Setting::Align => align_name(self.align).to_owned(),
             Setting::Vertical => align_name(self.vertical).to_owned(),
@@ -289,13 +301,18 @@ impl State {
                 self.view = cycle(&[View::Preview, View::Ladder], self.view, delta);
             }
             Setting::Size => {
-                self.mode = cycle(&[Mode::Fit, Mode::MaxRows, Mode::Exact], self.mode, delta);
+                self.mode = cycle(
+                    &[Mode::Fit, Mode::MaxRows, Mode::LineRows, Mode::Exact],
+                    self.mode,
+                    delta,
+                );
             }
             Setting::Face => {
                 self.face = step_index(self.face, BigFace::ALL.len(), delta);
             }
             Setting::Scale => self.scale = step_number(self.scale, delta, MOST_SCALE),
             Setting::MaxRows => self.max_rows = step_number(self.max_rows, delta, MOST_ROWS),
+            Setting::Wrap => self.wrap = !self.wrap,
             Setting::Weight => {
                 self.weight = cycle(&[BigWeight::Bold, BigWeight::Regular], self.weight, delta);
             }
@@ -688,6 +705,7 @@ impl BigGym {
         c.with_widget_mut(nodes.preview, |big: &mut BigText, _| {
             state.configure(big);
             big.set_size(state.size());
+            big.set_wrap(state.wrap);
             Ok(())
         })?;
         // The frame takes two columns and two rows around the area. A set
@@ -1055,8 +1073,9 @@ mod tests {
         let mut harness = gym(Size::new(100, 30))?;
         assert!(screen(&harness).contains("draws"), "{}", screen(&harness));
         keys(&mut harness, &["Esc"])?;
-        // Size: fit, max rows, exact. Exact takes the compact face at ×1.
-        keys(&mut harness, &["j", "l", "l"])?;
+        // Size: fit, max rows, line rows, exact. Exact takes the compact face
+        // at ×1.
+        keys(&mut harness, &["j", "l", "l", "l"])?;
         harness.render()?;
         let text = screen(&harness);
         assert!(text.contains("exact"), "{text}");

@@ -1336,12 +1336,13 @@ fn signature(block: &Block, unit: &ReadingUnit, object: Option<u64>, inputs: Blo
     hash.finish()
 }
 
-/// Return the rows that draw `text` in the smallest big text face, or none
-/// when it is wider than `width`. Terminals with octants draw it two rows
-/// high; others draw it in half blocks, four rows high with descenders.
+/// Return the rows that draw `text` in the smallest big text face, wrapped
+/// at spaces to `width`, or none when a glyph is wider than `width`.
+/// Terminals with octants draw each line two rows high; others draw it in
+/// half blocks, four rows high with descenders.
 fn big_heading(text: &str, width: u32, mosaic: Tier) -> Option<Vec<String>> {
     let size = if mosaic == Tier::Full {
-        BigSize::MaxRows(2)
+        BigSize::LineRows(2)
     } else {
         BigSize::Exact {
             face: BigFace::Compact,
@@ -1350,6 +1351,7 @@ fn big_heading(text: &str, width: u32, mosaic: Tier) -> Option<Vec<String>> {
     };
     let rows = BigText::new(text)
         .with_size(size)
+        .with_wrap(true)
         .with_tier(mosaic)
         .rows_in(Size::new(width, BIG_HEADING_ROWS));
     let fits = !rows.is_empty() && rows.iter().all(|row| text::width(row) <= width);
@@ -1630,9 +1632,10 @@ fn prepare_block(
             }
             let prose = body.min(geometry.prose_width.clamp(1, 65535));
             let text_start = rows.len();
-            // A first-level heading that fits draws in big text, without
-            // markers. Each row reads as the whole heading, so a reading
-            // position, search match, or selection in it marks the title.
+            // A first-level heading draws in big text, without markers,
+            // wrapped over as many lines as it needs. Each row reads as the
+            // whole heading, so a reading position, search match, or
+            // selection in it marks the title.
             let big = (level == Some(1) && geometry.glyphs == GlyphPreset::Unicode)
                 .then(|| {
                     big_heading(

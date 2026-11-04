@@ -277,6 +277,10 @@ pub enum BigSize {
     /// The rendering that [`BigSize::Fit`] would choose in an area of at most
     /// this many rows.
     MaxRows(u32),
+    /// The rendering that [`BigSize::Fit`] would choose for one line in at
+    /// most this many rows. Every line takes that face and scale, and the
+    /// text takes the rows that its lines need, as wrapped text does.
+    LineRows(u32),
     /// One face at one integer scale. A scale of 0 draws at scale 1.
     Exact {
         /// The face.
@@ -297,8 +301,9 @@ pub enum BigSize {
 /// The glyphs come from the terminal, as the application set them, unless
 /// the text has a tier of its own, set with [`BigText::with_tier`].
 /// [`BigSize::Fit`], the default, takes the face and scale that draw
-/// the largest capitals in the area; [`BigSize::MaxRows`] caps the rows, and
-/// [`BigSize::Exact`] takes one face at one scale. The fit measures the text
+/// the largest capitals in the area; [`BigSize::MaxRows`] caps the rows,
+/// [`BigSize::LineRows`] caps the rows of each line, and [`BigSize::Exact`]
+/// takes one face at one scale. The fit measures the text
 /// itself: a line box runs from the cap height down to the baseline, and
 /// grows for the ascenders and descenders that the text has. A strut, set
 /// with [`BigText::with_strut`], grows the line box for more glyphs, so texts
@@ -306,9 +311,13 @@ pub enum BigSize {
 /// smallest rendering and is cut at the right and bottom edges.
 /// [`BigWeight::Bold`] is the default weight.
 ///
-/// A newline starts a new line, one blank row below the last. Each line
-/// aligns on its own with [`BigText::with_align`], and the block of lines
-/// aligns with [`BigText::with_vertical_align`], in half rows.
+/// A newline starts a new line, one blank row below the last. With
+/// [`BigText::with_wrap`], a line also breaks at a space where it would pass
+/// the width of the area, and a word wider than the area breaks between its
+/// characters. A fit then takes the largest capitals whose wrapped lines fit
+/// the area. Each line aligns on its own with [`BigText::with_align`], and
+/// the block of lines aligns with [`BigText::with_vertical_align`], in half
+/// rows.
 ///
 /// The text is a list of runs, each with the style path that paints it, so
 /// one value can show a number and a dimmer unit. `BigText` pushes the
@@ -373,6 +382,10 @@ impl BigText {
     /// Sets the weight.
     pub fn set_weight(&mut self, weight: BigWeight);
 
+    /// Breaks lines at spaces to fit the width of the area, or keeps each
+    /// line whole.
+    pub fn set_wrap(&mut self, wrap: bool);
+
     /// Returns the size in cells that the text takes in an area of `area`,
     /// in its own tier.
     pub fn size_in(&self, area: Size) -> Size;
@@ -418,6 +431,11 @@ impl BigText {
     /// Sets the weight.
     #[must_use]
     pub fn with_weight(self, weight: BigWeight) -> Self;
+
+    /// Breaks lines at spaces to fit the width of the area, or keeps each
+    /// line whole, as without a call.
+    #[must_use]
+    pub fn with_wrap(self, wrap: bool) -> Self;
 }
 
 impl Widget for BigText {}

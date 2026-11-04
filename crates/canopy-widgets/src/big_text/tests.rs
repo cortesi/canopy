@@ -909,3 +909,63 @@ fn runs_that_meet_in_a_cell_give_it_to_the_one_with_more_ink() {
         }
     }
 }
+
+#[test]
+fn wrapping_breaks_lines_at_spaces_to_fit_the_width() {
+    let width = size_of("12").w.max(size_of("34").w);
+    assert!(size_of("12 34").w > width);
+    let area = Size::new(width, 100);
+    assert_eq!(
+        compact("12 34").with_wrap(true).rows_in(area),
+        rows_of("12\n34")
+    );
+    // Without wrapping, the line stays whole, and the area cuts it.
+    assert_eq!(compact("12 34").rows_in(area), rows_of("12 34"));
+    // A newline still starts a line.
+    assert_eq!(
+        compact("12\n34").with_wrap(true).rows_in(area),
+        rows_of("12\n34")
+    );
+}
+
+#[test]
+fn a_word_wider_than_the_area_breaks_between_its_characters() {
+    let area = Size::new(size_of("888").w, 100);
+    assert_eq!(
+        compact("888888").with_wrap(true).rows_in(area),
+        rows_of("888\n888")
+    );
+}
+
+#[test]
+fn line_rows_cap_each_line_and_the_text_takes_the_rows_of_its_lines() {
+    let line = |text: &str| {
+        BigText::new(text)
+            .with_size(BigSize::MaxRows(2))
+            .with_tier(Tier::Full)
+    };
+    let one = line("12").size_in(ROOMY);
+    assert_eq!(one.h, 2);
+    let width = one.w.max(line("34").size_in(ROOMY).w);
+    let area = Size::new(width, 100);
+    let wrapped = BigText::new("12 34")
+        .with_size(BigSize::LineRows(2))
+        .with_wrap(true)
+        .with_tier(Tier::Full);
+    // Each line takes the rendering of one line in two rows, one blank row
+    // apart.
+    assert_eq!(wrapped.face_in(area), line("12").face_in(ROOMY));
+    assert_eq!(wrapped.grid_in(area), line("12").grid_in(ROOMY));
+    assert_eq!(wrapped.size_in(area).h, 2 * one.h + 1);
+}
+
+#[test]
+fn a_wrapping_fit_takes_the_largest_capitals_whose_lines_fit_the_area() {
+    let area = Size::new(12, 40);
+    let wrapped = half("12 34").with_wrap(true);
+    let rows = wrapped.rows_in(area);
+    assert!(rows.len() <= 40);
+    assert!(rows.iter().all(|row| row.chars().count() <= 12));
+    // Two lines take more of a tall area than one line can.
+    assert!(wrapped.size_in(area).h > half("12 34").size_in(area).h);
+}

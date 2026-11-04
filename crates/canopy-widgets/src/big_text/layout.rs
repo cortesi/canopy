@@ -1,6 +1,8 @@
 //! Laying big text out in a face, and choosing the face and scale that fit
 //! an area.
 
+use std::mem;
+
 use canopy::geom::Size;
 
 use super::face::{BigFace, BigWeight, Glyph};
@@ -17,6 +19,10 @@ pub enum BigSize {
     /// The rendering that [`BigSize::Fit`] would choose in an area of at most
     /// this many rows.
     MaxRows(u32),
+    /// The rendering that [`BigSize::Fit`] would choose for one line in at
+    /// most this many rows. Every line takes that face and scale, and the
+    /// text takes the rows that its lines need, as wrapped text does.
+    LineRows(u32),
     /// One face at one integer scale. A scale of 0 draws at scale 1.
     Exact {
         /// The face.
@@ -102,6 +108,37 @@ pub(super) struct Column {
     pub(super) slot: Option<(char, u32)>,
 }
 
+impl Line {
+    /// Lay `chars` out in `face` and `weight` at scale 1. Each character has
+    /// the index of its run.
+    pub(super) fn new(face: BigFace, weight: BigWeight, chars: &[(usize, char)]) -> Self {
+        let mut pen = 0_i32;
+        let mut glyphs = Vec::with_capacity(chars.len());
+        let mut ink: Option<(i32, i32)> = None;
+        for (run, ch) in chars {
+            let glyph = face.glyph(weight, *ch);
+            if glyph.has_ink() {
+                let left = pen + i32::from(glyph.x);
+                let right = left + i32::from(glyph.width);
+                ink = Some(ink.map_or((left, right), |(l, r)| (l.min(left), r.max(right))));
+            }
+            glyphs.push(Placed {
+                pen,
+                glyph,
+                run: *run,
+                ch: *ch,
+            });
+            pen = pen.saturating_add(i32::from(glyph.advance));
+        }
+        let (left, right) = ink.unwrap_or((0, 0));
+        Self {
+            glyphs,
+            left,
+            width: (right - left).max(0) as u32,
+        }
+    }
+}
+
 impl Column {
     /// Returns whether pixel row `row` from the top of the line box has ink.
     pub(super) fn ink(&self, row: u32) -> bool {
@@ -135,46 +172,23 @@ impl Laid {
         lines: &[Vec<(usize, char)>],
         strut: &str,
     ) -> Self {
+        let lines: Vec<Line> = lines
+            .iter()
+            .map(|line| Line::new(face, weight, line))
+            .collect();
         let mut above = face.cap_height() as i32;
         let mut below = 0;
-        for ch in strut.chars() {
-            let glyph = face.glyph(weight, ch);
+        let glyphs = strut.chars().map(|ch| face.glyph(weight, ch)).chain(
+            lines
+                .iter()
+                .flat_map(|line| line.glyphs.iter().map(|placed| placed.glyph)),
+        );
+        for glyph in glyphs {
             if glyph.has_ink() {
                 above = above.max(i32::from(glyph.top));
                 below = below.max(glyph.descent());
             }
         }
-        let lines = lines
-            .iter()
-            .map(|line| {
-                let mut pen = 0_i32;
-                let mut glyphs = Vec::with_capacity(line.len());
-                let mut ink: Option<(i32, i32)> = None;
-                for (run, ch) in line {
-                    let glyph = face.glyph(weight, *ch);
-                    if glyph.has_ink() {
-                        let left = pen + i32::from(glyph.x);
-                        let right = left + i32::from(glyph.width);
-                        ink = Some(ink.map_or((left, right), |(l, r)| (l.min(left), r.max(right))));
-                        above = above.max(i32::from(glyph.top));
-                        below = below.max(glyph.descent());
-                    }
-                    glyphs.push(Placed {
-                        pen,
-                        glyph,
-                        run: *run,
-                        ch: *ch,
-                    });
-                    pen = pen.saturating_add(i32::from(glyph.advance));
-                }
-                let (left, right) = ink.unwrap_or((0, 0));
-                Line {
-                    glyphs,
-                    left,
-                    width: (right - left).max(0) as u32,
-                }
-            })
-            .collect();
         Self {
             face,
             weight,
@@ -237,11 +251,16 @@ impl Laid {
         while by_rows > 0 && self.grid_rows(by_rows, grid) > room {
             by_rows -= 1;
         }
-        let by_columns = match (columns, self.width()) {
+        by_rows.min(self.columns_scale(columns, grid))
+    }
+
+    /// Returns the largest scale at which the widest line fits `columns`
+    /// columns, or no bound without `columns` or without ink.
+    fn columns_scale(&self, columns: Option<u32>, grid: BigGrid) -> u32 {
+        match (columns, self.width()) {
             (Some(columns), width) if width > 0 => columns.saturating_mul(grid.across()) / width,
             _ => u32::MAX,
-        };
-        by_rows.min(by_columns)
+        }
     }
 
     /// Returns the pixel columns of `line`.
@@ -316,11 +335,11 @@ impl Resolved {
 
 /// One candidate rendering of a fit: a face, a grid, and the largest scale
 /// that fits.
-struct Candidate<'a> {
+struct Candidate {
     /// Position of the face in [`BigFace::ALL`].
     order: usize,
-    /// The text laid out in the face.
-    laid: &'a Laid,
+    /// The text laid out in the face, wrapped at the scale when it wraps.
+    laid: Laid,
     /// The grid.
     grid: BigGrid,
     /// The scale.
@@ -329,7 +348,7 @@ struct Candidate<'a> {
     size: Size,
 }
 
-impl Candidate<'_> {
+impl Candidate {
     /// Quarter rows of one font pixel, a scale that both grids share.
     fn pixel(&self) -> u32 {
         self.scale.saturating_mul(self.grid.quarters())
@@ -344,7 +363,8 @@ impl Candidate<'_> {
 /// Choose the face, scale, and grid of `lines` under `size`, in an area of at
 /// most `width` columns and `height` rows. `None` is unbounded. The line box
 /// also holds the glyphs of `strut`. A fit chooses from `grids`, and an exact
-/// size and unbounded text take the half grid.
+/// size and unbounded text take the half grid. With `wrap`, the lines break
+/// at spaces to fit the width, as [`wrap_lines`] breaks them.
 pub(super) fn resolve(
     lines: &[Vec<(usize, char)>],
     strut: &str,
@@ -352,72 +372,170 @@ pub(super) fn resolve(
     size: BigSize,
     (width, height): (Option<u32>, Option<u32>),
     grids: &[BigGrid],
+    wrap: bool,
 ) -> Resolved {
+    // The text laid out in `face` at `scale` on `grid`: wrapped to the width,
+    // when it wraps and the width has a bound.
+    let lay = |face: BigFace, scale: u32, grid: BigGrid| match width.filter(|_| wrap) {
+        Some(columns) => {
+            let room = columns.saturating_mul(grid.across()) / scale.max(1);
+            Laid::new(face, weight, &wrap_lines(face, weight, lines, room), strut)
+        }
+        None => Laid::new(face, weight, lines, strut),
+    };
     let rows = match size {
         BigSize::Exact { face, scale } => {
+            let scale = scale.max(1);
             return Resolved {
-                laid: Laid::new(face, weight, lines, strut),
-                scale: scale.max(1),
+                laid: lay(face, scale, BigGrid::Half),
+                scale,
                 grid: BigGrid::Half,
             };
         }
         BigSize::Fit => height,
-        BigSize::MaxRows(rows) => Some(height.map_or(rows, |height| height.min(rows))),
+        BigSize::MaxRows(rows) | BigSize::LineRows(rows) => {
+            Some(height.map_or(rows, |height| height.min(rows)))
+        }
     };
     // Without a bound on its height, fitted text takes the compact face at
     // scale 1, so it keeps a size in a scrolling area.
     let Some(rows) = rows else {
         return Resolved {
-            laid: Laid::new(BigFace::Compact, weight, lines, strut),
+            laid: lay(BigFace::Compact, 1, BigGrid::Half),
             scale: 1,
             grid: BigGrid::Half,
         };
     };
+    let per_line = matches!(size, BigSize::LineRows(_));
+    // The largest scale of `laid`, a face at scale 1, that fits on `grid`,
+    // with the text laid out at that scale.
+    let fitted = |laid: &Laid, grid: BigGrid| -> Option<(u32, Laid)> {
+        let room = rows.saturating_mul(grid.down());
+        let by_line = room / laid.box_height();
+        if !wrap {
+            let scale = if per_line {
+                by_line.min(laid.columns_scale(width, grid))
+            } else {
+                laid.max_scale(rows, width, grid)
+            };
+            return (scale > 0).then(|| (scale, laid.clone()));
+        }
+        // Wrapped text fits each word on a line, and its lines in the rows,
+        // unless each line has rows of its own.
+        let words = Laid::new(laid.face, weight, &words_of(lines), strut);
+        let top = by_line.min(words.columns_scale(width, grid));
+        (1..=top).rev().find_map(|scale| {
+            let wrapped = lay(laid.face, scale, grid);
+            (per_line || wrapped.grid_rows(scale, grid) <= room).then_some((scale, wrapped))
+        })
+    };
     let laid = BigFace::ALL.map(|face| Laid::new(face, weight, lines, strut));
-    let candidates = |scale: Option<u32>| -> Vec<Candidate<'_>> {
+    let pairs = || {
         laid.iter()
             .enumerate()
             .flat_map(|(order, laid)| grids.iter().map(move |grid| (order, laid, *grid)))
-            .filter_map(|(order, laid, grid)| {
-                let scale = scale.unwrap_or_else(|| laid.max_scale(rows, width, grid));
-                (scale > 0).then(|| Candidate {
-                    order,
-                    laid,
-                    grid,
-                    scale,
-                    size: laid.size(scale, grid),
-                })
-            })
-            .collect()
     };
     // The largest capitals win. At equal size, the fewer rows, then the
     // smaller pixels, which keep more of the design, then the narrower
     // text, then the half grid, then the earlier face.
-    let best = candidates(None).into_iter().max_by(|a, b| {
-        a.cap()
-            .cmp(&b.cap())
-            .then(b.size.h.cmp(&a.size.h))
-            .then(b.pixel().cmp(&a.pixel()))
-            .then(b.size.w.cmp(&a.size.w))
-            .then((b.grid as u8).cmp(&(a.grid as u8)))
-            .then(b.order.cmp(&a.order))
-    });
+    let best = pairs()
+        .filter_map(|(order, laid, grid)| {
+            let (scale, laid) = fitted(laid, grid)?;
+            Some(Candidate {
+                order,
+                size: laid.size(scale, grid),
+                laid,
+                grid,
+                scale,
+            })
+        })
+        .max_by(|a, b| {
+            a.cap()
+                .cmp(&b.cap())
+                .then(b.size.h.cmp(&a.size.h))
+                .then(b.pixel().cmp(&a.pixel()))
+                .then(b.size.w.cmp(&a.size.w))
+                .then((b.grid as u8).cmp(&(a.grid as u8)))
+                .then(b.order.cmp(&a.order))
+        });
     let chosen = best.or_else(|| {
         // Nothing fits: the smallest rendering, which the area clips.
-        candidates(Some(1))
-            .into_iter()
+        pairs()
+            .map(|(order, laid, grid)| {
+                let laid = lay(laid.face, 1, grid);
+                Candidate {
+                    order,
+                    size: laid.size(1, grid),
+                    laid,
+                    grid,
+                    scale: 1,
+                }
+            })
             .min_by_key(|c| (c.size.h, c.size.w, c.grid as u8, c.order))
     });
     match chosen {
         Some(c) => Resolved {
-            laid: c.laid.clone(),
+            laid: c.laid,
             scale: c.scale,
             grid: c.grid,
         },
         None => Resolved {
-            laid: Laid::new(BigFace::Compact, weight, lines, strut),
+            laid: lay(BigFace::Compact, 1, BigGrid::Half),
             scale: 1,
             grid: BigGrid::Half,
         },
     }
+}
+
+/// Returns the words of `lines`: the runs of characters between spaces.
+fn words_of(lines: &[Vec<(usize, char)>]) -> Vec<Vec<(usize, char)>> {
+    lines
+        .iter()
+        .flat_map(|line| line.split(|(_, ch)| *ch == ' '))
+        .filter(|word| !word.is_empty())
+        .map(<[_]>::to_vec)
+        .collect()
+}
+
+/// Break each of `lines` at spaces into lines whose ink is at most `room`
+/// pixels wide in `face` and `weight` at scale 1. The spaces at a break go,
+/// and a word wider than `room` breaks between its characters.
+pub(super) fn wrap_lines(
+    face: BigFace,
+    weight: BigWeight,
+    lines: &[Vec<(usize, char)>],
+    room: u32,
+) -> Vec<Vec<(usize, char)>> {
+    let fits = |chars: &[(usize, char)]| Line::new(face, weight, chars).width <= room;
+    let mut wrapped = Vec::new();
+    for line in lines {
+        let mut current: Vec<(usize, char)> = Vec::new();
+        let mut rest = line.as_slice();
+        while !rest.is_empty() {
+            let gap = rest.iter().take_while(|(_, ch)| *ch == ' ').count();
+            let length = rest[gap..].iter().take_while(|(_, ch)| *ch != ' ').count();
+            let (spaces, word) = rest[..gap + length].split_at(gap);
+            rest = &rest[gap + length..];
+            let mut joined = current.clone();
+            joined.extend_from_slice(spaces);
+            joined.extend_from_slice(word);
+            if current.is_empty() || fits(&joined) {
+                current = joined;
+            } else {
+                wrapped.push(mem::replace(&mut current, word.to_vec()));
+            }
+            // A word too wide for a line of its own breaks between its
+            // characters, each line taking as many as fit, and at least one.
+            while current.len() > 1 && !fits(&current) {
+                let mut end = 1;
+                while end < current.len() && fits(&current[..=end]) {
+                    end += 1;
+                }
+                let tail = current.split_off(end);
+                wrapped.push(mem::replace(&mut current, tail));
+            }
+        }
+        wrapped.push(current);
+    }
+    wrapped
 }

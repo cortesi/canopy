@@ -101,8 +101,9 @@ struct Roll {
 /// The glyphs come from the terminal, as the application set them, unless
 /// the text has a tier of its own, set with [`BigText::with_tier`].
 /// [`BigSize::Fit`], the default, takes the face and scale that draw
-/// the largest capitals in the area; [`BigSize::MaxRows`] caps the rows, and
-/// [`BigSize::Exact`] takes one face at one scale. The fit measures the text
+/// the largest capitals in the area; [`BigSize::MaxRows`] caps the rows,
+/// [`BigSize::LineRows`] caps the rows of each line, and [`BigSize::Exact`]
+/// takes one face at one scale. The fit measures the text
 /// itself: a line box runs from the cap height down to the baseline, and
 /// grows for the ascenders and descenders that the text has. A strut, set
 /// with [`BigText::with_strut`], grows the line box for more glyphs, so texts
@@ -110,9 +111,13 @@ struct Roll {
 /// smallest rendering and is cut at the right and bottom edges.
 /// [`BigWeight::Bold`] is the default weight.
 ///
-/// A newline starts a new line, one blank row below the last. Each line
-/// aligns on its own with [`BigText::with_align`], and the block of lines
-/// aligns with [`BigText::with_vertical_align`], in half rows.
+/// A newline starts a new line, one blank row below the last. With
+/// [`BigText::with_wrap`], a line also breaks at a space where it would pass
+/// the width of the area, and a word wider than the area breaks between its
+/// characters. A fit then takes the largest capitals whose wrapped lines fit
+/// the area. Each line aligns on its own with [`BigText::with_align`], and
+/// the block of lines aligns with [`BigText::with_vertical_align`], in half
+/// rows.
 ///
 /// The text is a list of runs, each with the style path that paints it, so
 /// one value can show a number and a dimmer unit. `BigText` pushes the
@@ -142,6 +147,8 @@ pub struct BigText {
     vertical: Align,
     /// Characters whose glyphs the line box holds.
     strut: String,
+    /// Whether lines break at spaces to fit the width of the area.
+    wrap: bool,
     /// The text's own mosaic tier, or none to follow the terminal's glyphs.
     tier: Option<Tier>,
     /// What the last render showed.
@@ -163,6 +170,7 @@ impl BigText {
             align: Align::Start,
             vertical: Align::Start,
             strut: String::new(),
+            wrap: false,
             tier: None,
             shown: None,
             roll: None,
@@ -220,6 +228,14 @@ impl BigText {
         self
     }
 
+    /// Breaks lines at spaces to fit the width of the area, or keeps each
+    /// line whole, as without a call.
+    #[must_use]
+    pub fn with_wrap(mut self, wrap: bool) -> Self {
+        self.wrap = wrap;
+        self
+    }
+
     /// Draws with the symbols of `tier`, whatever glyphs the terminal has.
     /// The full tier adds the octant grid to the ladder.
     #[must_use]
@@ -263,6 +279,12 @@ impl BigText {
     /// Sets a strut: characters whose glyphs the line box holds.
     pub fn set_strut(&mut self, strut: impl Into<String>) {
         self.strut = strut.into();
+    }
+
+    /// Breaks lines at spaces to fit the width of the area, or keeps each
+    /// line whole.
+    pub fn set_wrap(&mut self, wrap: bool) {
+        self.wrap = wrap;
     }
 
     /// Replaces the text with one run in the `text` part.
@@ -384,6 +406,7 @@ impl BigText {
             self.size,
             (width, height),
             grids,
+            self.wrap,
         )
     }
 
@@ -569,7 +592,9 @@ impl Widget for BigText {
         // area keeps a size.
         let size = match self.size {
             BigSize::Fit => Size::new(width.unwrap_or(text.w), height.unwrap_or(text.h)),
-            BigSize::MaxRows(_) => Size::new(width.unwrap_or(text.w), text.h),
+            BigSize::MaxRows(_) | BigSize::LineRows(_) => {
+                Size::new(width.unwrap_or(text.w), text.h)
+            }
             BigSize::Exact { .. } => text,
         };
         c.clamp(size)
