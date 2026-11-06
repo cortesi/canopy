@@ -1,3 +1,5 @@
+use proptest::{collection, prelude::*};
+
 use super::*;
 
 // Neither stable keys nor opaque cursors implement Ord. Item labels
@@ -624,8 +626,7 @@ fn status_of(request: &RequestState<Key, Cursor>) -> Status {
     }
 }
 
-fn event() -> impl proptest::strategy::Strategy<Value = Event> {
-    use proptest::prelude::*;
+fn event() -> impl Strategy<Value = Event> {
     prop_oneof![
         Just(Event::First),
         (-6i64..=6).prop_map(Event::Navigate),
@@ -639,10 +640,10 @@ fn event() -> impl proptest::strategy::Strategy<Value = Event> {
     ]
 }
 
-proptest::proptest! {
+proptest! {
     #[test]
     fn the_status_agrees_with_the_request_through_any_events(
-        events in proptest::collection::vec(event(), 1..60),
+        events in collection::vec(event(), 1..60),
     ) {
         let mut provider = Provider::new(30);
         let mut model = model(8, 4);

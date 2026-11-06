@@ -308,11 +308,6 @@ mod tests {
 
     #[test]
     fn open_transitions() -> Result<()> {
-        let items = vec!["a".to_string(), "b".to_string(), "c".to_string()];
-        let mut harness = Harness::builder(Dropdown::new(items)?)
-            .register::<Dropdown<String>>()
-            .size(20, 6)
-            .build()?;
         /// An event of the dropdown.
         #[derive(Clone, Copy, Debug)]
         enum Step {
@@ -321,6 +316,11 @@ mod tests {
             Confirm,
             Cancel,
         }
+        let items = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let mut harness = Harness::builder(Dropdown::new(items)?)
+            .register::<Dropdown<String>>()
+            .size(20, 6)
+            .build()?;
         // From collapsed on 1, and from expanded on 1 with the highlight on
         // 2: the next highlight, or none when collapsed, and the selection.
         for (expanded, step, highlight, selected) in [
