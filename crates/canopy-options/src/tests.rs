@@ -1,7 +1,7 @@
 //! Tests of the derives, the store, the files, and the panel together.
 
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     fs,
     path::{Path, PathBuf},
     rc::Rc,
@@ -16,6 +16,13 @@ use canopy::{
     geom::Point,
     input::key::Key,
     testing::harness::Harness,
+};
+
+use proptest::{
+    collection::vec,
+    prelude::{ProptestConfig, prop_assert},
+    sample::select,
+    test_runner::TestRunner,
 };
 
 use crate::{
@@ -1218,6 +1225,103 @@ fn a_file_set_or_order_keeps_the_names_it_knows() {
         store.current().shown.iter().collect::<Vec<_>>(),
         [Column::Git]
     );
+}
+
+#[test]
+fn regression_quick_mode_keeps_a_changed_set_open_under_the_save_level() {
+    let store: Store<Ranked> = Store::default();
+    let mut harness = Harness::builder(Options::new(&store, Blank))
+        .register::<Options>()
+        .size(80, 24)
+        .build()
+        .unwrap();
+    harness.script("options.open(nil, true)").unwrap();
+    keys(&mut harness, &["m", "g"]);
+    assert!(!store.current().shown.is_full());
+    // The save level opens over the changed set, and leaving it returns to
+    // the set.
+    keys(&mut harness, &["S"]);
+    assert!(screen(&mut harness).contains("save"));
+    keys(&mut harness, &["Esc"]);
+    assert!(panel_open(&mut harness), "Esc on the save level closed the panel");
+    let text = screen(&mut harness);
+    assert!(!text.contains("save"), "{text}");
+    // Leaving the changed set ends the quick change.
+    keys(&mut harness, &["Esc"]);
+    assert!(!panel_open(&mut harness));
+}
+
+/// Return the depth of the open panel's level, from the title on the
+/// screen.
+fn panel_depth(harness: &mut Harness) -> usize {
+    let text = screen(harness);
+    let title = text
+        .lines()
+        .find(|line| line.contains("Options"))
+        .expect("the open panel shows its title");
+    title.matches(" › ").count() + 1
+}
+
+/// Quick mode closes the panel only on a change, at the top level, or as the
+/// user leaves a level on which a value changed.
+#[test]
+fn quick_mode_closes_only_after_a_change_on_a_level_left() {
+    let store: Store<Ranked> = Store::default();
+    let changes = Rc::new(Cell::new(0_usize));
+    let counted = Rc::clone(&changes);
+    store.handle().subscribe("", move |_, _, _| {
+        counted.set(counted.get() + 1);
+        Ok(())
+    });
+    // One harness serves every case, which starts from the defaults.
+    let harness = RefCell::new(
+        Harness::builder(Options::new(&store, Blank))
+            .register::<Options>()
+            .size(80, 24)
+            .build()
+            .unwrap(),
+    );
+    let presses = vec(select(vec!["r", "m", "g", "J", "S", "Esc"]), 1..12);
+    let mut runner = TestRunner::new(ProptestConfig::with_cases(256));
+    let result = runner.run(&presses, |presses| {
+        let mut harness = harness.borrow_mut();
+        harness
+            .script("options.close(); options.revert(); options.open(nil, true)")
+            .unwrap();
+        // Whether a value changed on each open level, from the top.
+        let mut model = vec![false];
+        for press in presses {
+            let before = changes.get();
+            let depth = model.len();
+            keys(&mut harness, &[press]);
+            let changed = changes.get() != before;
+            if !panel_open(&mut harness) {
+                let left_changed = press == "Esc" && (depth == 1 || model[depth - 1]);
+                prop_assert!(
+                    changed || left_changed,
+                    "{press} closed the panel at depth {depth} without a change: {model:?}",
+                );
+                harness.script("options.open(nil, true)").unwrap();
+                model = vec![false];
+                continue;
+            }
+            prop_assert!(
+                !(press == "Esc" && depth > 1 && model[depth - 1]),
+                "Esc left a changed level and kept the panel: {model:?}",
+            );
+            let now = panel_depth(&mut harness);
+            model.resize(now, false);
+            if changed {
+                // A change that keeps the panel open is on a level of many
+                // steps.
+                model[now - 1] = true;
+            }
+        }
+        Ok(())
+    });
+    if let Err(error) = result {
+        panic!("{error}");
+    }
 }
 
 #[test]

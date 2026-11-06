@@ -19,6 +19,7 @@ toml_edit = "0.25.15"
 [dev-dependencies]
 anyhow.workspace = true
 canopy = { workspace = true, features = ["testing"] }
+proptest.workspace = true
 
 [lints]
 workspace = true

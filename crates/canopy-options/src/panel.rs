@@ -1,7 +1,7 @@
 //! The options panel: a modal dialog built from the schema, which shows each
 //! value with a control for its kind.
 
-use std::{mem, path::Path, rc::Rc, result::Result as StdResult};
+use std::{path::Path, rc::Rc, result::Result as StdResult};
 
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, Setup, TypedId, ViewContext, Widget,
@@ -424,6 +424,31 @@ struct Level {
     kind: LevelKind,
     /// The selected row.
     selected: usize,
+    /// Whether a value changed on this level, for a level that takes more
+    /// than one step, so that leaving it in quick mode closes the panel.
+    changed: bool,
+}
+
+impl Level {
+    /// A level that shows `kind`, with `selected` selected and nothing
+    /// changed.
+    fn new(kind: LevelKind, selected: usize) -> Self {
+        Self {
+            kind,
+            selected,
+            changed: false,
+        }
+    }
+}
+
+/// When a change closes the panel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Close {
+    /// A change leaves the panel open.
+    Never,
+    /// Quick mode: a change closes the panel. A set, an order, or a list
+    /// closes it as the user leaves its level.
+    OnChange,
 }
 
 /// What an inline edit changes.
@@ -521,12 +546,8 @@ pub struct PanelBody {
     host: Option<NodeId>,
     /// The frame, to retitle.
     frame: Option<TypedId<Frame>>,
-    /// Whether a change closes the panel. A set, an order, or a list closes
-    /// it as the user leaves its level.
-    quick: bool,
-    /// Whether a level that takes more than one step changed in quick mode,
-    /// so that leaving it closes the panel.
-    level_changed: bool,
+    /// When a change closes the panel.
+    close: Close,
     /// The levels, from the opened group to the current one.
     levels: Vec<Level>,
     /// What the panel does with keys.
@@ -540,12 +561,8 @@ impl PanelBody {
             backend,
             host: None,
             frame: None,
-            quick: false,
-            level_changed: false,
-            levels: vec![Level {
-                kind: LevelKind::Group(String::new()),
-                selected: 0,
-            }],
+            close: Close::Never,
+            levels: vec![Level::new(LevelKind::Group(String::new()), 0)],
             mode: Mode::Browse,
         }
     }
@@ -553,12 +570,8 @@ impl PanelBody {
     /// Show the group at `group`.
     fn reset(&mut self, host: NodeId, group: &str, quick: bool) {
         self.host = Some(host);
-        self.quick = quick;
-        self.level_changed = false;
-        self.levels = vec![Level {
-            kind: LevelKind::Group(group.to_string()),
-            selected: 0,
-        }];
+        self.close = if quick { Close::OnChange } else { Close::Never };
+        self.levels = vec![Level::new(LevelKind::Group(group.to_string()), 0)];
         self.mode = Mode::Browse;
     }
 
@@ -603,7 +616,7 @@ impl PanelBody {
             }
         }
         let mut title = parts.join(" › ");
-        if self.quick {
+        if self.close == Close::OnChange {
             title.push_str(" (quick)");
         }
         title
@@ -959,9 +972,9 @@ impl PanelBody {
     /// Go back one level, or close the panel at the top.
     fn back(&mut self, context: &mut dyn Context) -> Result<()> {
         if self.levels.len() > 1 {
-            self.levels.pop();
+            let left = self.levels.pop().expect("more than one level");
             // Quick mode closes once a level of many steps is done.
-            if self.quick && mem::take(&mut self.level_changed) {
+            if self.close == Close::OnChange && left.changed {
                 return self.close(context);
             }
             self.retitle(context)
@@ -972,7 +985,7 @@ impl PanelBody {
 
     /// Open a level, selecting the row at `selected`.
     fn push(&mut self, context: &mut dyn Context, kind: LevelKind, selected: usize) -> Result<()> {
-        self.levels.push(Level { kind, selected });
+        self.levels.push(Level::new(kind, selected));
         self.retitle(context)
     }
 
@@ -980,14 +993,15 @@ impl PanelBody {
     /// order, or a list takes more than one step, so its level stays open
     /// until the user leaves it.
     fn changed(&mut self, context: &mut dyn Context) -> Result<()> {
-        if !self.quick {
+        if self.close == Close::Never {
             return Ok(());
         }
+        let level = self.level_mut();
         if matches!(
-            self.level().kind,
+            level.kind,
             LevelKind::Set(_) | LevelKind::Order(_) | LevelKind::List(_)
         ) {
-            self.level_changed = true;
+            level.changed = true;
             return Ok(());
         }
         self.close(context)

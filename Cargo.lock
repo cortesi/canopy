@@ -454,6 +454,7 @@ dependencies = [
  "canopy",
  "canopy-options-derive",
  "canopy-widgets",
+ "proptest",
  "tempfile",
  "toml_edit",
 ]
