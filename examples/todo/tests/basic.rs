@@ -61,6 +61,21 @@ mod tests {
     }
 
     #[test]
+    fn regression_a_second_accept_adds_nothing() -> AnyResult<()> {
+        let (mut h, store) = app()?;
+        h.key('a')?;
+        h.key('h')?;
+        h.key('i')?;
+        // The first accept closes the modal; the second, in the same script
+        // or a later one, finds it closed.
+        h.script("todo.accept_add(); todo.accept_add()")?;
+        h.script("todo.accept_add()")?;
+        assert_eq!(store.todos()?.len(), 1);
+        assert_eq!(list_len(&mut h), 1);
+        Ok(())
+    }
+
+    #[test]
     fn add_item_with_char_newline() -> AnyResult<()> {
         let (mut h, _store) = app()?;
 

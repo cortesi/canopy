@@ -417,6 +417,10 @@ impl Todo {
     #[command]
     /// Store the pending input and close the add-item modal.
     pub fn accept_add(&self, c: &mut dyn Context) -> Result<()> {
+        // A modal that is closed, or closing, has nothing to accept.
+        if !self.adder.is_some_and(|token| c.modal_is_open(token)) {
+            return Ok(());
+        }
         let value = self.with_input(c, |input| Ok(input.value().to_string()))?;
 
         if !value.is_empty() {
