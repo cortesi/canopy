@@ -20,7 +20,7 @@ use canopy::{
     ViewContextExt, Widget,
     commands::CommandCall,
     derive_commands,
-    error::{Error, Result},
+    error::Result,
     geom::{Line, Point, Rect, Size},
     input::{
         BindingAction, BindingOptions, BindingPhase, BindingTier, Event, FrameworkBindingGroup,
@@ -34,6 +34,7 @@ use canopy::{
     render::Render,
     style::roles,
     text::{self, Truncate},
+    widget::Mount,
 };
 
 use crate::{
@@ -66,17 +67,25 @@ pub struct Picker<T>
 where
     T: ItemLabel,
 {
-    /// The list of items, once mounted. The list titles the frame itself, so
-    /// the frame needs no second owner.
-    list: Option<TypedId<PickerList<T>>>,
-    /// The filter field under the list, once mounted.
-    filter: Option<NodeId>,
-    /// Which end a row drops when it does not fit.
-    truncate: Truncate,
+    /// Which end a row drops when it does not fit, and the list and the
+    /// filter field once mounted.
+    parts: Mount<Truncate, Parts<T>>,
     /// Call that accepting the selection posts.
     on_accept: Option<CommandCall>,
     /// Call that closing the picker posts.
     on_cancel: Option<CommandCall>,
+}
+
+/// The children a picker builds when it mounts.
+struct Parts<T>
+where
+    T: ItemLabel,
+{
+    /// The list of items. The list titles the frame itself, so the frame
+    /// needs no second owner.
+    list: TypedId<PickerList<T>>,
+    /// The filter field under the list.
+    filter: NodeId,
 }
 
 impl<T> Default for Picker<T>
@@ -97,9 +106,7 @@ where
     #[must_use]
     pub fn new() -> Self {
         Self {
-            list: None,
-            filter: None,
-            truncate: Truncate::default(),
+            parts: Mount::new(Truncate::default()),
             on_accept: None,
             on_cancel: None,
         }
@@ -111,7 +118,7 @@ where
     /// to the tree.
     #[must_use]
     pub fn with_truncate(mut self, truncate: Truncate) -> Self {
-        self.truncate = truncate;
+        *self.parts.pending_mut() = truncate;
         self
     }
 
@@ -227,14 +234,12 @@ where
 
     /// Return the filter field, or an error before the picker mounts.
     pub fn filter(&self) -> Result<NodeId> {
-        self.filter
-            .ok_or_else(|| Error::NotFound("picker filter".into()))
+        Ok(self.parts.mounted()?.filter)
     }
 
     /// Return the typed list, or an error before the picker mounts.
     fn typed_list(&self) -> Result<TypedId<PickerList<T>>> {
-        self.list
-            .ok_or_else(|| Error::NotFound("picker list".into()))
+        Ok(self.parts.mounted()?.list)
     }
 }
 
@@ -254,48 +259,52 @@ where
 
     fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
         let root = context.node_id();
-        // The dialog fits its contents rather than filling the view, so a
-        // short list is a small dialog. The picker's own margin caps a long
-        // one, which then nearly fills the view. The width a narrow dialog
-        // holds comes from the list's own measurement, which the view bounds,
-        // rather than from a minimum here that a narrow terminal could not
-        // honour. The list and the field are siblings in a column, so the
-        // field sits outside whatever the list scrolls. However many items the
-        // list holds, the field keeps its row at the bottom of the frame.
-        let (dialog, body) = Dialog::new()
-            .with_margin(Edges::all(0))
-            .add(context, root, PickerBody)?;
-        let dialog: NodeId = dialog.into();
-        let frame: NodeId = Dialog::frame(context, dialog)?.into();
-        let list = context.add_child(body, PickerList::<T>::new())?;
-        // The field takes no focus and no keys of its own: the list owns the
-        // keyboard while the modal is open, writes what it holds there, and
-        // lights it up while it takes filter text.
-        let filter = context.add_child(body, Input::new("").with_prompt(FILTER_PROMPT))?;
-        // The list takes whatever height is left, and the field keeps its one
-        // measured row, so a list too tall to fit scrolls instead of pushing
-        // the field off the bottom.
-        let rows: NodeId = list.into();
-        let field: NodeId = filter.into();
-        context.set_layout_override(rows, Layout::fill().into())?;
-        context.set_layout_override(
-            field,
-            Layout::fill()
-                .height(Sizing::Measure)
-                .fixed_height(FILTER_ROWS)
-                .into(),
-        )?;
+        self.parts.mount(|&mut truncate| {
+            // The dialog fits its contents rather than filling the view, so
+            // a short list is a small dialog. The picker's own margin caps a
+            // long one, which then nearly fills the view. The width a narrow
+            // dialog holds comes from the list's own measurement, which the
+            // view bounds, rather than from a minimum here that a narrow
+            // terminal could not honour. The list and the field are siblings
+            // in a column, so the field sits outside whatever the list
+            // scrolls. However many items the list holds, the field keeps its
+            // row at the bottom of the frame.
+            let (dialog, body) = Dialog::new()
+                .with_margin(Edges::all(0))
+                .add(context, root, PickerBody)?;
+            let dialog: NodeId = dialog.into();
+            let frame: NodeId = Dialog::frame(context, dialog)?.into();
+            let list = context.add_child(body, PickerList::<T>::new())?;
+            // The field takes no focus and no keys of its own: the list owns
+            // the keyboard while the modal is open, writes what it holds
+            // there, and lights it up while it takes filter text.
+            let filter = context.add_child(body, Input::new("").with_prompt(FILTER_PROMPT))?;
+            // The list takes whatever height is left, and the field keeps its
+            // one measured row, so a list too tall to fit scrolls instead of
+            // pushing the field off the bottom.
+            let rows: NodeId = list.into();
+            let field: NodeId = filter.into();
+            context.set_layout_override(rows, Layout::fill().into())?;
+            context.set_layout_override(
+                field,
+                Layout::fill()
+                    .height(Sizing::Measure)
+                    .fixed_height(FILTER_ROWS)
+                    .into(),
+            )?;
+            context.with_widget_mut(list, |list: &mut PickerList<T>, _| {
+                list.truncate = truncate;
+                list.chrome.mount(|()| Ok(Chrome { frame, field }))
+            })?;
+            Ok(Parts {
+                list,
+                filter: field,
+            })
+        })
+    }
 
-        let truncate = self.truncate;
-        context.with_widget_mut(list, |list: &mut PickerList<T>, _| {
-            list.frame = Some(frame);
-            list.field = Some(field);
-            list.truncate = truncate;
-            Ok(())
-        })?;
-        self.list = Some(list);
-        self.filter = Some(field);
-        Ok(())
+    fn on_unmount(&mut self, _context: &mut dyn Context) {
+        self.parts.unmount();
     }
 
     fn on_event(&mut self, event: &Event, _context: &mut dyn Context) -> Result<EventOutcome> {
@@ -461,10 +470,9 @@ where
     label: String,
     /// Text shown in place of an empty list.
     placeholder: &'static str,
-    /// The frame this list titles, once mounted.
-    frame: Option<NodeId>,
-    /// The filter field this list writes, once mounted.
-    field: Option<NodeId>,
+    /// The frame this list titles and the field it writes, once the picker
+    /// that holds the list gives them.
+    chrome: Mount<(), Chrome>,
     /// Which end a row drops when it does not fit.
     truncate: Truncate,
     /// Width that shows the widest label unclipped.
@@ -473,6 +481,16 @@ where
     counted: bool,
     /// Text the title shows after the count, or an empty string.
     note: String,
+}
+
+/// The parts of a picker that its list writes: the frame it titles and the
+/// field that shows its filter.
+#[derive(Clone, Copy)]
+struct Chrome {
+    /// The frame around the dialog.
+    frame: NodeId,
+    /// The filter field under the list.
+    field: NodeId,
 }
 
 #[derive_commands]
@@ -491,8 +509,7 @@ where
             filter: Filter::Off,
             label: String::new(),
             placeholder: "",
-            frame: None,
-            field: None,
+            chrome: Mount::new(()),
             truncate: Truncate::default(),
             fitted_width: 0,
             counted: true,
@@ -760,7 +777,11 @@ where
 
     /// Write the current state into the frame's title and the filter field.
     fn republish(&self, context: &mut dyn Context) -> Result<()> {
-        if let Some(field) = self.field {
+        // A list outside a picker has nothing to write.
+        let Ok(&Chrome { frame, field }) = self.chrome.mounted() else {
+            return Ok(());
+        };
+        {
             let text = self.filter.text().to_string();
             let active = self.filter.editing();
             // The field is part of the dialog only while there is a search to
@@ -774,9 +795,6 @@ where
                 Ok(())
             })?;
         }
-        let Some(frame) = self.frame else {
-            return Ok(());
-        };
         let title = self.title();
         context.with_widget_mut(frame, |frame: &mut Frame, _| {
             frame.set_title(title);
@@ -1166,6 +1184,10 @@ where
         Ok(EventOutcome::Handle)
     }
 
+    fn on_unmount(&mut self, _context: &mut dyn Context) {
+        self.chrome.unmount();
+    }
+
     fn name(&self) -> NodeName {
         NodeName::convert("picker_list")
     }
@@ -1173,10 +1195,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use canopy::{commands::CommandTarget, geom::Size, render::cursor, testing::harness::Harness};
+    use canopy::{
+        commands::CommandTarget, error::Error, geom::Size, render::cursor,
+        testing::harness::Harness,
+    };
 
     use super::*;
-    use crate::{Confirm, ConfirmRequest};
+    use crate::{Confirm, ConfirmRequest, remount_test_support::attach_and_roll_back};
 
     /// Build a picker showing `items`, rendered once.
     fn picker(items: &[&str], width: u32, height: u32) -> Result<Harness> {
@@ -1331,6 +1356,43 @@ mod tests {
         })?;
         harness.render()?;
         Ok((harness, picker))
+    }
+
+    #[test]
+    fn regression_a_rolled_back_picker_reads_unmounted_and_mounts_again() -> Result<()> {
+        let (mut harness, _) = hosting(false)?;
+        harness.with_root_widget_context(|_: &mut PickerHost, ctx| {
+            let picker =
+                ctx.create_detached(Picker::<String>::new().with_truncate(Truncate::Start))?;
+            attach_and_roll_back(ctx, picker.into());
+            let unmounted = ctx.with_widget(picker, |picker: &Picker<String>| {
+                Ok(picker.list().is_err() && picker.filter().is_err())
+            })?;
+            assert!(unmounted, "a rolled-back picker has no list and no field");
+            ctx.attach(ctx.node_id(), picker.into())?;
+            ctx.with_widget_mut(picker, |picker: &mut Picker<String>, ctx| {
+                let items = ["/x", "/y"].map(str::to_owned).to_vec();
+                picker.set_items(ctx, "Again", "<none>", items)?;
+                let list = picker.list()?;
+                let (shown, truncate) = ctx.with_widget(list, |list: &PickerList<String>| {
+                    Ok((list.shown_count(), list.truncate))
+                })?;
+                assert_eq!(shown, 2, "the second mount builds a list that takes items");
+                assert_eq!(truncate, Truncate::Start, "the list keeps the picker's end");
+                Ok(())
+            })
+        })?;
+        assert_eq!(
+            harness.find_nodes("**/picker/**/frame")?.len(),
+            2,
+            "each picker holds one frame"
+        );
+        harness.render()?;
+        assert!(
+            harness.tbuf().contains_text("Again"),
+            "the list titles its frame"
+        );
+        Ok(())
     }
 
     #[test]
