@@ -991,6 +991,57 @@ fn a_framed_row_boxes_its_panes_and_marks_the_focused_one() -> Result<()> {
 }
 
 #[test]
+fn a_framed_row_labels_a_pane_at_the_right_of_its_rule() -> Result<()> {
+    // Twenty-seven columns less the frame's two sides and one shared side
+    // leave two panes of twelve.
+    let (mut harness, nodes) = scene(27, 4, |c| {
+        let root = c.node_id();
+        let columns: NodeId = c
+            .add_child(
+                root,
+                Columns::new().with_frame(BoxGlyphs::SINGLE, BoxGlyphs::SINGLE_THICK),
+            )?
+            .into();
+        let mut nodes = vec![columns];
+        for _ in 0..2 {
+            nodes.push(boxed(c, columns, Layout::fill())?);
+        }
+        Ok(nodes)
+    })?;
+    let (columns, left, right) = (nodes[0], nodes[1], nodes[2]);
+    let label = |harness: &mut Harness, pane: NodeId, text: &str| -> Result<String> {
+        harness.canopy.with_root_context(|c| {
+            c.with_widget_mut(columns, |columns: &mut Columns, _| {
+                columns.set_label(pane, "columns/divider", text);
+                Ok(())
+            })
+        })?;
+        harness.render()?;
+        Ok(harness.tbuf().lines()[0].clone())
+    };
+
+    assert_eq!(
+        label(&mut harness, right, "edited")?,
+        "┌────────────┬─── edited ─┐"
+    );
+    assert_eq!(
+        label(&mut harness, left, "● edited")?,
+        "┌─ ● edited ─┬─── edited ─┐",
+        "each pane keeps its own label"
+    );
+    assert_eq!(
+        label(&mut harness, right, "far too wide")?,
+        "┌─ ● edited ─┬────────────┐",
+        "a label too wide for its rule does not draw"
+    );
+    assert_eq!(
+        label(&mut harness, left, "")?,
+        "┌────────────┬────────────┐"
+    );
+    Ok(())
+}
+
+#[test]
 fn focus_column_skips_a_pane_that_refuses_focus() -> Result<()> {
     let (mut harness, nodes) = scene(30, 4, |c| {
         let columns = add_columns(c)?;

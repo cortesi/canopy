@@ -4,10 +4,11 @@
 use canopy::{
     Context, EventOutcome, NodeId, NodeName, ViewContext, ViewContextExt, Widget, derive_commands,
     error::Result,
-    geom::Rect,
+    geom::{Line, Rect},
     input::Event,
     layout::{Direction, Edges, Layout, ScrollAxis},
     render::Render,
+    text,
     tree::FocusScope,
 };
 
@@ -33,6 +34,10 @@ use crate::{
 /// with its own glyphs and `columns/divider/focused`. A [`Pane`](crate::Pane)
 /// paints the same ground inside it.
 ///
+/// A framed row can also [label](Columns::set_label) a pane: a short text at
+/// the right end of the rule above it, such as a mark that the pane holds
+/// unsaved changes.
+///
 /// `Columns` owns the scrollbars of its panes, so an enclosing frame draws none
 /// for them. Dividers use `columns/divider`, thumbs `columns/thumb`, and a
 /// thumb a drag holds `columns/thumb/active`.
@@ -46,6 +51,8 @@ pub struct Columns {
     frame: Option<(BoxGlyphs, BoxGlyphs)>,
     /// Panes that stand for focus held by the columns or an ancestor.
     home: Vec<NodeId>,
+    /// The label of each labelled pane: its style and its text.
+    labels: Vec<(NodeId, String, String)>,
 }
 
 #[derive_commands]
@@ -57,6 +64,7 @@ impl Columns {
             scrollbar: Self::scrollbar(ScrollbarGlyphs::THIN, false),
             frame: None,
             home: Vec::new(),
+            labels: Vec::new(),
         }
     }
 
@@ -83,6 +91,29 @@ impl Columns {
     /// ancestor, the frame marks the first displayed pane of `panes`.
     pub fn set_home(&mut self, panes: Vec<NodeId>) {
         self.home = panes;
+    }
+
+    /// Label `pane` with `text` in `style`, at the right end of the frame's
+    /// rule above it, or take its label away with an empty `text`.
+    ///
+    /// The label draws with a space on each side, and a cell of the rule
+    /// between it and the corner. A label too wide for the rule, and the
+    /// label of a row without a frame, do not draw.
+    pub fn set_label(&mut self, pane: NodeId, style: impl Into<String>, text: impl Into<String>) {
+        let text = text.into();
+        self.labels.retain(|(labelled, ..)| *labelled != pane);
+        if !text.is_empty() {
+            self.labels.push((pane, style.into(), text));
+        }
+    }
+
+    /// Return the label text of `pane`, or none.
+    #[must_use]
+    pub fn label(&self, pane: NodeId) -> Option<&str> {
+        self.labels
+            .iter()
+            .find(|(labelled, ..)| *labelled == pane)
+            .map(|(_, _, text)| text.as_str())
     }
 
     /// Build columns with replaced scrollbar glyphs.
@@ -196,16 +227,16 @@ impl Columns {
         }
         let focus = self.marked(ctx, ctx.node_id(), panes);
         // Each displayed pane's columns, in this widget's outer coordinates,
-        // and whether it holds focus.
-        let spans: Vec<(u32, u32, bool)> = panes
+        // whether it holds focus, and the pane.
+        let spans: Vec<(u32, u32, bool, NodeId)> = panes
             .iter()
             .filter_map(|pane| {
                 let outer = ctx.view_of(*pane)?.outer;
                 let x = u32::try_from(i64::from(outer.tl.x) - i64::from(own.tl.x)).ok()?;
-                Some((x, outer.w, focus == Some(*pane)))
+                Some((x, outer.w, focus == Some(*pane), *pane))
             })
             .collect();
-        let Some(&(last_x, last_w, _)) = spans.last() else {
+        let Some(&(last_x, last_w, ..)) = spans.last() else {
             return Ok(());
         };
         let look = |lit: bool| {
@@ -216,10 +247,11 @@ impl Columns {
             }
         };
         let bottom = own.h - 1;
-        for &(x, w, lit) in &spans {
+        for &(x, w, lit, pane) in &spans {
             let (style, glyphs) = look(lit);
             rndr.fill(style, Rect::new(x, 0, w, 1), glyphs.horizontal)?;
             rndr.fill(style, Rect::new(x, bottom, w, 1), glyphs.horizontal)?;
+            self.render_label(rndr, pane, x, w)?;
         }
         // A side lies left of each pane and right of the last, between the
         // panes on either side of it.
@@ -227,7 +259,7 @@ impl Columns {
             let left = side.checked_sub(1).map(|pane| spans[pane].2);
             let right = spans.get(side).map(|span| span.2);
             let x = match spans.get(side) {
-                Some(&(x, _, _)) => x.saturating_sub(1),
+                Some(&(x, ..)) => x.saturating_sub(1),
                 None => last_x + last_w,
             };
             if x >= own.w {
@@ -243,6 +275,23 @@ impl Columns {
             rndr.fill(style, Rect::new(x, 0, 1, 1), top)?;
             rndr.fill(style, Rect::new(x, bottom, 1, 1), low)?;
         }
+        Ok(())
+    }
+
+    /// Draw the label of `pane` at the right end of its rule, which spans
+    /// `w` cells from `x`.
+    fn render_label(&self, rndr: &mut Render, pane: NodeId, x: u32, w: u32) -> Result<()> {
+        let Some((_, style, label)) = self.labels.iter().find(|(labelled, ..)| *labelled == pane)
+        else {
+            return Ok(());
+        };
+        let padded = format!(" {label} ");
+        let width = text::width(&padded);
+        // A cell of the rule stays on each side of the label.
+        if width.saturating_add(2) > w {
+            return Ok(());
+        }
+        rndr.text(style, Line::new(x + w - 1 - width, 0, width), &padded)?;
         Ok(())
     }
 
