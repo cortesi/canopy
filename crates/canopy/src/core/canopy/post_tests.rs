@@ -1147,7 +1147,7 @@ fn a_mount_in_the_sweep_delivers_before_the_sweep_goes_on() -> Result<()> {
     site.canopy.core.attach(site.host, node)?;
     delivered.set(false);
     // The sweep mounts what an attach has not, such as the first root.
-    site.canopy.core.nodes[node].mounted = false;
+    site.canopy.core.nodes[node].mark_unmounted();
     site.lay_out()?;
     assert!(delivered.get(), "the sweep's mount delivered its post");
 
@@ -1159,8 +1159,7 @@ fn a_mount_in_the_sweep_delivers_before_the_sweep_goes_on() -> Result<()> {
         n.on_mount = vec![Act::Post(Host::call_remove(notifier))];
         n.on_poll = vec![Act::Post(note("polled"))];
     });
-    site.canopy.core.nodes[notifier].mounted = false;
-    site.canopy.core.nodes[notifier].initialized = false;
+    site.canopy.core.nodes[notifier].mark_unmounted();
     site.lay_out()?;
     assert!(
         !site.exists(notifier),
@@ -1177,8 +1176,7 @@ fn a_mount_in_the_sweep_delivers_before_the_sweep_goes_on() -> Result<()> {
         n.on_mount = vec![Act::Post(Host::call_remove(sibling))]
     });
     for node in [notifier, sibling] {
-        site.canopy.core.nodes[node].mounted = false;
-        site.canopy.core.nodes[node].initialized = false;
+        site.canopy.core.nodes[node].mark_unmounted();
     }
     site.lay_out()?;
     assert!(site.exists(notifier));
@@ -1339,7 +1337,7 @@ fn a_widget_call_queued_at_mount_runs_on_every_mount_path() -> Result<()> {
     let node = site.canopy.core.create_detached(mounting(false))?;
     site.canopy.core.attach(site.host, node)?;
     ran.set(0);
-    site.canopy.core.nodes[node].mounted = false;
+    site.canopy.core.nodes[node].mark_unmounted();
     site.lay_out()?;
     assert_eq!(ran.take(), 1, "the sweep's mount ran its call");
 

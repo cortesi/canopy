@@ -8,6 +8,7 @@ use crate::{
     core::{
         context::CoreViewContext,
         cursor::{CursorMotion, CursorSnapshot},
+        node::Node,
         notice::NoticeSource,
         render::{DeclaredCursor, RenderFrame},
         snapshot,
@@ -108,7 +109,7 @@ impl Canopy {
                 focus_seen = true;
             }
 
-            let mounted = self.core.nodes.get(id).map(|n| n.mounted).unwrap_or(false);
+            let mounted = self.core.nodes.get(id).is_some_and(Node::is_mounted);
             if !mounted {
                 layout_dirty = true;
                 // The mount is its own boundary, so the calls its hook posts
@@ -121,17 +122,12 @@ impl Canopy {
                 }
             }
 
-            let initialized = self
-                .core
-                .nodes
-                .get(id)
-                .map(|n| n.initialized)
-                .unwrap_or(false);
-            if !initialized {
+            let polled = self.core.nodes.get(id).is_some_and(Node::is_polled);
+            if !polled {
                 layout_dirty = true;
                 self.poll_node(id)?;
                 if let Some(node) = self.core.nodes.get_mut(id) {
-                    node.initialized = true;
+                    node.mark_polled();
                 }
             }
 

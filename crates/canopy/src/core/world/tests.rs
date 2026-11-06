@@ -18,6 +18,7 @@ use crate::{
     Context, ContextExt, ViewContext, ViewContextExt,
     core::{
         context::{CoreContext, CoreViewContext},
+        node::Lifecycle,
         script::validate_node_handle,
         testing::model::trace_result,
     },
@@ -76,8 +77,7 @@ struct NodeSnapshot {
     children: Vec<NodeId>,
     slots: Vec<(String, NodeId)>,
     hidden: bool,
-    initialized: bool,
-    mounted: bool,
+    lifecycle: Lifecycle,
 }
 
 impl StructuralSnapshot {
@@ -99,8 +99,7 @@ impl StructuralSnapshot {
                     children: node.children.clone(),
                     slots,
                     hidden: node.hidden,
-                    initialized: node.initialized,
-                    mounted: node.mounted,
+                    lifecycle: node.lifecycle,
                 }
             })
             .collect();
@@ -742,23 +741,6 @@ fn validate_invariants_rejects_missing_child_link() -> Result<()> {
     let error = core
         .validate_invariants()
         .expect_err("missing child should fail validation");
-    assert!(matches!(error, Error::Internal(_)));
-    Ok(())
-}
-
-#[test]
-fn validate_invariants_rejects_initialized_attached_unmounted_node() -> Result<()> {
-    let mut core = Core::new();
-    let child = core.create_detached(simple_widget())?;
-    attach_root_child(&mut core, child)?;
-    if let Some(node) = core.nodes.get_mut(child) {
-        node.mounted = false;
-        node.initialized = true;
-    }
-
-    let error = core
-        .validate_invariants()
-        .expect_err("initialized attached node must be mounted");
     assert!(matches!(error, Error::Internal(_)));
     Ok(())
 }
@@ -1833,17 +1815,17 @@ fn attachment_refresh_changes_only_the_moved_subtree() -> Result<()> {
     let moved_child = core.create_detached(simple_widget())?;
     core.attach(moved, moved_child)?;
     core.attach(core.root, stay)?;
-    let stay_generation = core.nodes[stay].attachment_generation;
+    let stay_generation = core.nodes[stay].attachment;
     assert!(stay_generation.is_some());
-    assert_eq!(core.nodes[moved_child].attachment_generation, None);
+    assert_eq!(core.nodes[moved_child].attachment, None);
 
     core.attach(core.root, moved)?;
-    assert!(core.nodes[moved].attachment_generation.is_some());
-    assert!(core.nodes[moved_child].attachment_generation.is_some());
+    assert!(core.nodes[moved].attachment.is_some());
+    assert!(core.nodes[moved_child].attachment.is_some());
     core.detach(moved)?;
-    assert_eq!(core.nodes[moved].attachment_generation, None);
-    assert_eq!(core.nodes[moved_child].attachment_generation, None);
-    assert_eq!(core.nodes[stay].attachment_generation, stay_generation);
+    assert_eq!(core.nodes[moved].attachment, None);
+    assert_eq!(core.nodes[moved_child].attachment, None);
+    assert_eq!(core.nodes[stay].attachment, stay_generation);
     core.validate_invariants()
 }
 

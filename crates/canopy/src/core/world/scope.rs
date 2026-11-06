@@ -4,6 +4,10 @@
 //! scope, a drain, and lifecycle cleanup are set when a call starts and
 //! restored when it ends. Each is owned by a [`Scope`], so an early return, a
 //! `?`, or an unwind that an embedder catches restores it.
+#![expect(
+    clippy::redundant_pub_crate,
+    reason = "The guards are crate-private, so their impls stay out of the public API."
+)]
 
 use std::{
     mem,
@@ -19,7 +23,7 @@ use crate::{
 };
 
 /// An owner of the core whose state a [`Scope`] restores.
-pub trait CoreOwner {
+pub(crate) trait CoreOwner {
     /// Return the core.
     fn core_mut(&mut self) -> &mut Core;
 
@@ -193,7 +197,7 @@ impl Exit {
 ///
 /// The scope borrows its owner, a [`Core`] or a [`Canopy`], and dereferences
 /// to it, so the call inside the scope works through the guard.
-pub struct Scope<'a, T: CoreOwner> {
+pub(crate) struct Scope<'a, T: CoreOwner> {
     /// Owner whose core state the scope restores.
     owner: &'a mut T,
     /// State to restore, until the scope ends.
@@ -211,7 +215,7 @@ impl<'a, T: CoreOwner> Scope<'a, T> {
 
     /// Close a dispatch boundary: a failure discards the work it queued, and
     /// the success of the outermost boundary drains the batch.
-    pub fn finish(mut self, success: bool) -> Result<()> {
+    pub(crate) fn finish(mut self, success: bool) -> Result<()> {
         let Some(Exit::Dispatch(checkpoint)) = self.exit.take() else {
             unreachable!("only a dispatch scope finishes");
         };

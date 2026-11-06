@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashSet, mem, rc::Rc};
+use std::{collections::HashSet, mem, num::NonZeroU64, rc::Rc};
 
 use super::{
     focus::FocusRecoveryHint,
@@ -83,6 +83,11 @@ impl Core {
         generation
     }
 
+    /// Allocate an attachment generation, which is never zero.
+    fn next_attachment(&mut self) -> NonZeroU64 {
+        NonZeroU64::new(self.next_generation()).expect("generations start above zero")
+    }
+
     /// Update provisional attachment identities in the subtree at `root`
     /// after it moved.
     ///
@@ -92,14 +97,14 @@ impl Core {
     fn refresh_attachment_generations(&mut self, root: NodeId) {
         let attached = self.is_attached_to_root(root);
         for id in self.subtree_pre_order(root) {
-            if self.nodes[id].attachment_generation.is_some() == attached {
+            if self.nodes[id].attachment.is_some() == attached {
                 continue;
             }
-            let generation = attached.then(|| self.next_generation());
+            let attachment = attached.then(|| self.next_attachment());
             let node = &mut self.nodes[id];
-            node.attachment_generation = generation;
+            node.attachment = attachment;
             if node.poll_lifetime == PollLifetime::Attachment {
-                node.initialized = false;
+                node.restart_polling();
             }
         }
     }
@@ -110,7 +115,7 @@ impl Core {
             .sync(self.nodes.iter().map(|(node, entry)| PollOwner {
                 node,
                 incarnation: entry.incarnation,
-                attachment: entry.attachment_generation,
+                attachment: entry.attachment_id(),
             }))
     }
 
@@ -164,31 +169,12 @@ impl Core {
     /// Replace one subtree's widget inside an active tree edit.
     fn replace_subtree_inner(&mut self, node_id: NodeId, widget: Box<dyn Widget>) -> Result<()> {
         self.nodes.require(node_id)?;
-        let name = widget.name();
-        let layout = widget.layout();
-        layout.validate()?;
-        let widget_type = widget.as_ref().type_id();
-        let poll_lifetime = widget.poll_lifetime();
+        widget.layout().validate()?;
 
         let lost = self.delete_subtree(node_id, "replace subtree", true)?;
         self.clear_identity(node_id)?;
         let incarnation = self.next_generation();
-        let node = &mut self.nodes[node_id];
-        node.incarnation = incarnation;
-        node.reveal = None;
-        node.reveal_in_ancestors = None;
-        node.scroll_order = 0;
-        node.attachment_generation = None;
-        node.poll_lifetime = poll_lifetime;
-        node.widget = Rc::new(RefCell::new(Some(widget)));
-        node.name = name;
-        node.layout = layout;
-        node.base_layout = layout;
-        node.layout_override = LayoutOverride::default();
-        node.floor_inset = 0;
-        node.widget_type = widget_type;
-        node.mounted = false;
-        node.initialized = false;
+        self.nodes[node_id].replace(widget, incarnation);
 
         self.refresh_attachment_generations(node_id);
         if self.is_attached_to_root(node_id) {
@@ -199,7 +185,7 @@ impl Core {
 
     /// Run the mount hook for a node if it has not been mounted yet.
     pub(crate) fn mount_node(&mut self, node_id: NodeId) -> Result<()> {
-        let should_mount = !self.nodes.require(node_id)?.mounted;
+        let should_mount = !self.nodes.require(node_id)?.is_mounted();
         if !should_mount {
             return Ok(());
         }
@@ -209,7 +195,7 @@ impl Core {
         self.with_widget_ctx(node_id, |widget, ctx| widget.on_mount(ctx))??;
 
         if let Some(node) = self.nodes.get_mut(node_id) {
-            node.mounted = true;
+            node.mark_mounted();
         }
         if let Some(journal) = self.tree_edit.as_mut() {
             journal.mounted.push(MountedWidget {
@@ -320,13 +306,13 @@ impl Core {
     /// Run an unmount hook once for a successfully mounted node.
     fn unmount_node(&mut self, node_id: NodeId) -> Result<()> {
         let node = self.nodes.require(node_id)?;
-        if !node.mounted {
+        if !node.is_mounted() {
             return Ok(());
         }
         let widget = Rc::clone(&node.widget);
         self.sealed(|core| core.with_widget_ctx(node_id, |widget, ctx| widget.on_unmount(ctx)))?;
         if let Some(node) = self.nodes.get_mut(node_id) {
-            node.mounted = false;
+            node.mark_unmounted();
         }
         if let Some(journal) = self.tree_edit.as_mut() {
             journal.unmounted.insert(Rc::as_ptr(&widget) as usize);
@@ -499,16 +485,11 @@ impl Core {
         Ok(())
     }
 
-    /// Validate lifecycle flags and attachment generations, which are
-    /// independent of widget behavior.
+    /// Validate attachment generations, which are independent of widget
+    /// behavior. The lifecycle enum admits no polled node that is unmounted.
     fn validate_lifecycle_state(&self, node_id: NodeId, node: &Node) -> Result<()> {
         let attached = self.is_attached_to_root(node_id);
-        if node.initialized && !node.mounted && attached {
-            return Err(invariant_violation(format!(
-                "attached node {node_id:?} is initialized before it is mounted"
-            )));
-        }
-        if node.attachment_generation.is_some() != attached {
+        if node.attachment.is_some() != attached {
             return Err(invariant_violation(format!(
                 "node {node_id:?} attachment generation disagrees with its attachment"
             )));
@@ -1010,7 +991,11 @@ impl Core {
         operation: &'static str,
     ) -> Result<()> {
         for node_id in self.subtree_pre_order(root) {
-            if self.nodes.get(node_id).is_some_and(|node| !node.mounted) {
+            if self
+                .nodes
+                .get(node_id)
+                .is_some_and(|node| !node.is_mounted())
+            {
                 self.ensure_widget_slot_available(node_id, operation)?;
             }
         }

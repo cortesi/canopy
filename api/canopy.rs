@@ -1102,8 +1102,6 @@ impl Canopy {
 
 impl Drop for Canopy {}
 
-impl crate::core::world::scope::CoreOwner for Canopy {}
-
 impl !Send for Canopy {}
 impl !Sync for Canopy {}
 

@@ -1,4 +1,4 @@
-use std::{any::TypeId, cell::RefCell, collections::HashMap, rc::Rc};
+use std::{any::TypeId, cell::RefCell, collections::HashMap, mem, num::NonZeroU64, rc::Rc};
 
 use crate::{
     NodeId, NodeName,
@@ -22,6 +22,20 @@ pub struct NodeIdentity {
     pub key: String,
 }
 
+/// Where a node's widget is in its lifecycle.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Lifecycle {
+    /// The mount hook has not run, or the unmount hook has.
+    #[default]
+    Unmounted,
+    /// The mount hook has run. `polled` says whether the first poll that
+    /// starts the widget's polling has run, for its current poll lifetime.
+    Mounted {
+        /// Whether polling has started.
+        polled: bool,
+    },
+}
+
 /// Core node data stored in the arena.
 #[derive(Clone)]
 pub struct Node {
@@ -33,7 +47,7 @@ pub struct Node {
     /// Widget identity independent of the arena slot generation.
     pub(crate) incarnation: u64,
     /// Current committed attachment generation, absent while detached.
-    pub(crate) attachment_generation: Option<u64>,
+    pub(crate) attachment: Option<NonZeroU64>,
     /// Poll ownership chosen by the widget at construction.
     pub(crate) poll_lifetime: PollLifetime,
 
@@ -85,10 +99,8 @@ pub struct Node {
     pub(crate) hidden: bool,
     /// Node name for commands and paths.
     pub(crate) name: NodeName,
-    /// Whether polling has been initialized.
-    pub(crate) initialized: bool,
-    /// Whether the widget mount hook has run.
-    pub(crate) mounted: bool,
+    /// Where the widget is in its lifecycle.
+    pub(crate) lifecycle: Lifecycle,
     /// Whether layout configuration should be refreshed from the widget.
     pub(crate) layout_dirty: bool,
 
@@ -135,7 +147,7 @@ impl Node {
             widget: Rc::new(RefCell::new(Some(widget))),
             widget_type,
             incarnation,
-            attachment_generation: None,
+            attachment: None,
             poll_lifetime,
             parent: None,
             children: Vec::new(),
@@ -157,10 +169,134 @@ impl Node {
             view: View::default(),
             hidden: false,
             name,
-            initialized: false,
-            mounted: false,
+            lifecycle: Lifecycle::Unmounted,
             layout_dirty: false,
             effects: Vec::new(),
         }
+    }
+
+    /// Return whether the mount hook has run.
+    pub(crate) fn is_mounted(&self) -> bool {
+        matches!(self.lifecycle, Lifecycle::Mounted { .. })
+    }
+
+    /// Return whether the widget's polling has started.
+    pub(crate) fn is_polled(&self) -> bool {
+        matches!(self.lifecycle, Lifecycle::Mounted { polled: true })
+    }
+
+    /// Record that the mount hook ran. A mounted node stays as it is.
+    pub(crate) fn mark_mounted(&mut self) {
+        if self.lifecycle == Lifecycle::Unmounted {
+            self.lifecycle = Lifecycle::Mounted { polled: false };
+        }
+    }
+
+    /// Record that the unmount hook ran.
+    pub(crate) fn mark_unmounted(&mut self) {
+        self.lifecycle = Lifecycle::Unmounted;
+    }
+
+    /// Record that the first poll ran. An unmounted node has no polling to
+    /// start, and stays unmounted.
+    pub(crate) fn mark_polled(&mut self) {
+        if let Lifecycle::Mounted { polled } = &mut self.lifecycle {
+            *polled = true;
+        }
+    }
+
+    /// Start polling again at the next sweep, as a new attachment does for
+    /// work bound to the attachment.
+    pub(crate) fn restart_polling(&mut self) {
+        if let Lifecycle::Mounted { polled } = &mut self.lifecycle {
+            *polled = false;
+        }
+    }
+
+    /// Return the committed attachment generation as a work stamp reads it.
+    pub(crate) fn attachment_id(&self) -> Option<u64> {
+        self.attachment.map(NonZeroU64::get)
+    }
+
+    /// Give this node a new widget incarnation in one assignment.
+    ///
+    /// The widget's identity, cached configuration, lifecycle, attachment,
+    /// and reveals start fresh, as for a new node. The node keeps its place
+    /// in the tree, its geometry and view, its visibility, its layout floor,
+    /// its scroll and its observers, and its effects. The caller clears the
+    /// node's identity and children first.
+    pub(crate) fn replace(&mut self, widget: Box<dyn Widget>, incarnation: u64) {
+        let fresh = Self::new(widget, incarnation);
+        *self = Self {
+            parent: self.parent,
+            children: mem::take(&mut self.children),
+            slots: mem::take(&mut self.slots),
+            identity: self.identity.take(),
+            floor: self.floor,
+            rect: self.rect,
+            content_size: self.content_size,
+            canvas: self.canvas,
+            scroll: self.scroll,
+            scroll_observers: mem::take(&mut self.scroll_observers),
+            view: self.view,
+            hidden: self.hidden,
+            layout_dirty: self.layout_dirty,
+            effects: mem::take(&mut self.effects),
+            ..fresh
+        };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Widget with default behavior.
+    struct Blank;
+
+    impl Widget for Blank {}
+
+    #[test]
+    fn lifecycle_transitions_follow_their_table() {
+        type Event = fn(&mut Node);
+        let unmounted = Lifecycle::Unmounted;
+        let fresh = Lifecycle::Mounted { polled: false };
+        let polled = Lifecycle::Mounted { polled: true };
+        let events: [(&str, Event); 4] = [
+            ("mount", Node::mark_mounted),
+            ("unmount", Node::mark_unmounted),
+            ("poll", Node::mark_polled),
+            ("restart", Node::restart_polling),
+        ];
+        let table = [
+            (unmounted, [fresh, unmounted, unmounted, unmounted]),
+            (fresh, [fresh, unmounted, polled, fresh]),
+            (polled, [polled, unmounted, polled, fresh]),
+        ];
+        for (start, nexts) in table {
+            for ((name, event), next) in events.iter().zip(nexts) {
+                let mut node = Node::new(Box::new(Blank), 1);
+                node.lifecycle = start;
+                event(&mut node);
+                assert_eq!(node.lifecycle, next, "{name} from {start:?}");
+                assert_eq!(node.is_mounted(), next != unmounted);
+                assert_eq!(node.is_polled(), next == polled);
+            }
+        }
+    }
+
+    #[test]
+    fn a_replacement_starts_a_fresh_incarnation_in_place() {
+        let mut node = Node::new(Box::new(Blank), 1);
+        node.lifecycle = Lifecycle::Mounted { polled: true };
+        node.attachment = Some(NonZeroU64::MIN);
+        node.hidden = true;
+        node.scroll_order = 7;
+        node.replace(Box::new(Blank), 2);
+        assert_eq!(node.incarnation, 2);
+        assert_eq!(node.lifecycle, Lifecycle::Unmounted);
+        assert_eq!(node.attachment, None);
+        assert_eq!(node.scroll_order, 0);
+        assert!(node.hidden, "the node keeps its visibility");
     }
 }

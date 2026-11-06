@@ -139,7 +139,7 @@ impl Core {
             node.incarnation == stamp.incarnation
                 && stamp
                     .attachment
-                    .is_none_or(|generation| node.attachment_generation == Some(generation))
+                    .is_none_or(|generation| node.attachment_id() == Some(generation))
         })
     }
 
@@ -153,7 +153,7 @@ impl Core {
         lifetime: PollLifetime,
     ) -> Result<Option<PollOwner>> {
         let entry = self.nodes.require(node)?;
-        let attachment = match (lifetime, entry.attachment_generation) {
+        let attachment = match (lifetime, entry.attachment_id()) {
             (PollLifetime::Node, _) => None,
             (PollLifetime::Attachment, Some(generation)) => Some(generation),
             (PollLifetime::Attachment, None) => return Ok(None),
@@ -490,17 +490,17 @@ mod tests {
         let mut core = Core::new();
         let node = core.create_detached(AttachmentLeaf)?;
         core.attach(core.root, node)?;
-        core.nodes[node].initialized = true;
+        core.nodes[node].mark_polled();
         let failure: Result<()> = core.with_tree_edit("failed detach", |core| {
             core.detach(node)?;
             Err(Error::Invalid("abort edit".into()))
         });
         assert!(failure.is_err());
-        assert!(core.nodes[node].initialized);
+        assert!(core.nodes[node].is_polled());
         core.detach(node)?;
-        assert!(!core.nodes[node].initialized);
+        assert!(!core.nodes[node].is_polled());
         core.attach(core.root, node)?;
-        assert!(!core.nodes[node].initialized);
+        assert!(!core.nodes[node].is_polled());
         let mut scope = core.enter_dispatch();
         scope.remove_after_dispatch(node)?;
         scope.finish(true)?;
@@ -520,7 +520,7 @@ mod tests {
                 incarnation: core.nodes[node].incarnation,
                 attachment: match lifetime {
                     PollLifetime::Node => None,
-                    PollLifetime::Attachment => core.nodes[node].attachment_generation,
+                    PollLifetime::Attachment => core.nodes[node].attachment_id(),
                 },
             };
             assert_eq!(original.wake()?, WakeOutcome::Queued);
@@ -554,7 +554,7 @@ mod tests {
         let node_handle = core.wake_handle(node, PollLifetime::Node)?;
         let attached_handle = core.wake_handle(node, PollLifetime::Attachment)?;
         let incarnation = core.nodes[node].incarnation;
-        let attachment = core.nodes[node].attachment_generation;
+        let attachment = core.nodes[node].attachment;
         core.set_hidden(node, true)?;
         assert_eq!(attached_handle.wake()?, WakeOutcome::Queued);
         core.wake_registry.drain()?;
@@ -565,7 +565,7 @@ mod tests {
         });
         assert!(failure.is_err());
         assert_eq!(core.nodes[node].incarnation, incarnation);
-        assert_eq!(core.nodes[node].attachment_generation, attachment);
+        assert_eq!(core.nodes[node].attachment, attachment);
         assert_eq!(attached_handle.wake()?, WakeOutcome::Queued);
         core.wake_registry.drain()?;
         core.detach(node)?;
@@ -573,7 +573,7 @@ mod tests {
         assert_eq!(node_handle.wake()?, WakeOutcome::Queued);
         core.wake_registry.drain()?;
         core.attach(core.root, node)?;
-        assert_ne!(core.nodes[node].attachment_generation, attachment);
+        assert_ne!(core.nodes[node].attachment, attachment);
         let reattached = core.wake_handle(node, PollLifetime::Attachment)?;
         core.replace_subtree(node, Leaf { veto: false })?;
         assert_eq!(node_handle.wake()?, WakeOutcome::Expired);

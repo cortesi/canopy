@@ -6,6 +6,7 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
+    num::NonZeroU64,
     rc::Rc,
     sync::Arc,
 };
@@ -58,7 +59,11 @@ mod tests;
 /// Arena mutation, structural invariants, and path helpers.
 mod tree;
 
-pub use scope::CoreOwner;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "The guards are crate-private, so their impls stay out of the public API."
+)]
+pub(crate) use scope::CoreOwner;
 
 /// Core state for the arena, layout engine, and focus.
 pub struct Core {
@@ -217,7 +222,7 @@ impl Core {
     pub fn new() -> Self {
         let mut nodes = NodeArena::new();
         let mut root_node = Node::new(Box::new(RootContainer), 1);
-        root_node.attachment_generation = Some(1);
+        root_node.attachment = Some(NonZeroU64::MIN);
         let root = nodes.insert(root_node);
 
         Self {

@@ -6,6 +6,7 @@ use futures::{Stream, StreamExt};
 
 use super::Canopy;
 use crate::{
+    core::node::Node,
     error::{Error, Result},
     render::RenderBackend,
     testing::ManualClock,
@@ -62,7 +63,7 @@ impl Canopy {
     /// time base.
     pub fn set_clock_for_testing(&mut self, clock: Arc<ManualClock>) -> Result<()> {
         if self.frame.snapshot.is_some()
-            || self.core.nodes.values().any(|node| node.initialized)
+            || self.core.nodes.values().any(Node::is_polled)
             || self.script.host.is_eval_active()
             || self.next_deadline().is_some()
         {
