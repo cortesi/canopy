@@ -681,7 +681,7 @@ fn search_failure_replaces_matches_and_success_clears_the_error() {
             );
             reader.search_next(ctx, 1)?;
             assert_eq!(reader.search_position(), 2);
-            let results = reader.results.clone().unwrap();
+            let results = reader.matches.rendered().cloned().unwrap();
             reader.apply_search(ctx, Err("scan failed".into()))?;
             assert_eq!(reader.search_error(), Some("scan failed"));
             assert_eq!(reader.search_matches(), 0);
@@ -3097,4 +3097,153 @@ fn a_match_in_a_cut_column_marks_the_margin_of_its_row() {
     let x = line.chars().position(|c| c == '›').unwrap() as u32;
     let bg = harness.buf().get(Point::new(x, y as u32)).unwrap().style.bg;
     assert_ne!(Some(bg), current.solid_color());
+}
+
+#[test]
+fn a_kept_position_over_failed_or_empty_matches_makes_none_current() {
+    let text = "needle one\n\nneedle two\n";
+    for (next, failed) in [(text, true), ("nothing here\n", false)] {
+        let (mut harness, manual) = fixture(text, ViewType::Rendered, false, false, false);
+        settle(&mut harness, &manual);
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                reader.set_search(ctx, "needle".into(), false)?;
+                Ok(())
+            })
+            .unwrap();
+        settle(&mut harness, &manual);
+        let place = harness.with_root_widget(|reader: &mut Markdown| reader.search_place());
+        assert!(place.is_some());
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                reader.replace(ctx, DocumentInput::Complete(next.into()))?;
+                reader.set_search(ctx, "needle".into(), false)?;
+                reader.keep_search_position(place);
+                if failed {
+                    reader.apply_search(ctx, Err("scan failed".into()))?;
+                }
+                Ok(())
+            })
+            .unwrap();
+        if !failed {
+            settle(&mut harness, &manual);
+        }
+        harness.with_root_widget(|reader: &mut Markdown| {
+            assert_eq!(reader.search_position(), 0, "{next:?}");
+            assert_eq!(reader.search_error().is_some(), failed, "{next:?}");
+            assert_eq!(reader.shared.borrow().overlays.search_current, None);
+        });
+    }
+}
+
+/// The search model test.
+mod search_model {
+    use proptest::{collection::vec, prelude::*};
+
+    use super::*;
+    use crate::testing;
+
+    /// One step of the search model test.
+    #[derive(Clone, Debug)]
+    enum SearchStep {
+        /// A new query.
+        Query(&'static str),
+        /// A step through the matches.
+        Next(i32),
+        /// A switch to the other view.
+        Switch,
+        /// An edit that adds a paragraph at the start of the text.
+        Edit(&'static str),
+        /// Work that finishes.
+        Settle,
+    }
+
+    proptest! {
+        #![proptest_config(testing::config(16))]
+
+        /// The overlay's current match is always the reader's current Rendered
+        /// match, and its highlights are the Rendered matches.
+        #[test]
+        fn the_search_overlay_agrees_with_the_matches(
+            steps in vec(
+                prop_oneof![
+                    prop_oneof![
+                        Just("needle"),
+                        Just("ne+dle"),
+                        Just("("),
+                        Just(""),
+                    ]
+                    .prop_map(SearchStep::Query),
+                    (-2..3i32).prop_map(SearchStep::Next),
+                    Just(SearchStep::Switch),
+                    prop_oneof![
+                        Just("needle again\n\n"),
+                        Just("plain\n\n"),
+                    ]
+                    .prop_map(SearchStep::Edit),
+                    Just(SearchStep::Settle),
+                ],
+                1..16,
+            ),
+        ) {
+            let text = "needle one\n\n| a | b |\n| - | - |\n| needle | needle |\n\nlast needle\n";
+            let (mut harness, manual) = fixture(text, ViewType::Rendered, false, false, false);
+            settle(&mut harness, &manual);
+            for step in &steps {
+                harness
+                    .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                        match step {
+                            SearchStep::Query(query) => {
+                                reader.set_search(ctx, (*query).into(), query.contains('+'))
+                            }
+                            SearchStep::Next(delta) => reader.search_next(ctx, *delta),
+                            SearchStep::Switch => {
+                                let view = match reader.requested_view_type() {
+                                    ViewType::Rendered => ViewType::Source,
+                                    ViewType::Source => ViewType::Rendered,
+                                };
+                                reader.set_view_type(ctx, view)
+                            }
+                            SearchStep::Edit(paragraph) => {
+                                let epoch = reader.epoch();
+                                // An edit of a text whose layout waits, or of a
+                                // view that cannot edit, changes nothing.
+                                reader
+                                .apply_edit(ctx, epoch, 0, 0, (*paragraph).into())
+                                .ok();
+                                Ok(())
+                            }
+                            SearchStep::Settle => Ok(()),
+                        }
+                    })
+                    .unwrap();
+                if matches!(step, SearchStep::Settle) {
+                    settle(&mut harness, &manual);
+                } else {
+                    service(&mut harness);
+                }
+                harness.with_root_widget(|reader: &mut Markdown| {
+                    let state = reader.shared.borrow();
+                    prop_assert_eq!(
+                        state.overlays.search_current,
+                        reader.matches.rendered_current(),
+                        "after {:?}",
+                        step
+                    );
+                    if let Some(results) = reader.matches.rendered() {
+                        prop_assert_eq!(state.overlays.search.len(), results.matches.len());
+                        prop_assert!(
+                            reader.matches.current().is_none_or(|i| i < results.matches.len())
+                        );
+                    }
+                    if let Some(matches) = reader.matches.source() {
+                        prop_assert!(
+                            reader.matches.current().is_none_or(|i| i < matches.ranges.len())
+                        );
+                    }
+                    Ok(())
+                })?;
+            }
+        }
+    }
 }

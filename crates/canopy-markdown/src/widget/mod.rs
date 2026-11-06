@@ -36,6 +36,7 @@ use canopy_widgets::{
     view_search,
 };
 
+use self::matches::Matches;
 use crate::{
     Follow, MarkdownOptions, Mode, ViewType,
     document::{
@@ -51,12 +52,9 @@ use crate::{
     },
     inspector::{Inspector, InspectorContent, InspectorEvent, InspectorHandle, InspectorOptions},
     presentation::{EmbedInfo, GeometryKey, Supplied},
-    search::{
-        SearchAddress, SearchCase, SearchLimits, SearchMatch, SearchMode, SearchQuery,
-        SearchResults,
-    },
+    search::{SearchAddress, SearchCase, SearchLimits, SearchMatch, SearchMode, SearchQuery},
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
-    source_view::{MarkdownSource, SourceAnchor, SourceMatches, SourceOptions},
+    source_view::{MarkdownSource, SourceAnchor, SourceOptions},
     surface::{Focus, Interaction, Pending, PendingMark, RenderedSurface, SurfaceState},
     units::EditUnit,
 };
@@ -185,17 +183,9 @@ pub struct Markdown {
     query: SearchQuery,
     /// Monotonic identity of the current query.
     query_generation: u64,
-    /// Bounded Rendered matches for one displayed revision.
-    results: Option<SearchResults>,
-    /// The current match, or None while there is none.
-    search_index: Option<usize>,
-    /// Where the match lies that the next Rendered matches make current
-    /// without a reveal, for a host that keeps its place.
-    kept_match: Option<MatchPlace>,
-    /// Exact Source match ranges for one displayed revision.
-    source_results: Option<SourceMatches>,
-    /// Current compile or scan failure, without discarding query text.
-    query_error: Option<String>,
+    /// The query's matches in the active view and the current one, or its
+    /// error, or the place the next matches make current.
+    matches: Matches,
     /// At most one lazily mounted modal inspector.
     inspector: Option<OpenInspector>,
     /// What the reader has done about each resource, by kind and
@@ -430,11 +420,7 @@ impl Markdown {
             last_submitted: None,
             query: SearchQuery::default(),
             query_generation: 0,
-            results: None,
-            search_index: None,
-            kept_match: None,
-            source_results: None,
-            query_error: None,
+            matches: Matches::default(),
             inspector: None,
             resource_states: HashMap::new(),
             resource_requests: HashMap::new(),
@@ -500,17 +486,13 @@ impl Markdown {
                 source.cancel_drag(ctx)
             })?;
         }
-        self.source_results = None;
+        self.matches.invalidate(false);
         self.requests.replace();
         self.switching = None;
         self.displayed = None;
         self.source_snapshot = None;
         self.last_document = None;
         self.saved_source_selection = None;
-        self.results = None;
-        self.search_index = None;
-        self.kept_match = None;
-        self.shared.borrow_mut().overlays.search_current = None;
         self.saved = [None, None];
         self.return_position = None;
         self.jumps.clear();
@@ -639,9 +621,7 @@ impl Markdown {
         self.active = view;
         self.switching = None;
         self.displayed = Some(source);
-        self.results = None;
-        self.search_index = None;
-        self.source_results = None;
+        self.matches.invalidate(true);
         self.clear_search_overlay();
         if let Some(nodes) = &self.nodes {
             ctx.set_hidden(nodes.rendered, view != ViewType::Rendered)?;
@@ -1093,13 +1073,10 @@ impl Markdown {
         self.store.replace(&text, false).map_err(invalid)?;
         let epoch = self.store.snapshot().epoch;
         self.dismiss_inspector(ctx)?;
-        self.source_results = None;
+        self.matches.invalidate(false);
         self.requests.replace();
         self.switching = None;
         self.saved_source_selection = None;
-        self.results = None;
-        self.search_index = None;
-        self.kept_match = None;
         self.saved = [None, None];
         self.return_position = None;
         self.jumps.clear();
@@ -1110,7 +1087,7 @@ impl Markdown {
         {
             let mut state = self.shared.borrow_mut();
             state.overlays.search.clear();
-            state.overlays.search_current = None;
+            state.overlays.search_current = self.matches.rendered_current();
             state.clear_marks();
             let mark = slot::pending_mark(&state, epoch, first, row);
             state.await_edit(mark);
@@ -1411,12 +1388,8 @@ impl Markdown {
                 SearchCase::Sensitive
             },
         };
-        self.source_results = None;
+        self.matches.requery();
         self.query_generation += 1;
-        self.query_error = None;
-        self.results = None;
-        self.search_index = None;
-        self.kept_match = None;
         self.shared.borrow_mut().search_reveal = !self.query.text.is_empty();
         self.clear_search_overlay();
         if let Some(node) = self.nodes.as_ref().and_then(|nodes| nodes.source) {
@@ -1469,16 +1442,12 @@ impl Markdown {
     /// Count of retained matches in the active projection.
     #[command]
     pub fn search_matches(&self) -> usize {
-        if self.active == ViewType::Rendered {
-            self.results.as_ref().map_or(0, |r| r.matches.len())
-        } else {
-            self.source_results.as_ref().map_or(0, |r| r.ranges.len())
-        }
+        self.matches.count(self.active)
     }
     /// One-based current match, or zero while there is none.
     #[command]
     pub fn search_position(&self) -> usize {
-        self.search_index.map_or(0, |i| i + 1)
+        self.matches.current().map_or(0, |i| i + 1)
     }
     /// Return where the current Rendered match lies, for
     /// [`Self::keep_search_position`]. Source keeps no place, so a reload
@@ -1487,7 +1456,7 @@ impl Markdown {
         if self.active != ViewType::Rendered {
             return None;
         }
-        let index = self.search_index?;
+        let index = self.matches.current()?;
         let state = self.shared.borrow();
         let bytes = match_bytes(&state);
         let source_byte = *bytes.get(index)?;
@@ -1508,21 +1477,18 @@ impl Markdown {
     /// match when none follows. With no `place`, no match is current.
     pub fn keep_search_position(&mut self, place: Option<MatchPlace>) {
         self.shared.borrow_mut().search_reveal = false;
-        self.kept_match = place;
+        if let Some(place) = self.matches.keep(place) {
+            self.restore_kept_match(place);
+        }
     }
     /// Whether a query waits for its first matches in the active view.
     #[command]
     pub fn search_pending(&self) -> bool {
-        !self.query.text.is_empty()
-            && self.query_error.is_none()
-            && match self.active {
-                ViewType::Rendered => self.results.is_none(),
-                ViewType::Source => self.source_results.is_none(),
-            }
+        !self.query.text.is_empty() && self.matches.waits(self.active)
     }
     /// The current query error without changing the retained query.
     pub fn search_error(&self) -> Option<&str> {
-        self.query_error.as_deref()
+        self.matches.error()
     }
     /// Visit a retained match in the active representation.
     #[command(enabled = "search_step_status")]
@@ -1530,7 +1496,8 @@ impl Markdown {
         if self.slot.is_open() {
             return Ok(());
         }
-        let Some(next) = view_search::step(self.search_index, self.search_matches(), delta) else {
+        let Some(next) = view_search::step(self.matches.current(), self.search_matches(), delta)
+        else {
             return Ok(());
         };
         self.shared.borrow_mut().search_reveal = false;
@@ -1540,7 +1507,7 @@ impl Markdown {
             state.navigation += 1;
         }
         if self.active == ViewType::Source {
-            self.search_index = Some(next);
+            self.matches.set_current(Some(next));
             if let Some(node) = self.navigation_node() {
                 ctx.with_widget_mut(node, |source: &mut MarkdownSource, ctx| {
                     source.activate_match(ctx, next);
@@ -1568,7 +1535,7 @@ impl Markdown {
         let marked = self.shared.borrow_mut().marked_unit();
         let id = active.or_else(|| match &marked {
             Some((unit, _)) => unit_object(&p.document, unit),
-            None if self.search_index.is_some() => None,
+            None if self.matches.current().is_some() => None,
             None => p.document.objects.first().map(|o| o.id),
         });
         let Some(object) = id
@@ -1674,9 +1641,7 @@ impl Markdown {
             inspected,
         )?;
         self.sync_inspector_marks(ctx)?;
-        if let Some(found) = self
-            .search_index
-            .and_then(|i| self.results.as_ref()?.matches.get(i))
+        if let Some(found) = self.current_match()
             && let Some(open) = &self.inspector
         {
             match found.address {
@@ -2630,10 +2595,8 @@ impl Markdown {
             }
         }
         if switched {
-            self.results = None;
-            self.search_index = None;
-            self.shared.borrow_mut().overlays.search_current = None;
-            self.source_results = None;
+            self.matches.invalidate(true);
+            self.show_current();
             if was_focused && let Some(node) = self.navigation_node() {
                 ctx.set_focus(node)?;
             }
@@ -2718,29 +2681,19 @@ impl Markdown {
     ) -> Result<()> {
         // A kept place applies to the first matches that publish, whatever
         // they hold.
-        let kept = self.kept_match.take();
         let output = match search {
             Ok(output) => output,
             Err(error) => {
-                self.query_error = Some(error);
-                self.results = None;
-                self.source_results = None;
-                self.search_index = None;
+                self.matches.fail(error);
                 self.shared.borrow_mut().search_reveal = false;
                 self.clear_search_overlay();
                 return Ok(());
             }
         };
-        self.query_error = None;
         match output {
             SearchOutput::Source(matches) => {
                 self.shared.borrow_mut().search_reveal = false;
-                let current = self
-                    .search_index
-                    .and_then(|i| self.source_results.as_ref()?.ranges.get(i));
-                self.search_index =
-                    current.and_then(|range| matches.ranges.iter().position(|next| next == range));
-                self.source_results = Some(matches.clone());
+                self.matches.publish_source(matches.clone());
                 if let Some(node) = self.nodes.as_ref().and_then(|n| n.source) {
                     ctx.with_widget_mut(node, |source: &mut MarkdownSource, _| {
                         source.publish_matches(matches).map_err(invalid)
@@ -2748,21 +2701,12 @@ impl Markdown {
                 }
             }
             SearchOutput::Rendered(results) => {
-                let current = self
-                    .search_index
-                    .and_then(|i| self.results.as_ref()?.matches.get(i));
-                self.search_index = current
-                    .and_then(|current| results.matches.iter().position(|found| found == current));
                 let ranges = reading_ranges(self.last_document.as_deref(), &results.matches);
-                {
-                    let mut state = self.shared.borrow_mut();
-                    state.overlays.search = ranges;
-                    state.overlays.search_current = self.search_index;
-                }
-                self.results = Some(results);
-                if let Some(place) = kept {
+                self.shared.borrow_mut().overlays.search = ranges;
+                if let Some(place) = self.matches.publish_rendered(results) {
                     self.restore_kept_match(place);
                 }
+                self.show_current();
                 self.reveal_first_match(ctx)?;
             }
         }
@@ -2773,6 +2717,17 @@ impl Markdown {
         let mut state = self.shared.borrow_mut();
         state.overlays.search.clear();
         state.overlays.search_current = None;
+    }
+    /// Show the current Rendered match as the overlay's, its one writer.
+    fn show_current(&self) {
+        self.shared.borrow_mut().overlays.search_current = self.matches.rendered_current();
+    }
+    /// The current Rendered match.
+    fn current_match(&self) -> Option<&SearchMatch> {
+        self.matches
+            .rendered()?
+            .matches
+            .get(self.matches.rendered_current()?)
     }
     /// Make the first Rendered match at or below the top of the view current
     /// and reveal it, once for each new query. Reader input since the query,
@@ -2817,7 +2772,7 @@ impl Markdown {
     /// Make the Rendered match at `place` current, without a reveal, as
     /// [`Self::keep_search_position`] describes.
     fn restore_kept_match(&mut self, place: MatchPlace) {
-        let mut state = self.shared.borrow_mut();
+        let state = self.shared.borrow();
         let bytes = match_bytes(&state);
         if bytes.is_empty() {
             return;
@@ -2828,8 +2783,9 @@ impl Markdown {
             .take_while(|&&byte| byte == place.source_byte)
             .count();
         let index = (first + place.rank.min(same)) % bytes.len();
-        state.overlays.search_current = Some(index);
-        self.search_index = Some(index);
+        drop(state);
+        self.matches.set_current(Some(index));
+        self.show_current();
     }
     /// Make Rendered match `index` current, mark the object it lies in, and
     /// reveal it as every searchable view does.
@@ -2839,18 +2795,18 @@ impl Markdown {
             return Ok(());
         }
         let Some(found) = self
-            .results
-            .as_ref()
+            .matches
+            .rendered()
             .and_then(|r| r.matches.get(index))
             .cloned()
         else {
             return Ok(());
         };
-        self.search_index = Some(index);
+        self.matches.set_current(Some(index));
+        self.show_current();
         let presentation = self.shared.borrow().presentation.clone();
         let row = {
             let mut state = self.shared.borrow_mut();
-            state.overlays.search_current = Some(index);
             let Some(p) = presentation else {
                 return Ok(());
             };
@@ -3080,7 +3036,7 @@ impl Markdown {
             && let Some(nodes) = &self.nodes
         {
             let count = self.search_matches();
-            let status = self.query_error.clone().unwrap_or_else(|| {
+            let status = self.matches.error().map(str::to_owned).unwrap_or_else(|| {
                 format!(
                     "{} of {} · {:?}",
                     self.search_position(),
@@ -3735,6 +3691,7 @@ fn local_display(link: &LocalLink) -> String {
     }
 }
 
+mod matches;
 mod slot;
 
 #[cfg(test)]

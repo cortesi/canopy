@@ -216,7 +216,7 @@ pub(super) fn state(reader: &Markdown, ctx: &dyn ViewContext) -> Result<ArgValue
         ("inspector", inspector),
         ("action_status", text(&reader.action_status)),
         ("failure", optional_text(reader.failure.as_deref())),
-        ("search_error", optional_text(reader.query_error.as_deref())),
+        ("search_error", optional_text(reader.matches.error())),
         ("ready", ArgValue::Bool(reader.ready())),
         ("switching", ArgValue::Bool(reader.switching.is_some())),
         ("accepted_bytes", number(accepted.len())),
@@ -366,20 +366,17 @@ pub(super) fn objects(reader: &Markdown, offset: usize, limit: usize) -> ArgValu
 /// counts.
 fn search_coverage(reader: &Markdown) -> ArgValue {
     if reader.active == ViewType::Source {
-        reader
-            .source_results
-            .as_ref()
-            .map_or(ArgValue::Null, |results| {
-                map([
-                    ("complete", ArgValue::Bool(results.complete)),
-                    ("retained", number(results.ranges.len())),
-                    ("count", number(results.ranges.len())),
-                    ("storage_limited", ArgValue::Null),
-                    ("scanned_bytes", ArgValue::Null),
-                ])
-            })
+        reader.matches.source().map_or(ArgValue::Null, |results| {
+            map([
+                ("complete", ArgValue::Bool(results.complete)),
+                ("retained", number(results.ranges.len())),
+                ("count", number(results.ranges.len())),
+                ("storage_limited", ArgValue::Null),
+                ("scanned_bytes", ArgValue::Null),
+            ])
+        })
     } else {
-        reader.results.as_ref().map_or(ArgValue::Null, |results| {
+        reader.matches.rendered().map_or(ArgValue::Null, |results| {
             map([
                 ("complete", ArgValue::Bool(results.coverage_complete)),
                 ("retained", number(results.matches.len())),
@@ -421,29 +418,26 @@ fn address(address: &SearchAddress) -> ArgValue {
 pub(super) fn search(reader: &Markdown, offset: usize, limit: usize) -> ArgValue {
     let displayed = reader.displayed.as_ref();
     let (epoch, revision, total) = if reader.active == ViewType::Source {
-        reader.source_results.as_ref().map_or(
+        reader.matches.source().map_or(
             (reader.epoch(), displayed.map(|source| source.revision), 0),
             |results| (results.epoch, Some(results.revision), results.ranges.len()),
         )
     } else {
-        reader.results.as_ref().map_or(
+        reader.matches.rendered().map_or(
             (reader.epoch(), displayed.map(|source| source.revision), 0),
             |results| (results.epoch, Some(results.revision), results.matches.len()),
         )
     };
     let window = Window::new(offset, limit, total);
     let items = if reader.active == ViewType::Source {
-        reader
-            .source_results
-            .as_ref()
-            .map_or_else(Vec::new, |results| {
-                results.ranges[window.offset..window.end]
-                    .iter()
-                    .map(|found| map([("address", text("source_bytes")), ("range", range(found))]))
-                    .collect()
-            })
+        reader.matches.source().map_or_else(Vec::new, |results| {
+            results.ranges[window.offset..window.end]
+                .iter()
+                .map(|found| map([("address", text("source_bytes")), ("range", range(found))]))
+                .collect()
+        })
     } else {
-        reader.results.as_ref().map_or_else(Vec::new, |results| {
+        reader.matches.rendered().map_or_else(Vec::new, |results| {
             results.matches[window.offset..window.end]
                 .iter()
                 .map(|found| {
@@ -479,20 +473,20 @@ pub(super) fn search(reader: &Markdown, offset: usize, limit: usize) -> ArgValue
         fields.insert(
             "result_generation".into(),
             if reader.active == ViewType::Rendered {
-                optional_number(reader.results.as_ref().map(|results| results.generation))
+                optional_number(reader.matches.rendered().map(|results| results.generation))
             } else {
                 reader
-                    .source_results
-                    .as_ref()
+                    .matches
+                    .source()
                     .map_or(ArgValue::Null, |_| ArgValue::UInt(reader.query_generation))
             },
         );
         fields.insert("coverage".into(), search_coverage(reader));
         fields.insert(
             "current".into(),
-            reader.search_index.map_or(ArgValue::Null, number),
+            reader.matches.current().map_or(ArgValue::Null, number),
         );
-        fields.insert("error".into(), optional_text(reader.query_error.as_deref()));
+        fields.insert("error".into(), optional_text(reader.matches.error()));
     }
     result
 }
@@ -611,7 +605,7 @@ mod tests {
         reader.active = ViewType::Source;
         reader.query.text = "終".repeat(200);
         reader.query_generation = 7;
-        reader.source_results = Some(SourceMatches {
+        reader.matches.publish_source(SourceMatches {
             epoch: reader.epoch(),
             revision: 19,
             ranges: vec![5..11, 12..18],
