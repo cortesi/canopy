@@ -19,6 +19,7 @@ use canopy::{
     render::Render,
     text::{self, WrapOptions},
     tree::{FocusDirection, FocusScope},
+    widget::Mount,
 };
 
 use crate::{Answer, Answers, ButtonLook, Dialog, Text, frame::Frame};
@@ -175,14 +176,8 @@ impl ConfirmRequest {
 /// Each answer posts its call. Under [`Closing::ByCall`] that call closes the
 /// dialog; under [`Closing::BeforeCall`] the dialog closes first.
 pub struct Confirm {
-    /// The dialog, once mounted.
-    dialog: Option<NodeId>,
-    /// The body, once mounted.
-    body: Option<TypedId<ConfirmBody>>,
-    /// The message, once mounted.
-    message: Option<TypedId<Text>>,
-    /// The row of answers, once mounted.
-    row: Option<TypedId<Answers>>,
+    /// How each answer draws, and the parts of the dialog once mounted.
+    parts: Mount<ButtonLook, Parts>,
     /// The answers of the open question, left to right.
     answers: Vec<Answer>,
     /// The answer that declines.
@@ -193,8 +188,18 @@ pub struct Confirm {
     tone: Tone,
     /// The modal of the open question.
     token: Option<ModalToken>,
-    /// How each answer draws.
-    look: ButtonLook,
+}
+
+/// The children a confirm dialog builds when it mounts.
+struct Parts {
+    /// The frame, which shows the title.
+    frame: TypedId<Frame>,
+    /// The body.
+    body: TypedId<ConfirmBody>,
+    /// The message.
+    message: TypedId<Text>,
+    /// The row of answers.
+    row: TypedId<Answers>,
 }
 
 impl Default for Confirm {
@@ -213,16 +218,12 @@ impl Confirm {
     /// Build an empty dialog.
     pub fn new() -> Self {
         Self {
-            dialog: None,
-            body: None,
-            message: None,
-            row: None,
+            parts: Mount::new(ButtonLook::Solid),
             answers: Vec::new(),
             decline: 0,
             closing: Closing::ByCall,
             tone: Tone::Plain,
             token: None,
-            look: ButtonLook::Solid,
         }
     }
 
@@ -231,7 +232,7 @@ impl Confirm {
     /// mounts.
     #[must_use]
     pub fn with_look(mut self, look: ButtonLook) -> Self {
-        self.look = look;
+        *self.parts.pending_mut() = look;
         self
     }
 
@@ -321,7 +322,7 @@ impl Confirm {
     /// Report the status of the declining answer in the row: disabled before
     /// the row arms, and while the declining call is disabled.
     fn decline_status(&self, ctx: &dyn ViewContext) -> Result<CommandStatus> {
-        let Some(row) = self.row else {
+        let Ok(&Parts { row, .. }) = self.parts.mounted() else {
             return Ok(CommandStatus::Disabled("the dialog has not mounted".into()));
         };
         // The check of the row reads this dialog, which a dispatch holds, so
@@ -338,8 +339,7 @@ impl Confirm {
 
     /// Return the row of answers, or an error before it mounts.
     fn row(&self) -> Result<TypedId<Answers>> {
-        self.row
-            .ok_or_else(|| Error::NotFound("confirm answers".into()))
+        Ok(self.parts.mounted()?.row)
     }
 
     /// Show `request`, and return the button that takes the keyboard.
@@ -357,11 +357,12 @@ impl Confirm {
                 request.answers.len()
             )));
         }
-        let (Some(dialog), Some(body), Some(message), Some(row)) =
-            (self.dialog, self.body, self.message, self.row)
-        else {
-            return Err(Error::NotFound("confirm dialog".into()));
-        };
+        let &Parts {
+            frame,
+            body,
+            message,
+            row,
+        } = self.parts.mounted()?;
         // The row's buttons give the dialog's own answers, so the dialog
         // decides when the modal closes.
         let owner = CommandTarget::Exact(ctx.node_id());
@@ -384,7 +385,7 @@ impl Confirm {
                 .ok_or_else(|| Error::NotFound("declining answer".into()))?;
             Ok((focus, row.width()))
         })?;
-        ctx.with_widget_mut(Dialog::frame(ctx, dialog)?, |frame: &mut Frame, _| {
+        ctx.with_widget_mut(frame, |frame: &mut Frame, _| {
             frame.set_title(request.title.as_str());
             Ok(())
         })?;
@@ -451,24 +452,32 @@ impl Widget for Confirm {
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let root = ctx.node_id();
-        // The dialog fits the question, so it is only as large as what it
-        // asks.
-        let (dialog, body) = Dialog::new().add(ctx, root, ConfirmBody::new(self.look.rows()))?;
-        let message = ctx.add_child(
-            body,
-            Text::new("")
-                .with_style(MESSAGE_STYLE)
-                .with_tab_stop(TAB_STOP)
-                .with_wrap_width(MESSAGE_WIDTH)
-                .with_wrap_options(WrapOptions::PROSE)
-                .with_fit(true),
-        )?;
-        let row = ctx.add_child(body, Answers::new().with_look(self.look))?;
-        self.dialog = Some(dialog.into());
-        self.body = Some(body);
-        self.message = Some(message);
-        self.row = Some(row);
-        Ok(())
+        self.parts.mount(|&mut look| {
+            // The dialog fits the question, so it is only as large as what it
+            // asks.
+            let (dialog, body) = Dialog::new().add(ctx, root, ConfirmBody::new(look.rows()))?;
+            let frame = Dialog::frame(ctx, dialog.into())?;
+            let message = ctx.add_child(
+                body,
+                Text::new("")
+                    .with_style(MESSAGE_STYLE)
+                    .with_tab_stop(TAB_STOP)
+                    .with_wrap_width(MESSAGE_WIDTH)
+                    .with_wrap_options(WrapOptions::PROSE)
+                    .with_fit(true),
+            )?;
+            let row = ctx.add_child(body, Answers::new().with_look(look))?;
+            Ok(Parts {
+                frame,
+                body,
+                message,
+                row,
+            })
+        })
+    }
+
+    fn on_unmount(&mut self, _ctx: &mut dyn Context) {
+        self.parts.unmount();
     }
 
     fn name(&self) -> NodeName {
@@ -595,7 +604,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::Button;
+    use crate::{Button, remount_test_support::attach_and_roll_back};
 
     /// A host that opens one dialog and records the answers it was given.
     #[derive(Default)]
@@ -775,7 +784,7 @@ mod tests {
 
     /// Return the button of the answer at `index`.
     fn answer_node(harness: &mut Harness, index: usize) -> Result<NodeId> {
-        let row = on_dialog(harness, |confirm, _| confirm.row)?.expect("mounted");
+        let row = on_dialog(harness, |confirm, _| confirm.row())??;
         harness
             .canopy
             .with_root_view(|ctx| ctx.with_widget(row, |row: &Answers| Ok(row.button(index))))?
@@ -1316,9 +1325,10 @@ mod tests {
     fn a_click_outside_the_answers_does_not_answer() -> Result<()> {
         let mut harness = dialog("/tmp/a", 40, 12)?;
         let node = dialog_node(&mut harness)?;
-        let body: NodeId = on_dialog(&mut harness, |confirm, _| confirm.body)?
-            .expect("mounted")
-            .into();
+        let body: NodeId = on_dialog(&mut harness, |confirm, _| {
+            confirm.parts.mounted().map(|parts| parts.body)
+        })??
+        .into();
         // The dialog's own margin, its frame corner, and the gap between the
         // answers all belong to the dialog.
         for node in [node, body] {
@@ -1334,6 +1344,32 @@ mod tests {
         });
         click_at(&mut harness, gap)?;
         assert!(answered(&mut harness).is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn regression_a_rolled_back_dialog_reads_unmounted_and_asks_again() -> Result<()> {
+        let mut harness = host(40, 12)?;
+        harness.with_root_widget_context(|host: &mut Host, ctx| {
+            let dialog = ctx.create_detached(Confirm::new())?;
+            attach_and_roll_back(ctx, dialog.into());
+            let unmounted =
+                ctx.with_widget(dialog, |dialog: &Confirm| Ok(dialog.row().is_err()))?;
+            assert!(unmounted, "a rolled-back dialog has no answers");
+            ctx.attach(ctx.node_id(), dialog.into())?;
+            ctx.set_hidden(dialog.into(), true)?;
+            host.dialog = Some(dialog);
+            Ok(())
+        })?;
+        ask(&mut harness, "/tmp/again")?;
+        assert!(open(&mut harness)?);
+        assert!(
+            screen(&harness)
+                .iter()
+                .any(|row| row.contains("/tmp/again"))
+        );
+        harness.key('y')?;
+        assert_eq!(answered(&mut harness), ["yes"]);
         Ok(())
     }
 
