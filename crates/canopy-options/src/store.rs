@@ -23,6 +23,7 @@ use crate::{
     file::{self, FileLayer, Scope},
     layout::Layout,
     model::{OptionGroup, Schema, SetError, Value, join_path},
+    panel::display_path,
 };
 
 /// The root value as the handles see it.
@@ -84,12 +85,56 @@ fn below(path: &str, prefix: &str) -> bool {
             .is_some_and(|rest| rest.starts_with('.'))
 }
 
-/// Work that waits for a notification round to end.
+/// A store change that waits for a notification round to end. The changes
+/// of a round run in call order after it.
 enum Deferred {
     /// A write to the root.
     Write(RootWrite),
-    /// A change that a layer operation made, such as a revert or a save.
-    Notify(Changes),
+    /// A default for the leaf at a path.
+    SetDefault {
+        /// The leaf path.
+        path: String,
+        /// The default.
+        value: Value,
+    },
+    /// The removal of the live values at or below a path, or of every live
+    /// value.
+    Revert(Option<String>),
+    /// The removal of a leaf from the nearest file that sets it.
+    Clear(String),
+    /// A save of the live values to the file of a scope.
+    Save(Scope),
+}
+
+/// Whether the store is notifying its subscribers.
+enum Round {
+    /// No notification runs, so a change runs at once.
+    Idle,
+    /// Subscribers are being notified. Changes queue until the round ends.
+    Notifying {
+        /// The changes that wait, in call order.
+        queue: VecDeque<Deferred>,
+    },
+}
+
+/// What a save did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Saved {
+    /// The save wrote this file.
+    Written(PathBuf),
+    /// The save waits for a notification round, and posts its outcome as a
+    /// notice when it runs.
+    Deferred,
+}
+
+/// What a clear did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Cleared {
+    /// The clear removed the leaf from this file, or no file set it.
+    Done(Option<PathBuf>),
+    /// The clear waits for a notification round, and posts its outcome as a
+    /// notice when it runs.
+    Deferred,
 }
 
 /// The layer that sets the effective value of a leaf.
@@ -178,10 +223,8 @@ struct Inner<T> {
     subscribers: Vec<Subscriber>,
     /// The widgets to poll as the options panel closes.
     close_wakes: Vec<NodeWakeHandle>,
-    /// Whether subscribers are being notified.
-    notifying: bool,
-    /// Work that arrived during a notification.
-    queue: VecDeque<Deferred>,
+    /// Whether subscribers are being notified, with the changes that wait.
+    round: Round,
     /// Warnings that wait for a context to show them.
     warnings: Vec<String>,
 }
@@ -290,6 +333,29 @@ impl<T: OptionGroup> Inner<T> {
     }
 }
 
+/// Holds a notification round open, and closes it when dropped, so an
+/// unwinding subscriber does not leave the store in a round.
+struct RoundGuard<'a, T> {
+    /// The store whose round is open.
+    shared: &'a Shared<T>,
+}
+
+impl<'a, T> RoundGuard<'a, T> {
+    /// Open a round on `shared`.
+    fn open(shared: &'a Shared<T>) -> Self {
+        shared.inner.borrow_mut().round = Round::Notifying {
+            queue: VecDeque::new(),
+        };
+        Self { shared }
+    }
+}
+
+impl<T> Drop for RoundGuard<'_, T> {
+    fn drop(&mut self) {
+        self.shared.inner.borrow_mut().round = Round::Idle;
+    }
+}
+
 /// The shared state of a store, which the handles and the widget reach.
 pub struct Shared<T> {
     /// The state.
@@ -357,8 +423,7 @@ impl<T: OptionGroup + Send + Sync> Store<T> {
             current: Arc::new(T::default()),
             subscribers: Vec::new(),
             close_wakes: Vec::new(),
-            notifying: false,
-            queue: VecDeque::new(),
+            round: Round::Idle,
             warnings,
         };
         inner.rebuild();
@@ -457,14 +522,14 @@ pub trait Backend {
         &self,
         context: &mut dyn Context,
         path: &str,
-    ) -> CanopyResult<StdResult<Option<PathBuf>, StoreError>>;
+    ) -> CanopyResult<StdResult<Cleared, StoreError>>;
 
     /// Save the live values to the file for `scope`, and return the file.
     fn save(
         &self,
         context: &mut dyn Context,
         scope: Scope,
-    ) -> CanopyResult<StdResult<PathBuf, StoreError>>;
+    ) -> CanopyResult<StdResult<Saved, StoreError>>;
 
     /// Return the file that a save for `scope` writes.
     fn save_target(&self, scope: Scope) -> Option<PathBuf>;
@@ -480,52 +545,48 @@ pub trait Backend {
 }
 
 impl<T: OptionGroup + Send + Sync> Shared<T> {
-    /// Notify the subscribers of `changes`, then run the writes that arrived
-    /// during the notification.
+    /// Return whether a notification round is open.
+    fn in_round(&self) -> bool {
+        matches!(self.inner.borrow().round, Round::Notifying { .. })
+    }
+
+    /// Queue `change` until the open round ends.
+    fn defer(&self, change: Deferred) {
+        if let Round::Notifying { queue } = &mut self.inner.borrow_mut().round {
+            queue.push_back(change);
+        }
+    }
+
+    /// Notify the subscribers of `changes` in a round, then run the changes
+    /// that arrived during it, in call order, and notify theirs.
     ///
     /// Every subscriber runs, also after a failure. The failures become one
-    /// error notice.
+    /// error notice, after the notices of the deferred changes.
     fn notify(&self, context: &mut dyn Context, changes: &Changes) -> CanopyResult<()> {
-        // A notification that runs inside another waits for it, so that each
-        // callback sees one change at a time.
-        if self.inner.borrow().notifying {
-            self.inner
-                .borrow_mut()
-                .queue
-                .push_back(Deferred::Notify(changes.clone()));
-            return Ok(());
-        }
         let mut failures = Vec::new();
-        if !changes.is_empty() {
-            let (subscribers, current) = {
-                let mut inner = self.inner.borrow_mut();
-                inner.notifying = true;
-                (inner.subscribers.clone(), Arc::clone(&inner.current))
-            };
-            for subscriber in subscribers {
-                if !changes.touches(&subscriber.prefix) {
-                    continue;
-                }
-                let Ok(mut callback) = subscriber.callback.try_borrow_mut() else {
-                    continue;
+        let mut notices = Vec::new();
+        {
+            let _round = RoundGuard::open(self);
+            self.call_subscribers(context, changes, &mut failures);
+            loop {
+                let next = match &mut self.inner.borrow_mut().round {
+                    Round::Notifying { queue } => queue.pop_front(),
+                    Round::Idle => None,
                 };
-                let root: &AnyRoot = &*current;
-                if let Err(error) = callback(context, root, changes) {
-                    failures.push(error.to_string());
+                let Some(change) = next else {
+                    break;
+                };
+                match self.apply(change) {
+                    Ok((changes, notice)) => {
+                        notices.extend(notice);
+                        self.call_subscribers(context, &changes, &mut failures);
+                    }
+                    Err(error) => failures.push(error.to_string()),
                 }
             }
-            self.inner.borrow_mut().notifying = false;
         }
-        loop {
-            let deferred = self.inner.borrow_mut().queue.pop_front();
-            match deferred {
-                None => break,
-                Some(Deferred::Notify(queued)) => self.notify(context, &queued)?,
-                Some(Deferred::Write(write)) => match self.apply(write) {
-                    Ok(queued) => self.notify(context, &queued)?,
-                    Err(error) => failures.push(error.to_string()),
-                },
-            }
+        for notice in notices {
+            context.notify(NoticePost::info(notice))?;
         }
         if !failures.is_empty() {
             context.notify(NoticePost::error(format!(
@@ -536,20 +597,152 @@ impl<T: OptionGroup + Send + Sync> Shared<T> {
         Ok(())
     }
 
+    /// Call the subscribers that `changes` touch, with the current root, and
+    /// collect their failures.
+    fn call_subscribers(
+        &self,
+        context: &mut dyn Context,
+        changes: &Changes,
+        failures: &mut Vec<String>,
+    ) {
+        if changes.is_empty() {
+            return;
+        }
+        let (subscribers, current) = {
+            let inner = self.inner.borrow();
+            (inner.subscribers.clone(), Arc::clone(&inner.current))
+        };
+        for subscriber in subscribers {
+            if !changes.touches(&subscriber.prefix) {
+                continue;
+            }
+            let Ok(mut callback) = subscriber.callback.try_borrow_mut() else {
+                continue;
+            };
+            let root: &AnyRoot = &*current;
+            if let Err(error) = callback(context, root, changes) {
+                failures.push(error.to_string());
+            }
+        }
+    }
+
+    /// Run a deferred change, and return its changed paths and the notice
+    /// that reports it.
+    fn apply(&self, change: Deferred) -> StdResult<(Changes, Option<String>), StoreError> {
+        match change {
+            Deferred::Write(write) => self.write_now(write).map(|changes| (changes, None)),
+            Deferred::SetDefault { path, value } => Ok((self.set_default_now(path, value), None)),
+            Deferred::Revert(path) => Ok((self.revert_now(path.as_deref()), None)),
+            Deferred::Clear(path) => self.clear_now(&path).map(|(file, changes)| {
+                let notice = match file {
+                    Some(file) => format!("Cleared {path} from {}", display_path(&file)),
+                    None => format!("No option file sets {path}"),
+                };
+                (changes, Some(notice))
+            }),
+            Deferred::Save(scope) => self.save_now(scope).map(|(file, changes)| {
+                (changes, Some(format!("Saved to {}", display_path(&file))))
+            }),
+        }
+    }
+
     /// Run `write` on a copy of the current value, then commit it.
     ///
     /// The store is not borrowed while `write` runs, so the write can read
     /// the store.
-    fn apply(&self, write: RootWrite) -> StdResult<Changes, StoreError> {
+    fn write_now(&self, write: RootWrite) -> StdResult<Changes, StoreError> {
         let mut next = (*self.inner.borrow().current).clone();
         write(&mut next);
         self.inner.borrow_mut().commit(next)
     }
 
-    /// Rebuild the values from the layers and notify the changes.
-    fn rebuild_and_notify(&self, context: &mut dyn Context) -> CanopyResult<()> {
-        let changes = self.inner.borrow_mut().rebuild();
-        self.notify(context, &changes)
+    /// Set the default of the leaf at `path`, and return the changes.
+    fn set_default_now(&self, path: String, value: Value) -> Changes {
+        let mut inner = self.inner.borrow_mut();
+        inner.script_defaults.insert(path, value);
+        inner.rebuild()
+    }
+
+    /// Remove the live values at or below `path`, or every live value, and
+    /// return the changes.
+    fn revert_now(&self, path: Option<&str>) -> Changes {
+        let mut inner = self.inner.borrow_mut();
+        match path {
+            Some(path) => {
+                if inner.schema.leaf(path).is_some() {
+                    inner.live.remove(path);
+                } else {
+                    inner.live.retain(|live, _| !below(live, path));
+                }
+            }
+            None => inner.live.clear(),
+        }
+        inner.rebuild()
+    }
+
+    /// Remove the leaf at `path` from the nearest file that sets it, and
+    /// return that file, if any, and the changes.
+    fn clear_now(&self, path: &str) -> StdResult<(Option<PathBuf>, Changes), StoreError> {
+        let found = {
+            let inner = self.inner.borrow();
+            inner
+                .files()
+                .enumerate()
+                .filter(|(_, layer)| layer.values.contains_key(path))
+                .map(|(index, layer)| (index, layer.path.clone()))
+                .last()
+        };
+        let Some((index, file)) = found else {
+            return Ok((None, Changes::default()));
+        };
+        Self::edit_file(&file, &[(path.to_string(), None)])?;
+        let mut inner = self.inner.borrow_mut();
+        inner.layer_mut(index).values.remove(path);
+        Ok((Some(file), inner.rebuild()))
+    }
+
+    /// Save the live values to the file for `scope`, and return the file and
+    /// the changes.
+    fn save_now(&self, scope: Scope) -> StdResult<(PathBuf, Changes), StoreError> {
+        let (file, edits, index) = {
+            let mut inner = self.inner.borrow_mut();
+            let index = inner.target_index(scope)?;
+            let below = inner.merged_below(index);
+            let file = inner.layer_mut(index).path.clone();
+            let mut edits = Vec::new();
+            for (path, value) in &inner.live {
+                let global_only = inner.schema.leaf(path).is_some_and(|leaf| leaf.global);
+                if scope == Scope::Local && global_only {
+                    continue;
+                }
+                let lower = below.get(path);
+                // A file cannot unset a value that a layer below sets, so
+                // such a value stays live.
+                if *value == Value::Unset && lower.as_ref() != Some(&Value::Unset) {
+                    continue;
+                }
+                let entry = (lower.as_ref() != Some(value)).then(|| value.clone());
+                edits.push((path.clone(), entry));
+            }
+            (file, edits, index)
+        };
+        if edits.is_empty() {
+            return Ok((file, Changes::default()));
+        }
+        Self::edit_file(&file, &edits)?;
+        let mut inner = self.inner.borrow_mut();
+        let layer = inner.layer_mut(index);
+        for (path, value) in edits {
+            match value {
+                Some(value) => {
+                    layer.values.insert(path, value);
+                }
+                None => {
+                    layer.values.remove(&path);
+                }
+            }
+        }
+        Ok((file, inner.rebuild()))
     }
 
     /// Return `path` if it names a leaf, or an error.
@@ -586,14 +779,11 @@ impl<T: OptionGroup + Send + Sync> Backend for Shared<T> {
     }
 
     fn update_root(&self, context: &mut dyn Context, write: RootWrite) -> CanopyResult<()> {
-        if self.inner.borrow().notifying {
-            self.inner
-                .borrow_mut()
-                .queue
-                .push_back(Deferred::Write(write));
+        if self.in_round() {
+            self.defer(Deferred::Write(write));
             return Ok(());
         }
-        match self.apply(write) {
+        match self.write_now(write) {
             Ok(changes) => self.notify(context, &changes),
             Err(error) => context.notify(NoticePost::error(format!("options: {error}"))),
         }
@@ -665,112 +855,61 @@ impl<T: OptionGroup + Send + Sync> Backend for Shared<T> {
         if let Err(error) = probe.set(&path, &value) {
             return Ok(Err(StoreError::Set { path, error }));
         }
-        self.inner.borrow_mut().script_defaults.insert(path, value);
-        self.rebuild_and_notify(context).map(Ok)
+        if self.in_round() {
+            self.defer(Deferred::SetDefault { path, value });
+            return Ok(Ok(()));
+        }
+        let changes = self.set_default_now(path, value);
+        self.notify(context, &changes).map(Ok)
     }
 
     fn revert(&self, context: &mut dyn Context, path: Option<&str>) -> CanopyResult<()> {
-        {
-            let mut inner = self.inner.borrow_mut();
-            match path {
-                Some(path) => {
-                    if inner.schema.leaf(path).is_some() {
-                        inner.live.remove(path);
-                    } else {
-                        inner.live.retain(|live, _| !below(live, path));
-                    }
-                }
-                None => inner.live.clear(),
-            }
+        if self.in_round() {
+            self.defer(Deferred::Revert(path.map(str::to_string)));
+            return Ok(());
         }
-        self.rebuild_and_notify(context)
+        let changes = self.revert_now(path);
+        self.notify(context, &changes)
     }
 
     fn clear(
         &self,
         context: &mut dyn Context,
         path: &str,
-    ) -> CanopyResult<StdResult<Option<PathBuf>, StoreError>> {
+    ) -> CanopyResult<StdResult<Cleared, StoreError>> {
         let path = match self.leaf_path(path) {
             Ok(path) => path,
             Err(error) => return Ok(Err(error)),
         };
-        let found = {
-            let inner = self.inner.borrow();
-            inner
-                .files()
-                .enumerate()
-                .filter(|(_, layer)| layer.values.contains_key(&path))
-                .map(|(index, layer)| (index, layer.path.clone()))
-                .last()
-        };
-        let Some((index, file)) = found else {
-            return Ok(Ok(None));
-        };
-        if let Err(error) = Self::edit_file(&file, &[(path.clone(), None)]) {
-            return Ok(Err(error));
+        if self.in_round() {
+            self.defer(Deferred::Clear(path));
+            return Ok(Ok(Cleared::Deferred));
         }
-        self.inner
-            .borrow_mut()
-            .layer_mut(index)
-            .values
-            .remove(&path);
-        self.rebuild_and_notify(context)?;
-        Ok(Ok(Some(file)))
+        match self.clear_now(&path) {
+            Ok((file, changes)) => {
+                self.notify(context, &changes)?;
+                Ok(Ok(Cleared::Done(file)))
+            }
+            Err(error) => Ok(Err(error)),
+        }
     }
 
     fn save(
         &self,
         context: &mut dyn Context,
         scope: Scope,
-    ) -> CanopyResult<StdResult<PathBuf, StoreError>> {
-        let (file, edits, index) = {
-            let mut inner = self.inner.borrow_mut();
-            let index = match inner.target_index(scope) {
-                Ok(index) => index,
-                Err(error) => return Ok(Err(error)),
-            };
-            let below = inner.merged_below(index);
-            let file = inner.layer_mut(index).path.clone();
-            let mut edits = Vec::new();
-            for (path, value) in &inner.live {
-                let global_only = inner.schema.leaf(path).is_some_and(|leaf| leaf.global);
-                if scope == Scope::Local && global_only {
-                    continue;
-                }
-                let lower = below.get(path);
-                // A file cannot unset a value that a layer below sets, so
-                // such a value stays live.
-                if *value == Value::Unset && lower.as_ref() != Some(&Value::Unset) {
-                    continue;
-                }
-                let entry = (lower.as_ref() != Some(value)).then(|| value.clone());
-                edits.push((path.clone(), entry));
+    ) -> CanopyResult<StdResult<Saved, StoreError>> {
+        if self.in_round() {
+            self.defer(Deferred::Save(scope));
+            return Ok(Ok(Saved::Deferred));
+        }
+        match self.save_now(scope) {
+            Ok((file, changes)) => {
+                self.notify(context, &changes)?;
+                Ok(Ok(Saved::Written(file)))
             }
-            (file, edits, index)
-        };
-        if edits.is_empty() {
-            return Ok(Ok(file));
+            Err(error) => Ok(Err(error)),
         }
-        if let Err(error) = Self::edit_file(&file, &edits) {
-            return Ok(Err(error));
-        }
-        {
-            let mut inner = self.inner.borrow_mut();
-            let layer = inner.layer_mut(index);
-            for (path, value) in &edits {
-                match value {
-                    Some(value) => {
-                        layer.values.insert(path.clone(), value.clone());
-                    }
-                    None => {
-                        layer.values.remove(path);
-                    }
-                }
-            }
-        }
-        self.rebuild_and_notify(context)?;
-        Ok(Ok(file))
     }
 
     fn save_target(&self, scope: Scope) -> Option<PathBuf> {

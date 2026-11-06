@@ -17,7 +17,6 @@ use canopy::{
     input::key::Key,
     testing::harness::Harness,
 };
-
 use proptest::{
     collection::vec,
     prelude::{ProptestConfig, prop_assert},
@@ -27,7 +26,9 @@ use proptest::{
 
 use crate::{
     Changes, Follower, Kind, Layout, OptionEnum, OptionGroup, Options, Set, SetError, Store, Value,
-    file::Scope, model, store::Source,
+    file::Scope,
+    model,
+    store::{Cleared, Saved, Source},
 };
 
 /// A sort order.
@@ -297,7 +298,7 @@ fn saves_clears_and_reverts_write_the_right_files() {
 
         // A global save writes the live value, and the value is saved.
         let file = backend.save(context, Scope::Global)?.unwrap();
-        assert_eq!(file, global);
+        assert_eq!(file, Saved::Written(global.clone()));
         assert!(!backend.has_live_at(""));
         let text = fs::read_to_string(&global).unwrap();
         assert!(text.contains("order = \"size\""), "{text}");
@@ -329,10 +330,13 @@ fn saves_clears_and_reverts_write_the_right_files() {
         // Clear removes the nearest file's key.
         assert_eq!(
             backend.clear(context, "diff.context")?.unwrap(),
-            Some(local.clone())
+            Cleared::Done(Some(local.clone()))
         );
         assert_eq!(backend.get("diff.context"), Some(Value::Int(3)));
-        assert_eq!(backend.clear(context, "diff.context")?.unwrap(), None);
+        assert_eq!(
+            backend.clear(context, "diff.context")?.unwrap(),
+            Cleared::Done(None)
+        );
         Ok(())
     });
 }
@@ -1057,16 +1061,20 @@ fn inline_groups_show_in_their_parent() {
     assert!(!panel_open(&mut harness));
 }
 
+/// The paths and the context value of each notification.
+type Heard = Vec<(Vec<String>, u32)>;
+
 #[test]
 fn a_write_can_read_the_store_and_a_callback_can_revert() {
     let store: Store<Root> = Store::default();
     let root = store.handle();
     let reader = root.clone();
     let backend = store.backend();
-    let heard: Rc<RefCell<Vec<Vec<String>>>> = Rc::default();
+    let heard: Rc<RefCell<Heard>> = Rc::default();
     let log = Rc::clone(&heard);
     root.subscribe("diff", move |context, root, changes: &Changes| {
-        log.borrow_mut().push(changes.paths().to_vec());
+        log.borrow_mut()
+            .push((changes.paths().to_vec(), root.diff.context));
         // A revert during a notification waits for the round to end.
         if root.diff.context == 9 {
             backend.revert(context, Some("diff"))?;
@@ -1084,10 +1092,164 @@ fn a_write_can_read_the_store_and_a_callback_can_revert() {
     assert_eq!(
         *heard.borrow(),
         vec![
-            vec!["diff.context".to_string()],
-            vec!["diff.context".to_string()]
+            (vec!["diff.context".to_string()], 9),
+            (vec!["diff.context".to_string()], 3)
         ]
     );
+}
+
+/// Run `f` in the context of a fresh harness, and return the harness to
+/// read its notices.
+fn in_harness(f: impl FnOnce(&mut dyn Context) -> Result<()>) -> Harness {
+    let mut harness = Harness::new(Blank).expect("the harness builds");
+    harness
+        .with_root_widget_context(|_: &mut Blank, context| f(context))
+        .expect("the closure succeeds");
+    harness
+}
+
+/// Return the messages of the harness's notices.
+fn notices(harness: &Harness) -> Vec<String> {
+    harness
+        .canopy
+        .notices()
+        .iter()
+        .map(|notice| notice.message.clone())
+        .collect()
+}
+
+#[test]
+fn regression_a_subscriber_update_then_revert_ends_reverted() {
+    let store: Store<Root> = Store::default();
+    let root = store.handle();
+    let writer = root.clone();
+    let backend = store.backend();
+    root.subscribe("diff.tab_width", move |context, root, _| {
+        if root.diff.tab_width == 8 {
+            writer.update(context, |root| root.diff.context = 1)?;
+            backend.revert(context, Some("diff.context"))?;
+        }
+        Ok(())
+    });
+    with_context(|context| root.update(context, |root| root.diff.tab_width = 8));
+    assert_eq!(root.get().diff.tab_width, 8);
+    assert_eq!(root.get().diff.context, 3, "the revert follows the update");
+}
+
+#[test]
+fn regression_a_save_in_a_round_writes_the_queued_writes() {
+    let directory = tempfile::tempdir().unwrap();
+    let global = options_file(directory.path(), "");
+    let store: Store<Root> = Store::load(&Layout {
+        global: Some(global.clone()),
+        ..Layout::default()
+    });
+    let root = store.handle();
+    let writer = root.clone();
+    let backend = store.backend();
+    let saved = Rc::new(RefCell::new(None));
+    let result = Rc::clone(&saved);
+    root.subscribe("diff.tab_width", move |context, root, _| {
+        if root.diff.tab_width == 8 {
+            writer.update(context, |root| root.diff.context = 1)?;
+            *result.borrow_mut() = Some(backend.save(context, Scope::Global)?);
+        }
+        Ok(())
+    });
+    let harness = in_harness(|context| root.update(context, |root| root.diff.tab_width = 8));
+    let text = fs::read_to_string(&global).unwrap();
+    assert!(text.contains("tab_width = 8"), "{text}");
+    assert!(text.contains("context = 1"), "{text}");
+    assert_eq!(
+        store.backend().source("diff.context"),
+        Source::File {
+            path: global,
+            scope: Scope::Global,
+        }
+    );
+    assert_eq!(*saved.borrow(), Some(Ok(Saved::Deferred)));
+    let notices = notices(&harness);
+    assert!(
+        notices.iter().any(|notice| notice.starts_with("Saved to")),
+        "{notices:?}"
+    );
+}
+
+#[test]
+fn a_save_that_fails_in_a_round_posts_its_error() {
+    let store: Store<Root> = Store::default();
+    let root = store.handle();
+    let backend = store.backend();
+    root.subscribe("diff", move |context, _, _| {
+        backend.save(context, Scope::Local)?.ok();
+        Ok(())
+    });
+    let harness = in_harness(|context| root.update(context, |root| root.diff.context = 1));
+    let notices = notices(&harness);
+    assert!(
+        notices
+            .iter()
+            .any(|notice| notice.contains("no local directory")),
+        "{notices:?}"
+    );
+}
+
+#[test]
+fn a_deferred_clear_follows_a_queued_save() {
+    let directory = tempfile::tempdir().unwrap();
+    let global = options_file(directory.path(), "");
+    let store: Store<Root> = Store::load(&Layout {
+        global: Some(global.clone()),
+        ..Layout::default()
+    });
+    let root = store.handle();
+    let backend = store.backend();
+    let cleared = Rc::new(RefCell::new(None));
+    let result = Rc::clone(&cleared);
+    root.subscribe("diff.context", move |context, root, _| {
+        if root.diff.context == 1 {
+            backend.save(context, Scope::Global)?.unwrap();
+            *result.borrow_mut() = Some(backend.clear(context, "diff.context")?);
+        }
+        Ok(())
+    });
+    let harness = in_harness(|context| root.update(context, |root| root.diff.context = 1));
+    assert_eq!(*cleared.borrow(), Some(Ok(Cleared::Deferred)));
+    // The save wrote the value, and the clear then removed it.
+    let text = fs::read_to_string(&global).unwrap();
+    assert!(!text.contains("context"), "{text}");
+    assert_eq!(root.get().diff.context, 3);
+    let notices = notices(&harness);
+    assert!(
+        notices
+            .iter()
+            .any(|notice| notice.starts_with("Cleared diff.context from")),
+        "{notices:?}"
+    );
+}
+
+#[test]
+fn regression_two_subscribers_in_one_round_see_the_same_store() {
+    let store: Store<Root> = Store::default();
+    let root = store.handle();
+    let backend = store.backend();
+    let seen: Rc<RefCell<Vec<u32>>> = Rc::default();
+    let first = Rc::clone(&seen);
+    let reader = root.clone();
+    root.subscribe("diff", move |context, root, _| {
+        first.borrow_mut().push(root.diff.context);
+        if root.diff.context == 1 {
+            backend.revert(context, None)?;
+        }
+        Ok(())
+    });
+    let second = Rc::clone(&seen);
+    root.subscribe("diff", move |_, _, _| {
+        second.borrow_mut().push(reader.get().diff.context);
+        Ok(())
+    });
+    with_context(|context| root.update(context, |root| root.diff.context = 1));
+    assert_eq!(*seen.borrow(), [1, 1, 3, 3]);
 }
 
 #[test]
@@ -1243,7 +1405,10 @@ fn regression_quick_mode_keeps_a_changed_set_open_under_the_save_level() {
     keys(&mut harness, &["S"]);
     assert!(screen(&mut harness).contains("save"));
     keys(&mut harness, &["Esc"]);
-    assert!(panel_open(&mut harness), "Esc on the save level closed the panel");
+    assert!(
+        panel_open(&mut harness),
+        "Esc on the save level closed the panel"
+    );
     let text = screen(&mut harness);
     assert!(!text.contains("save"), "{text}");
     // Leaving the changed set ends the quick change.

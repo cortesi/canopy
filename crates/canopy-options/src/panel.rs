@@ -26,7 +26,7 @@ use canopy_widgets::{
 use crate::{
     file::Scope,
     model::{Item, Kind, Leaf, Value, assign_keys, join_path, panel_items},
-    store::{Backend, Source, StoreError},
+    store::{Backend, Cleared, Saved, Source, StoreError},
     widget::{Options, display_value, source_mark, step_value},
 };
 
@@ -1252,11 +1252,18 @@ impl PanelBody {
             }
             Intent::Clear => {
                 if let Some(path) = self.selected_leaf() {
-                    let result = self.backend.clear(context, &path)?;
-                    report(context, result, |file| match file {
-                        Some(file) => format!("Cleared from {}", display_path(&file)),
-                        None => "No option file sets this option".into(),
-                    })?;
+                    // A deferred clear posts its own notice when it runs.
+                    match self.backend.clear(context, &path)? {
+                        Ok(Cleared::Deferred) => {}
+                        result => report(context, result, |cleared| match cleared {
+                            Cleared::Done(Some(file)) => {
+                                format!("Cleared from {}", display_path(&file))
+                            }
+                            Cleared::Done(None) | Cleared::Deferred => {
+                                "No option file sets this option".into()
+                            }
+                        })?,
+                    }
                 }
             }
             Intent::Increase => self.step(context, 1)?,
@@ -1353,9 +1360,13 @@ impl PanelBody {
         self.retitle(context)?;
         let result = self.backend.save(context, scope)?;
         let saved = result.is_ok();
-        report(context, result, |file| {
-            format!("Saved to {}", display_path(&file))
-        })?;
+        // A deferred save posts its own notice when it runs.
+        if result != Ok(Saved::Deferred) {
+            report(context, result, |saved| match saved {
+                Saved::Written(file) => format!("Saved to {}", display_path(&file)),
+                Saved::Deferred => String::new(),
+            })?;
+        }
         if saved {
             self.changed(context)?;
         }
@@ -1446,7 +1457,7 @@ fn control(leaf: &Leaf, value: &Value) -> (String, bool) {
 }
 
 /// Return `path` for display, with the home directory as `~`.
-fn display_path(path: &Path) -> String {
+pub fn display_path(path: &Path) -> String {
     Home::from_env().path(path)
 }
 

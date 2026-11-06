@@ -18,8 +18,12 @@ use crate::{
     file::Scope,
     model::{Kind, Leaf, OptionGroup, Value},
     panel::{self, OptionsPanel},
-    store::{Backend, Source, Store, StoreError},
+    store::{Backend, Cleared, Saved, Source, Store, StoreError},
 };
+
+/// What `options.save` and `options.clear` return for a change that waits
+/// for a notification round.
+const DEFERRED: &str = "deferred";
 
 /// Builds the application child when the widget mounts.
 type PendingApp = Box<dyn FnOnce(&mut dyn Context, NodeId) -> Result<NodeId>>;
@@ -188,24 +192,38 @@ impl Options {
         self.backend.revert(context, path.as_deref())
     }
 
-    /// Remove an option from the nearest option file that sets it.
+    /// Remove an option from the nearest option file that sets it. A clear
+    /// that a subscriber of a change makes waits until the change's
+    /// subscribers have run, and posts its outcome as a notice.
     /// @param path The dotted path of the option.
-    /// @return The file that changed, or nil if no file sets the option.
+    /// @return The file that changed, nil if no file sets the option, or
+    /// "deferred" for a clear that waits.
     #[command]
     pub fn clear(&mut self, context: &mut dyn Context, path: String) -> Result<Option<String>> {
         self.leaf(&path)?;
-        let file = self.backend.clear(context, &path)?.map_err(store_error)?;
-        Ok(file.map(|file| file.display().to_string()))
+        Ok(
+            match self.backend.clear(context, &path)?.map_err(store_error)? {
+                Cleared::Done(file) => file.map(|file| file.display().to_string()),
+                Cleared::Deferred => Some(DEFERRED.to_string()),
+            },
+        )
     }
 
-    /// Save the live values to the global or the local option file.
+    /// Save the live values to the global or the local option file. A save
+    /// that a subscriber of a change makes waits until the change's
+    /// subscribers have run, and posts its outcome as a notice.
     /// @param scope "global" or "local".
-    /// @return The file that the save wrote.
+    /// @return The file that the save wrote, or "deferred" for a save that
+    /// waits.
     #[command]
     pub fn save(&mut self, context: &mut dyn Context, scope: String) -> Result<String> {
         let scope = parse_scope(&scope)?;
-        let file = self.backend.save(context, scope)?.map_err(store_error)?;
-        Ok(file.display().to_string())
+        Ok(
+            match self.backend.save(context, scope)?.map_err(store_error)? {
+                Saved::Written(file) => file.display().to_string(),
+                Saved::Deferred => DEFERRED.to_string(),
+            },
+        )
     }
 
     /// Return the layer that sets the value of an option.

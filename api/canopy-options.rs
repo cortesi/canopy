@@ -515,9 +515,12 @@ impl Options {
 }
 
 impl Options {
-    /// Remove an option from the nearest option file that sets it.
+    /// Remove an option from the nearest option file that sets it. A clear
+    /// that a subscriber of a change makes waits until the change's
+    /// subscribers have run, and posts its outcome as a notice.
     /// @param path The dotted path of the option.
-    /// @return The file that changed, or nil if no file sets the option.
+    /// @return The file that changed, nil if no file sets the option, or
+    /// "deferred" for a clear that waits.
     pub fn clear(
         &mut self,
         context: &mut dyn Context,
@@ -575,9 +578,12 @@ impl Options {
         path: Option<String>,
     ) -> canopy::error::Result<()>;
 
-    /// Save the live values to the global or the local option file.
+    /// Save the live values to the global or the local option file. A save
+    /// that a subscriber of a change makes waits until the change's
+    /// subscribers have run, and posts its outcome as a notice.
     /// @param scope "global" or "local".
-    /// @return The file that the save wrote.
+    /// @return The file that the save wrote, or "deferred" for a save that
+    /// waits.
     pub fn save(
         &mut self,
         context: &mut dyn Context,

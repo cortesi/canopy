@@ -139,6 +139,12 @@ The name is the field's name, or empty for a flattened field. A handle can:
 - `update` the group with a closure, as a live change.
 - `subscribe` to the changes at or below a path.
 
+Subscribers of one change run in a round, and see the same store. A change
+that a subscriber makes, such as an update, a revert, a save, or a clear,
+waits until the round ends, and the changes then run in the order of their
+calls. A save or a clear that waits returns `"deferred"`, and posts its
+outcome or its error as a notice when it runs.
+
 ## Following options in a widget
 
 A widget keeps the values it shows in fields of its own. A `Follower` links
