@@ -315,19 +315,69 @@ enum Job {
     Copy(CopyRequest),
 }
 
+/// What a lane's worker runs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Worker {
+    /// The lane occupies no worker.
+    #[default]
+    Idle,
+    /// A preparation.
+    Preparing,
+    /// A FIFO copy.
+    Copying,
+}
+
+/// Where a lane's last preparation stands with its owner. A copy may run in
+/// any of these.
+#[derive(Debug, Default)]
+enum Prep {
+    /// No result waits, so the next preparation may start.
+    #[default]
+    Idle,
+    /// A prepared result waits for the owner.
+    Completed(Box<WorkResult>),
+    /// The owner took a result and has yet to acknowledge its publication.
+    AwaitingAck,
+}
+
+impl Prep {
+    /// A preparation finished with `result`.
+    fn complete(&mut self, result: WorkResult) {
+        *self = Self::Completed(Box::new(result));
+    }
+
+    /// The owner takes the completed result, which then awaits its
+    /// acknowledgement.
+    fn take(&mut self) -> Option<WorkResult> {
+        match take(self) {
+            Self::Completed(result) => {
+                *self = Self::AwaitingAck;
+                Some(*result)
+            }
+            other => {
+                *self = other;
+                None
+            }
+        }
+    }
+
+    /// The owner acknowledges a taken result.
+    fn acknowledge(&mut self) {
+        if matches!(self, Self::AwaitingAck) {
+            *self = Self::Idle;
+        }
+    }
+}
+
 #[derive(Default)]
 /// One reader's replaceable preparation and independent FIFO copies.
 struct Lane {
     /// Latest replaceable preparation not yet started.
     desired: Option<WorkRequest>,
-    /// Whether this lane currently occupies a worker.
-    running: bool,
-    /// Whether the running job is a FIFO copy.
-    running_copy: bool,
-    /// Whether a taken preparation still awaits publication disposition.
-    awaiting_ack: bool,
-    /// At most one prepared result awaiting the owner.
-    completed: Option<WorkResult>,
+    /// What this lane's worker runs.
+    worker: Worker,
+    /// Where the last preparation stands with the owner.
+    prep: Prep,
     /// Whether this lane already appears in the ready queue.
     queued: bool,
     /// Non-owning runtime wake for the registered node.
@@ -338,6 +388,19 @@ struct Lane {
     copy_completed: VecDeque<CopyCompletion>,
     /// Alternates copy and preparation when both can start.
     prefer_copy: bool,
+}
+
+impl Lane {
+    /// Whether the desired preparation may start: no earlier result waits
+    /// for the owner.
+    fn can_prepare(&self) -> bool {
+        matches!(self.prep, Prep::Idle) && self.desired.is_some()
+    }
+
+    /// Whether the lane has a job to start on a free worker.
+    fn runnable(&self) -> bool {
+        self.worker == Worker::Idle && (!self.copies.is_empty() || self.can_prepare())
+    }
 }
 
 /// Shared queue bookkeeping, mutated only while holding the service mutex.
@@ -385,10 +448,8 @@ impl Shared {
             return;
         }
         if let Some(lane) = state.lanes.get_mut(&id)
-            && !lane.running
             && !lane.queued
-            && ((!lane.copies.is_empty())
-                || (!lane.awaiting_ack && lane.completed.is_none() && lane.desired.is_some()))
+            && lane.runnable()
         {
             lane.queued = true;
             state.ready.push_back(id);
@@ -405,11 +466,10 @@ impl Shared {
                 continue;
             };
             lane.queued = false;
-            if lane.running {
+            if lane.worker != Worker::Idle {
                 continue;
             }
-            let can_prepare =
-                !lane.awaiting_ack && lane.completed.is_none() && lane.desired.is_some();
+            let can_prepare = lane.can_prepare();
             let job = if !lane.copies.is_empty() && (lane.prefer_copy || !can_prepare) {
                 lane.prefer_copy = false;
                 Job::Copy(lane.copies.pop_front().expect("queued copy"))
@@ -419,8 +479,10 @@ impl Shared {
             } else {
                 continue;
             };
-            lane.running = true;
-            lane.running_copy = matches!(&job, Job::Copy(_));
+            lane.worker = match &job {
+                Job::Copy(_) => Worker::Copying,
+                Job::Prepare(_) => Worker::Preparing,
+            };
             state.running += 1;
             return Some(HeldWork {
                 shared: self.clone(),
@@ -438,8 +500,8 @@ impl Shared {
             let mut state = self.lock();
             state.running -= 1;
             if let Some(lane) = state.lanes.get_mut(&id) {
-                lane.running = false;
-                lane.completed = Some(result);
+                lane.worker = Worker::Idle;
+                lane.prep.complete(result);
                 let wake = lane.wake.clone();
                 Self::queue(&mut state, id);
                 wake
@@ -461,8 +523,7 @@ impl Shared {
             state.running -= 1;
             let stopped = state.stopped;
             if let Some(lane) = state.lanes.get_mut(&id) {
-                lane.running = false;
-                lane.running_copy = false;
+                lane.worker = Worker::Idle;
                 lane.copy_completed
                     .push_back(CopyCompletion { result, reserved });
                 if stopped {
@@ -515,7 +576,7 @@ impl Shared {
                 .filter_map(|lane| {
                     lane.desired = None;
                     lane.queued = false;
-                    if !lane.running_copy {
+                    if lane.worker != Worker::Copying {
                         Self::cancel_copies(lane);
                     }
                     lane.wake.clone()
@@ -685,7 +746,7 @@ impl MarkdownExecutor {
             completed: state
                 .lanes
                 .values()
-                .filter(|lane| lane.completed.is_some())
+                .filter(|lane| matches!(lane.prep, Prep::Completed(_)))
                 .count(),
             ready: state.ready.len(),
             worker_limit: self.service.shared.options.worker_count,
@@ -761,12 +822,7 @@ impl WorkHandle {
         // Taking a result makes nothing runnable: the lane awaits its
         // acknowledgement, which signals workers instead.
         let mut state = self.shared.lock();
-        let lane = state.lanes.get_mut(&self.id)?;
-        let result = lane.completed.take();
-        if result.is_some() {
-            lane.awaiting_ack = true;
-        }
-        result
+        state.lanes.get_mut(&self.id)?.prep.take()
     }
 
     /// Releases the result handshake after publication or rejection. Any queued
@@ -791,7 +847,7 @@ impl WorkHandle {
             let Some(lane) = state.lanes.get_mut(&self.id) else {
                 return;
             };
-            lane.awaiting_ack = false;
+            lane.prep.acknowledge();
             if let Some(desired) = &mut lane.desired {
                 desired.previous = previous;
                 desired.previous_source = source;
@@ -858,10 +914,9 @@ impl WorkHandle {
     /// Whether this lane retains work, results, or a publication handshake.
     pub fn is_pending(&self) -> bool {
         self.shared.lock().lanes.get(&self.id).is_some_and(|lane| {
-            lane.running
-                || lane.awaiting_ack
+            lane.worker != Worker::Idle
+                || !matches!(lane.prep, Prep::Idle)
                 || lane.desired.is_some()
-                || lane.completed.is_some()
                 || !lane.copies.is_empty()
                 || !lane.copy_completed.is_empty()
         })
@@ -1748,7 +1803,7 @@ mod tests {
         let (state, timeout) = shared
             .ready
             .wait_timeout_while(state, Duration::from_secs(5), |state| {
-                state.lanes[&handle.id].completed.is_none()
+                !matches!(state.lanes[&handle.id].prep, Prep::Completed(_))
             })
             .unwrap();
         assert!(!timeout.timed_out(), "worker did not complete");
@@ -1757,6 +1812,88 @@ mod tests {
         executor.join();
         assert_eq!(handle.submit(request(2)), Err(SubmitError::Shutdown));
         assert!(executor.stats().stopped);
+    }
+
+    /// A failed result of `request(generation)`.
+    fn result(generation: u64) -> WorkResult {
+        let request = request(generation);
+        WorkResult {
+            source: request.source.clone(),
+            tags: request.tags(),
+            result: Err(WorkError::Cancelled),
+            search: None,
+        }
+    }
+
+    #[test]
+    fn a_preparation_result_waits_for_its_owner_and_then_its_acknowledgement() {
+        let name = |prep: &Prep| match prep {
+            Prep::Idle => "idle",
+            Prep::Completed(_) => "completed",
+            Prep::AwaitingAck => "awaiting",
+        };
+        let states = || {
+            [
+                Prep::Idle,
+                Prep::Completed(Box::new(result(1))),
+                Prep::AwaitingAck,
+            ]
+        };
+        // (completion, take and whether it took, acknowledgement)
+        let expected = [
+            ("completed", ("idle", false), "idle"),
+            ("completed", ("awaiting", true), "completed"),
+            ("completed", ("awaiting", false), "idle"),
+        ];
+        for (index, (complete, (take, took), acknowledge)) in expected.into_iter().enumerate() {
+            let state = || states().into_iter().nth(index).unwrap();
+            let before = name(&state());
+            let mut prep = state();
+            prep.complete(result(2));
+            assert_eq!(name(&prep), complete, "a completion from {before}");
+            let mut prep = state();
+            assert_eq!(prep.take().is_some(), took, "a take from {before}");
+            assert_eq!(name(&prep), take, "a take from {before}");
+            let mut prep = state();
+            prep.acknowledge();
+            assert_eq!(name(&prep), acknowledge, "an acknowledgement from {before}");
+        }
+    }
+
+    #[test]
+    fn a_copy_runs_beside_a_waiting_preparation_result() {
+        let (executor, driver) = manual(1, 1);
+        let handle = executor.register(None).unwrap();
+        for taken in [false, true] {
+            handle.submit(request(1)).unwrap();
+            driver.start_next().unwrap().finish();
+            if taken {
+                assert!(handle.take_completed().is_some());
+            }
+            // A newer preparation waits for the result, but a copy runs.
+            handle.submit(request(2)).unwrap();
+            handle
+                .submit_copy(1, CopyInput::Text("copy".into()), 4)
+                .unwrap();
+            let copy = driver.start_next().expect("the copy runs");
+            assert_eq!(copy.copy_id(), Some(1));
+            copy.finish();
+            assert!(driver.start_next().is_none(), "the preparation waits");
+            assert_eq!(
+                handle.take_copy_completed().unwrap().result.unwrap(),
+                "copy"
+            );
+            if !taken {
+                assert_eq!(handle.take_completed().unwrap().tags.generation, 1);
+            }
+            handle.acknowledge(None);
+            let next = driver.start_next().expect("the preparation runs");
+            assert_eq!(next.request().unwrap().generation, 2);
+            next.finish();
+            assert!(handle.take_completed().is_some());
+            handle.acknowledge(None);
+            assert!(!handle.is_pending());
+        }
     }
 
     #[test]

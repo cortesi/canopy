@@ -214,7 +214,7 @@ pub(super) fn state(reader: &Markdown, ctx: &dyn ViewContext) -> Result<ArgValue
         ("edits", number(reader.edits.len())),
         ("locked", ArgValue::Bool(reader.blocks_locked())),
         ("inspector", inspector),
-        ("action_status", text(&reader.action_status)),
+        ("action_status", text(&reader.action_status.to_string())),
         ("failure", optional_text(reader.failure.as_deref())),
         ("search_error", optional_text(reader.matches.error())),
         ("ready", ArgValue::Bool(reader.ready())),
@@ -497,7 +497,7 @@ mod tests {
 
     use canopy::testing::harness::Harness;
 
-    use super::*;
+    use super::{super::ActionStatus, *};
     use crate::{
         MarkdownOptions,
         document::{ParseLimits, parse_document},
@@ -709,7 +709,7 @@ mod tests {
     #[test]
     fn state_before_publication_is_bounded_and_has_no_displayed_revision() {
         let mut reader = reader("PRIVATE WHOLE SOURCE".repeat(100));
-        reader.action_status = "終".repeat(200);
+        reader.action_status = ActionStatus::Failed("終".repeat(200));
         reader.failure = Some("error".repeat(200));
         let mut harness = Harness::builder(reader)
             .register::<Markdown>()

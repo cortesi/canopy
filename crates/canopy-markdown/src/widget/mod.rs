@@ -3,12 +3,12 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, VecDeque},
-    fmt::Display,
+    fmt::{self, Display},
     ops::Range,
     rc::Rc,
     result::Result as StdResult,
     sync::Arc,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use canopy::{
@@ -36,7 +36,7 @@ use canopy_widgets::{
     view_search,
 };
 
-use self::matches::Matches;
+use self::{matches::Matches, submission::Submission};
 use crate::{
     Follow, MarkdownOptions, Mode, ViewType,
     document::{
@@ -167,18 +167,15 @@ pub struct Markdown {
     last_document: Option<Arc<DocumentSnapshot>>,
     /// Byte endpoints preserved when inactive Source geometry is evicted.
     saved_source_selection: Option<(usize, usize)>,
-    /// Whether current source, geometry, or query still needs submission.
-    dirty: bool,
-    /// Optional coalescing deadline for replaceable producer updates.
-    deadline: Option<Instant>,
+    /// Whether current source, geometry, or query still needs submission,
+    /// and the identity of the request the lane last admitted.
+    submission: Submission,
     /// Owner generation used to reject stale view and geometry results.
     generation: u64,
     /// Latest allocated body width observed during render.
     geometry_width: u32,
     /// Block mosaics of the terminal's glyphs, observed during render.
     mosaic: Tier,
-    /// Identity of the most recent admitted replaceable request.
-    last_submitted: Option<(u64, u64, ViewType, GeometryKey, u64, u64)>,
     /// Retained query and explicit matching policy.
     query: SearchQuery,
     /// Monotonic identity of the current query.
@@ -203,10 +200,7 @@ pub struct Markdown {
     /// Bounded immutable effects awaiting host delivery or acknowledgement.
     requests: Requests,
     /// Latest status of an explicitly activated host effect.
-    action_status: String,
-    /// Whether the action status reports a failure or a refusal, which a
-    /// notice reports, so the status row leaves it out.
-    action_failed: bool,
+    action_status: ActionStatus,
     /// Current worker or publication failure, which a notice reports.
     failure: Option<String>,
     /// The failure a notice last reported, so a failure that persists posts
@@ -412,12 +406,10 @@ impl Markdown {
             source_snapshot: None,
             last_document: None,
             saved_source_selection: None,
-            dirty: true,
-            deadline: None,
+            submission: Submission::default(),
             generation: 1,
             geometry_width: 0,
             mosaic: Tier::Full,
-            last_submitted: None,
             query: SearchQuery::default(),
             query_generation: 0,
             matches: Matches::default(),
@@ -428,8 +420,7 @@ impl Markdown {
             resource_asked: 0,
             supplied: Arc::default(),
             requests: Requests::default(),
-            action_status: String::new(),
-            action_failed: false,
+            action_status: ActionStatus::None,
             failure: None,
             failure_reported: None,
             chrome: Rc::new(RefCell::new(ChromeState::default())),
@@ -497,7 +488,7 @@ impl Markdown {
         self.return_position = None;
         self.jumps.clear();
         // An action's status belongs to the document that took it.
-        self.set_action_status(String::new());
+        self.action_status = ActionStatus::None;
         // So do its images, which a new document asks for again.
         self.resource_states.clear();
         self.resource_requests.clear();
@@ -511,7 +502,7 @@ impl Markdown {
         self.failure = None;
         self.last_scroll = None;
         self.generation += 1;
-        self.last_submitted = None;
+        self.submission.invalidate();
         {
             let mut state = self.shared.borrow_mut();
             state.presentation = None;
@@ -565,7 +556,7 @@ impl Markdown {
         if view == self.active {
             self.switching = None;
             self.generation += 1;
-            self.last_submitted = None;
+            self.submission.invalidate();
             return self.schedule(ctx, true);
         }
         let position = self.position(ctx)?;
@@ -575,7 +566,7 @@ impl Markdown {
             minimum_revision: self.displayed_revision(),
         });
         self.generation += 1;
-        self.last_submitted = None;
+        self.submission.invalidate();
         self.failure = None;
         if self.use_cached_view(ctx, view, position)? {
             return Ok(());
@@ -642,8 +633,7 @@ impl Markdown {
             self.restore(ctx, anchor)?;
         }
         if self.query.text.is_empty() {
-            self.dirty = false;
-            self.deadline = None;
+            self.submission.settle();
         } else {
             self.schedule(ctx, true)?;
         }
@@ -767,7 +757,7 @@ impl Markdown {
                 .set_row_numbers(ctx, numbers != LineNumbers::None)?;
         }
         self.generation += 1;
-        self.last_submitted = None;
+        self.submission.invalidate();
         self.schedule(ctx, true)
     }
     /// Center the reader's content, as [`MarkdownOptions::centered`] says,
@@ -1083,7 +1073,7 @@ impl Markdown {
         self.acknowledged = text.len();
         self.failure = None;
         self.generation += 1;
-        self.last_submitted = None;
+        self.submission.invalidate();
         {
             let mut state = self.shared.borrow_mut();
             state.overlays.search.clear();
@@ -1196,7 +1186,7 @@ impl Markdown {
         self.displayed
             .as_ref()
             .is_some_and(|s| s.epoch == self.epoch() && s.revision == self.accepted_revision())
-            && !self.dirty
+            && !self.submission.is_due()
             && !self.lane.as_ref().is_some_and(|lane| lane.is_pending())
             && self.switching.is_none()
             && self.failure.is_none()
@@ -1398,7 +1388,7 @@ impl Markdown {
                 Ok(())
             })?;
         }
-        self.last_submitted = None;
+        self.submission.invalidate();
         self.schedule(ctx, true)
     }
     /// Edit the built-in search field using literal matching.
@@ -1812,7 +1802,7 @@ impl Markdown {
             .reserve(self.epoch(), revision, object, self.options.action_limit)
             .ok_or_else(|| invalid("The host request queue is full"))?;
         self.requests.publish(reserved.id, action);
-        self.set_action_status(status.into());
+        self.action_status = ActionStatus::Busy(status);
         self.wake_publication_host()?;
         Ok(true)
     }
@@ -2276,7 +2266,7 @@ impl Markdown {
             self.requests.cancel(context.id);
             return Err(invalid(error));
         }
-        self.set_action_status("Copying".into());
+        self.action_status = ActionStatus::Busy("Copying");
         self.update_chrome(ctx)
     }
     /// Drain complete immutable requests once. The host performs each action
@@ -2291,7 +2281,7 @@ impl Markdown {
             && context.epoch == self.epoch()
         {
             match reply.outcome {
-                HostOutcome::Success => self.set_action_status(ACTION_DONE.into()),
+                HostOutcome::Success => self.action_status = ActionStatus::Done,
                 HostOutcome::Rejected(reason) => self.refuse_action(ctx, &reason)?,
                 HostOutcome::Failed(reason) => self.fail_action(ctx, &reason)?,
             }
@@ -2299,38 +2289,32 @@ impl Markdown {
         self.update_chrome(ctx)
     }
 
-    /// Record the status of an action that goes on, or that succeeded.
-    fn set_action_status(&mut self, status: String) {
-        self.action_status = status;
-        self.action_failed = false;
-    }
-
     /// Record a failed action, and report it as an error notice.
     fn fail_action(&mut self, ctx: &mut dyn Context, reason: &str) -> Result<()> {
-        self.action_status = format!("Failed: {reason}");
-        self.action_failed = true;
+        self.action_status = ActionStatus::Failed(reason.into());
         ctx.notify(NoticePost::error(reason))
     }
 
     /// Record an action that something refused, and report it as a warning
     /// notice.
     fn refuse_action(&mut self, ctx: &mut dyn Context, reason: &str) -> Result<()> {
-        self.action_status = format!("Rejected: {reason}");
-        self.action_failed = true;
+        self.action_status = ActionStatus::Rejected(reason.into());
         ctx.notify(NoticePost::warning(reason))
     }
 
     /// The status of an action that goes on. The host reports a success in
     /// its own way, and a notice reports a failure, so neither shows.
-    fn action_progress(&self) -> Option<&str> {
-        (!self.action_status.is_empty() && self.action_status != ACTION_DONE && !self.action_failed)
-            .then_some(self.action_status.as_str())
+    fn action_progress(&self) -> Option<&'static str> {
+        match self.action_status {
+            ActionStatus::Busy(status) => Some(status),
+            _ => None,
+        }
     }
 
     /// Latest truthful status of a requested host action.
     #[command]
     pub fn action_status(&self) -> String {
-        self.action_status.clone()
+        self.action_status.to_string()
     }
     /// Whether an inspector is open over the reader.
     pub fn inspector_open(&self) -> bool {
@@ -2361,7 +2345,7 @@ impl Markdown {
     #[command]
     pub fn retry(&mut self, ctx: &mut dyn Context) -> Result<()> {
         self.failure = None;
-        self.last_submitted = None;
+        self.submission.invalidate();
         self.schedule(ctx, true)
     }
 
@@ -2396,12 +2380,8 @@ impl Markdown {
     /// Mark replaceable work dirty and request immediate or coalesced owner
     /// polling.
     fn schedule(&mut self, ctx: &mut dyn Context, immediate: bool) -> Result<()> {
-        self.dirty = true;
-        if immediate {
-            self.deadline = None;
-        } else if self.deadline.is_none() {
-            self.deadline = Some(ctx.now() + self.options.coalesce);
-        }
+        self.submission
+            .schedule(immediate, ctx.now() + self.options.coalesce);
         ctx.request_poll()
     }
     /// Admit the latest source, geometry, query, and published semantic bases.
@@ -2420,8 +2400,7 @@ impl Markdown {
             self.generation,
             self.query_generation,
         );
-        if self.last_submitted == Some(key) {
-            self.dirty = false;
+        if self.submission.dedupe(key) {
             return Ok(());
         }
         let previous = self.shared.borrow().presentation.clone();
@@ -2456,16 +2435,11 @@ impl Markdown {
             return Ok(());
         };
         match lane.submit(request) {
-            Ok(()) => {
-                self.last_submitted = Some(key);
-                self.dirty = false;
-                self.deadline = None;
-            }
+            Ok(()) => self.submission.sent(key),
             Err(error) => {
                 self.failure = Some(error.to_string());
-                self.dirty = true;
-                self.deadline =
-                    Some(ctx.now() + self.options.coalesce.max(Duration::from_millis(1)));
+                self.submission
+                    .refused(ctx.now() + self.options.coalesce.max(Duration::from_millis(1)));
             }
         }
         Ok(())
@@ -2488,8 +2462,7 @@ impl Markdown {
                 .as_ref()
                 .is_some_and(|s| tags.revision < s.minimum_revision)
         {
-            self.dirty = true;
-            self.last_submitted = None;
+            self.submission.resubmit();
             return Ok(());
         }
         let prepared = match result.result {
@@ -2497,7 +2470,7 @@ impl Markdown {
             Err(error) => {
                 self.failure = Some(error.to_string());
                 self.switching = None;
-                self.dirty = false;
+                self.submission.settle();
                 // A commit whose text cannot be laid out ends its slot, and
                 // block steps work on the shown layout again; the text and
                 // the host's queued edits keep the edit.
@@ -2559,8 +2532,7 @@ impl Markdown {
                         })
                     {
                         self.failure = Some(error.to_string());
-                        self.last_submitted = None;
-                        self.dirty = true;
+                        self.submission.resubmit();
                         self.wake_publication_host()?;
                         return Ok(());
                     }
@@ -2619,12 +2591,10 @@ impl Markdown {
                 self.apply_search(ctx, search)?;
             }
         } else {
-            self.dirty = true;
-            self.last_submitted = None;
+            self.submission.resubmit();
         }
         if self.accepted_revision() > self.displayed_revision() {
-            self.dirty = true;
-            self.last_submitted = None;
+            self.submission.resubmit();
         }
         // A republished table drops its marks, which the matches of this
         // publication replace.
@@ -2988,7 +2958,7 @@ impl Markdown {
         };
         let update = if self.switching.is_some() {
             " · Switching"
-        } else if self.displayed_revision() < snapshot.revision || self.dirty {
+        } else if self.displayed_revision() < snapshot.revision || self.submission.is_due() {
             " · Updating"
         } else {
             ""
@@ -3280,8 +3250,7 @@ impl Widget for Markdown {
                 self.geometry_width = width;
                 self.mosaic = mosaic;
                 self.generation += 1;
-                self.dirty = true;
-                self.last_submitted = None;
+                self.submission.resubmit();
                 if let Some(wake) = &self.wake {
                     let _ = wake.wake()?;
                 }
@@ -3387,7 +3356,7 @@ impl Widget for Markdown {
             match copy.result {
                 Ok(text) => {
                     if self.requests.publish(copy.id, HostAction::CopyText(text)) {
-                        self.set_action_status("Copy ready".into());
+                        self.action_status = ActionStatus::Busy("Copy ready");
                         self.wake_publication_host()?;
                     }
                 }
@@ -3407,8 +3376,8 @@ impl Widget for Markdown {
             }
             self.failure_reported.clone_from(&self.failure);
         }
-        if self.dirty {
-            if let Some(deadline) = self.deadline
+        if self.submission.is_due() {
+            if let Some(deadline) = self.submission.deadline()
                 && deadline > ctx.now()
             {
                 self.update_chrome(ctx)?;
@@ -3417,7 +3386,7 @@ impl Widget for Markdown {
             self.submit_work(ctx)?;
         }
         self.update_chrome(ctx)?;
-        Ok(if self.dirty && self.geometry_width > 0 {
+        Ok(if self.submission.is_due() && self.geometry_width > 0 {
             Some(self.options.coalesce.max(Duration::from_millis(1)))
         } else {
             None
@@ -3428,8 +3397,7 @@ impl Widget for Markdown {
             drop(open.handle.wake());
         }
         self.lane = None;
-        self.last_submitted = None;
-        self.dirty = true;
+        self.submission.resubmit();
     }
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Event::Mouse(event) = event {
@@ -3595,8 +3563,33 @@ fn match_bytes(state: &SurfaceState) -> Vec<usize> {
         .collect()
 }
 
-/// The action status after the host performs an action.
-const ACTION_DONE: &str = "Done";
+/// The status of the latest host action that the reader asked for.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+enum ActionStatus {
+    /// No action, or one of a replaced document.
+    #[default]
+    None,
+    /// The action goes on, or its result waits for the host.
+    Busy(&'static str),
+    /// The host performed it.
+    Done,
+    /// It failed, for this reason, which a notice reports.
+    Failed(String),
+    /// Something refused it, for this reason, which a notice reports.
+    Rejected(String),
+}
+
+impl Display for ActionStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::None => Ok(()),
+            Self::Busy(status) => f.write_str(status),
+            Self::Done => f.write_str("Done"),
+            Self::Failed(reason) => write!(f, "Failed: {reason}"),
+            Self::Rejected(reason) => write!(f, "Rejected: {reason}"),
+        }
+    }
+}
 
 /// The reader's default keys, which a host takes with
 /// `markdown.default_bindings()`, or replaces with its own.
@@ -3693,6 +3686,7 @@ fn local_display(link: &LocalLink) -> String {
 
 mod matches;
 mod slot;
+mod submission;
 
 #[cfg(test)]
 mod cursor_tests;

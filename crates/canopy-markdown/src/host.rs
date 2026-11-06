@@ -1,9 +1,6 @@
 //! Immutable, explicitly activated host actions and bounded reply tracking.
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
+use std::{collections::BTreeMap, mem, sync::Arc};
 
 use image::RgbaImage;
 
@@ -114,17 +111,25 @@ pub(crate) struct ActionContext {
     pub object: Option<u64>,
 }
 
+/// Where a reserved request stands.
+#[derive(Debug)]
+enum Stage {
+    /// Reserved while its action, such as a copy, prepares.
+    Reserved,
+    /// Ready for the host.
+    Ready(HostRequest),
+    /// Drained by the host, and awaiting its reply.
+    Delivered,
+}
+
 /// A bounded queue with exactly-once draining and duplicate-reply rejection.
 #[derive(Default)]
 pub(crate) struct Requests {
     /// Last allocated identity.
     next: u64,
-    /// Requests ready for the host.
-    ready: BTreeMap<u64, HostRequest>,
-    /// Drained requests awaiting host acknowledgement.
-    delivered: BTreeSet<u64>,
-    /// Reserved, ready, and delivered requests that still await completion.
-    pending: BTreeMap<u64, ActionContext>,
+    /// Each request that awaits completion, in activation order, with where
+    /// it stands.
+    pending: BTreeMap<u64, (ActionContext, Stage)>,
 }
 
 impl Requests {
@@ -146,73 +151,64 @@ impl Requests {
             revision,
             object,
         };
-        self.pending.insert(context.id, context);
+        self.pending.insert(context.id, (context, Stage::Reserved));
         Some(context)
     }
 
     /// Finish a reserved request. Returns false after replacement or
-    /// cancellation.
+    /// cancellation, or for a request already finished.
     pub fn publish(&mut self, id: u64, action: HostAction) -> bool {
-        let Some(context) = self.pending.get(&id) else {
+        let Some((context, stage @ Stage::Reserved)) = self.pending.get_mut(&id) else {
             return false;
         };
-        if self.delivered.contains(&id) || self.ready.contains_key(&id) {
-            return false;
-        }
-        self.ready.insert(
+        *stage = Stage::Ready(HostRequest {
             id,
-            HostRequest {
-                id,
-                epoch: context.epoch,
-                revision: context.revision,
-                object: context.object,
-                action,
-            },
-        );
+            epoch: context.epoch,
+            revision: context.revision,
+            object: context.object,
+            action,
+        });
         true
     }
 
     /// Forget failed serialization without reporting a successful copy.
     pub fn cancel(&mut self, id: u64) {
         self.pending.remove(&id);
-        self.ready.remove(&id);
-        self.delivered.remove(&id);
     }
 
-    /// Remove each action at most once for the host to execute.
+    /// Remove each action at most once for the host to execute, in
+    /// activation order: a request still reserved holds back those after it.
     pub fn take(&mut self, limit: usize) -> Vec<HostRequest> {
         let mut output = Vec::new();
-        for id in self
+        for (_, stage) in self
             .pending
-            .keys()
-            .filter(|id| !self.delivered.contains(id))
-            .copied()
+            .values_mut()
+            .filter(|(_, stage)| !matches!(stage, Stage::Delivered))
             .take(limit)
-            .collect::<Vec<_>>()
         {
-            let Some(request) = self.ready.remove(&id) else {
-                break;
-            };
-            self.delivered.insert(id);
-            output.push(request);
+            match mem::replace(stage, Stage::Delivered) {
+                Stage::Ready(request) => output.push(request),
+                held => {
+                    *stage = held;
+                    break;
+                }
+            }
         }
         output
     }
 
     /// Match one reply; duplicate and canceled replies are ignored.
     pub fn complete(&mut self, id: u64) -> Option<ActionContext> {
-        if !self.delivered.remove(&id) {
+        if !matches!(self.pending.get(&id), Some((_, Stage::Delivered))) {
             return None;
         }
-        self.pending.remove(&id)
+        self.pending.remove(&id).map(|(context, _)| context)
     }
 
     /// Cancel undelivered work at document replacement, preserving the
     /// identifier sequence.
     pub fn replace(&mut self) {
-        self.ready.clear();
         self.pending.clear();
-        self.delivered.clear();
     }
 }
 
@@ -237,6 +233,53 @@ mod tests {
         let cancelled = requests.reserve(1, 2, None, 3).unwrap();
         requests.cancel(cancelled.id);
         assert!(requests.take(3).is_empty());
+    }
+
+    #[test]
+    fn each_event_moves_each_stage() {
+        let action = || HostAction::CopyText("text".into());
+        // A reserved request publishes once, and is taken once, and its reply
+        // completes it once.
+        let mut requests = Requests::default();
+        let id = requests.reserve(1, 1, None, 4).unwrap().id;
+        assert!(
+            requests.complete(id).is_none(),
+            "a reserved request has no reply"
+        );
+        assert!(requests.publish(id, action()));
+        assert!(
+            !requests.publish(id, action()),
+            "a ready request publishes once"
+        );
+        assert!(
+            requests.complete(id).is_none(),
+            "a ready request has no reply"
+        );
+        assert_eq!(requests.take(4).len(), 1);
+        assert!(
+            !requests.publish(id, action()),
+            "a delivered request publishes once"
+        );
+        assert!(
+            requests.take(4).is_empty(),
+            "a delivered request is taken once"
+        );
+        assert_eq!(requests.complete(id).map(|context| context.id), Some(id));
+        assert!(requests.complete(id).is_none(), "a reply completes once");
+        // A cancel in any stage forgets the request.
+        for stage in 0..3 {
+            let id = requests.reserve(1, 1, None, 4).unwrap().id;
+            if stage > 0 {
+                requests.publish(id, action());
+            }
+            if stage > 1 {
+                requests.take(4);
+            }
+            requests.cancel(id);
+            assert!(!requests.publish(id, action()), "stage {stage}");
+            assert!(requests.take(4).is_empty(), "stage {stage}");
+            assert!(requests.complete(id).is_none(), "stage {stage}");
+        }
     }
 
     #[test]

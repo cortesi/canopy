@@ -97,7 +97,7 @@ fn settle(harness: &mut Harness, manual: &ManualExecutor) {
             reader.active,
             reader.accepted_revision(),
             reader.displayed_revision(),
-            reader.dirty,
+            reader.submission.is_due(),
             reader.failure,
             reader.switching.is_some()
         )
@@ -3133,6 +3133,19 @@ fn a_kept_position_over_failed_or_empty_matches_makes_none_current() {
             assert_eq!(reader.search_error().is_some(), failed, "{next:?}");
             assert_eq!(reader.shared.borrow().overlays.search_current, None);
         });
+    }
+}
+
+#[test]
+fn an_action_status_reads_as_its_state() {
+    for (status, shown) in [
+        (ActionStatus::None, ""),
+        (ActionStatus::Busy("Copying"), "Copying"),
+        (ActionStatus::Done, "Done"),
+        (ActionStatus::Failed("no room".into()), "Failed: no room"),
+        (ActionStatus::Rejected("no".into()), "Rejected: no"),
+    ] {
+        assert_eq!(status.to_string(), shown);
     }
 }
 
