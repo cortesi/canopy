@@ -22,6 +22,14 @@ use crate::{
 /// Most ready input events one turn takes before it renders.
 const INPUT_BATCH_LIMIT: usize = 256;
 
+/// What ended a batch early, held for the next call.
+enum Held {
+    /// A framework wake.
+    Wake,
+    /// A stream error, met after the input of its batch.
+    Error(error::Error),
+}
+
 /// Simple event source wrapper for receiving events.
 ///
 /// The run loop takes one event, then drains the input already waiting into
@@ -31,11 +39,8 @@ pub(super) struct EventSource<S> {
     terminal: S,
     /// Framework event receiver channel.
     internal: mpsc::UnboundedReceiver<AdapterEvent>,
-    /// Framework wake that ended the last batch, returned by the next call.
-    pending: Option<AdapterEvent>,
-    /// Stream error met while draining, returned by the next call after its
-    /// batch.
-    deferred_error: Option<error::Error>,
+    /// What ended the last batch, which the next call returns first.
+    held: Option<Held>,
     /// Alternate terminal and framework input when both remain ready.
     prefer_internal: bool,
 }
@@ -49,8 +54,7 @@ where
         Self {
             terminal,
             internal,
-            pending: None,
-            deferred_error: None,
+            held: None,
             prefer_internal: false,
         }
     }
@@ -106,13 +110,11 @@ where
     /// Await the next event, returning a held stream error or framework wake
     /// first.
     async fn next(&mut self) -> Result<AdapterEvent> {
-        if let Some(error) = self.deferred_error.take() {
-            return Err(error);
+        match self.held.take() {
+            Some(Held::Wake) => Ok(AdapterEvent::Wake),
+            Some(Held::Error(error)) => Err(error),
+            None => self.next_uncoalesced().await,
         }
-        if let Some(event) = self.pending.take() {
-            return Ok(event);
-        }
-        self.next_uncoalesced().await
     }
 
     /// Await the next unit of work: a framework wake, or a batch of input.
@@ -148,7 +150,7 @@ where
             let next = match self.poll_uncoalesced(cx) {
                 Poll::Ready(Ok(event)) => event,
                 Poll::Ready(Err(error)) => {
-                    self.deferred_error = Some(error);
+                    self.held = Some(Held::Error(error));
                     return;
                 }
                 Poll::Pending => return,
@@ -156,7 +158,7 @@ where
             match next {
                 AdapterEvent::Input(event) => push_coalesced(batch, event),
                 AdapterEvent::Wake => {
-                    self.pending = Some(AdapterEvent::Wake);
+                    self.held = Some(Held::Wake);
                     return;
                 }
             }

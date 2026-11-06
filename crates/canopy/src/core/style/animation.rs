@@ -64,7 +64,7 @@ pub enum Pause {
 impl Pause {
     /// Return whether repeating motion holds at rest at the clocks' time.
     pub(crate) fn holds(self, clocks: &MotionClocks) -> bool {
-        self == Self::Idle && clocks.paused
+        self == Self::Idle && clocks.rest.paused()
     }
 }
 
@@ -110,14 +110,35 @@ pub(crate) struct MotionClocks {
     /// Start of the primary cursor's motion: its last change, or the last
     /// input event if that is later.
     pub cursor: Instant,
-    /// Whether repeating motion holds at rest, after the idle pause or while
-    /// unfocused.
-    pub paused: bool,
-    /// Whether the primary cursor holds at rest: after the blink pause, or
-    /// while repeating motion does.
-    pub cursor_rests: bool,
-    /// Whether the terminal has focus.
-    pub focused: bool,
+    /// How far motion has come to rest.
+    pub rest: Rest,
+}
+
+/// How far motion has come to rest, each step holding more still.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Rest {
+    /// Everything moves.
+    Moving,
+    /// The blink pause passed: the primary cursor holds at rest, and
+    /// repeating motion still moves.
+    CursorResting,
+    /// The idle pause passed: repeating motion holds at rest too.
+    Idle,
+    /// The terminal lacks focus: everything holds, and the primary cursor
+    /// shows dimmed.
+    Unfocused,
+}
+
+impl Rest {
+    /// Return whether repeating motion holds at rest.
+    pub(crate) fn paused(self) -> bool {
+        matches!(self, Self::Idle | Self::Unfocused)
+    }
+
+    /// Return whether the primary cursor holds at rest.
+    pub(crate) fn cursor_rests(self) -> bool {
+        self != Self::Moving
+    }
 }
 
 impl MotionClocks {
@@ -129,9 +150,7 @@ impl MotionClocks {
             epoch: now,
             last_input: now,
             cursor: now,
-            paused: false,
-            cursor_rests: false,
-            focused: true,
+            rest: Rest::Moving,
         }
     }
 }
@@ -538,7 +557,7 @@ mod tests {
         let t0 = Instant::now();
         let blink = Animation::blink(Color::White, Color::Black, MS(600), MS(400));
         let paused = MotionClocks {
-            paused: true,
+            rest: Rest::Idle,
             ..clocks(t0, 700)
         };
         assert_eq!(blink.color(&paused), Color::White);
@@ -551,7 +570,7 @@ mod tests {
         let blink =
             Animation::blink(Color::White, Color::Black, MS(600), MS(400)).with_pause(Pause::Never);
         let paused = MotionClocks {
-            paused: true,
+            rest: Rest::Idle,
             ..clocks(t0, 700)
         };
         assert_eq!(blink.color(&paused), Color::Black);

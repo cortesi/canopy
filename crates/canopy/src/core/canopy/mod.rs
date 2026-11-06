@@ -525,14 +525,14 @@ impl Canopy {
     ) -> Result<R> {
         let mut scope = self.enter_dispatch();
         let result = f(&mut scope);
-        let completion = scope.finish(result.is_ok());
+        let completion = scope.finish_drain(result.is_ok());
         let value = result?;
         if let Err(error) = completion {
-            let (node, source) = match self.core.take_failed_post() {
+            let (node, source) = match error.post {
                 Some(post) => (Some(post.origin), post.source.unwrap_or(source)),
                 None => (node, source),
             };
-            self.notice_or_fail(error, source, node)?;
+            self.notice_or_fail(error.source, source, node)?;
         }
         Ok(value)
     }

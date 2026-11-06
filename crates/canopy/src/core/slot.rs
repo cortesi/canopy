@@ -2,33 +2,43 @@
 //! newest request matters.
 
 use std::{
-    error, fmt,
+    error, fmt, mem,
     sync::{
         Arc, Condvar, Mutex, MutexGuard, PoisonError,
         atomic::{AtomicBool, Ordering},
     },
 };
 
+/// What the box holds.
+enum Held<T> {
+    /// No request waits, and no job runs.
+    Empty,
+    /// A request waits for the worker, with its generation.
+    Waiting(T, u64),
+    /// The worker took a job, which this flag cancels.
+    Taken(Arc<AtomicBool>),
+    /// The receiver has gone, so the box takes no request.
+    Closed,
+}
+
 /// The box, under one lock.
 struct Slot<T> {
-    /// The request that waits for the worker, and its generation.
-    waiting: Option<(T, u64)>,
-    /// The cancel flag of the job the worker took last.
-    running: Option<Arc<AtomicBool>>,
+    /// What the box holds.
+    held: Held<T>,
     /// Advances on each send and cancel.
     generation: u64,
     /// Live senders. The worker stops waiting when none is left.
     senders: usize,
-    /// Whether the receiver is still alive.
-    receiver: bool,
 }
 
 impl<T> Slot<T> {
-    /// Cancel the running job and drop the waiting request.
+    /// Cancel the running job and drop the waiting request. A closed box
+    /// stays closed.
     fn clear(&mut self) {
-        self.waiting = None;
-        if let Some(running) = self.running.take() {
-            running.store(true, Ordering::Relaxed);
+        match mem::replace(&mut self.held, Held::Empty) {
+            Held::Taken(running) => running.store(true, Ordering::Relaxed),
+            Held::Closed => self.held = Held::Closed,
+            Held::Empty | Held::Waiting(..) => {}
         }
     }
 }
@@ -59,11 +69,9 @@ impl<T> Shared<T> {
 pub fn request_slot<T>() -> (SlotSender<T>, SlotReceiver<T>) {
     let shared = Arc::new(Shared {
         slot: Mutex::new(Slot {
-            waiting: None,
-            running: None,
+            held: Held::Empty,
             generation: 0,
             senders: 1,
-            receiver: true,
         }),
         ready: Condvar::new(),
     });
@@ -122,7 +130,7 @@ impl<T> fmt::Debug for SlotSender<T> {
         let slot = self.shared.lock();
         f.debug_struct("SlotSender")
             .field("generation", &slot.generation)
-            .field("waiting", &slot.waiting.is_some())
+            .field("waiting", &matches!(slot.held, Held::Waiting(..)))
             .finish()
     }
 }
@@ -132,13 +140,13 @@ impl<T> SlotSender<T> {
     /// generation of the new request.
     pub fn send(&self, request: T) -> Result<u64, SlotClosed> {
         let mut slot = self.shared.lock();
-        if !slot.receiver {
+        if matches!(slot.held, Held::Closed) {
             return Err(SlotClosed);
         }
         slot.clear();
         slot.generation = slot.generation.wrapping_add(1);
         let generation = slot.generation;
-        slot.waiting = Some((request, generation));
+        slot.held = Held::Waiting(request, generation);
         drop(slot);
         self.shared.ready.notify_one();
         Ok(generation)
@@ -172,8 +180,8 @@ pub struct SlotReceiver<T> {
 impl<T> Drop for SlotReceiver<T> {
     fn drop(&mut self) {
         let mut slot = self.shared.lock();
-        slot.receiver = false;
         slot.clear();
+        slot.held = Held::Closed;
     }
 }
 
@@ -192,14 +200,17 @@ impl<T> SlotReceiver<T> {
     pub fn recv(&self) -> Option<Job<T>> {
         let mut slot = self.shared.lock();
         loop {
-            if let Some((request, generation)) = slot.waiting.take() {
-                let flag = Arc::new(AtomicBool::new(false));
-                slot.running = Some(Arc::clone(&flag));
-                return Some(Job {
-                    request,
-                    generation,
-                    cancel: CancelToken { flag },
-                });
+            match mem::replace(&mut slot.held, Held::Empty) {
+                Held::Waiting(request, generation) => {
+                    let flag = Arc::new(AtomicBool::new(false));
+                    slot.held = Held::Taken(Arc::clone(&flag));
+                    return Some(Job {
+                        request,
+                        generation,
+                        cancel: CancelToken { flag },
+                    });
+                }
+                other => slot.held = other,
             }
             if slot.senders == 0 {
                 return None;

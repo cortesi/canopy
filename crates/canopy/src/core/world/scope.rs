@@ -13,9 +13,10 @@ use std::{
     mem,
     num::NonZeroU32,
     ops::{Deref, DerefMut},
+    result::Result as StdResult,
 };
 
-use super::{Core, TreeEditJournal, TreeStateSnapshot};
+use super::{Core, TreeEditJournal, TreeStateSnapshot, completion::DrainError};
 use crate::{
     core::{canopy::Canopy, notice::NoticeSource},
     error::{Error, Result},
@@ -215,7 +216,13 @@ impl<'a, T: CoreOwner> Scope<'a, T> {
 
     /// Close a dispatch boundary: a failure discards the work it queued, and
     /// the success of the outermost boundary drains the batch.
-    pub(crate) fn finish(mut self, success: bool) -> Result<()> {
+    pub(crate) fn finish(self, success: bool) -> Result<()> {
+        self.finish_drain(success).map_err(|error| error.source)
+    }
+
+    /// Close a dispatch boundary as [`Self::finish`] does, and report which
+    /// posted call stopped the drain.
+    pub(crate) fn finish_drain(mut self, success: bool) -> StdResult<(), DrainError> {
         let Some(Exit::Dispatch(checkpoint)) = self.exit.take() else {
             unreachable!("only a dispatch scope finishes");
         };

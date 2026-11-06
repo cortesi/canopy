@@ -15,7 +15,7 @@
 //!   a callback or a dispatch boundary.
 //! - The drain restores `draining` on every exit.
 
-use std::collections::VecDeque;
+use std::{collections::VecDeque, result::Result as StdResult};
 
 use super::{Core, CoreOwner, scope};
 use crate::{
@@ -81,6 +81,22 @@ pub struct PostFailure {
     pub(crate) source: Option<NoticeSource>,
 }
 
+/// The failure that stopped a drain.
+#[derive(Debug)]
+pub struct DrainError {
+    /// The failure itself.
+    pub(crate) source: Error,
+    /// Where the posted call that failed came from, when a posted call
+    /// stopped the drain.
+    pub(crate) post: Option<PostFailure>,
+}
+
+impl From<Error> for DrainError {
+    fn from(source: Error) -> Self {
+        Self { source, post: None }
+    }
+}
+
 /// Mutation deferred until the outer callback boundary completes.
 pub(super) enum CompletionRequest {
     /// Run a posted call.
@@ -125,8 +141,6 @@ pub(super) struct CompletionBatch {
     /// Whether a drain loop runs, so a boundary that finishes inside it does
     /// not start another.
     pub(super) draining: bool,
-    /// The posted call whose failure stopped the last drain.
-    failed: Option<PostFailure>,
     /// Kinds of the running handlers, innermost last.
     pub(super) notice_sources: Vec<NoticeSource>,
 }
@@ -270,12 +284,6 @@ impl Core {
         self.completion.requests.len()
     }
 
-    /// Take the posted call whose failure stopped the last drain, if a posted
-    /// call stopped it.
-    pub(crate) fn take_failed_post(&mut self) -> Option<PostFailure> {
-        self.completion.failed.take()
-    }
-
     /// Admit a completion request unless lifecycle cleanup forbids new work or
     /// the batch is full, then drain the outer boundary when no dispatch
     /// remains open.
@@ -289,40 +297,42 @@ impl Core {
         }
         self.completion.requests.push_back(request);
         if self.completion_ready() {
-            self.drain_completion()?;
+            self.drain_completion().map_err(|error| error.source)?;
         }
         Ok(())
     }
 
     /// Apply the current FIFO batch, stopping and discarding the tail on
     /// failure.
-    pub(super) fn drain_completion(&mut self) -> Result<()> {
+    pub(super) fn drain_completion(&mut self) -> StdResult<(), DrainError> {
         if self.completion.draining {
             return Ok(());
         }
-        self.completion.failed = None;
         self.enter_drain().drain_completion_inner()
     }
 
     /// Apply requests in FIFO order. A posted call or a removal applies only
     /// while its node's widget incarnation still matches the request.
-    fn drain_completion_inner(&mut self) -> Result<()> {
+    fn drain_completion_inner(&mut self) -> StdResult<(), DrainError> {
         let mut posted = 0;
         while let Some(request) = self.completion.requests.pop_front() {
             match request {
                 CompletionRequest::Post(request) => {
                     if posted == MAX_POSTED_CALLS {
-                        self.completion.failed = Some(request.failure());
-                        return Err(Error::Invalid(format!(
-                            "one dispatch posted more than {MAX_POSTED_CALLS} calls; \
-                             a posted command may be posting itself"
-                        )));
+                        return Err(DrainError {
+                            source: Error::Invalid(format!(
+                                "one dispatch posted more than {MAX_POSTED_CALLS} calls; \
+                                 a posted command may be posting itself"
+                            )),
+                            post: Some(request.failure()),
+                        });
                     }
                     posted += 1;
                     if self.is_incarnation(request.target, request.incarnation) {
                         let failure = request.failure();
-                        self.deliver(request).inspect_err(|_| {
-                            self.completion.failed = Some(failure);
+                        self.deliver(request).map_err(|source| DrainError {
+                            source,
+                            post: Some(failure),
                         })?;
                     }
                 }

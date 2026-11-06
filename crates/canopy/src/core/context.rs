@@ -1,6 +1,6 @@
 use std::{
     any::{Any, TypeId, type_name},
-    iter,
+    iter, mem,
     ops::Deref,
     result::Result as StdResult,
     time::Instant,
@@ -266,36 +266,43 @@ pub fn matching_nodes<'a, C: ViewContext + ?Sized>(
 /// helpers accept `FnOnce` closures and return values. The `FnMut` shim runs
 /// the closure through [`OneShot::call`] and stores its output. Calling the
 /// shim twice, or never, is an internal error.
-pub(super) struct OneShot<F, R> {
-    /// Closure to run, until it runs.
-    f: Option<F>,
-    /// Output of the closure, once it ran.
-    output: Option<R>,
+pub(super) enum OneShot<F, R> {
+    /// The closure waits for the shim.
+    Ready(F),
+    /// The closure ran, and this is its output.
+    Done(R),
+    /// The closure ran and failed, or its output was taken.
+    Spent,
 }
 
 impl<F, R> OneShot<F, R> {
     /// Hold a closure until the shim calls it.
     pub(super) fn new(f: F) -> Self {
-        Self {
-            f: Some(f),
-            output: None,
-        }
+        Self::Ready(f)
     }
 
     /// Run the closure through `run` and store its output.
     pub(super) fn call(&mut self, run: impl FnOnce(F) -> Result<R>) -> Result<()> {
-        let f = self
-            .f
-            .take()
-            .ok_or_else(|| Error::Internal("one-shot callback called twice".into()))?;
-        self.output = Some(run(f)?);
-        Ok(())
+        match mem::replace(self, Self::Spent) {
+            Self::Ready(f) => {
+                *self = Self::Done(run(f)?);
+                Ok(())
+            }
+            other => {
+                *self = other;
+                Err(Error::Internal("one-shot callback called twice".into()))
+            }
+        }
     }
 
     /// Return the stored output.
     pub(super) fn finish(self) -> Result<R> {
-        self.output
-            .ok_or_else(|| Error::Internal("one-shot callback never called".into()))
+        match self {
+            Self::Done(output) => Ok(output),
+            Self::Ready(_) | Self::Spent => {
+                Err(Error::Internal("one-shot callback never called".into()))
+            }
+        }
     }
 }
 

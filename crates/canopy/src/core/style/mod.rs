@@ -16,8 +16,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(crate) use animation::MotionClocks;
 pub use animation::{Animation, AnimationStart, Easing, Pause, Repeat};
+pub(crate) use animation::{MotionClocks, Rest};
 pub use color::{Color, Mix, hex_byte};
 use foldhash::HashMap;
 
@@ -1629,7 +1629,7 @@ mod tests {
             spec.color_at(rect, point)
         );
         let paused = MotionClocks {
-            paused: true,
+            rest: Rest::Idle,
             ..at(500)
         };
         assert_eq!(
@@ -1692,7 +1692,7 @@ mod tests {
         );
         // A busy gradient swings on while the operator is idle.
         let paused = MotionClocks {
-            paused: true,
+            rest: Rest::Idle,
             ..at(250)
         };
         assert_eq!(

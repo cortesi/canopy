@@ -4759,6 +4759,7 @@ pub mod runtime {
         pub repeats: u32,
         /// The caught failure, for a failure the runtime recorded.
         pub failure: Option<Failure>,
+        /* private fields */
     }
 
     impl Notice {

@@ -8,7 +8,11 @@
 use std::time::{Duration, Instant};
 
 use super::Canopy;
-use crate::{NodeId, geom::Point, style::MotionClocks};
+use crate::{
+    NodeId,
+    geom::Point,
+    style::{MotionClocks, Rest},
+};
 
 /// Global motion settings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,15 +92,21 @@ impl MotionState {
         let last_input = self.last_input.unwrap_or(epoch);
         let cursor = last_input.max(self.cursor_since.unwrap_or(epoch));
         let quiet = now.saturating_duration_since(last_input);
-        let paused = self.unfocused || quiet >= self.settings.idle_pause;
+        let rest = if self.unfocused {
+            Rest::Unfocused
+        } else if quiet >= self.settings.idle_pause {
+            Rest::Idle
+        } else if quiet >= self.settings.blink_pause {
+            Rest::CursorResting
+        } else {
+            Rest::Moving
+        };
         MotionClocks {
             now,
             epoch,
             last_input,
             cursor,
-            paused,
-            cursor_rests: paused || quiet >= self.settings.blink_pause,
-            focused: !self.unfocused,
+            rest,
         }
     }
 
@@ -185,9 +195,9 @@ impl Canopy {
         // blinking cursor when the blink pause begins.
         let settings = self.motion.settings;
         let pauses = [
-            (!clocks.paused, settings.idle_pause),
+            (!clocks.rest.paused(), settings.idle_pause),
             (
-                !clocks.cursor_rests && buffer.has_cursor_motion(),
+                !clocks.rest.cursor_rests() && buffer.has_cursor_motion(),
                 settings.blink_pause,
             ),
         ];
@@ -218,5 +228,53 @@ impl Canopy {
             self.schedule_motion(now);
         }
         changed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rest_follows_focus_and_quiet_time() {
+        let t0 = Instant::now();
+        let settings = MotionSettings {
+            idle_pause: Duration::from_secs(60),
+            blink_pause: Duration::from_secs(10),
+            ..MotionSettings::default()
+        };
+        let table = [
+            (false, 0, Rest::Moving),
+            (false, 9, Rest::Moving),
+            (false, 10, Rest::CursorResting),
+            (false, 59, Rest::CursorResting),
+            (false, 60, Rest::Idle),
+            (true, 0, Rest::Unfocused),
+            (true, 60, Rest::Unfocused),
+        ];
+        for (unfocused, quiet, expected) in table {
+            let mut state = MotionState {
+                settings,
+                ..MotionState::default()
+            };
+            state.clocks(t0);
+            state.input(t0);
+            state.unfocused = unfocused;
+            let clocks = state.clocks(t0 + Duration::from_secs(quiet));
+            assert_eq!(
+                clocks.rest, expected,
+                "unfocused {unfocused}, quiet {quiet}s"
+            );
+        }
+        let queries = [
+            (Rest::Moving, false, false),
+            (Rest::CursorResting, false, true),
+            (Rest::Idle, true, true),
+            (Rest::Unfocused, true, true),
+        ];
+        for (rest, paused, cursor_rests) in queries {
+            assert_eq!(rest.paused(), paused, "{rest:?}");
+            assert_eq!(rest.cursor_rests(), cursor_rests, "{rest:?}");
+        }
     }
 }

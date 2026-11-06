@@ -15,7 +15,7 @@ use super::TermBuf;
 use crate::{
     core::cursor::{CursorMotion, CursorShape},
     geom::{Point, Rect},
-    style::{Attr, AttrSet, Color, Coverage, Mix, MotionClocks, Paint, ResolvedStyle},
+    style::{Attr, AttrSet, Color, Coverage, Mix, MotionClocks, Paint, ResolvedStyle, Rest},
 };
 
 /// How a moving grapheme resolves its style.
@@ -67,16 +67,14 @@ impl MotionStyle {
                 );
                 coverage.map_or(style, |coverage| coverage.apply(style))
             }
-            Self::Cursor { on, off, motion } => {
-                if !clocks.focused {
-                    return mix_styles(*on, *off, UNFOCUSED_CURSOR);
+            Self::Cursor { on, off, motion } => match clocks.rest {
+                Rest::Unfocused => mix_styles(*on, *off, UNFOCUSED_CURSOR),
+                Rest::CursorResting | Rest::Idle => *on,
+                Rest::Moving => {
+                    let elapsed = clocks.now.saturating_duration_since(clocks.cursor);
+                    mix_styles(*on, *off, motion.phase(elapsed))
                 }
-                if clocks.cursor_rests {
-                    return *on;
-                }
-                let elapsed = clocks.now.saturating_duration_since(clocks.cursor);
-                mix_styles(*on, *off, motion.phase(elapsed))
-            }
+            },
         }
     }
 
@@ -91,7 +89,7 @@ impl MotionStyle {
             .flatten()
             .min(),
             Self::Cursor { motion, .. } => {
-                if clocks.cursor_rests || !clocks.focused {
+                if clocks.rest.cursor_rests() {
                     return None;
                 }
                 motion.next_change(clocks.cursor, clocks.now, sample)
@@ -450,8 +448,7 @@ mod tests {
         assert_eq!(hidden.cells[0].style, ground());
         let mut unfocused = buf.clone();
         unfocused.apply_motion(&MotionClocks {
-            focused: false,
-            paused: true,
+            rest: Rest::Unfocused,
             ..clocks_after(600)
         });
         assert_eq!(

@@ -9,10 +9,7 @@
 //! a poll as an error when [`Error::is_notice`] says so. A widget posts any
 //! notice with [`Context::notify`](crate::Context::notify).
 
-use std::{
-    collections::HashSet,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use crate::{
     NodeId,
@@ -131,6 +128,8 @@ pub struct Notice {
     pub repeats: u32,
     /// The caught failure, for a failure the runtime recorded.
     pub failure: Option<Failure>,
+    /// Whether a click or the toast limit ended the toast before its time.
+    dismissed: bool,
 }
 
 impl Notice {
@@ -144,6 +143,12 @@ impl Notice {
     /// Return when the notice's toast time ends.
     pub fn ends(&self) -> Instant {
         self.at + self.duration
+    }
+
+    /// Return whether the toast shows at `now`: in its time, and not ended
+    /// early.
+    fn is_live(&self, now: Instant) -> bool {
+        !self.dismissed && self.at <= now && now < self.ends()
     }
 }
 
@@ -213,8 +218,6 @@ pub struct NoticeLog {
     entries: Vec<Notice>,
     /// Identity the next new entry takes.
     next_id: u64,
-    /// Toasts that a click or the toast limit ended before their time.
-    ended: HashSet<NoticeId>,
     /// Number of changes to the log or to what shows, so hooks know when to
     /// resync.
     generation: u64,
@@ -245,15 +248,14 @@ impl NoticeLog {
                 newest.repeats = newest.repeats.saturating_add(1);
                 newest.at = now;
                 newest.duration = duration;
-                self.ended.remove(&newest.id);
+                newest.dismissed = false;
                 newest.id
             }
             _ => {
                 let id = NoticeId(self.next_id);
                 self.next_id += 1;
                 if self.entries.len() == NOTICE_LIMIT {
-                    let evicted = self.entries.remove(0);
-                    self.ended.remove(&evicted.id);
+                    self.entries.remove(0);
                 }
                 self.entries.push(Notice {
                     id,
@@ -263,6 +265,7 @@ impl NoticeLog {
                     duration,
                     repeats: 1,
                     failure,
+                    dismissed: false,
                 });
                 id
             }
@@ -300,26 +303,27 @@ impl NoticeLog {
 
     /// End the oldest live toasts until at most [`TOAST_LIMIT`] show.
     fn limit_toasts(&mut self, now: Instant) {
-        let live = self.live_toasts(now);
-        let excess = live.len().saturating_sub(TOAST_LIMIT);
-        let ended = live
-            .iter()
+        let excess = self.live_toasts(now).len().saturating_sub(TOAST_LIMIT);
+        for notice in self
+            .entries
+            .iter_mut()
+            .filter(|notice| notice.is_live(now))
             .take(excess)
-            .map(|notice| notice.id)
-            .collect::<Vec<_>>();
-        self.ended.extend(ended);
+        {
+            notice.dismissed = true;
+        }
     }
 
     /// End the toast of `id` before its time. Returns whether it was live.
     pub(crate) fn end_toast(&mut self, id: NoticeId, now: Instant) -> bool {
-        let live = self
+        let Some(notice) = self
             .entries
-            .iter()
-            .any(|notice| notice.id == id && self.is_live(notice, now));
-        if !live {
+            .iter_mut()
+            .find(|notice| notice.id == id && notice.is_live(now))
+        else {
             return false;
-        }
-        self.ended.insert(id);
+        };
+        notice.dismissed = true;
         self.generation = self.generation.wrapping_add(1);
         true
     }
@@ -339,7 +343,7 @@ impl NoticeLog {
 
     /// Return whether `notice` shows at `now`, as a toast in its time.
     pub fn is_live(&self, notice: &Notice, now: Instant) -> bool {
-        !self.ended.contains(&notice.id) && notice.at <= now && now < notice.ends()
+        notice.is_live(now)
     }
 
     /// Return when the next live toast ends, if one shows at `now`.
