@@ -23,7 +23,7 @@ use futures::{
 };
 use tokio::{task::yield_now, time::sleep};
 
-use super::{AdapterEvent, Canopy};
+use super::{AdapterEvent, Canopy, scripting::Startup};
 use crate::{
     commands::ArgValue,
     core::wake::PollOwner,
@@ -367,8 +367,8 @@ pub(super) struct Driver {
     pub(super) publication: PublicationWatch,
     /// Reject nested synchronous driver entry.
     pub(super) in_turn: bool,
-    /// Whether automatic startup has already been attempted.
-    pub(super) startup_attempted: bool,
+    /// Whether automatic startup has run.
+    pub(super) startup: Startup,
 }
 impl Driver {
     /// Construct an idle driver.
@@ -381,20 +381,33 @@ impl Driver {
             }),
             publication: PublicationWatch::default(),
             in_turn: false,
-            startup_attempted: false,
+            startup: Startup::Pending,
         }
     }
 }
 impl Canopy {
+    /// Admit a top-level evaluation, or report the runtime busy.
+    ///
+    /// The runtime is busy while the driver holds an evaluation, while the
+    /// script host holds one that it started itself, and while a script runs
+    /// in a live VM scope.
+    pub(crate) fn eval_admission(&self) -> Result<()> {
+        if !self.driver.eval.is_idle()
+            || self.script.host.is_eval_active()
+            || script::in_live_scope(self)
+        {
+            return Err(busy());
+        }
+        Ok(())
+    }
+
     /// Admit an evaluation before changing retained runtime state.
     ///
     /// A busy runtime is an error. Any other failure to start completes the
     /// evaluation at once, and the returned outcome reports it with the
     /// source's diagnostics.
     fn start_eval(&mut self, id: EvalId, request: EvalRequest) -> Result<Option<EvalOutcome>> {
-        if !self.driver.eval.is_idle() || self.script.host.is_eval_active() {
-            return Err(busy());
-        }
+        self.eval_admission()?;
         let started = self.now();
         let origin = self.core.root_id();
         let mut diagnostics = Vec::new();
@@ -416,9 +429,12 @@ impl Canopy {
                         diagnostics = found;
                         error
                     })?;
-            let mut invocation = self.script.host.start_invocation(origin, script)?;
+            let incarnation = self.core.nodes[origin].incarnation;
+            let mut invocation = self
+                .script
+                .host
+                .start_invocation(origin, incarnation, script)?;
             invocation.set_reporting_timeout(request.timeout);
-            invocation.set_origin_incarnation(self.core.nodes[origin].incarnation);
             Ok((deadline, invocation))
         })();
         let (deadline, invocation) = match prepared {
@@ -806,9 +822,10 @@ impl Canopy {
 
     /// Drive bounded turns inside the owned blocking runtime.
     async fn eval_async(&mut self, request: EvalRequest) -> Result<EvalOutcome> {
-        if self.driver.in_turn || !self.driver.eval.is_idle() || script::in_live_scope(self) {
+        if self.driver.in_turn {
             return Err(busy());
         }
+        self.eval_admission()?;
         let events = self.event_rx.take().ok_or_else(busy)?;
         let mut guard = HeadlessEval {
             canopy: self,

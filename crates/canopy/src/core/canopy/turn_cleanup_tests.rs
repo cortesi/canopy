@@ -15,7 +15,9 @@ use std::{
 use futures::{channel::mpsc, task::noop_waker};
 use tokio::{runtime::Builder, time::sleep};
 
-use super::{AdapterEvent, Canopy, CanopyBuilder, EvalRequest, EvalTicket, TurnInput};
+use super::{
+    AdapterEvent, Canopy, CanopyBuilder, EvalRequest, EvalTicket, TurnInput, scripting::Startup,
+};
 use crate::{
     Context, ViewContext,
     commands::ArgValue,
@@ -225,11 +227,11 @@ fn synchronous_headless_rejects_current_thread_tasks_without_consuming_driver() 
             assert!(matches!(error, Error::Invalid(_)));
             assert!(error.to_string().contains("blocking worker"));
             assert!(canopy.event_rx.is_some());
-            assert!(!canopy.driver.startup_attempted);
+            assert_eq!(canopy.driver.startup, Startup::Pending);
             Ok::<_, Error>(())
         })?;
     assert_eq!(canopy.eval_script("return 7")?, ArgValue::Int(7));
-    assert!(canopy.driver.startup_attempted);
+    assert_eq!(canopy.driver.startup, Startup::Ran);
     Ok(())
 }
 
@@ -422,4 +424,34 @@ fn regression_a_turn_runs_after_a_caught_panic_in_a_turn() -> Result<()> {
     assert_eq!(probe.keys.get(), 2);
     canopy.prepare()?;
     Ok(())
+}
+
+#[test]
+fn eval_admission_reports_each_busy_cause() -> Result<()> {
+    let (mut canopy, _) = application()?;
+    canopy.eval_admission()?;
+
+    // The driver holds a parked evaluation.
+    let started = canopy.turn(TurnInput::StartEval(EvalRequest::new(
+        "canopy.wait_for(function() return false end)",
+    )))?;
+    assert!(matches!(canopy.eval_admission(), Err(Error::ScriptBusy(_))));
+    let id = started.started.expect("the evaluation starts");
+    canopy.turn(TurnInput::CancelEval(id))?;
+    canopy.eval_admission()?;
+
+    // The host holds an invocation it started itself.
+    let host = canopy.script.host.clone();
+    let script = host.compile("return 1")?;
+    let root = canopy.root_id();
+    let invocation = host.start_invocation(root, canopy.core.nodes[root].incarnation, script)?;
+    assert!(matches!(canopy.eval_admission(), Err(Error::ScriptBusy(_))));
+    drop(invocation);
+    canopy.eval_admission()?;
+
+    // A script runs in a live VM scope.
+    canopy.script.context_stack.push(root);
+    assert!(matches!(canopy.eval_admission(), Err(Error::ScriptBusy(_))));
+    canopy.script.context_stack.clear();
+    canopy.eval_admission()
 }

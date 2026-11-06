@@ -28,16 +28,61 @@ pub const SCRIPT_GAS_LIMIT: u64 = 500_000_000;
 /// Maximum VM work before the adapter can service cancellation and other input.
 const SCRIPT_QUANTUM: u64 = 10_000;
 
+/// Where an invocation is between admission and release.
+enum InvocationState {
+    /// Ruau owns pending work for the invocation.
+    Pending {
+        /// Handle of the pending work.
+        handle: InvocationHandle,
+        /// Top-level admission, held until the owner completes the task.
+        guard: ActiveEvalGuard,
+    },
+    /// The VM work ended, and admission stays held until the owner releases
+    /// the invocation.
+    Done {
+        /// Top-level admission, held until the owner completes the task. Its
+        /// drop releases admission.
+        _guard: ActiveEvalGuard,
+    },
+    /// The invocation was aborted or released, and holds nothing.
+    Released,
+}
+
+impl InvocationState {
+    /// Return the handle of pending work.
+    fn handle(&self) -> Option<InvocationHandle> {
+        match self {
+            Self::Pending { handle, .. } => Some(*handle),
+            Self::Done { .. } | Self::Released => None,
+        }
+    }
+
+    /// End the pending work, keeping admission. Return the handle of the work
+    /// that was pending.
+    fn complete(&mut self) -> Option<InvocationHandle> {
+        match mem::replace(self, Self::Released) {
+            Self::Pending { handle, guard } => {
+                *self = Self::Done { _guard: guard };
+                Some(handle)
+            }
+            other => {
+                *self = other;
+                None
+            }
+        }
+    }
+}
+
 /// A pending evaluation with no borrowed runtime, widget, or application state.
 pub struct ScriptInvocation {
     /// Host responsible for releasing a pending invocation on drop.
     host: LuauHost,
-    /// Present only while Ruau still owns a pending invocation.
-    handle: Option<InvocationHandle>,
+    /// Pending work and admission.
+    state: InvocationState,
     /// Original dispatch origin restored for each VM segment.
     origin: NodeId,
-    /// Incarnation captured at admission or the first direct test poll.
-    origin_incarnation: Option<u64>,
+    /// Incarnation of the origin's widget at admission.
+    origin_incarnation: u64,
     /// Error context retained across polls.
     label: String,
     /// Options retain their print-quota state across VM segments.
@@ -50,15 +95,13 @@ pub struct ScriptInvocation {
     logs: Vec<String>,
     /// Owned assertion outcomes, separate from unrelated input callbacks.
     assertions: Vec<ScriptAssertion>,
-    /// Top-level admission remains held until the owner completes the task.
-    active: Option<ActiveEvalGuard>,
 }
 
 impl fmt::Debug for ScriptInvocation {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ScriptInvocation")
-            .field("handle", &self.handle)
+            .field("handle", &self.state.handle())
             .field("origin", &self.origin)
             .field("label", &self.label)
             .finish_non_exhaustive()
@@ -66,11 +109,6 @@ impl fmt::Debug for ScriptInvocation {
 }
 
 impl ScriptInvocation {
-    /// Bind this task to the origin widget that existed at admission.
-    pub(crate) fn set_origin_incarnation(&mut self, incarnation: u64) {
-        self.origin_incarnation = Some(incarnation);
-    }
-
     /// Preserve the requested budget while individual polls use the remaining
     /// time.
     pub(crate) fn set_reporting_timeout(&mut self, timeout: Option<Duration>) {
@@ -85,7 +123,7 @@ impl ScriptInvocation {
 
 impl Drop for ScriptInvocation {
     fn drop(&mut self) {
-        if self.handle.is_some() {
+        if self.state.handle().is_some() {
             let host = self.host.clone();
             if let Err(error) = host.abort_invocation(self) {
                 tracing::error!(%error, "failed to release pending script invocation");
@@ -186,9 +224,13 @@ impl LuauHost {
     }
 
     /// Begin a compiled root without borrowing Canopy or retaining a VM borrow.
+    ///
+    /// The task binds to the origin widget's `incarnation` at admission, so a
+    /// replaced origin ends it.
     pub(crate) fn start_invocation(
         &self,
         origin: NodeId,
+        incarnation: u64,
         script: ScriptId,
     ) -> Result<ScriptInvocation> {
         let active = self.begin_active_eval()?;
@@ -201,16 +243,18 @@ impl LuauHost {
         let print_lines = Arc::new(Mutex::new(Vec::new()));
         Ok(ScriptInvocation {
             host: self.clone(),
-            handle: Some(handle),
+            state: InvocationState::Pending {
+                handle,
+                guard: active,
+            },
             origin,
-            origin_incarnation: None,
+            origin_incarnation: incarnation,
             label,
             options: invocation_options(None, &print_lines),
             reporting_timeout: None,
             print_lines,
             logs: Vec::new(),
             assertions: Vec::new(),
-            active: Some(active),
         })
     }
 
@@ -254,10 +298,7 @@ impl LuauHost {
             )
             .with_owner(format!("{origin:?}"))
         })?;
-        if invocation
-            .origin_incarnation
-            .is_some_and(|incarnation| incarnation != entry.incarnation)
-        {
+        if invocation.origin_incarnation != entry.incarnation {
             return Err(error::Error::script_structured(
                 error::ScriptErrorKind::InvalidNode,
                 "script origin widget was replaced",
@@ -267,8 +308,7 @@ impl LuauHost {
         if !canopy.core.is_attached_to_root(origin) {
             return Err(error::Error::NodeDetached(origin));
         }
-        invocation.origin_incarnation = Some(entry.incarnation);
-        let handle = invocation.handle.ok_or_else(|| {
+        let handle = invocation.state.handle().ok_or_else(|| {
             error::Error::Invalid("script invocation is already complete".to_string())
         })?;
         let mut runtime = self.runtime_mut("script VM re-entered without a live scope")?;
@@ -289,7 +329,7 @@ impl LuauHost {
         );
         drop(origin);
         if step.poll.is_ready() {
-            invocation.handle = None;
+            invocation.state.complete();
         }
         let synchronized = self.synchronize_closures(
             &mut runtime,
@@ -299,7 +339,7 @@ impl LuauHost {
         self.push_print_lines(&invocation.print_lines);
         drop(diagnostics);
         if let Err(error) = synchronized {
-            if let Some(handle) = invocation.handle.take() {
+            if let Some(handle) = invocation.state.complete() {
                 runtime.abort_invocation(handle).map_err(|error| {
                     retained_runtime_error_to_canopy(
                         &error,
@@ -338,16 +378,16 @@ impl LuauHost {
     /// Abort pending work once. A completed or previously aborted task is
     /// unchanged.
     pub(crate) fn abort_invocation(&self, invocation: &mut ScriptInvocation) -> Result<()> {
-        if let Some(handle) = invocation.handle {
+        if let Some(handle) = invocation.state.handle() {
             let mut runtime = self.runtime_mut("cannot abort a script inside a live VM scope")?;
-            invocation.handle = None;
+            invocation.state.complete();
             runtime.abort_invocation(handle).map_err(|error| {
                 retained_runtime_error_to_canopy(&error, &invocation.label, None)
             })?;
             self.synchronize_closures(&mut runtime, &invocation.label, None)?;
         }
         self.push_pending_invocation_print(invocation);
-        invocation.active = None;
+        invocation.state = InvocationState::Released;
         Ok(())
     }
 
@@ -427,7 +467,8 @@ mod tests {
                 canopy.wait_for(function() return false end)
             "#)?;
             host.push_log("ambient output".to_string());
-            let mut invocation = host.start_invocation(tree.root, script)?;
+            let mut invocation =
+                host.start_invocation(tree.root, canopy.core.nodes[tree.root].incarnation, script)?;
             let mut gas = SCRIPT_GAS_LIMIT;
             assert!(drive_ready(&host, canopy, &mut invocation, &mut gas).is_pending());
             assert!(gas < SCRIPT_GAS_LIMIT);
@@ -475,7 +516,7 @@ mod tests {
                 Err(error::Error::ScriptBusy(_))
             ));
             assert!(matches!(
-                host.start_invocation(tree.root, script),
+                host.start_invocation(tree.root, canopy.core.nodes[tree.root].incarnation, script),
                 Err(error::Error::ScriptBusy(_))
             ));
             assert_eq!(host.logs(), vec!["ambient output", "binding output"]);
@@ -483,7 +524,7 @@ mod tests {
             assert_eq!(invocation.logs, vec!["root output"]);
             host.abort_invocation(&mut invocation)?;
             host.abort_invocation(&mut invocation)?;
-            assert!(invocation.handle.is_none());
+            assert!(invocation.state.handle().is_none());
             assert!(!host.is_eval_active());
             assert_eq!(invocation.take_diagnostics().0, vec!["root output"]);
             Ok(())
@@ -502,14 +543,15 @@ mod tests {
                 return 42
             "#,
             )?;
-            let mut invocation = host.start_invocation(tree.root, script)?;
+            let mut invocation =
+                host.start_invocation(tree.root, canopy.core.nodes[tree.root].incarnation, script)?;
             let mut gas = SCRIPT_GAS_LIMIT;
             let Poll::Ready(result) = drive_ready(&host, canopy, &mut invocation, &mut gas) else {
                 panic!("an immediately satisfied wait must complete");
             };
             assert_eq!(result?, ArgValue::Int(42));
             assert!(gas < SCRIPT_GAS_LIMIT);
-            assert!(invocation.handle.is_none());
+            assert!(invocation.state.handle().is_none());
             let (logs, _) = invocation.take_diagnostics();
             assert_eq!(logs.len(), 4097);
             assert_eq!(
@@ -528,7 +570,8 @@ mod tests {
         run_ttree(|canopy, _, tree| {
             let host = canopy.script.host.clone();
             let script = host.compile("canopy.wait_for(function() return false end); return 42")?;
-            let mut invocation = host.start_invocation(tree.root, script)?;
+            let mut invocation =
+                host.start_invocation(tree.root, canopy.core.nodes[tree.root].incarnation, script)?;
             let waker = Waker::from(Arc::new(TestWake(AtomicBool::new(true))));
             let mut context = TaskContext::from_waker(&waker);
             let step = host.poll_invocation(
@@ -554,7 +597,7 @@ mod tests {
                     ..
                 }))
             ));
-            assert!(invocation.handle.is_none());
+            assert!(invocation.state.handle().is_none());
             assert!(!host.is_eval_active());
             assert!(canopy.script.context_stack.is_empty());
             Ok(())
@@ -566,7 +609,8 @@ mod tests {
         run_ttree(|canopy, _, tree| {
             let host = canopy.script.host.clone();
             let script = host.compile("while true do end")?;
-            let mut invocation = host.start_invocation(tree.root, script)?;
+            let mut invocation =
+                host.start_invocation(tree.root, canopy.core.nodes[tree.root].incarnation, script)?;
             invocation.set_reporting_timeout(Some(Duration::from_millis(125)));
             let waker = Waker::from(Arc::new(TestWake(AtomicBool::new(true))));
             let mut context = TaskContext::from_waker(&waker);
@@ -581,7 +625,7 @@ mod tests {
                 step.poll,
                 Poll::Ready(Err(error::Error::ScriptTimeout { timeout_ms: 125 }))
             ));
-            assert!(invocation.handle.is_none());
+            assert!(invocation.state.handle().is_none());
             Ok(())
         })
     }
@@ -597,7 +641,8 @@ mod tests {
                 end
             "#,
             )?;
-            let mut invocation = host.start_invocation(tree.root, script)?;
+            let mut invocation =
+                host.start_invocation(tree.root, canopy.core.nodes[tree.root].incarnation, script)?;
             let mut gas = 10_000;
             let Poll::Ready(result) = drive_ready(&host, canopy, &mut invocation, &mut gas) else {
                 panic!("gas exhaustion must terminate immediately satisfied waits");
@@ -607,7 +652,7 @@ mod tests {
                 error.to_string().contains("instruction budget exhausted"),
                 "{error}"
             );
-            assert!(invocation.handle.is_none());
+            assert!(invocation.state.handle().is_none());
             assert!(canopy.script.context_stack.is_empty());
             Ok(())
         })

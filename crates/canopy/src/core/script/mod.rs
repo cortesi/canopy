@@ -204,16 +204,36 @@ impl ScriptCheckResult {
     }
 }
 
+/// How far a cached script has come toward the retained runtime.
+enum ScriptLoad {
+    /// Only the source is known: the surface was not finalized when it
+    /// compiled, or a source change cleared its graph.
+    Source,
+    /// The source is checked against the finalized surface.
+    Prepared(PreparedGraph),
+    /// The checked graph is loaded into the retained runtime as a root.
+    Loaded(PreparedGraph, RootHandle),
+}
+
 /// Cached compiled script and its retained root once the host is finalized.
 struct Script {
     /// Strict source executed at runtime, including identity and diagnostic
     /// metadata.
     runtime_source: Source,
-    /// Checked graph artifact used to produce the chunk, when the surface is
-    /// finalized.
-    prepared: Option<PreparedGraph>,
-    /// Root loaded into the retained runtime.
-    root: Option<RootHandle>,
+    /// How far the script has come toward the retained runtime.
+    load: ScriptLoad,
+}
+
+impl Script {
+    /// Return the script's checked graph, once it has one.
+    fn prepared(&self) -> Option<PreparedGraph> {
+        match &self.load {
+            ScriptLoad::Prepared(prepared) | ScriptLoad::Loaded(prepared, _) => {
+                Some(prepared.clone())
+            }
+            ScriptLoad::Source => None,
+        }
+    }
 }
 
 /// Compiled script cache.
@@ -244,12 +264,12 @@ impl ScriptCache {
         self.next_script_id = self.next_script_id.checked_add(1).ok_or_else(|| {
             error::Error::Invalid("script identifier space exhausted".to_string())
         })?;
+        let load = prepared.map_or(ScriptLoad::Source, ScriptLoad::Prepared);
         self.scripts.insert(
             id,
             Script {
                 runtime_source,
-                prepared,
-                root: None,
+                load,
             },
         );
         Ok(id)
@@ -262,35 +282,28 @@ impl ScriptCache {
 
     /// Return the retained root for a script, if it is loaded.
     fn root(&self, id: ScriptId) -> Option<RootHandle> {
-        self.scripts.get(&id).and_then(|script| script.root.clone())
+        match &self.scripts.get(&id)?.load {
+            ScriptLoad::Loaded(_, root) => Some(root.clone()),
+            ScriptLoad::Source | ScriptLoad::Prepared(_) => None,
+        }
     }
 
     /// Return the prepared graph for a script.
     fn prepared(&self, id: ScriptId) -> Option<PreparedGraph> {
-        self.scripts
-            .get(&id)
-            .and_then(|script| script.prepared.clone())
+        self.scripts.get(&id)?.prepared()
     }
 
-    /// Record a script's checked graph artifact.
-    fn set_prepared(&mut self, id: ScriptId, prepared: PreparedGraph) {
+    /// Record that a script's checked graph loaded as `root`.
+    fn set_loaded(&mut self, id: ScriptId, prepared: PreparedGraph, root: RootHandle) {
         if let Some(script) = self.scripts.get_mut(&id) {
-            script.prepared = Some(prepared);
+            script.load = ScriptLoad::Loaded(prepared, root);
         }
     }
 
-    /// Record the loaded root for a script.
-    fn set_root(&mut self, id: ScriptId, root: RootHandle) {
-        if let Some(script) = self.scripts.get_mut(&id) {
-            script.root = Some(root);
-        }
-    }
-
-    /// Clear every loaded root after source invalidation.
+    /// Clear every graph and loaded root after source invalidation.
     fn clear_roots(&mut self) {
         for script in self.scripts.values_mut() {
-            script.root = None;
-            script.prepared = None;
+            script.load = ScriptLoad::Source;
         }
     }
 
@@ -380,6 +393,41 @@ impl ClosureRegistry {
     }
 }
 
+/// The audited surfaces of a finalized command API.
+#[derive(Clone)]
+struct Surfaces {
+    /// Surface used for checks and VM construction.
+    script: Surface,
+    /// Surface with the startup-root global obligations.
+    startup: Surface,
+}
+
+/// Where the host is in finalization.
+///
+/// The phases run once, in order. The retained runtime is built as the host
+/// becomes `Ready`, and lives in its own cell, apart from this state, so a
+/// live VM scope can hold it while callbacks read the host.
+#[derive(Default)]
+enum HostPhase {
+    /// The command surface is still open to registration.
+    #[default]
+    Open,
+    /// The surfaces are audited, and the runtime is not yet built.
+    Staged(Surfaces),
+    /// The runtime is built and scripts load into it.
+    Ready(Surfaces),
+}
+
+impl HostPhase {
+    /// Return the audited surfaces, once staged.
+    fn surfaces(&self) -> Option<&Surfaces> {
+        match self {
+            Self::Open => None,
+            Self::Staged(surfaces) | Self::Ready(surfaces) => Some(surfaces),
+        }
+    }
+}
+
 /// Shared mutable host state.
 #[derive(Default)]
 struct LuauState {
@@ -391,12 +439,8 @@ struct LuauState {
     logs: Vec<String>,
     /// Assertion results emitted by the most recent script evaluation.
     assertions: Vec<ScriptAssertion>,
-    /// Audited script surface used for checks and VM construction.
-    surface: Option<Surface>,
-    /// Script surface with startup-root global obligations.
-    startup_surface: Option<Surface>,
-    /// Whether the command surface has been finalized.
-    finalized: bool,
+    /// Where the host is in finalization.
+    phase: HostPhase,
     /// Whether a top-level async eval is currently driving the retained VM.
     active_eval: bool,
     /// Deferred hooks to execute after the first live render.
@@ -413,9 +457,11 @@ impl LuauState {
         }
     }
 
-    /// Mark a fully prepared script API as ready.
+    /// Mark a staged script API as ready, once its runtime is built.
     fn publish(&mut self) {
-        self.finalized = true;
+        if let HostPhase::Staged(surfaces) = mem::take(&mut self.phase) {
+            self.phase = HostPhase::Ready(surfaces);
+        }
     }
 
     /// Drain deferred `on_start` hooks in registration order.
@@ -628,12 +674,27 @@ impl LuauHost {
 
     /// Return true if the API has been finalized.
     pub fn is_finalized(&self) -> bool {
-        self.state.borrow().finalized
+        matches!(self.state.borrow().phase, HostPhase::Ready(_))
     }
 
     /// Return the finalized script surface.
     pub(crate) fn surface(&self) -> Option<Surface> {
-        self.state.borrow().surface.clone()
+        self.state
+            .borrow()
+            .phase
+            .surfaces()
+            .map(|surfaces| surfaces.script.clone())
+    }
+
+    /// Return the audited surfaces, or an error that `action` needs
+    /// `finalize_api()` first.
+    fn staged_surfaces(&self, action: &str) -> Result<Surfaces> {
+        self.state
+            .borrow()
+            .phase
+            .surfaces()
+            .cloned()
+            .ok_or_else(|| error::Error::Invalid(format!("cannot {action} before finalize_api()")))
     }
 
     /// Mark the retained runtime as busy with a top-level async evaluation.
@@ -648,22 +709,16 @@ impl LuauHost {
 
     /// Type-check a named Luau source against the finalized canopy API.
     pub fn check_script(&self, source_name: &str, source: &str) -> Result<ScriptCheckResult> {
-        let surface = self.state.borrow().surface.clone().ok_or_else(|| {
-            error::Error::Invalid("cannot type-check scripts before finalize_api()".to_string())
-        })?;
+        let surfaces = self.staged_surfaces("type-check scripts")?;
         let source = named_source(ModuleId::new(source_name), source);
-        Ok(check_source_with_surface(&surface, &source))
+        Ok(check_source_with_surface(&surfaces.script, &source))
     }
 
     /// Type-check a named startup script against its runtime module identity
     /// and enforce the startup-script obligation.
     fn typecheck_startup_source(&self, source: &Source) -> Result<()> {
-        let surface = self.state.borrow().startup_surface.clone().ok_or_else(|| {
-            error::Error::Invalid(
-                "cannot type-check startup scripts before finalize_api()".to_string(),
-            )
-        })?;
-        let result = check_source_with_surface(&surface, source);
+        let surfaces = self.staged_surfaces("type-check startup scripts")?;
+        let result = check_source_with_surface(&surfaces.startup, source);
         if !result.has_errors() {
             Ok(())
         } else {
@@ -740,7 +795,7 @@ impl LuauHost {
         fixtures: &[FixtureInfo],
         actions: &inputmap::IntentCatalog,
     ) -> Result<String> {
-        if self.is_finalized() || self.state.borrow().surface.is_some() {
+        if !matches!(self.state.borrow().phase, HostPhase::Open) {
             return Err(error::Error::Invalid(
                 "Luau API finalization is already active or complete".into(),
             ));
@@ -768,24 +823,27 @@ impl LuauHost {
             .map_err(|err| {
                 error::Error::script(format!("building startup script checker failed: {err}"))
             })?;
-        let mut state = self.state.borrow_mut();
-        state.surface = Some(surface);
-        state.startup_surface = Some(startup_surface);
+        self.state.borrow_mut().phase = HostPhase::Staged(Surfaces {
+            script: surface,
+            startup: startup_surface,
+        });
         Ok(definitions)
     }
 
     /// Build and publish the retained runtime after every other preparation
     /// step succeeds.
     pub(crate) fn publish_finalize(&self) -> Result<()> {
-        if self.is_finalized() {
-            return Err(error::Error::Invalid("Luau API already finalized".into()));
-        }
-        let surface = self
-            .state
-            .borrow()
-            .surface
-            .clone()
-            .ok_or_else(|| error::Error::Invalid("Luau API surface is not prepared".into()))?;
+        let surface = match &self.state.borrow().phase {
+            HostPhase::Open => {
+                return Err(error::Error::Invalid(
+                    "Luau API surface is not prepared".into(),
+                ));
+            }
+            HostPhase::Staged(surfaces) => surfaces.script.clone(),
+            HostPhase::Ready(_) => {
+                return Err(error::Error::Invalid("Luau API already finalized".into()));
+            }
+        };
         let mut runtime = Runtime::new(
             surface.clone(),
             &VmConfig::untrusted(Ambient::production(0), default_vm_limits()),
@@ -798,7 +856,7 @@ impl LuauHost {
             .scripts
             .scripts
             .iter()
-            .map(|(id, script)| (*id, script.runtime_source.clone(), script.prepared.clone()))
+            .map(|(id, script)| (*id, script.runtime_source.clone(), script.prepared()))
             .collect::<Vec<_>>();
         let mut pending = pending;
         pending.sort_by_key(|(id, _, _)| *id);
@@ -819,8 +877,7 @@ impl LuauHost {
         {
             let mut state = self.state.borrow_mut();
             for (id, prepared, root) in loaded {
-                state.scripts.set_prepared(id, prepared);
-                state.scripts.set_root(id, root);
+                state.scripts.set_loaded(id, prepared, root);
             }
             state.publish();
         }
@@ -869,7 +926,7 @@ impl LuauHost {
     ) -> StdResult<ScriptId, CompileFailure<E>> {
         self.ensure_eval_idle().map_err(CompileFailure::Other)?;
         let runtime_source = strict_named_source(source).map_err(CompileFailure::Other)?;
-        let prepared = if let Some(surface) = self.state.borrow().surface.clone() {
+        let prepared = if let Some(surface) = self.surface() {
             Some(
                 surface
                     .prepare_graph_ready(runtime_source.clone())
@@ -920,12 +977,9 @@ impl LuauHost {
         self.typecheck_startup_source(&strict_named_source(source)?)?;
         let runtime_source = source_with_text(source, startup_runtime_source(original));
         let runtime_source = strict_named_source(&runtime_source)?;
-        let surface = self.state.borrow().surface.clone().ok_or_else(|| {
-            error::Error::Invalid(
-                "cannot compile startup scripts before finalize_api()".to_string(),
-            )
-        })?;
-        let prepared = surface
+        let prepared = self
+            .staged_surfaces("compile startup scripts")?
+            .script
             .prepare_graph_ready(runtime_source.clone())
             .map_err(|error| prepare_graph_error_to_canopy(&error))?;
         let sid = self
@@ -976,8 +1030,7 @@ impl LuauHost {
             retained_runtime_error_to_canopy(&error, "loading prepared script", None)
         })?;
         let mut state = self.state.borrow_mut();
-        state.scripts.set_prepared(sid, prepared);
-        state.scripts.set_root(sid, root.clone());
+        state.scripts.set_loaded(sid, prepared, root.clone());
         Ok(root)
     }
 
@@ -1009,10 +1062,14 @@ impl LuauHost {
         sid: ScriptId,
     ) -> Result<ArgValue> {
         let node_id = node_id.into();
-        let mut invocation = self.start_invocation(node_id, sid)?;
-        if let Some(entry) = canopy.core.nodes.get(node_id) {
-            invocation.set_origin_incarnation(entry.incarnation);
-        }
+        let incarnation = canopy.core.nodes.get(node_id).ok_or_else(|| {
+            error::Error::script_structured(
+                error::ScriptErrorKind::InvalidNode,
+                "script origin no longer exists",
+            )
+            .with_owner(format!("{node_id:?}"))
+        })?;
+        let mut invocation = self.start_invocation(node_id, incarnation.incarnation, sid)?;
         let mut gas = SCRIPT_GAS_LIMIT;
         let future = poll_fn(|cx| {
             let step = self.poll_invocation(canopy, &mut invocation, cx, gas, None);

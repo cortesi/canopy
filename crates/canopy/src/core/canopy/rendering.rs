@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use super::{Canopy, FrameId, motion::PrimaryCursor};
+use super::{Canopy, FrameId, motion::PrimaryCursor, scripting::Startup};
 use crate::{
     NodeId,
     core::{
@@ -338,7 +338,7 @@ impl Canopy {
 
     /// Prepare and publish pending state without writing to a backend.
     pub(super) fn prepare_frame(&mut self, force: bool) -> Result<bool> {
-        if !self.driver.startup_attempted {
+        if self.driver.startup == Startup::Pending {
             self.run_startup_scripts()?;
         }
         if !force

@@ -320,7 +320,7 @@ mod tests {
                     builder.project_script_root(directory.path().to_owned(), ScriptTrust::Disabled);
             }
             let mut canopy = builder.build()?;
-            assert!(canopy.script.module_source.is_none());
+            assert!(canopy.script.module_source().is_none());
             canopy.set_screen_size(Size::new(10, 3))?;
             canopy.turn(TurnInput::Prepare)?;
             assert!(

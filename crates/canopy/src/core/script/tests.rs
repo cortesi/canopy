@@ -1233,3 +1233,41 @@ fn script_discovery_separates_disabled_state_and_missing_input() -> Result<()> {
     ));
     Ok(())
 }
+
+#[test]
+fn host_phases_run_once_in_order() -> Result<()> {
+    let host = LuauHost::new();
+    let commands = CommandSet::default();
+    let owners = BTreeSet::new();
+    let intents = IntentCatalog::default();
+    let prepare = |host: &LuauHost| host.prepare_finalize(&commands, &owners, None, &[], &intents);
+    let phase = |host: &LuauHost| match host.state.borrow().phase {
+        HostPhase::Open => "open",
+        HostPhase::Staged(_) => "staged",
+        HostPhase::Ready(_) => "ready",
+    };
+
+    // Open: checks need a surface, and publishing needs a staged one.
+    assert_eq!(phase(&host), "open");
+    assert!(host.check_script("probe", "return 1").is_err());
+    assert!(host.publish_finalize().is_err());
+    assert_eq!(phase(&host), "open");
+
+    // Staged: checks run, the runtime does not exist, and staging is once.
+    prepare(&host)?;
+    assert_eq!(phase(&host), "staged");
+    assert!(host.check_script("probe", "return 1").is_ok());
+    assert!(!host.is_finalized());
+    assert!(prepare(&host).is_err());
+    assert_eq!(phase(&host), "staged");
+
+    // Ready: scripts load, and neither step runs again.
+    host.publish_finalize()?;
+    assert_eq!(phase(&host), "ready");
+    assert!(host.is_finalized());
+    assert!(host.compile("return 1").is_ok());
+    assert!(prepare(&host).is_err());
+    assert!(host.publish_finalize().is_err());
+    assert_eq!(phase(&host), "ready");
+    Ok(())
+}

@@ -31,8 +31,6 @@ use crate::{
 struct DefaultBindingsScript {
     /// Source text evaluated for this owner.
     source: String,
-    /// Pre-compiled script handle available after `finalize_api()`.
-    script_id: Option<script::ScriptId>,
 }
 
 /// Registered app startup script metadata.
@@ -41,8 +39,28 @@ pub(super) struct StartupScript {
     name: String,
     /// Source text evaluated during startup.
     source: String,
-    /// Pre-compiled script handle available after `finalize_api()`.
-    script_id: Option<script::ScriptId>,
+}
+
+/// What `finalize_api()` produced.
+struct Finalized {
+    /// Luau API definition text.
+    api_text: String,
+    /// Persistent Luau module source, if roots are configured.
+    module_source: Option<Arc<script::ScriptModuleSource>>,
+    /// Compiled startup scripts, in registration order.
+    startup_ids: Vec<script::ScriptId>,
+    /// Compiled default binding scripts, by owner.
+    default_binding_ids: HashMap<String, script::ScriptId>,
+}
+
+/// Whether automatic startup has run.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum Startup {
+    /// Startup runs at the first frame preparation.
+    #[default]
+    Pending,
+    /// Startup ran, or was attempted and failed; it does not run again.
+    Ran,
 }
 
 /// Reversible callback and binding state for one startup script attempt.
@@ -70,12 +88,10 @@ pub struct ScriptState {
     pub(crate) host: script::LuauHost,
     /// Stack of active script dispatch origins for the current VM invocation.
     pub(crate) context_stack: Vec<NodeId>,
-    /// Cached Luau API definition text.
-    api_text: Option<String>,
+    /// What `finalize_api()` produced, once it has run.
+    finalized: Option<Finalized>,
     /// Configured persistent Luau module roots.
     pub(super) module_roots: script::ScriptModuleRoots,
-    /// Finalized persistent Luau module source, if any.
-    pub(super) module_source: Option<Arc<script::ScriptModuleSource>>,
     /// App-level startup scripts run before user and project init files.
     pub(super) startup_scripts: Vec<StartupScript>,
     /// Binding targets whose release is deferred until a startup attempt
@@ -92,9 +108,8 @@ impl Default for ScriptState {
         Self {
             host: script::LuauHost::new(),
             context_stack: Vec::new(),
-            api_text: None,
+            finalized: None,
             module_roots: script::ScriptModuleRoots::default(),
-            module_source: None,
             startup_scripts: Vec::new(),
             deferred_binding_releases: None,
             default_bindings: HashMap::new(),
@@ -104,6 +119,11 @@ impl Default for ScriptState {
 }
 
 impl ScriptState {
+    /// Return the finalized persistent Luau module source, if any.
+    pub(super) fn module_source(&self) -> Option<&Arc<script::ScriptModuleSource>> {
+        self.finalized.as_ref()?.module_source.as_ref()
+    }
+
     /// Register a Luau script as the default bindings for a command owner.
     pub(super) fn register_default_bindings(&mut self, owner: &str, script: &str) -> Result<()> {
         if owner.trim().is_empty() {
@@ -123,7 +143,6 @@ impl ScriptState {
             owner.to_string(),
             DefaultBindingsScript {
                 source: script.to_string(),
-                script_id: None,
             },
         );
         Ok(())
@@ -151,7 +170,6 @@ impl ScriptState {
         self.startup_scripts.push(StartupScript {
             name: name.to_string(),
             source: source.to_string(),
-            script_id: None,
         });
         Ok(())
     }
@@ -314,18 +332,15 @@ impl Canopy {
     /// Run app, user, and project startup scripts once, during the first
     /// frame preparation.
     pub(super) fn run_startup_scripts(&mut self) -> Result<()> {
-        self.driver.startup_attempted = true;
+        self.driver.startup = Startup::Ran;
         let host = self.script.host.clone();
+        let finalized = self.script.finalized.as_ref().ok_or_else(not_finalized)?;
         let startup_scripts = self
             .script
             .startup_scripts
             .iter()
-            .map(|script| {
-                let script_id = script
-                    .script_id
-                    .expect("startup scripts are compiled during finalize_api()");
-                (script.name.clone(), script.source.clone(), script_id)
-            })
+            .zip(&finalized.startup_ids)
+            .map(|(script, id)| (script.name.clone(), script.source.clone(), *id))
             .collect::<Vec<_>>();
         for (name, source, script_id) in startup_scripts {
             self.run_startup_attempt(ScriptOrigin::Startup(name), &source, script_id)?;
@@ -333,9 +348,12 @@ impl Canopy {
         for module in self.script.module_roots.startup_modules() {
             let mounted_source = self
                 .script
-                .module_source
-                .as_ref()
-                .expect("startup modules require a finalized filesystem source")
+                .module_source()
+                .ok_or_else(|| {
+                    error::Error::Invalid(
+                        "startup modules require a finalized filesystem source".into(),
+                    )
+                })?
                 .source_for_path(&module.path)
                 .map_err(|err| {
                     error::Error::Invalid(format!(
@@ -484,7 +502,7 @@ impl Canopy {
         let source = fs::read_to_string(path)
             .map_err(|err| error::Error::Invalid(format!("config read failed: {err}")))?;
         let result = (|| {
-            let mounted_source = match &self.script.module_source {
+            let mounted_source = match self.script.module_source() {
                 Some(mounts) => match mounts.source_for_path(path) {
                     Ok(source) => Some(source),
                     Err(DirectoryMountsError::OutsideRoots { .. }) => None,
@@ -533,20 +551,25 @@ impl Canopy {
             self.core.input_map.intents(),
         )?;
         self.validate_script_module_declarations(module_source.as_ref())?;
-        self.compile_registered_default_bindings()?;
-        self.compile_registered_startup_scripts()?;
+        let default_binding_ids = self.compile_registered_default_bindings()?;
+        let startup_ids = self.compile_registered_startup_scripts()?;
         self.script.host.publish_finalize()?;
-        self.script.module_source = module_source;
-        self.script.api_text = Some(definitions);
+        self.script.finalized = Some(Finalized {
+            api_text: definitions,
+            module_source,
+            startup_ids,
+            default_binding_ids,
+        });
         Ok(())
     }
 
     /// Return the rendered Luau definition file for a ready app.
     pub fn script_api(&self) -> Result<&str> {
         self.script
-            .api_text
-            .as_deref()
-            .ok_or_else(|| error::Error::Invalid("script API is not finalized".to_string()))
+            .finalized
+            .as_ref()
+            .map(|finalized| finalized.api_text.as_str())
+            .ok_or_else(not_finalized)
     }
 
     /// Prepare a registered default binding script for a nested scoped run.
@@ -557,9 +580,14 @@ impl Canopy {
         let script = self.script.default_bindings.get(owner).ok_or_else(|| {
             error::Error::NotFound(format!("default bindings not registered for owner {owner}"))
         })?;
-        let script_id = script.script_id.ok_or_else(|| {
-            error::Error::NotFound(format!("default bindings not compiled for owner {owner}"))
-        })?;
+        let script_id = self
+            .script
+            .finalized
+            .as_ref()
+            .and_then(|finalized| finalized.default_binding_ids.get(owner).copied())
+            .ok_or_else(|| {
+                error::Error::NotFound(format!("default bindings not compiled for owner {owner}"))
+            })?;
         let source = script.source.clone();
         let host = self.script.host.clone();
         let baseline = self.begin_script_journal();
@@ -749,31 +777,32 @@ impl Canopy {
         self.script.default_bindings.keys().cloned().collect()
     }
 
-    /// Compile any registered default binding scripts after finalization.
-    fn compile_registered_default_bindings(&mut self) -> Result<()> {
-        let host = self.script.host.clone();
-        let mut scripts = self.script.default_bindings.iter_mut().collect::<Vec<_>>();
-        scripts.sort_by_key(|(a, _)| a.as_str());
-        for (_, script) in scripts {
-            if script.script_id.is_none() {
-                script.script_id = Some(host.compile(&script.source)?);
-            }
-        }
-        Ok(())
+    /// Compile the registered default binding scripts, in owner order, and
+    /// return their ids by owner.
+    fn compile_registered_default_bindings(&self) -> Result<HashMap<String, script::ScriptId>> {
+        let host = &self.script.host;
+        let mut scripts = self.script.default_bindings.iter().collect::<Vec<_>>();
+        scripts.sort_by_key(|(owner, _)| owner.as_str());
+        scripts
+            .into_iter()
+            .map(|(owner, script)| Ok((owner.clone(), host.compile(&script.source)?)))
+            .collect()
     }
 
-    /// Compile any registered startup scripts after finalization.
-    fn compile_registered_startup_scripts(&mut self) -> Result<()> {
-        let host = self.script.host.clone();
-        for script in &mut self.script.startup_scripts {
-            if script.script_id.is_none() {
-                script.script_id = Some(host.compile_startup_named(
+    /// Compile the registered startup scripts, and return their ids in
+    /// registration order.
+    fn compile_registered_startup_scripts(&self) -> Result<Vec<script::ScriptId>> {
+        let host = &self.script.host;
+        self.script
+            .startup_scripts
+            .iter()
+            .map(|script| {
+                host.compile_startup_named(
                     &script.source,
                     format!("startup/{}", script.name).as_bytes(),
-                )?);
-            }
-        }
-        Ok(())
+                )
+            })
+            .collect()
     }
 
     /// Execute and release all queued startup hooks.
@@ -850,4 +879,9 @@ fn implementation_path_for_declaration(path: &FsPath) -> Option<PathBuf> {
     let file_name = path.file_name()?.to_str()?;
     let stem = file_name.strip_suffix(".d.luau")?;
     Some(path.with_file_name(format!("{stem}.luau")))
+}
+
+/// The error of a request that needs `finalize_api()` first.
+fn not_finalized() -> error::Error {
+    error::Error::Invalid("script API is not finalized".to_string())
 }

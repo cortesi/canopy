@@ -25,7 +25,7 @@ impl Canopy {
                 "cannot reload modules while evaluation is active".into(),
             ));
         }
-        let Some(source) = self.script.module_source.as_ref() else {
+        let Some(source) = self.script.module_source() else {
             return Ok(None);
         };
         let epoch = match root {
