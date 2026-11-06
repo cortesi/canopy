@@ -85,14 +85,51 @@ fn reader<R>(
     ctx.with_slot::<ReaderSlot, _>(ctx.node_id(), f)
 }
 
+/// Where the gym's document stands, for the controls and the status line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Stream {
+    /// A complete document, named for the status line.
+    Complete(&'static str),
+    /// A controlled stream that has accepted this many chunks of [`STREAM`].
+    Receiving(usize),
+    /// A controlled stream that finished.
+    Finished,
+    /// A controlled stream that was aborted.
+    Aborted,
+}
+
+impl Stream {
+    /// Return whether the stream still accepts an append or a finish.
+    fn is_receiving(self) -> bool {
+        matches!(self, Self::Receiving(_))
+    }
+
+    /// Return the next chunk to append and the state after it, while the
+    /// stream receives and has a chunk left.
+    fn next_chunk(self) -> Option<(&'static str, Self)> {
+        let Self::Receiving(accepted) = self else {
+            return None;
+        };
+        STREAM
+            .get(accepted)
+            .map(|chunk| (*chunk, Self::Receiving(accepted + 1)))
+    }
+
+    /// Return the lifecycle text for the status line.
+    fn label(self) -> String {
+        match self {
+            Self::Complete(label) => label.to_owned(),
+            Self::Receiving(accepted) => format!("receiving {accepted}/{}", STREAM.len()),
+            Self::Finished => "finished".to_owned(),
+            Self::Aborted => "aborted".to_owned(),
+        }
+    }
+}
+
 /// A real reader with an explicit, non-effecting clipboard/browser host.
 pub struct MarkdownGym {
-    /// Next controlled chunk to append.
-    next_chunk: usize,
-    /// Whether the controlled stream still accepts append or finish.
-    receiving: bool,
-    /// Human-readable lifecycle outcome for the host status line.
-    state: String,
+    /// Where the document's lifecycle stands.
+    stream: Stream,
     /// Whether newly mounted geometry uses portable decorations.
     ascii: bool,
     /// Whether the live palette uses the light theme.
@@ -113,9 +150,7 @@ impl MarkdownGym {
     /// Construct the complete fixture with a recording host.
     pub fn new() -> Self {
         Self {
-            next_chunk: 0,
-            receiving: false,
-            state: "complete fixture".into(),
+            stream: Stream::Complete("complete fixture"),
             ascii: false,
             light: false,
             blocks: false,
@@ -149,7 +184,7 @@ impl MarkdownGym {
     fn show_status(&self, ctx: &mut dyn Context) -> Result<()> {
         let text = format!(
             "Markdown · {} · {}{} · recording host: {} actions",
-            self.state,
+            self.stream.label(),
             if self.ascii { "ASCII" } else { "Unicode" },
             if self.blocks { " · block cursor" } else { "" },
             self.requests.len()
@@ -160,30 +195,17 @@ impl MarkdownGym {
         })
     }
     /// Record a lifecycle state and publish it to the status line.
-    fn set_state(
-        &mut self,
-        ctx: &mut dyn Context,
-        state: impl Into<String>,
-        receiving: bool,
-    ) -> Result<()> {
-        self.state = state.into();
-        self.receiving = receiving;
+    fn set_stream(&mut self, ctx: &mut dyn Context, stream: Stream) -> Result<()> {
+        self.stream = stream;
         self.show_status(ctx)
     }
     /// Replace the document in a new epoch with both presentations available.
-    fn load(
-        &mut self,
-        ctx: &mut dyn Context,
-        input: DocumentInput,
-        state: impl Into<String>,
-    ) -> Result<()> {
-        let receiving = matches!(input, DocumentInput::Receiving(_));
+    fn load(&mut self, ctx: &mut dyn Context, input: DocumentInput, stream: Stream) -> Result<()> {
         reader(ctx, |md, ctx| {
             md.set_source_only(ctx, false, None)?;
             md.replace(ctx, input).map(|_| ())
         })?;
-        self.next_chunk = usize::from(receiving);
-        self.set_state(ctx, state, receiving)
+        self.set_stream(ctx, stream)
     }
     /// Mount a reader over the complete fixture with the current options and
     /// region.
@@ -276,45 +298,40 @@ impl MarkdownGym {
         self.load(
             ctx,
             DocumentInput::Receiving(STREAM[0].into()),
-            format!("receiving 1/{}", STREAM.len()),
+            Stream::Receiving(1),
         )
     }
     /// Accept exactly one known chunk. This command never advances a clock.
     #[command]
     pub fn append_chunk(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if !self.receiving {
-            return Ok(());
-        }
-        let Some(chunk) = STREAM.get(self.next_chunk) else {
+        let Some((chunk, next)) = self.stream.next_chunk() else {
             return Ok(());
         };
         reader(ctx, |md, ctx| md.append(ctx, chunk).map(|_| ()))?;
-        self.next_chunk += 1;
-        let state = format!("receiving {}/{}", self.next_chunk, STREAM.len());
-        self.set_state(ctx, state, true)
+        self.set_stream(ctx, next)
     }
     #[command]
     /// Complete the current stream without accepting additional bytes.
     pub fn finish(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if !self.receiving {
+        if !self.stream.is_receiving() {
             return Ok(());
         }
         reader(ctx, |md, ctx| {
             md.finish(ctx, FinishOutcome::Completed).map(|_| ())
         })?;
-        self.set_state(ctx, "finished", false)
+        self.set_stream(ctx, Stream::Finished)
     }
     #[command]
     /// Retain accepted bytes and finish with an explicit abort outcome.
     pub fn abort(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if !self.receiving {
+        if !self.stream.is_receiving() {
             return Ok(());
         }
         reader(ctx, |md, ctx| {
             md.finish(ctx, FinishOutcome::Aborted("Controlled gym abort".into()))
                 .map(|_| ())
         })?;
-        self.set_state(ctx, "aborted", false)
+        self.set_stream(ctx, Stream::Aborted)
     }
     #[command]
     /// Replace the document with the complete rich fixture in a new epoch.
@@ -322,7 +339,7 @@ impl MarkdownGym {
         self.load(
             ctx,
             DocumentInput::Complete(FIXTURE.into()),
-            "complete fixture",
+            Stream::Complete("complete fixture"),
         )
     }
     /// Show exact CRLF, a tab, and a final newline for Source copy checks.
@@ -331,7 +348,7 @@ impl MarkdownGym {
         self.load(
             ctx,
             DocumentInput::Complete(EXACT_SOURCE.into()),
-            "exact CRLF fixture",
+            Stream::Complete("exact CRLF fixture"),
         )?;
         reader(ctx, |md, ctx| md.set_view_type(ctx, ViewType::Source))
     }
@@ -340,7 +357,11 @@ impl MarkdownGym {
     pub fn syntax_limit(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let payload = "let plain_above_syntax_cap = 42;\n".repeat(9000);
         let source = format!("# Syntax limit\n\n```rust\n{payload}```\n");
-        self.load(ctx, DocumentInput::Complete(source), "syntax limit fixture")
+        self.load(
+            ctx,
+            DocumentInput::Complete(source),
+            Stream::Complete("syntax limit fixture"),
+        )
     }
     /// Demonstrate a host-limited prefix without presenting it as a complete
     /// parse.
@@ -354,7 +375,7 @@ impl MarkdownGym {
         self.load(
             ctx,
             DocumentInput::Complete(prefix),
-            "partial source prefix",
+            Stream::Complete("partial source prefix"),
         )?;
         reader(ctx, |md, ctx| md.set_source_only(ctx, true, Some(status)))
     }
@@ -366,7 +387,7 @@ impl MarkdownGym {
             DocumentInput::Complete(
                 "# Unavailable actions\n\n[Unsafe destination](javascript:alert%281%29)\n".into(),
             ),
-            "unavailable browser action",
+            Stream::Complete("unavailable browser action"),
         )?;
         reader(ctx, |md, ctx| md.set_view_type(ctx, ViewType::Rendered))
     }
@@ -411,7 +432,7 @@ impl MarkdownGym {
         if focused {
             self.focus_reader(ctx)?;
         }
-        self.set_state(ctx, "complete fixture", false)
+        self.set_stream(ctx, Stream::Complete("complete fixture"))
     }
 
     #[command]
@@ -575,4 +596,37 @@ fn landscape() -> Arc<image::RgbaImage> {
         };
         image::Rgba([rgb[0], rgb[1], rgb[2], 255])
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_stream_appends_each_chunk_then_stops() {
+        let mut stream = Stream::Receiving(1);
+        let mut appended = vec![STREAM[0]];
+        while let Some((chunk, next)) = stream.next_chunk() {
+            appended.push(chunk);
+            stream = next;
+        }
+        assert_eq!(appended, STREAM);
+        assert_eq!(stream, Stream::Receiving(STREAM.len()));
+        assert!(stream.is_receiving());
+        assert_eq!(stream.label(), format!("receiving {0}/{0}", STREAM.len()));
+        for done in [
+            Stream::Complete("complete fixture"),
+            Stream::Finished,
+            Stream::Aborted,
+        ] {
+            assert!(!done.is_receiving());
+            assert_eq!(done.next_chunk(), None);
+        }
+        assert_eq!(
+            Stream::Complete("complete fixture").label(),
+            "complete fixture"
+        );
+        assert_eq!(Stream::Finished.label(), "finished");
+        assert_eq!(Stream::Aborted.label(), "aborted");
+    }
 }
