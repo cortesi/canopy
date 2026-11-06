@@ -1048,15 +1048,38 @@ fn named_modes_enter_move_and_leave_by_name() -> Result<()> {
 }
 
 #[test]
+fn a_mode_enters_under_a_menu_that_a_framework_modal_suspends() -> Result<()> {
+    let mut map = InputMap::new();
+    map.open_menu("go")?;
+    map.set_modal_bindings(Some(ModalBindings::Framework {
+        groups: &[HELP],
+        intents: &[],
+    }));
+    assert!(map.modal_suspends_menus());
+    map.enter_mode("insert")?;
+    map.set_modal_bindings(None);
+    assert_eq!(map.active_modes(), vec!["go", "insert"]);
+    assert_eq!(map.transient_mode(), Some("go"), "the menu still waits");
+    let snapshot = map.snapshot_application();
+    map.clear_application();
+    assert!(map.active_modes().is_empty());
+    map.restore_application(snapshot);
+    assert_eq!(map.active_modes(), vec!["go", "insert"]);
+    assert_eq!(map.mode(), "go", "a restore keeps the menu newest");
+    Ok(())
+}
+
+#[test]
 fn a_waiting_menu_stays_the_newest_mode() -> Result<()> {
     let mut map = InputMap::new();
     map.enter_mode("normal")?;
     map.open_menu("go")?;
     let generation = map.mode_generation();
     assert!(
-        map.enter_mode("insert").is_err(),
-        "a mode cannot bury a waiting menu"
+        map.enter_mode("go").is_err(),
+        "one name never names a mode and a menu at once"
     );
+    assert!(map.enter_mode("").is_err(), "a mode must have a name");
     assert!(
         map.leave_mode("go").is_err(),
         "the menu closes with its key"
@@ -1068,14 +1091,28 @@ fn a_waiting_menu_stays_the_newest_mode() -> Result<()> {
         "the failed calls change nothing"
     );
 
+    map.enter_mode("insert")?;
+    assert_eq!(
+        map.active_modes(),
+        vec!["go", "insert", "normal"],
+        "a mode enters under the waiting menu"
+    );
+    assert_eq!(map.transient_mode(), Some("go"));
+    assert_eq!(map.mode(), "go");
     map.leave_mode("normal")?;
     assert_eq!(
         map.active_modes(),
-        vec!["go"],
+        vec!["go", "insert"],
         "other modes can leave while a menu waits"
     );
     map.close_menu();
-    assert!(map.active_modes().is_empty());
+    assert_eq!(map.active_modes(), vec!["insert"]);
+    assert_eq!(
+        map.mode(),
+        "insert",
+        "the mode is active once the menu closes"
+    );
+    map.leave_mode("insert")?;
     assert!(map.open_menu("").is_err(), "a menu must name its mode");
     map.enter_mode("go")?;
     assert!(
@@ -1122,7 +1159,7 @@ impl ModeModel {
     /// Apply `op`, returning whether it succeeded.
     fn apply(&mut self, op: &ModeOp, saved: &mut Option<Self>) -> bool {
         let admitted = match *op {
-            ModeOp::Enter(name) => !name.is_empty() && self.menu().is_none(),
+            ModeOp::Enter(name) => !name.is_empty() && self.menu() != Some(name),
             ModeOp::Leave(name) => !name.is_empty() && self.menu() != Some(name),
             ModeOp::Open(name) => {
                 !name.is_empty()
@@ -1137,7 +1174,9 @@ impl ModeModel {
         match *op {
             ModeOp::Enter(name) => {
                 self.0.retain(|(active, _)| *active != name);
-                self.0.push((name, false));
+                // A mode enters under a waiting menu, which stays newest.
+                let below_menu = self.0.len() - usize::from(self.menu().is_some());
+                self.0.insert(below_menu, (name, false));
             }
             ModeOp::Leave(name) => self.0.retain(|(active, _)| *active != name),
             ModeOp::Open(name) => self.0.push((name, true)),

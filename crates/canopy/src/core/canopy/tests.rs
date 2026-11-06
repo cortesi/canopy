@@ -1334,6 +1334,26 @@ fn a_transient_mode_takes_the_next_key_before_widgets() -> Result<()> {
 }
 
 #[test]
+fn a_mode_entered_under_a_menu_is_active_after_the_menu_takes_its_key() -> Result<()> {
+    let mut canopy = app();
+    canopy.eval_script(
+        r#"
+        canopy.keymap({
+            mode = "prefix",
+            { key = "y", description = "Prefix y", action = function() canopy.enter_mode("after") end },
+        })
+        "#,
+    )?;
+    open_menu(&mut canopy, "prefix")?;
+    canopy.enter_mode("insert")?;
+    assert_eq!(canopy.core.input_map.active_modes(), ["prefix", "insert"]);
+    assert!(canopy.enter_mode("prefix").is_err());
+    canopy.key(None, 'y')?;
+    assert_eq!(canopy.core.input_map.active_modes(), ["after", "insert"]);
+    Ok(())
+}
+
+#[test]
 fn mode_hooks_run_once_for_each_mode_change() -> Result<()> {
     static RUNS: AtomicUsize = AtomicUsize::new(0);
     fn count(_context: &mut dyn Context) -> Result<()> {

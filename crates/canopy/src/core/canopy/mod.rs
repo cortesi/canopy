@@ -581,10 +581,11 @@ impl Canopy {
     }
 
     /// Make `mode` the newest active mode. A mode that is already active
-    /// moves to the top.
+    /// moves to the top. A menu that waits for its key stays newer, and the
+    /// mode is the newest once the menu takes its key.
     ///
-    /// An empty name is an error, and so is entering a mode while a menu
-    /// waits for its key. A failed call changes nothing.
+    /// An empty name is an error, and so is the name of the waiting menu. A
+    /// failed call changes nothing.
     pub fn enter_mode(&mut self, mode: &str) -> Result<()> {
         self.core.input_map.enter_mode(mode)
     }

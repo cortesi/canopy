@@ -767,8 +767,11 @@ mod tests {
             1,
         )?;
         core.input_map.open_menu("go")?;
+        core.input_map.enter_mode("insert")?;
 
         let snapshot = core.available_bindings(None)?;
+        assert_eq!(snapshot.active_modes, ["go", "insert"]);
+        assert_eq!(snapshot.transient_mode.as_deref(), Some("go"));
         assert_eq!(
             snapshot
                 .bindings

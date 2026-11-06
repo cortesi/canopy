@@ -496,8 +496,8 @@ impl ModeStack {
             .chain(self.modes.iter().rev().map(String::as_str))
     }
 
-    /// Make `mode` the newest mode, moving it if it is active. Return whether
-    /// the stack changed.
+    /// Make `mode` the newest mode, moving it if it is active. The menu stays
+    /// newer. Return whether the stack changed.
     fn enter(&mut self, mode: &str) -> bool {
         if self.modes.last().is_some_and(|last| last == mode) {
             return false;
@@ -1061,14 +1061,15 @@ impl InputMap {
     /// Make `mode` the newest active mode. A mode that is already active
     /// moves to the top.
     ///
-    /// An empty name is an error. So is entering a mode while a menu waits
-    /// for its key, because the mode would bury the menu. A failed call
-    /// changes nothing.
+    /// A menu that waits for its key stays the newest entry: the mode enters
+    /// under it, and is the newest mode once the menu takes its key. An empty
+    /// name is an error, and so is the name of the waiting menu, because one
+    /// name never names both a mode and a menu. A failed call changes nothing.
     pub fn enter_mode(&mut self, mode: &str) -> Result<()> {
         check_mode_name(mode)?;
-        if let Some(menu) = self.transient_mode() {
+        if self.transient_mode() == Some(mode) {
             return Err(Error::Invalid(format!(
-                "mode {mode} cannot enter while menu {menu} waits for its key"
+                "mode {mode} cannot enter while menu {mode} waits for its key"
             )));
         }
         if self.mode_stack.enter(mode) {

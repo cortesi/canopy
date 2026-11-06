@@ -831,8 +831,8 @@ pub trait Context: ViewContext + sealed::Context {
     ///
     /// # Errors
     ///
-    /// Fails for an empty name, and while a menu waits for its key. A failed
-    /// call changes nothing.
+    /// Fails for an empty name, and for the name of a menu that waits for its
+    /// key. A failed call changes nothing.
     fn enter_mode(&mut self, mode: &str) -> Result<()>;
 
     /// Remove `mode` from the active keymap modes, wherever it is in the

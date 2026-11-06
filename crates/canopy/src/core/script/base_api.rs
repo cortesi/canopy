@@ -305,7 +305,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     BaseFunction {
         name: "enter_mode",
         docs: Some(
-            "Make `mode` the newest active mode. A mode that is already active moves to the top. An empty name is an error, and so is entering a mode while a menu waits for its key.",
+            "Make `mode` the newest active mode. A mode that is already active moves to the top. A menu that waits for its key stays newer, and the mode is the newest once the menu takes its key. An empty name is an error, and so is the name of the waiting menu.",
         ),
         signature: || FunctionSignature::new().param(("mode", Type::String)),
         handler: Handler::Sync(host_enter_mode),

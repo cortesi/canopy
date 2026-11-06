@@ -5,7 +5,7 @@
 // Declared features: testing
 // Workspace dependencies: canopy-derive, canopy-geom
 // Workspace dependents: canopy (dev), canopy-derive (dev), canopy-markdown, canopy-mcp, canopy-options, canopy-widgets, canopyctl, gyms, hello, mosaic-score, todo
-// Unnameable: crate::core::commands::sealed::Inject, crate::core::context::sealed::Context, crate::core::context::sealed::ViewContext
+// Unnameable: crate::core::commands::sealed::Inject, crate::core::context::sealed::Context, crate::core::context::sealed::ViewContext, crate::core::world::scope::CoreOwner
 
 //! Canopy: A terminal UI library.
 //!
@@ -135,8 +135,8 @@ pub trait Context: ViewContext + Context {
     ///
     /// # Errors
     ///
-    /// Fails for an empty name, and while a menu waits for its key. A failed
-    /// call changes nothing.
+    /// Fails for an empty name, and for the name of a menu that waits for its
+    /// key. A failed call changes nothing.
     fn enter_mode(&mut self, mode: &str) -> crate::error::Result<()>;
 
     /// Request a cooperative shutdown with the provided status code.
@@ -959,10 +959,11 @@ impl Canopy {
     pub fn cursor_looks(&self) -> &CursorLooks;
 
     /// Make `mode` the newest active mode. A mode that is already active
-    /// moves to the top.
+    /// moves to the top. A menu that waits for its key stays newer, and the
+    /// mode is the newest once the menu takes its key.
     ///
-    /// An empty name is an error, and so is entering a mode while a menu
-    /// waits for its key. A failed call changes nothing.
+    /// An empty name is an error, and so is the name of the waiting menu. A
+    /// failed call changes nothing.
     pub fn enter_mode(&mut self, mode: &str) -> crate::error::Result<()>;
 
     /// Explain where `key` would go for a node or the current focus.
@@ -1100,6 +1101,8 @@ impl Canopy {
 }
 
 impl Drop for Canopy {}
+
+impl crate::core::world::scope::CoreOwner for Canopy {}
 
 impl !Send for Canopy {}
 impl !Sync for Canopy {}

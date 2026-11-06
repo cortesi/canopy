@@ -306,8 +306,10 @@ bindings still apply, and they also reach through every modal. `Root` lists the
 keys of a menu in a small panel until the menu closes, centred over the
 application and dimming it as a modal does.
 
-An open menu is always the newest mode. `canopy.enter_mode` is an error while a
-menu waits for its key, and so is `canopy.leave_mode` with the menu's own name.
+An open menu is always the newest mode. `canopy.enter_mode` while a menu waits
+for its key enters the mode under the menu: the menu still takes the next key,
+and the mode is the newest once the menu closes. `canopy.enter_mode` and
+`canopy.leave_mode` with the menu's own name are errors.
 A mouse binding cannot open another menu while one waits for its key.
 Opening a menu whose name is an active mode is an error, and the key that opens
 it reports the error as a notice. An empty name is an error for all three
