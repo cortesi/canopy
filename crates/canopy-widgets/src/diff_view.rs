@@ -21,7 +21,7 @@ use std::{
     collections::BTreeMap,
     mem,
     ops::Range,
-    sync::Arc,
+    sync::{Arc, LazyLock},
     time::{Duration, Instant},
 };
 
@@ -196,34 +196,34 @@ struct SearchMatch {
     row: usize,
 }
 
+/// What a diff view shows.
+enum Content {
+    /// A model of a diff.
+    Diff(DiffModel),
+    /// A message in place of any diff.
+    Message(String),
+}
+
+/// The model that a view showing a message presents to its queries: one
+/// with no lines.
+static EMPTY_MODEL: LazyLock<DiffModel> = LazyLock::new(|| DiffModel::from_texts("", ""));
+
 /// A line diff with a display strategy, a scope, and optional highlighting.
 pub struct DiffView {
-    /// The line diff being shown.
-    diff: Arc<Diff>,
+    /// The diff or the message being shown.
+    content: Content,
     /// How the two sides are laid out.
     strategy: Mode,
-    /// How much unchanged text the rows show.
-    scope: Scope,
-    /// Rows for the current scope, in unified order.
-    rows: Arc<[DiffRow]>,
     /// Rows paired for side-by-side layout.
     side_rows: Vec<SideRow>,
     /// Paired wrapping, rebuilt when the pane width or model changes.
     side_layout: RefCell<Option<SideLayout>>,
-    /// Display width of the widest old line, tabs expanded.
-    old_width: u32,
-    /// Display width of the widest new line, tabs expanded.
-    new_width: u32,
-    /// Tab stop width in columns.
-    tab_stop: usize,
     /// Highlighter for the old side.
     old_highlighter: Option<Box<dyn Highlighter>>,
     /// Highlighter for the new side.
     new_highlighter: Option<Box<dyn Highlighter>>,
     /// Whether both highlighters hold the current texts.
     prepared: bool,
-    /// Text shown in place of the diff, if any.
-    message: Option<String>,
     /// When the view started waiting for a model, while it waits.
     loading: Option<Instant>,
     /// Index into the change heads that the last change move reached.
@@ -248,19 +248,13 @@ impl DiffView {
     #[must_use]
     pub fn new(model: DiffModel) -> Self {
         Self {
-            diff: model.diff,
+            content: Content::Diff(model),
             strategy: Mode::Unified,
-            scope: model.scope,
-            rows: model.rows,
             side_rows: Vec::new(),
             side_layout: RefCell::new(None),
-            old_width: model.old_width,
-            new_width: model.new_width,
-            tab_stop: model.tab_stop,
             old_highlighter: None,
             new_highlighter: None,
             prepared: false,
-            message: None,
             loading: None,
             change: 0,
             revision: 0,
@@ -271,9 +265,11 @@ impl DiffView {
     }
 
     /// Show a message in place of any diff, such as before one is chosen.
+    ///
+    /// The view drops its model, as [`Self::set_message`] does.
     #[must_use]
     pub fn with_message(mut self, message: impl Into<String>) -> Self {
-        self.message = Some(message.into());
+        self.show(Content::Message(message.into()));
         self
     }
 
@@ -282,23 +278,32 @@ impl DiffView {
     /// This clears any message and loading state, drops the highlighters,
     /// and returns change movement to the first change.
     pub fn set_model(&mut self, model: DiffModel) {
-        self.diff = model.diff;
-        self.scope = model.scope;
-        self.rows = model.rows;
-        self.side_rows = Vec::new();
-        self.side_layout.get_mut().take();
-        self.old_width = model.old_width;
-        self.new_width = model.new_width;
-        self.tab_stop = model.tab_stop;
         self.old_highlighter = None;
         self.new_highlighter = None;
+        self.show(Content::Diff(model));
+        self.revision = self.revision.wrapping_add(1);
+    }
+
+    /// Replace the content, and reset what the old content derived: the
+    /// paired rows, the wrapping, the change position, the matches, and the
+    /// loading state.
+    fn show(&mut self, content: Content) {
+        self.content = content;
+        self.side_rows = Vec::new();
+        self.side_layout.get_mut().take();
         self.ensure_side_rows();
         self.prepared = false;
-        self.message = None;
         self.loading = None;
         self.change = 0;
-        self.revision = self.revision.wrapping_add(1);
         self.clear_matches();
+    }
+
+    /// Return the model shown, or a model with no lines for a message.
+    fn model(&self) -> &DiffModel {
+        match &self.content {
+            Content::Diff(model) => model,
+            Content::Message(_) => &EMPTY_MODEL,
+        }
     }
 
     /// Replace the highlighters for the old and new sides.
@@ -313,9 +318,14 @@ impl DiffView {
     }
 
     /// Show `message` in place of the diff, such as for a binary file.
+    ///
+    /// This drops the model and the highlighters, and clears the loading
+    /// state.
     pub fn set_message(&mut self, message: impl Into<String>) {
-        self.set_model(DiffModel::from_texts("", ""));
-        self.message = Some(message.into());
+        self.old_highlighter = None;
+        self.new_highlighter = None;
+        self.show(Content::Message(message.into()));
+        self.revision = self.revision.wrapping_add(1);
     }
 
     /// Note that a model is computing. After a short delay the view shows a
@@ -327,7 +337,10 @@ impl DiffView {
     /// Return whether the view shows a message rather than a diff.
     #[must_use]
     pub fn message(&self) -> Option<&str> {
-        self.message.as_deref()
+        match &self.content {
+            Content::Diff(_) => None,
+            Content::Message(message) => Some(message),
+        }
     }
 
     /// Return the revision of the diff text and its display layout.
@@ -342,16 +355,15 @@ impl DiffView {
     /// so each text line has the same index as its unified display row.
     #[must_use]
     pub fn search_text(&self) -> String {
-        if self.message.is_some() {
-            return String::new();
-        }
-        self.rows
+        let model = self.model();
+        model
+            .rows
             .iter()
             .map(|row| match row {
                 DiffRow::Unchanged { old, .. } | DiffRow::Removed { old } => {
-                    self.diff.old_line(*old)
+                    model.diff.old_line(*old)
                 }
-                DiffRow::Added { new } => self.diff.new_line(*new),
+                DiffRow::Added { new } => model.diff.new_line(*new),
                 _ => "",
             })
             .collect::<Vec<_>>()
@@ -380,7 +392,7 @@ impl DiffView {
             if range.start.line != range.end.line || range.start.column >= range.end.column {
                 continue;
             }
-            let source = match self.rows.get(range.start.line) {
+            let source = match self.model().rows.get(range.start.line) {
                 Some(DiffRow::Unchanged { old, .. } | DiffRow::Removed { old }) => {
                     (Side::Old, *old)
                 }
@@ -481,11 +493,12 @@ impl DiffView {
     /// Map a source match through the current wrapping, including after resize.
     fn match_area(&self, found: &SearchMatch, width: u32) -> Rect {
         let geometry = self.geometry(width);
-        let source = found.side.line(&self.diff, found.line);
+        let model = self.model();
+        let source = found.side.line(&model.diff, found.line);
         let prefix = source.chars().take(found.columns.start).collect::<String>();
-        let start = text::width(&text::expand_tabs(&prefix, self.tab_stop));
+        let start = text::width(&text::expand_tabs(&prefix, model.tab_stop));
         let through = source.chars().take(found.columns.end).collect::<String>();
-        let end = text::width(&text::expand_tabs(&through, self.tab_stop));
+        let end = text::width(&text::expand_tabs(&through, model.tab_stop));
         if self.strategy == Mode::Unified {
             return Rect::new(
                 geometry.gutter + start,
@@ -577,18 +590,24 @@ impl DiffView {
         self
     }
 
-    /// Set the amount of unchanged text the rows show.
+    /// Set the amount of unchanged text the rows show. A view that shows
+    /// a message has no model to change.
     #[must_use]
     pub fn with_scope(mut self, scope: Scope) -> Self {
-        self.scope = scope;
+        if let Content::Diff(model) = &mut self.content {
+            model.scope = scope;
+        }
         self.rebuild_rows();
         self
     }
 
-    /// Set the tab stop width in columns.
+    /// Set the tab stop width in columns. A view that shows a message has no
+    /// model to change.
     #[must_use]
     pub fn with_tab_stop(mut self, tab_stop: usize) -> Self {
-        self.tab_stop = tab_stop.max(1);
+        if let Content::Diff(model) = &mut self.content {
+            model.tab_stop = tab_stop.max(1);
+        }
         self.rebuild();
         self
     }
@@ -612,25 +631,25 @@ impl DiffView {
     /// Return the diff being shown.
     #[must_use]
     pub fn diff(&self) -> &Diff {
-        &self.diff
+        &self.model().diff
     }
 
     /// Return the rows for the current scope.
     #[must_use]
     pub fn rows(&self) -> &[DiffRow] {
-        &self.rows
+        &self.model().rows
     }
 
     /// Return the display scope.
     #[must_use]
     pub fn scope(&self) -> Scope {
-        self.scope
+        self.model().scope
     }
 
     /// Pair the rows for side-by-side layout, once, when that layout needs it.
     fn ensure_side_rows(&mut self) {
         if self.strategy == Mode::SideBySide && self.side_rows.is_empty() {
-            self.side_rows = side_rows(&self.rows);
+            self.side_rows = side_rows(&self.model().rows);
         }
     }
 
@@ -638,13 +657,13 @@ impl DiffView {
     fn change_heads(&self, width: u32) -> Vec<usize> {
         match self.strategy {
             Mode::Unified => change_heads(
-                self.rows.iter().map(|row| {
+                self.model().rows.iter().map(|row| {
                     (
                         matches!(row, DiffRow::Header { .. }),
                         matches!(row, DiffRow::Removed { .. } | DiffRow::Added { .. }),
                     )
                 }),
-                self.scope,
+                self.model().scope,
             ),
             Mode::SideBySide => {
                 let heads = change_heads(
@@ -654,7 +673,7 @@ impl DiffView {
                             matches!(row, SideRow::Pair { changed: true, .. }),
                         )
                     }),
-                    self.scope,
+                    self.model().scope,
                 );
                 let geom = self.geometry(width);
                 self.with_side_layout(geom.half.saturating_sub(geom.gutter), |layout| {
@@ -666,14 +685,18 @@ impl DiffView {
 
     /// Rebuild the rows and the cached widths.
     fn rebuild(&mut self) {
-        self.old_width = widest_line(&self.diff, Side::Old, self.tab_stop);
-        self.new_width = widest_line(&self.diff, Side::New, self.tab_stop);
+        if let Content::Diff(model) = &mut self.content {
+            model.old_width = widest_line(&model.diff, Side::Old, model.tab_stop);
+            model.new_width = widest_line(&model.diff, Side::New, model.tab_stop);
+        }
         self.rebuild_rows();
     }
 
     /// Rebuild the rows for the current scope.
     fn rebuild_rows(&mut self) {
-        self.rows = self.diff.rows(self.scope).into();
+        if let Content::Diff(model) = &mut self.content {
+            model.rows = model.diff.rows(model.scope).into();
+        }
         self.side_rows = Vec::new();
         self.ensure_side_rows();
         self.side_layout.get_mut().take();
@@ -685,11 +708,12 @@ impl DiffView {
     /// Prepare both highlighters for the current texts, once.
     fn prepare_highlighters(&mut self) {
         if !self.prepared {
+            let diff = &self.model().diff;
             if let Some(highlighter) = &self.old_highlighter {
-                highlighter.prepare(self.diff.old_text());
+                highlighter.prepare(diff.old_text());
             }
             if let Some(highlighter) = &self.new_highlighter {
-                highlighter.prepare(self.diff.new_text());
+                highlighter.prepare(diff.new_text());
             }
             self.prepared = true;
         }
@@ -708,9 +732,10 @@ impl DiffView {
 
     /// Return the column layout for a view of `view_w` columns.
     fn geometry(&self, view_w: u32) -> Geometry {
-        let digits = digits(self.diff.old_len().max(self.diff.new_len()));
+        let model = self.model();
+        let digits = digits(model.diff.old_len().max(model.diff.new_len()));
         let gutter = digits + 2;
-        let line_width = self.old_width.max(self.new_width) + 1;
+        let line_width = model.old_width.max(model.new_width) + 1;
         match self.strategy {
             Mode::Unified => {
                 let width = (gutter + line_width).max(view_w);
@@ -755,7 +780,7 @@ impl DiffView {
     /// Return the number of body rows for the current strategy.
     fn body_rows(&self, width: u32) -> usize {
         match self.strategy {
-            Mode::Unified => self.rows.len(),
+            Mode::Unified => self.model().rows.len(),
             Mode::SideBySide => {
                 let geom = self.geometry(width);
                 self.with_side_layout(geom.half.saturating_sub(geom.gutter), |layout| {
@@ -769,14 +794,15 @@ impl DiffView {
     fn with_side_layout<R>(&self, width: u32, f: impl FnOnce(&SideLayout) -> R) -> R {
         let mut cache = self.side_layout.borrow_mut();
         if cache.as_ref().is_none_or(|layout| layout.width != width) {
-            let wrap = Wrap::new(WrapMode::Soft, width as usize, self.tab_stop, false);
+            let model = self.model();
+            let wrap = Wrap::new(WrapMode::Soft, width as usize, model.tab_stop, false);
             let mut lines = Vec::with_capacity(self.side_rows.len());
             let mut offsets = vec![0usize];
             for row in &self.side_rows {
                 let pair = match row {
                     SideRow::Pair { old, new, .. } => (
-                        old.map(|line| layout_line(self.diff.old_line(line), wrap)),
-                        new.map(|line| layout_line(self.diff.new_line(line), wrap)),
+                        old.map(|line| layout_line(model.diff.old_line(line), wrap)),
+                        new.map(|line| layout_line(model.diff.new_line(line), wrap)),
                     ),
                     _ => (None, None),
                 };
@@ -814,7 +840,7 @@ impl DiffView {
     ) -> Result<()> {
         let scroll = view_rect.tl.x;
         let base = rndr.resolve_style(style);
-        let text = side.line(&self.diff, line);
+        let text = side.line(&self.model().diff, line);
         let spans = self.highlight(side, line, text);
         let matches = self.match_lines.get(&(side, line));
         let search_current = rndr.resolve_style(view_search::CURRENT);
@@ -844,7 +870,7 @@ impl DiffView {
             tab_col,
             0,
             start_char,
-            self.tab_stop,
+            self.model().tab_stop,
             scroll,
             width,
             x,
@@ -887,13 +913,12 @@ impl DiffView {
         let view_rect = view.view_rect();
         let origin = view.content_origin();
         let geom = self.geometry(view_rect.w);
+        let rows = &self.model().rows;
         let first = view_rect.tl.y as usize;
-        let last = first
-            .saturating_add(view_rect.h as usize)
-            .min(self.rows.len());
+        let last = first.saturating_add(view_rect.h as usize).min(rows.len());
         for index in first..last {
             let y = origin.y + column(index - first);
-            let (marker, style, side, line) = match &self.rows[index] {
+            let (marker, style, side, line) = match &rows[index] {
                 DiffRow::Unchanged { old, .. } => (' ', "context", Side::Old, *old),
                 DiffRow::Removed { old } => ('-', "removed", Side::Old, *old),
                 DiffRow::Added { new } => ('+', "added", Side::New, *new),
@@ -1105,7 +1130,7 @@ impl Widget for DiffView {
         let view = ctx.view();
         let origin = view.content_origin();
         let width = view.view_rect().w;
-        if let Some(message) = &self.message {
+        if let Content::Message(message) = &self.content {
             // A message wraps at word boundaries, so a narrow pane shows all
             // of it rather than a clipped first line.
             let height = view.view_rect().h as usize;
@@ -1174,8 +1199,9 @@ impl Widget for DiffView {
         let width = match c.width {
             Constraint::Exact(n) | Constraint::AtMost(n) => n,
             Constraint::Unbounded => {
-                let gutter = digits(self.diff.old_len().max(self.diff.new_len())) + 2;
-                let half = gutter + self.old_width.max(self.new_width) + 1;
+                let model = self.model();
+                let gutter = digits(model.diff.old_len().max(model.diff.new_len())) + 2;
+                let half = gutter + model.old_width.max(model.new_width) + 1;
                 if self.strategy == Mode::Unified {
                     half
                 } else {
@@ -1494,6 +1520,38 @@ mod tests {
     }
 
     #[test]
+    fn regression_a_built_message_hides_the_model() -> Result<()> {
+        let same = "same\n".repeat(20);
+        let old = format!("{same}old\n{same}");
+        let new = format!("{same}new\n{same}");
+        let model = || DiffModel::from_texts(old.clone(), new.clone());
+        let canvas = |view: DiffView| -> Result<(Size, u32)> {
+            let mut harness = Harness::builder(view).size(20, 5).build()?;
+            harness.render()?;
+            harness.with_root_widget_context(|view: &mut DiffView, ctx| {
+                view.next_change(ctx);
+                view.next_change(ctx);
+                Ok(())
+            })?;
+            harness.render()?;
+            let root = harness.root;
+            let view = harness
+                .canopy
+                .with_root_view(|ctx| ctx.view_of(root).expect("view"));
+            Ok((view.canvas, view.scroll.y))
+        };
+        let mut set = DiffView::new(model());
+        set.set_message("Choose a file");
+        let built = DiffView::new(model()).with_message("Choose a file");
+        assert!(built.rows().is_empty(), "the message hides the model");
+        assert_eq!(built.search_text(), "");
+        let (built, scroll) = canvas(built)?;
+        assert_eq!(built, canvas(set)?.0, "the canvas of the message");
+        assert_eq!(scroll, 0, "a message has no changes to step through");
+        Ok(())
+    }
+
+    #[test]
     fn a_message_wraps_to_the_view_width() -> Result<()> {
         let mut view = DiffView::new(DiffModel::from_texts("a\n", "b\n"));
         view.set_message("Unresolved conflict: deleted by them. The worktree matches HEAD.");
@@ -1574,7 +1632,7 @@ mod tests {
         assert!(ptr::eq(view.diff(), other.diff()));
         assert!(ptr::eq(view.rows(), other.rows()));
         let original_rows = other.rows().to_vec();
-        let original_widths = (other.old_width, other.new_width);
+        let original_widths = (other.model().old_width, other.model().new_width);
 
         view = view.with_scope(Scope::Context(0));
         assert!(ptr::eq(view.diff(), model.diff()));
@@ -1584,21 +1642,30 @@ mod tests {
         assert_eq!(other.scope(), Scope::WholeFile);
         assert_eq!(other.revision(), 0);
 
-        let scoped_rows = view.rows.clone();
+        let scoped_rows = view.model().rows.clone();
         view = view.with_tab_stop(16);
         assert!(!ptr::eq(view.rows(), scoped_rows.as_ref()));
         assert_eq!(view.rows(), scoped_rows.as_ref());
-        assert_ne!((view.old_width, view.new_width), original_widths);
+        assert_ne!(
+            (view.model().old_width, view.model().new_width),
+            original_widths
+        );
         assert!(ptr::eq(view.diff(), model.diff()));
         assert_eq!(other.rows(), original_rows);
-        assert_eq!((other.old_width, other.new_width), original_widths);
-        assert_eq!(other.tab_stop, super::DEFAULT_TAB_STOP);
+        assert_eq!(
+            (other.model().old_width, other.model().new_width),
+            original_widths
+        );
+        assert_eq!(other.model().tab_stop, super::DEFAULT_TAB_STOP);
 
         let original = DiffView::new(model);
         assert!(ptr::eq(original.rows(), other.rows()));
         assert_eq!(original.rows(), original_rows);
         assert_eq!(original.scope(), Scope::WholeFile);
-        assert_eq!((original.old_width, original.new_width), original_widths);
+        assert_eq!(
+            (original.model().old_width, original.model().new_width),
+            original_widths
+        );
     }
 
     #[test]

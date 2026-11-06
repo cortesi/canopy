@@ -1284,6 +1284,9 @@ impl DiffView {
     pub fn set_matches(&mut self, ctx: &mut dyn Context, ranges: Vec<TextRange>);
 
     /// Show `message` in place of the diff, such as for a binary file.
+    ///
+    /// This drops the model and the highlighters, and clears the loading
+    /// state.
     pub fn set_message(&mut self, message: impl Into<String>);
 
     /// Replace the diff with an already computed model, keeping the layout.
@@ -1304,6 +1307,8 @@ impl DiffView {
     pub fn strategy(&self) -> Mode;
 
     /// Show a message in place of any diff, such as before one is chosen.
+    ///
+    /// The view drops its model, as [`Self::set_message`] does.
     #[must_use]
     pub fn with_message(self, message: impl Into<String>) -> Self;
 
@@ -1315,7 +1320,8 @@ impl DiffView {
     #[must_use]
     pub fn with_old_highlighter(self, highlighter: Box<dyn Highlighter>) -> Self;
 
-    /// Set the amount of unchanged text the rows show.
+    /// Set the amount of unchanged text the rows show. A view that shows
+    /// a message has no model to change.
     #[must_use]
     pub fn with_scope(self, scope: Scope) -> Self;
 
@@ -1323,7 +1329,8 @@ impl DiffView {
     #[must_use]
     pub fn with_strategy(self, strategy: Mode) -> Self;
 
-    /// Set the tab stop width in columns.
+    /// Set the tab stop width in columns. A view that shows a message has no
+    /// model to change.
     #[must_use]
     pub fn with_tab_stop(self, tab_stop: usize) -> Self;
 }
