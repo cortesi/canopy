@@ -170,6 +170,8 @@ pub mod list {
 }
 
 #[cfg(test)]
+mod remount_test_support;
+#[cfg(test)]
 mod render_tests;
 #[cfg(test)]
 mod scrolling_tests;

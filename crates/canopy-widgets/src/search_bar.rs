@@ -3,12 +3,13 @@
 use canopy::{
     Context, ContextExt, NodeName, TypedId, ViewContext, ViewContextExt, Widget,
     commands::CommandCall,
-    error::{Error, Result},
+    error::Result,
     geom::{Line, Size},
     layout::{Layout, LayoutOverride, MeasureConstraints, Measurement},
     render::Render,
     style::WidgetState,
     text,
+    widget::Mount,
 };
 
 use crate::input::{Input, ValueExposure};
@@ -40,6 +41,13 @@ const LABEL: &str = "Search";
 pub struct SearchBar {
     /// Node name, which bindings and automation match.
     name: NodeName,
+    /// What the bar builds its field from, and the field and the status once
+    /// it mounts.
+    parts: Mount<FieldSpec, Parts>,
+}
+
+/// What a search bar builds its query field from.
+struct FieldSpec {
     /// Text before the query.
     prompt: String,
     /// Label of the field in semantic snapshots.
@@ -50,10 +58,14 @@ pub struct SearchBar {
     on_submit: Option<CommandCall>,
     /// Call posted by Esc.
     on_cancel: Option<CommandCall>,
-    /// The query field, after the bar mounts.
-    field: Option<TypedId<Input>>,
+}
+
+/// The children a search bar builds when it mounts.
+struct Parts {
+    /// The query field.
+    field: TypedId<Input>,
     /// What the search found, after the field.
-    status: Option<TypedId<Status>>,
+    status: TypedId<Status>,
 }
 
 impl Default for SearchBar {
@@ -67,13 +79,13 @@ impl SearchBar {
     pub fn new() -> Self {
         Self {
             name: NodeName::convert("search_bar"),
-            prompt: PROMPT.to_owned(),
-            label: LABEL.to_owned(),
-            on_change: None,
-            on_submit: None,
-            on_cancel: None,
-            field: None,
-            status: None,
+            parts: Mount::new(FieldSpec {
+                prompt: PROMPT.to_owned(),
+                label: LABEL.to_owned(),
+                on_change: None,
+                on_submit: None,
+                on_cancel: None,
+            }),
         }
     }
 
@@ -89,14 +101,14 @@ impl SearchBar {
     /// default.
     #[must_use]
     pub fn with_label(mut self, label: impl Into<String>) -> Self {
-        self.label = label.into();
+        self.parts.pending_mut().label = label.into();
         self
     }
 
     /// Replace the text before the query.
     #[must_use]
     pub fn with_prompt(mut self, prompt: impl Into<String>) -> Self {
-        self.prompt = prompt.into();
+        self.parts.pending_mut().prompt = prompt.into();
         self
     }
 
@@ -104,28 +116,27 @@ impl SearchBar {
     /// [`Input::with_on_change`] does.
     #[must_use]
     pub fn with_on_change(mut self, call: CommandCall) -> Self {
-        self.on_change = Some(call);
+        self.parts.pending_mut().on_change = Some(call);
         self
     }
 
     /// Post `call` when Enter is pressed in the field.
     #[must_use]
     pub fn with_on_submit(mut self, call: CommandCall) -> Self {
-        self.on_submit = Some(call);
+        self.parts.pending_mut().on_submit = Some(call);
         self
     }
 
     /// Post `call` when Esc is pressed in the field.
     #[must_use]
     pub fn with_on_cancel(mut self, call: CommandCall) -> Self {
-        self.on_cancel = Some(call);
+        self.parts.pending_mut().on_cancel = Some(call);
         self
     }
 
     /// Return the query field, or an error before the bar mounts.
     pub fn field(&self) -> Result<TypedId<Input>> {
-        self.field
-            .ok_or_else(|| Error::Invalid("the search bar is not mounted".into()))
+        Ok(self.parts.mounted()?.field)
     }
 
     /// Return the query.
@@ -181,9 +192,7 @@ impl SearchBar {
         text: impl Into<String>,
         found: bool,
     ) -> Result<()> {
-        let status = self
-            .status
-            .ok_or_else(|| Error::Invalid("the search bar is not mounted".into()))?;
+        let status = self.parts.mounted()?.status;
         let text = text.into();
         ctx.with_widget_mut(status, |status: &mut Status, _| {
             status.text = text;
@@ -201,8 +210,9 @@ impl Widget for SearchBar {
     fn render(&mut self, render: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         render.push_layer("search_bar");
         if self
-            .field
-            .is_some_and(|field| ctx.is_on_focus_path(field.into()))
+            .parts
+            .mounted()
+            .is_ok_and(|parts| ctx.is_on_focus_path(parts.field.into()))
         {
             render.push_layer(WidgetState::Focused.layer());
         }
@@ -211,35 +221,40 @@ impl Widget for SearchBar {
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let node = ctx.node_id();
-        let mut field = Input::new("")
-            .with_prompt(self.prompt.clone())
-            .with_label(self.label.clone())
-            .with_value_exposure(ValueExposure::Public);
-        if let Some(call) = self.on_change.take() {
-            field = field.with_on_change(call);
-        }
-        if let Some(call) = self.on_submit.take() {
-            field = field.with_on_submit(call);
-        }
-        if let Some(call) = self.on_cancel.take() {
-            field = field.with_on_cancel(call);
-        }
-        let field = ctx.add_child(node, field)?;
-        // The status measures at its natural width. Reserve the prompt, two
-        // query cells, and the caret before the status takes the remainder.
-        let field_min_width = text::width(&self.prompt).saturating_add(3);
-        ctx.set_layout_override(
-            field.into(),
-            LayoutOverride {
-                min_width: Some(Some(field_min_width)),
-                ..LayoutOverride::new()
-            },
-        )?;
-        let status = ctx.add_child(node, Status::default())?;
-        self.field = Some(field);
-        self.status = Some(status);
-        ctx.set_hidden(node, true)?;
-        Ok(())
+        self.parts.mount(|spec| {
+            let mut field = Input::new("")
+                .with_prompt(spec.prompt.clone())
+                .with_label(spec.label.clone())
+                .with_value_exposure(ValueExposure::Public);
+            if let Some(call) = &spec.on_change {
+                field = field.with_on_change(call.clone());
+            }
+            if let Some(call) = &spec.on_submit {
+                field = field.with_on_submit(call.clone());
+            }
+            if let Some(call) = &spec.on_cancel {
+                field = field.with_on_cancel(call.clone());
+            }
+            let field = ctx.add_child(node, field)?;
+            // The status measures at its natural width. Reserve the prompt,
+            // two query cells, and the caret before the status takes the
+            // remainder.
+            let field_min_width = text::width(&spec.prompt).saturating_add(3);
+            ctx.set_layout_override(
+                field.into(),
+                LayoutOverride {
+                    min_width: Some(Some(field_min_width)),
+                    ..LayoutOverride::new()
+                },
+            )?;
+            let status = ctx.add_child(node, Status::default())?;
+            ctx.set_hidden(node, true)?;
+            Ok(Parts { field, status })
+        })
+    }
+
+    fn on_unmount(&mut self, _ctx: &mut dyn Context) {
+        self.parts.unmount();
     }
 
     fn name(&self) -> NodeName {
@@ -292,6 +307,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::remount_test_support::attach_after_rollback;
 
     /// A host that records what its search bar posts.
     #[derive(Default)]
@@ -465,6 +481,34 @@ mod tests {
         })?;
         harness.render()?;
         assert!(!harness.tbuf().contains_text(" / "));
+        Ok(())
+    }
+
+    #[test]
+    fn regression_a_bar_that_mounts_again_after_a_rollback_keeps_its_calls() -> Result<()> {
+        let mut harness = Harness::builder(Host::default())
+            .register::<Host>()
+            .size(30, 3)
+            .build()?;
+        harness.render()?;
+        harness.with_root_widget_context(|host: &mut Host, ctx| {
+            let owner = CommandTarget::Exact(ctx.node_id());
+            let bar = ctx.create_detached(
+                SearchBar::new()
+                    .with_name("retried_bar")
+                    .with_on_change(Host::spec_changed().call().with_target(owner))
+                    .with_on_submit(Host::call_submitted().with_target(owner)),
+            )?;
+            attach_after_rollback(ctx, bar.into())?;
+            ctx.with_widget_mut(bar, |bar: &mut SearchBar, ctx| bar.open(ctx, ""))?;
+            host.bar = Some(bar);
+            Ok(())
+        })?;
+        harness.render()?;
+        harness.type_text("x")?;
+        harness.key(KeyCode::Enter)?;
+        let events = harness.with_root_widget(|host: &mut Host| host.events.clone());
+        assert_eq!(events, ["change x", "submit"], "the second mount posts");
         Ok(())
     }
 
