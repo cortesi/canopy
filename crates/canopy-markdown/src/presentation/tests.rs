@@ -723,7 +723,7 @@ fn spacing_rows_hit_nothing_even_below_a_card() {
 #[test]
 fn mounted_table_uses_shared_grid_and_keeps_full_atomic_copy() {
     let p = prepared("| A | B |\n| - | - |\n| one | two |\n", 30);
-    assert!(p.blocks[0].table.is_some());
+    assert!(p.blocks[0].extra.table().is_some());
     let id = p.document.units[0].id;
     let range = ReadingRange {
         start: ReadingPosition {
@@ -756,10 +756,11 @@ fn table_preview_wraps_long_values_within_the_reading_width() {
         24,
     );
     let block = &p.blocks[0];
-    assert!(block.flow.is_some());
+    let preview = block.extra.table().unwrap();
+    assert!(preview.flow.is_some());
     // Header and its rule, three wrapped lines, a row rule, and the short
     // row.
-    assert_eq!(block.table_height, 7);
+    assert_eq!(preview.height, 7);
     let mut h = mounted(p, PaintOverlays::default(), 24, 8);
     h.render().unwrap();
     for line in [
@@ -869,7 +870,7 @@ fn table_preview_keeps_every_row_and_marks_cut_columns() {
     }
     let p = prepared(&source, 50);
     let block = &p.blocks[0];
-    let flow = block.flow.as_ref().unwrap();
+    let flow = block.extra.table().unwrap().flow.as_ref().unwrap();
     assert!(flow.cut());
     assert!(row_text(&p, block.start).contains(" of 4 columns"));
     let mut h = mounted(p, PaintOverlays::default(), 50, 80);
@@ -897,7 +898,7 @@ fn source_cards_and_table_previews_show_every_line() {
     let flow = p
         .blocks
         .iter()
-        .find_map(|block| block.flow.clone())
+        .find_map(|block| block.extra.table()?.flow.clone())
         .expect("a flowed table");
     // Three hundred cells of value at most 30 wide need far more than the
     // four lines a preview once allowed.
@@ -936,7 +937,8 @@ fn cards_and_tables_label_only_what_their_formatting_cannot_show() {
         rows(&p)
     );
     assert_eq!(
-        p.blocks[0].table_start, 0,
+        p.blocks[0].extra.table().unwrap().start,
+        0,
         "the grid starts at the block's top"
     );
 

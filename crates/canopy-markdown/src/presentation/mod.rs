@@ -260,28 +260,61 @@ struct BlockLayout {
     start: u32,
     /// Immutable display rows shared across compatible publications.
     rows: Arc<[PreparedRow]>,
-    /// Shared full table geometry retained for preview and inspector.
-    table: Option<Arc<PreparedTable>>,
-    /// Preview fitted to the body width; absent when the columns cannot fit,
-    /// so the preview clips the shared grid.
-    flow: Option<Arc<FlowTable>>,
-    /// First table row relative to the block label.
-    table_start: u32,
-    /// Visible header and body rows in the inline preview.
-    table_height: u32,
+    /// What the block paints over its rows: a table preview or an image.
+    extra: Extra,
     /// Left document margin in terminal cells.
     inset: u32,
     /// Inspectable object represented by the card.
     object: Option<u64>,
     /// Verified source start of a contiguous readable projection.
     source_text_start: Option<usize>,
-    /// Where an image block draws its image.
-    image: Option<ImagePlacement>,
-    /// Where each cell of a table block lies in the unit's readable text.
-    cells: Arc<[CellSpan]>,
     /// The block's content rows, relative to its start: every row but a
     /// heading's blank row above it and the spacing rows below it.
     content: Range<u32>,
+}
+
+/// What a block paints over its prepared rows.
+#[derive(Clone, Debug)]
+enum Extra {
+    /// Nothing: the rows are the block.
+    None,
+    /// A table preview.
+    Table(TablePreview),
+    /// An image.
+    Image(ImagePlacement),
+}
+
+impl Extra {
+    /// The table preview, if the block shows one.
+    fn table(&self) -> Option<&TablePreview> {
+        match self {
+            Self::Table(preview) => Some(preview),
+            Self::None | Self::Image(_) => None,
+        }
+    }
+}
+
+/// A table block's preview over its rows.
+#[derive(Clone, Debug)]
+struct TablePreview {
+    /// Shared full table geometry retained for preview and inspector.
+    table: Arc<PreparedTable>,
+    /// Preview fitted to the body width; absent when the columns cannot fit,
+    /// so the preview clips the shared grid.
+    flow: Option<Arc<FlowTable>>,
+    /// First table row relative to the block label.
+    start: u32,
+    /// Visible header and body rows in the inline preview.
+    height: u32,
+    /// Where each cell lies in the unit's readable text.
+    cells: Arc<[CellSpan]>,
+}
+
+impl TablePreview {
+    /// The preview's rows, relative to the block's start.
+    fn rows(&self) -> Range<u32> {
+        self.start..self.start + self.height
+    }
 }
 
 /// Preparation evidence, independent of paint work.
@@ -544,15 +577,10 @@ impl PresentationSnapshot {
                     signature,
                     start: result.height,
                     rows: old.rows.clone(),
-                    table: old.table.clone(),
-                    flow: old.flow.clone(),
-                    table_start: old.table_start,
-                    table_height: old.table_height,
+                    extra: old.extra.clone(),
                     inset: old.inset,
                     object: old.object,
                     source_text_start: old.source_text_start,
-                    image: old.image.clone(),
-                    cells: old.cells.clone(),
                     content: old.content.clone(),
                 }
             } else {
@@ -596,16 +624,21 @@ impl PresentationSnapshot {
                     geometry.glyphs,
                 );
                 layout.rows = rows.into();
-                // The table preview must not paint over the status row.
-                layout.table_height = layout
-                    .table_height
-                    .min((remaining as u32 - 1).saturating_sub(layout.table_start));
-                // Nor may an image: it shrinks into the rows above it.
+                // The table preview must not paint over the status row, nor
+                // may an image: it shrinks into the rows above it.
                 let rows = remaining as u32 - 1;
-                if let Some(image) = &mut layout.image {
-                    image.size.h = image.size.h.min(rows);
+                match &mut layout.extra {
+                    Extra::Table(preview) => {
+                        preview.height = preview.height.min(rows.saturating_sub(preview.start));
+                    }
+                    Extra::Image(image) => {
+                        image.size.h = image.size.h.min(rows);
+                        if image.size.h == 0 {
+                            layout.extra = Extra::None;
+                        }
+                    }
+                    Extra::None => {}
                 }
-                layout.image = layout.image.take().filter(|image| image.size.h > 0);
                 let rows = layout.rows.len() as u32;
                 layout.content = layout.content.start.min(rows)..layout.content.end.min(rows);
                 result.truncated = true;
@@ -662,24 +695,25 @@ impl PresentationSnapshot {
                     }
                 }
             }
-            if let Some(table) = &block.table
-                && tables.insert(Arc::as_ptr(table) as usize)
-            {
+            let Some(preview) = block.extra.table() else {
+                continue;
+            };
+            if tables.insert(Arc::as_ptr(&preview.table) as usize) {
                 bytes = bytes
                     .saturating_add(2 * size_of::<usize>())
-                    .saturating_add(table.derived_bytes());
+                    .saturating_add(preview.table.derived_bytes());
             }
-            if let Some(flow) = &block.flow
+            if let Some(flow) = &preview.flow
                 && tables.insert(Arc::as_ptr(flow) as usize)
             {
                 bytes = bytes
                     .saturating_add(2 * size_of::<usize>())
                     .saturating_add(flow.derived_bytes());
             }
-            if tables.insert(Arc::as_ptr(&block.cells) as *const () as usize) {
+            if tables.insert(Arc::as_ptr(&preview.cells) as *const () as usize) {
                 bytes = bytes
                     .saturating_add(2 * size_of::<usize>())
-                    .saturating_add(block.cells.len().saturating_mul(size_of::<CellSpan>()));
+                    .saturating_add(preview.cells.len().saturating_mul(size_of::<CellSpan>()));
             }
         }
         bytes
@@ -700,7 +734,7 @@ impl PresentationSnapshot {
     /// `None`. A receiving trailing table is literal source, so it has runs.
     pub fn end_caret(&self) -> Option<Point> {
         let block = self.blocks.last()?;
-        if block.table.is_some() || block.image.is_some() {
+        if !matches!(block.extra, Extra::None) {
             return None;
         }
         let (index, run) = block
@@ -720,8 +754,9 @@ impl PresentationSnapshot {
     pub fn prepared_table(&self, unit_id: u64) -> Option<Arc<PreparedTable>> {
         self.blocks
             .get(*self.unit_blocks.get(&unit_id)?)?
-            .table
-            .clone()
+            .extra
+            .table()
+            .map(|preview| preview.table.clone())
     }
     /// Return the document rows of the content of the block of `unit_id`:
     /// every row but a heading's blank row above it and the spacing rows
@@ -827,8 +862,8 @@ impl PresentationSnapshot {
             return 0;
         };
         let b = &self.blocks[index];
-        if let Some(line) = table_line(b, offset) {
-            return b.start + b.table_start + line;
+        if let Some((preview, line)) = b.extra.table().zip(table_line(b, offset)) {
+            return b.start + preview.start + line;
         }
         let row = b
             .rows
@@ -983,10 +1018,12 @@ impl PresentationSnapshot {
             let active = |object: Option<u64>| object.is_some() && object == overlays.active_object;
             // An active card takes the object ground across its full width,
             // blank code lines and table preview rows included.
-            let table_rows = block.table_start..block.table_start + block.table_height;
             let active_card = active(block.object)
                 && (row.ground == "markdown/card"
-                    || (block.table.is_some() && table_rows.contains(&(y - block.start)))
+                    || block
+                        .extra
+                        .table()
+                        .is_some_and(|preview| preview.rows().contains(&(y - block.start)))
                     || row.runs.iter().any(|run| run.object == block.object));
             // The block cursor marks its rows with a bar in the margin, or
             // with its ground where blocks have no margin.
@@ -1108,45 +1145,48 @@ impl PresentationSnapshot {
             .blocks
             .partition_point(|b| b.start.saturating_add(b.rows.len() as u32) <= visible.tl.y);
         for b in self.blocks[first..].iter().take_while(|b| b.start < end) {
-            if let Some(image) = &b.image {
-                paint_image(render, b.start, image, visible, &overlays.images)?;
-            }
-            if self.paint_table(render, b, visible, &marks)? {
-                stats.tables += 1;
+            match &b.extra {
+                Extra::Image(image) => {
+                    paint_image(render, b.start, image, visible, &overlays.images)?;
+                }
+                Extra::Table(preview) => {
+                    if self.paint_table(render, b, preview, visible, &marks)? {
+                        stats.tables += 1;
+                    }
+                }
+                Extra::None => {}
             }
         }
         Ok(stats)
     }
 
-    /// Paint the table preview of `b` within `visible`, restyled whole as
+    /// Paint the table `preview` of `b` within `visible`, restyled whole as
     /// the overlays mark its unit. Returns whether any of it showed.
     fn paint_table(
         &self,
         render: &mut Render<'_>,
         b: &BlockLayout,
+        preview: &TablePreview,
         visible: Rect,
         marks: &Marks<'_>,
     ) -> Result<bool> {
-        let Some(table) = &b.table else {
-            return Ok(false);
-        };
         let area = Rect::new(
             b.inset,
-            b.start + b.table_start,
+            b.start + preview.start,
             self.geometry.width.saturating_sub(b.inset + 1),
-            b.table_height,
+            preview.height,
         );
         let Some(clip) = area.intersect(visible) else {
             return Ok(false);
         };
-        let overlay = self.table_overlay(b, marks);
+        let overlay = self.table_overlay(b, preview, marks);
         let local_area = Rect::new(
             clip.tl.x - visible.tl.x,
             clip.tl.y - visible.tl.y,
             clip.w,
             clip.h,
         );
-        if let Some(flow) = &b.flow {
+        if let Some(flow) = &preview.flow {
             flow.paint(
                 render,
                 local_area,
@@ -1157,7 +1197,7 @@ impl PresentationSnapshot {
                 &overlay,
             )?;
         } else {
-            table.paint(
+            preview.table.paint(
                 render,
                 local_area,
                 TableWindow {
@@ -1178,7 +1218,12 @@ impl PresentationSnapshot {
     /// What paints over the table preview of `b`: the selection or the
     /// object cursor as a ground across the whole table, and each search
     /// match over the text it found in its cell.
-    fn table_overlay(&self, b: &BlockLayout, marks: &Marks<'_>) -> TableOverlay {
+    fn table_overlay(
+        &self,
+        b: &BlockLayout,
+        preview: &TablePreview,
+        marks: &Marks<'_>,
+    ) -> TableOverlay {
         let Some(index) = b.rows.first().and_then(|row| self.unit_index(row.unit_id)) else {
             return TableOverlay::default();
         };
@@ -1191,7 +1236,7 @@ impl PresentationSnapshot {
             (b.object.is_some() && b.object == marks.active_object).then_some("markdown/object");
         TableOverlay::new(
             ground,
-            cell_marks(b, index, marks.search, marks.current.as_ref()),
+            cell_marks(&preview.cells, index, marks.search, marks.current.as_ref()),
         )
     }
     /// Return the search matches in the table of `unit_id` as marks over its
@@ -1201,8 +1246,10 @@ impl PresentationSnapshot {
         unit_id: u64,
         overlays: &PaintOverlays,
     ) -> Vec<CellMark> {
-        let (Some(b), Some(index)) = (
-            self.unit_blocks.get(&unit_id).map(|&i| &self.blocks[i]),
+        let (Some(preview), Some(index)) = (
+            self.unit_blocks
+                .get(&unit_id)
+                .and_then(|&i| self.blocks[i].extra.table()),
             self.unit_index(unit_id),
         ) else {
             return Vec::new();
@@ -1216,19 +1263,19 @@ impl PresentationSnapshot {
             .search_current
             .and_then(|i| overlays.search.get(i))
             .and_then(|s| self.reading_span(s));
-        cell_marks(b, index, &search, current.as_ref())
+        cell_marks(&preview.cells, index, &search, current.as_ref())
     }
 }
 
-/// Return a mark over each cell's share of the `search` spans that cover the
-/// table of `b`, the unit at reading index `index`. The `current` span takes
-/// the current role, and the others the match role.
+/// Return a mark over each cell's share of the `search` spans that cover a
+/// table with `cells`, the unit at reading index `index`. The `current` span
+/// takes the current role, and the others the match role.
 ///
 /// The spans and the cells both run in reading order, so each search finds
 /// its first span and cell by bisection, and the work follows the matches in
 /// the table rather than every match or every cell.
 fn cell_marks(
-    b: &BlockLayout,
+    cells: &[CellSpan],
     index: usize,
     search: &[Range<ReadingKey>],
     current: Option<&Range<ReadingKey>>,
@@ -1255,8 +1302,8 @@ fn cell_marks(
         } else {
             usize::MAX
         };
-        let cell = b.cells.partition_point(|cell| cell.text.end <= start);
-        for cell in b.cells[cell..]
+        let cell = cells.partition_point(|cell| cell.text.end <= start);
+        for cell in cells[cell..]
             .iter()
             .take_while(|cell| cell.text.start < end)
         {
@@ -1280,13 +1327,14 @@ fn cell_marks(
 /// `offset` of the unit's readable text, or `None` for a block that is not a
 /// table.
 fn table_line(b: &BlockLayout, offset: usize) -> Option<u32> {
-    let table = b.table.as_ref()?;
+    let preview = b.extra.table()?;
     // A tab or newline between cells belongs to the cell before it.
-    let cell = &b.cells[b
+    let cell = &preview.cells[preview
         .cells
         .partition_point(|cell| cell.text.start <= offset)
         .checked_sub(1)?];
-    let line = match (&b.flow, cell.row) {
+    let table = &preview.table;
+    let line = match (&preview.flow, cell.row) {
         (Some(flow), row) => flow.row_line(row)?,
         (None, None) => 0,
         (None, Some(row)) => table.header_lines() + table.cell_rect(row, cell.column)?.tl.y,
@@ -1414,11 +1462,7 @@ fn prepare_block(
         ground_x: margin,
         atomic: unit.atomic,
     };
-    let mut table = None;
-    let mut flow = None;
-    let mut table_start = 0;
-    let mut table_height = 0;
-    let mut image_placement = None;
+    let mut extra = Extra::None;
     // A heading's blank row above it, which is not content.
     let mut lead = 0;
     let mut prefix = block_prefix(block, geometry.glyphs);
@@ -1442,6 +1486,7 @@ fn prepare_block(
         ),
         BlockKind::Table(data) => {
             let ignored_excess = data.ignored_excess;
+            let cells = cell_spans(data).into();
             let columns = data
                 .headers
                 .iter()
@@ -1484,7 +1529,7 @@ fn prepare_block(
                 };
                 // The preview flows every row into the body width; the
                 // inspector keeps the full grid.
-                flow = FlowTable::prepare(
+                let flow = FlowTable::prepare(
                     data.clone(),
                     FlowOptions {
                         width: card_body,
@@ -1512,16 +1557,22 @@ fn prepare_block(
                             geometry.glyphs,
                         );
                         rows.push(row);
-                        table_start = 1;
                     }
+                    let start = rows.len() as u32;
                     let body_rows = prepared.data().rows().len();
-                    table_height = flow
+                    let height = flow
                         .as_ref()
                         .map_or(body_rows as u32 + 1, |flow| flow.height());
-                    for _ in 0..table_height {
+                    for _ in 0..height {
                         rows.push(make_row());
                     }
-                    table = Some(Arc::new(prepared));
+                    extra = Extra::Table(TablePreview {
+                        table: Arc::new(prepared),
+                        flow,
+                        start,
+                        height,
+                        cells,
+                    });
                     if ignored_excess {
                         let mut row = make_row();
                         decoration(
@@ -1589,7 +1640,7 @@ fn prepare_block(
             }
         }
         BlockKind::Image(image) => {
-            image_placement = prepare_image(
+            extra = prepare_image(
                 &mut rows,
                 make_row,
                 image,
@@ -1598,7 +1649,8 @@ fn prepare_block(
                 &mut prefix,
                 (inset, card_inset, body, &rails),
                 geometry,
-            );
+            )
+            .map_or(Extra::None, Extra::Image);
         }
         BlockKind::Embed(embed) => prepare_embed(
             &mut rows,
@@ -1750,25 +1802,11 @@ fn prepare_block(
         signature: 0,
         start: 0,
         rows: rows.into(),
-        table,
-        flow,
-        table_start,
-        table_height,
+        extra,
         inset: card_inset,
         object,
         source_text_start: None,
-        image: image_placement,
-        cells: table_cells(block),
         content,
-    }
-}
-
-/// Return where each cell of a table block lies in its unit's readable
-/// text, or nothing for another block.
-fn table_cells(block: &Block) -> Arc<[CellSpan]> {
-    match &block.kind {
-        BlockKind::Table(data) => cell_spans(data).into(),
-        _ => Arc::from([]),
     }
 }
 
