@@ -89,9 +89,10 @@ const KEY_TOASTS: &str = "Toasts";
 
 /// A Root widget that lives at the base of a Canopy app.
 pub struct Root {
-    /// Whether the inspector is visible.
+    /// Whether the inspector shows at start, which [`Self::install`] reads.
+    /// The inspector node's hidden flag holds its visibility after that.
     #[cfg(feature = "devtools")]
-    inspector_active: bool,
+    inspector_at_start: bool,
     /// Token for the open help modal, if any.
     help_token: Option<ModalToken>,
     /// Token for the open notice log, if any.
@@ -110,7 +111,7 @@ impl Root {
     pub fn new() -> Self {
         Self {
             #[cfg(feature = "devtools")]
-            inspector_active: false,
+            inspector_at_start: false,
             help_token: None,
             notices_token: None,
         }
@@ -144,7 +145,7 @@ impl Root {
     #[cfg(feature = "devtools")]
     #[must_use]
     pub fn with_inspector(mut self, state: bool) -> Self {
-        self.inspector_active = state;
+        self.inspector_at_start = state;
         self
     }
 
@@ -198,9 +199,8 @@ impl Root {
             return Ok(());
         }
         #[cfg(feature = "devtools")]
-        if self.inspector_active {
-            self.hide_inspector(c)?;
-            return Ok(());
+        if self.close_inspector(c)? {
+            return self.focus_app_first(c);
         }
         c.exit(0);
         Ok(())
@@ -218,9 +218,22 @@ impl Root {
     /// Hide the inspector.
     #[cfg(feature = "devtools")]
     pub fn hide_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.inspector_active = false;
+        self.close_inspector(c)?;
+        self.focus_app_first(c)
+    }
+
+    /// Hide the inspector, and return whether it showed.
+    #[cfg(feature = "devtools")]
+    fn close_inspector(&self, c: &mut dyn Context) -> Result<bool> {
         let inspector = self.inspector_id(c)?;
-        c.set_hidden(inspector, true)?;
+        // The node's hidden flag is the inspector's visibility, so hiding it
+        // says whether it showed.
+        Ok(c.set_hidden(inspector, true)?.changed())
+    }
+
+    /// Focus the first node of the app.
+    #[cfg(feature = "devtools")]
+    fn focus_app_first(&self, c: &mut dyn Context) -> Result<()> {
         let app = self.app_id(c)?;
         c.focus_first(FocusScope::Node(app))?;
         Ok(())
@@ -230,7 +243,6 @@ impl Root {
     /// Show the inspector.
     #[cfg(feature = "devtools")]
     pub fn show_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.inspector_active = true;
         let inspector = self.inspector_id(c)?;
         c.set_hidden(inspector, false)?;
         c.focus_first(FocusScope::Node(inspector))?;
@@ -241,11 +253,10 @@ impl Root {
     /// Toggle inspector visibility.
     #[cfg(feature = "devtools")]
     pub fn toggle_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.inspector_active {
-            self.hide_inspector(c)
-        } else {
-            self.show_inspector(c)
+        if self.close_inspector(c)? {
+            return self.focus_app_first(c);
         }
+        self.show_inspector(c)
     }
 
     #[command]
@@ -393,7 +404,7 @@ impl Root {
         W: Widget + 'static,
     {
         #[cfg(feature = "devtools")]
-        let inspector_active = self.inspector_active;
+        let inspector_at_start = self.inspector_at_start;
         let root_id: NodeId = canopy.replace_root(self)?.into();
         canopy.with_root_context(|context| {
             let app_id = context.create_detached(app)?;
@@ -429,7 +440,7 @@ impl Root {
             context.set_hidden(help, true)?;
 
             #[cfg(feature = "devtools")]
-            context.set_hidden(inspector, !inspector_active)?;
+            context.set_hidden(inspector, !inspector_at_start)?;
             context.set_layout_override(
                 app_node,
                 LayoutOverride::new().flex_horizontal(1).flex_vertical(1),
@@ -901,6 +912,36 @@ mod tests {
             lines[7].contains('\u{2570}'),
             "inspector frame bottom corner missing: {lines:?}"
         );
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "devtools")]
+    fn regression_the_inspector_toggles_from_its_shown_state() -> Result<()> {
+        let mut canopy = CanopyBuilder::new().configure(Root::register).build()?;
+        Root::new().with_inspector(true).install(&mut canopy, App)?;
+        let mut harness = Harness::from_canopy(canopy, Size::new(40, 8))?;
+        harness.render()?;
+        let framed = |harness: &Harness| harness.tbuf().lines()[0].contains('\u{256d}');
+        assert!(framed(&harness), "with_inspector(true) opens it at start");
+
+        // Something other than the root hides the inspector node.
+        harness.with_root_widget_context(|root: &mut Root, ctx| {
+            let inspector = root.inspector_id(ctx)?;
+            ctx.set_hidden(inspector, true)?;
+            Ok(())
+        })?;
+        harness.render()?;
+        assert!(!framed(&harness));
+        harness.with_root_widget_context(|root: &mut Root, ctx| root.toggle_inspector(ctx))?;
+        harness.render()?;
+        assert!(
+            framed(&harness),
+            "a toggle of the hidden inspector shows it"
+        );
+        harness.with_root_widget_context(|root: &mut Root, ctx| root.toggle_inspector(ctx))?;
+        harness.render()?;
+        assert!(!framed(&harness), "a second toggle hides it");
         Ok(())
     }
 
