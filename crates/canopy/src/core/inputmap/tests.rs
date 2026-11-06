@@ -1,3 +1,5 @@
+use proptest::{collection, prelude::*};
+
 use super::*;
 use crate::{
     commands::{CommandArgs, CommandCall, CommandId, CommandTarget},
@@ -1082,4 +1084,137 @@ fn a_waiting_menu_stays_the_newest_mode() -> Result<()> {
     );
     assert_eq!(map.active_modes(), vec!["go"]);
     Ok(())
+}
+
+/// One event on the mode stack.
+#[derive(Clone, Debug)]
+enum ModeOp {
+    /// Enter a mode.
+    Enter(&'static str),
+    /// Leave a mode.
+    Leave(&'static str),
+    /// Open a menu.
+    Open(&'static str),
+    /// Close the waiting menu.
+    Close,
+    /// Clear the application modes.
+    Clear,
+    /// Capture the application state.
+    Snapshot,
+    /// Restore the last captured state.
+    Restore,
+}
+
+/// Reference model of the mode stack: entries in push order, each with
+/// whether it is the menu.
+#[derive(Clone, Debug, Default)]
+struct ModeModel(Vec<(&'static str, bool)>);
+
+impl ModeModel {
+    /// Return the waiting menu.
+    fn menu(&self) -> Option<&'static str> {
+        self.0
+            .last()
+            .filter(|(_, menu)| *menu)
+            .map(|(name, _)| *name)
+    }
+
+    /// Apply `op`, returning whether it succeeded.
+    fn apply(&mut self, op: &ModeOp, saved: &mut Option<Self>) -> bool {
+        let admitted = match *op {
+            ModeOp::Enter(name) => !name.is_empty() && self.menu().is_none(),
+            ModeOp::Leave(name) => !name.is_empty() && self.menu() != Some(name),
+            ModeOp::Open(name) => {
+                !name.is_empty()
+                    && self.menu().is_none()
+                    && !self.0.iter().any(|(active, _)| *active == name)
+            }
+            ModeOp::Close | ModeOp::Clear | ModeOp::Snapshot | ModeOp::Restore => true,
+        };
+        if !admitted {
+            return false;
+        }
+        match *op {
+            ModeOp::Enter(name) => {
+                self.0.retain(|(active, _)| *active != name);
+                self.0.push((name, false));
+            }
+            ModeOp::Leave(name) => self.0.retain(|(active, _)| *active != name),
+            ModeOp::Open(name) => self.0.push((name, true)),
+            ModeOp::Close => {
+                if self.menu().is_some() {
+                    self.0.pop();
+                }
+            }
+            ModeOp::Clear => self.0.clear(),
+            ModeOp::Snapshot => *saved = Some(self.clone()),
+            ModeOp::Restore => {
+                if let Some(saved) = saved {
+                    *self = saved.clone();
+                }
+            }
+        }
+        true
+    }
+
+    /// Return the modes in resolution order.
+    fn reported(&self) -> Vec<&'static str> {
+        self.0.iter().rev().map(|(name, _)| *name).collect()
+    }
+}
+
+/// Generate one mode stack event over a few names.
+fn mode_op() -> impl Strategy<Value = ModeOp> {
+    let name = prop::sample::select(vec!["", "a", "b", "c"]);
+    prop_oneof![
+        name.clone().prop_map(ModeOp::Enter),
+        name.clone().prop_map(ModeOp::Leave),
+        name.prop_map(ModeOp::Open),
+        Just(ModeOp::Close),
+        Just(ModeOp::Clear),
+        Just(ModeOp::Snapshot),
+        Just(ModeOp::Restore),
+    ]
+}
+
+proptest! {
+    #[test]
+    fn the_mode_stack_reports_modes_in_order_with_the_menu_newest(
+        ops in collection::vec(mode_op(), 0..40)
+    ) {
+        let mut map = InputMap::new();
+        let mut model = ModeModel::default();
+        let mut saved_map = None;
+        let mut saved_model = None;
+        for op in &ops {
+            let ok = match *op {
+                ModeOp::Enter(name) => map.enter_mode(name).is_ok(),
+                ModeOp::Leave(name) => map.leave_mode(name).is_ok(),
+                ModeOp::Open(name) => map.open_menu(name).is_ok(),
+                ModeOp::Close => {
+                    map.close_menu();
+                    true
+                }
+                ModeOp::Clear => {
+                    map.clear_application();
+                    true
+                }
+                ModeOp::Snapshot => {
+                    saved_map = Some(map.snapshot_application());
+                    true
+                }
+                ModeOp::Restore => {
+                    if let Some(saved) = &saved_map {
+                        map.restore_application(saved.clone());
+                    }
+                    true
+                }
+            };
+            prop_assert_eq!(ok, model.apply(op, &mut saved_model), "{:?}", op);
+            prop_assert_eq!(map.active_modes(), model.reported());
+            prop_assert_eq!(map.transient_mode(), model.menu());
+            let newest = model.reported().first().copied().unwrap_or("");
+            prop_assert_eq!(map.mode(), newest);
+        }
+    }
 }

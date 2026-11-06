@@ -456,13 +456,79 @@ impl fmt::Display for InputSpec {
     }
 }
 
-/// One entry on the mode stack.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct ActiveMode {
-    /// Mode name.
-    name: String,
-    /// Whether the mode takes only the next key.
-    transient: bool,
+/// The active application modes, and the menu that waits for one key.
+///
+/// The menu is always the newest entry, above every mode.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct ModeStack {
+    /// Active modes in push order.
+    modes: Vec<String>,
+    /// Menu that waits for its key.
+    menu: Option<String>,
+}
+
+impl ModeStack {
+    /// Return the menu that waits for its key.
+    fn menu(&self) -> Option<&str> {
+        self.menu.as_deref()
+    }
+
+    /// Return whether `name` names an active mode, not counting the menu.
+    fn has_mode(&self, name: &str) -> bool {
+        self.modes.iter().any(|mode| mode == name)
+    }
+
+    /// Return whether `name` names an active mode or the menu.
+    fn contains(&self, name: &str) -> bool {
+        self.menu() == Some(name) || self.has_mode(name)
+    }
+
+    /// Return the newest entry: the menu, or else the newest mode.
+    fn newest(&self) -> Option<&str> {
+        self.menu()
+            .or_else(|| self.modes.last().map(String::as_str))
+    }
+
+    /// Return the entries in resolution order, newest first.
+    fn resolution_order(&self) -> impl Iterator<Item = &str> {
+        self.menu()
+            .into_iter()
+            .chain(self.modes.iter().rev().map(String::as_str))
+    }
+
+    /// Make `mode` the newest mode, moving it if it is active. Return whether
+    /// the stack changed.
+    fn enter(&mut self, mode: &str) -> bool {
+        if self.modes.last().is_some_and(|last| last == mode) {
+            return false;
+        }
+        self.modes.retain(|active| active != mode);
+        self.modes.push(mode.to_string());
+        true
+    }
+
+    /// Remove `mode` from the modes. Return whether it was active.
+    fn leave(&mut self, mode: &str) -> bool {
+        let before = self.modes.len();
+        self.modes.retain(|active| active != mode);
+        self.modes.len() != before
+    }
+
+    /// Open `menu`, replacing any menu that waits.
+    fn open_menu(&mut self, menu: &str) {
+        self.menu = Some(menu.to_string());
+    }
+
+    /// Close the waiting menu. Return whether one waited.
+    fn close_menu(&mut self) -> bool {
+        self.menu.take().is_some()
+    }
+
+    /// Remove every mode and the menu.
+    fn clear(&mut self) {
+        self.modes.clear();
+        self.menu = None;
+    }
 }
 
 /// Application-owned state restored after a failed startup script.
@@ -471,7 +537,7 @@ pub struct ApplicationBindingSnapshot {
     /// Application records captured at the start of an attempt.
     records: Vec<BindingRecord>,
     /// Application mode stack captured at the start of an attempt.
-    mode_stack: Vec<ActiveMode>,
+    mode_stack: ModeStack,
 }
 
 /// Registry for application bindings, framework controls, and active modes.
@@ -481,8 +547,8 @@ pub struct InputMap {
     records: Vec<BindingRecord>,
     /// Bindable intents the application registered.
     intents: IntentCatalog,
-    /// Active application modes in push order.
-    mode_stack: Vec<ActiveMode>,
+    /// Active application modes and the waiting menu.
+    mode_stack: ModeStack,
     /// Number of mode stack updates, so observers can tell when to resync.
     mode_generation: u64,
     /// Number of binding record updates, so observers can tell when to resync.
@@ -510,7 +576,7 @@ impl InputMap {
         Self {
             records: Vec::new(),
             intents: IntentCatalog::default(),
-            mode_stack: Vec::new(),
+            mode_stack: ModeStack::default(),
             mode_generation: 0,
             binding_generation: 0,
             modal_bindings: None,
@@ -741,7 +807,7 @@ impl InputMap {
             Some(ModalBindings::Scoped { groups }) => {
                 // A menu opened inside the modal takes its keys first, since
                 // the user opened it to choose from it.
-                let menu = self.mode_stack.last().is_some_and(|mode| mode.transient);
+                let menu = self.mode_stack.menu().is_some();
                 if menu {
                     self.extend_application_tiers(&mut out, path, input, true);
                 }
@@ -771,15 +837,16 @@ impl InputMap {
         transient_ends: bool,
     ) {
         self.extend_tier(out, path, input, |tier| *tier == BindingTier::Global);
-        for mode in self.mode_stack.iter().rev() {
-            self.extend_tier(out, path, input, |tier| {
-                tier.mode() == Some(mode.name.as_str())
-            });
-            if transient_ends && mode.transient {
+        if let Some(menu) = self.mode_stack.menu() {
+            self.extend_tier(out, path, input, |tier| tier.mode() == Some(menu));
+            if transient_ends {
                 // A transient mode ends the walk, so older modes and the
                 // default tier stay out of reach.
                 return;
             }
+        }
+        for mode in self.mode_stack.modes.iter().rev() {
+            self.extend_tier(out, path, input, |tier| tier.mode() == Some(mode.as_str()));
         }
         self.extend_tier(out, path, input, |tier| *tier == BindingTier::Default);
     }
@@ -848,14 +915,7 @@ impl InputMap {
             Some(ModalBindings::Scoped { groups }) => match &record.tier {
                 BindingTier::Framework(record_group) => groups.contains(record_group),
                 BindingTier::Global => true,
-                BindingTier::Mode(mode)
-                    if self
-                        .mode_stack
-                        .iter()
-                        .any(|active| active.transient && active.name == *mode) =>
-                {
-                    true
-                }
+                BindingTier::Mode(mode) if self.mode_stack.menu() == Some(mode.as_str()) => true,
                 BindingTier::Mode(_) | BindingTier::Default => {
                     !record.path_matcher.as_str().is_empty()
                         && !self.modal_enclosing.as_ref().is_some_and(|enclosing| {
@@ -922,9 +982,7 @@ impl InputMap {
                 BindingTier::Framework(group) => {
                     return RegistryStatus::InactiveFrameworkGroup(*group);
                 }
-                BindingTier::Mode(mode)
-                    if !self.mode_stack.iter().any(|active| active.name == *mode) =>
-                {
+                BindingTier::Mode(mode) if !self.mode_stack.contains(mode) => {
                     return RegistryStatus::InactiveMode(mode.clone());
                 }
                 BindingTier::Global | BindingTier::Mode(_) | BindingTier::Default => {}
@@ -1013,15 +1071,9 @@ impl InputMap {
                 "mode {mode} cannot enter while menu {menu} waits for its key"
             )));
         }
-        if self.mode() == mode {
-            return Ok(());
+        if self.mode_stack.enter(mode) {
+            self.touch_modes();
         }
-        self.mode_stack.retain(|active| active.name != mode);
-        self.mode_stack.push(ActiveMode {
-            name: mode.to_string(),
-            transient: false,
-        });
-        self.touch_modes();
         Ok(())
     }
 
@@ -1037,9 +1089,7 @@ impl InputMap {
                 "menu {mode} waits for its key, so it cannot be left"
             )));
         }
-        let before = self.mode_stack.len();
-        self.mode_stack.retain(|active| active.name != mode);
-        if self.mode_stack.len() != before {
+        if self.mode_stack.leave(mode) {
             self.touch_modes();
         }
         Ok(())
@@ -1058,49 +1108,36 @@ impl InputMap {
                 "menu {mode} cannot open while menu {menu} waits for its key"
             )));
         }
-        if self.mode_stack.iter().any(|active| active.name == mode) {
+        if self.mode_stack.has_mode(mode) {
             return Err(Error::Invalid(format!(
                 "menu {mode} cannot open while {mode} is an active mode"
             )));
         }
-        self.mode_stack.push(ActiveMode {
-            name: mode.to_string(),
-            transient: true,
-        });
+        self.mode_stack.open_menu(mode);
         self.touch_modes();
         Ok(())
     }
 
     /// Close the menu that waits for a key, if one does.
     pub(crate) fn close_menu(&mut self) {
-        if self.transient_mode().is_some() {
-            self.mode_stack.pop();
+        if self.mode_stack.close_menu() {
             self.touch_modes();
         }
     }
 
     /// Return the newest active mode.
     pub fn mode(&self) -> &str {
-        self.mode_stack
-            .last()
-            .map_or(DEFAULT_MODE, |mode| mode.name.as_str())
+        self.mode_stack.newest().unwrap_or(DEFAULT_MODE)
     }
 
     /// Return the newest active mode when it is transient.
     pub fn transient_mode(&self) -> Option<&str> {
-        self.mode_stack
-            .last()
-            .filter(|mode| mode.transient)
-            .map(|mode| mode.name.as_str())
+        self.mode_stack.menu()
     }
 
     /// Return active non-default modes in resolution order.
     pub fn active_modes(&self) -> Vec<&str> {
-        self.mode_stack
-            .iter()
-            .rev()
-            .map(|mode| mode.name.as_str())
-            .collect()
+        self.mode_stack.resolution_order().collect()
     }
 
     /// Return the number of mode stack updates so far.
@@ -1124,22 +1161,16 @@ impl InputMap {
     }
 
     /// Return the transient mode that keeps resolution from reaching `tier`.
+    ///
+    /// The menu is the newest entry, so it blocks the default tier and every
+    /// active mode, but not its own tier.
     fn transient_blocker(&self, tier: &BindingTier) -> Option<&str> {
-        let floor = match tier {
-            BindingTier::Default => 0,
-            BindingTier::Mode(mode) => {
-                self.mode_stack
-                    .iter()
-                    .rposition(|active| active.name == *mode)?
-                    + 1
-            }
-            BindingTier::Framework(_) | BindingTier::Global => return None,
-        };
-        self.mode_stack[floor..]
-            .iter()
-            .rev()
-            .find(|active| active.transient)
-            .map(|active| active.name.as_str())
+        let menu = self.mode_stack.menu()?;
+        match tier {
+            BindingTier::Default => Some(menu),
+            BindingTier::Mode(mode) if self.mode_stack.has_mode(mode) => Some(menu),
+            BindingTier::Mode(_) | BindingTier::Framework(_) | BindingTier::Global => None,
+        }
     }
 
     /// Snapshot only application-owned registry state.
