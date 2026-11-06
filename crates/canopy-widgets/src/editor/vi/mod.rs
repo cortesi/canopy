@@ -816,8 +816,9 @@ impl Editor {
     /// Move the vi mode to `to`: the one writer of the mode. Leaving insert
     /// mode commits the undo group of the session and records the session
     /// for `.`. Entering it opens an undo group, which the edits of the
-    /// entry join.
+    /// entry join. Every transition ends a pointer drag.
     pub(super) fn transition(&mut self, to: Target) {
+        self.mouse.end_drag();
         let state = match to {
             Target::Normal => State::Normal,
             Target::Visual(mode) => State::Visual(mode),

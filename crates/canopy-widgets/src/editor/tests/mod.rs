@@ -1416,6 +1416,49 @@ fn mouse_drag_extends_selection() {
 }
 
 #[test]
+fn set_text_ends_a_drag() {
+    // Regression: the drag kept its anchor in the old text, and the next
+    // drag event selected a clamped range of the new one.
+    let mut harness = build_harness("hello world", EditorConfig::new(), 20, 1);
+    harness
+        .mouse(mouse_event(mouse::Action::Down, 1, 0))
+        .unwrap();
+    with_editor(&mut harness, |editor| editor.set_text("abcdefgh"));
+    assert!(!with_editor(&mut harness, |editor| editor.selection_drag_active()));
+    harness
+        .mouse(mouse_event(mouse::Action::Drag, 4, 0))
+        .unwrap();
+    assert_eq!(
+        editor_selection(&mut harness),
+        Selection::caret(TextPosition::new(0, 0))
+    );
+}
+
+#[test]
+fn entering_visual_mode_ends_a_drag() {
+    // Regression: a drag after `v` wrote the selection past the visual
+    // mode's own ends.
+    let config = EditorConfig::new().with_mode(EditMode::Vi);
+    let mut harness = build_harness("hello world", config, 20, 1);
+    harness
+        .mouse(mouse_event(mouse::Action::Down, 1, 0))
+        .unwrap();
+    harness.key('v').unwrap();
+    let selected = with_editor(&mut harness, |editor| editor.selection());
+    harness
+        .mouse(mouse_event(mouse::Action::Drag, 4, 0))
+        .unwrap();
+    assert_eq!(
+        with_editor(&mut harness, |editor| editor.selection()),
+        selected
+    );
+    assert_eq!(
+        selected.range(),
+        TextRange::new(TextPosition::new(0, 1), TextPosition::new(0, 2))
+    );
+}
+
+#[test]
 fn mouse_triple_click_selects_line() {
     let config = EditorConfig::new().with_mode(EditMode::Text);
     let mut harness = build_harness("hello", config, 10, 1);

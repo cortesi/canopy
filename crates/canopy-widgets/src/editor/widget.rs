@@ -149,10 +149,9 @@ impl Highlighter for PreparedSpans {
 /// Mouse selection tracking state.
 #[derive(Debug, Clone)]
 pub(super) struct MouseState {
-    /// Whether a drag selection is active.
-    selecting: bool,
-    /// Anchor position for the selection.
-    anchor: Option<TextPosition>,
+    /// The anchor of the selection that a drag extends, only while the
+    /// button is down.
+    drag: Option<TextPosition>,
     /// Multi-click tracking state.
     click_state: ClickTracker,
 }
@@ -385,10 +384,11 @@ impl Editor {
 
     /// Replace the buffer contents.
     ///
-    /// An open prompt closes. The mode stays, and the typing of an insert
-    /// ends.
+    /// An open prompt closes and a pointer drag ends. The mode stays, and
+    /// the typing of an insert ends.
     pub fn set_text(&mut self, text: impl Into<String>) {
         self.close_prompt();
+        self.mouse.end_drag();
         self.end_entry();
         self.prepared_width = None;
         self.buffer = TextBuffer::new(text);
@@ -484,14 +484,13 @@ impl Editor {
 
     /// Return whether the pointer currently owns an unfinished selection.
     pub fn selection_drag_active(&self) -> bool {
-        self.mouse.selecting
+        self.mouse.drag.is_some()
     }
 
     /// End an unfinished pointer gesture, retaining its selected text.
     /// The host that owns pointer capture must release it separately.
     pub fn end_selection_drag(&mut self) {
-        self.mouse.selecting = false;
-        self.mouse.anchor = None;
+        self.mouse.end_drag();
     }
 
     /// Map a prepared content point to a logical text position.
@@ -1053,23 +1052,20 @@ impl Editor {
                     ),
                     _ => (pos, pos),
                 };
-                self.mouse.selecting = true;
-                self.mouse.anchor = Some(anchor);
+                self.mouse.drag = Some(anchor);
                 self.buffer.set_selection(Selection::new(anchor, head));
                 self.update_preferred_column();
                 true
             }
             mouse::Action::Drag if event.button == mouse::Button::Left => {
-                if self.mouse.selecting
-                    && let Some(anchor) = self.mouse.anchor
-                {
+                if let Some(anchor) = self.mouse.drag {
                     self.buffer.set_selection(Selection::new(anchor, pos));
                     self.update_preferred_column();
                 }
                 true
             }
             mouse::Action::Up if event.button == mouse::Button::Left => {
-                self.mouse.selecting = false;
+                self.mouse.end_drag();
                 true
             }
             _ => false,
@@ -1767,10 +1763,14 @@ impl MouseState {
     /// Construct a new mouse state.
     fn new() -> Self {
         Self {
-            selecting: false,
-            anchor: None,
+            drag: None,
             click_state: ClickTracker::default(),
         }
+    }
+
+    /// End a drag, keeping what it selected.
+    pub(super) fn end_drag(&mut self) {
+        self.drag = None;
     }
 }
 
