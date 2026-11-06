@@ -697,7 +697,7 @@ fn an_edit_of_a_tall_unit_puts_its_first_row_at_the_top_by_either_path() {
         // Both record the unit's first row on the top row, where the slot
         // opens on such a unit.
         let pending = reader(&mut harness, |reader, _| {
-            Ok(reader.shared.borrow().pending_mark)
+            Ok(reader.shared.borrow().pending().mark().copied())
         });
         assert_eq!(pending.and_then(|mark| mark.row), Some(0));
         settle(&mut harness, &manual);
@@ -1120,7 +1120,7 @@ fn keys_that_need_the_new_layout_work_as_soon_as_it_shows() {
     assert!(!reader(&mut harness, |reader, _| Ok(reader
         .shared
         .borrow()
-        .awaiting)));
+        .awaiting())));
     let (index, _) = marked(&mut harness).unwrap();
     press(&mut harness, "j");
     assert_eq!(marked(&mut harness).unwrap().0, index + 1);
@@ -1309,4 +1309,107 @@ fn a_block_opens_in_place_with_the_rows_of_the_reader() {
     // Every row shows the same text: only the bar beside the block changes
     // its colour.
     assert_eq!(screen(&harness), before);
+}
+
+/// Open the editor on the first unit, add " new" to it, and commit, so the
+/// commit's layout waits.
+fn commit_held(harness: &mut Harness) {
+    press(harness, "e");
+    harness.key('A').unwrap();
+    type_text(harness, " new");
+    press(harness, "Escape");
+    press(harness, "Escape");
+    assert!(!reader(harness, |reader, _| Ok(reader.block_open())));
+}
+
+#[test]
+fn regression_select_block_at_leaves_an_open_slot_on_its_unit() {
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    press(&mut harness, "j");
+    press(&mut harness, "e");
+    let state = |harness: &mut Harness| {
+        reader(harness, |reader, ctx| {
+            Ok((
+                reader.selected_block().map(|unit| unit.range),
+                slot::parts(reader, ctx),
+            ))
+        })
+    };
+    let before = state(&mut harness);
+    let lines = harness.tbuf().lines();
+    let later = parse_units(DOCUMENT)[3].range.start;
+    reader(&mut harness, |reader, ctx| {
+        reader.select_block_at(ctx, later)
+    });
+    service(&mut harness);
+    assert_eq!(state(&mut harness), before);
+    assert_eq!(
+        harness.tbuf().lines(),
+        lines,
+        "the rows around the slot stay"
+    );
+}
+
+#[test]
+fn regression_a_failed_commit_gives_back_block_steps() {
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    commit_held(&mut harness);
+    service(&mut harness);
+    manual
+        .start_next()
+        .expect("the commit's preparation")
+        .fail("injected failure");
+    service(&mut harness);
+    press(&mut harness, "j");
+    assert_eq!(marked(&mut harness).map(|(unit, _)| unit), Some(1));
+    let source = reader(&mut harness, |reader, _| Ok(reader.accepted_source()));
+    assert!(source.starts_with("## One new\n"), "{source:?}");
+    let edits = reader(&mut harness, |reader, _| Ok(reader.take_edits()));
+    assert_eq!(edits.len(), 1);
+}
+
+#[test]
+fn regression_escape_on_a_committed_slot_reaches_the_reader() {
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    commit_held(&mut harness);
+    // The view rests in the block cursor, with no object or selection, so
+    // Esc ends nothing.
+    assert!(!reader(&mut harness, |reader, ctx| reader.escape(ctx)));
+}
+
+#[test]
+fn repeated_direct_edits_while_a_layout_waits_land_in_order() {
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    press(&mut harness, "j");
+    press(&mut harness, "j");
+    let row = marked(&mut harness).unwrap().1.start - view(&mut harness).0;
+    let unit = reader(&mut harness, |reader, _| Ok(reader.selected_block())).unwrap();
+    for text in ["- item A", "- item AB"] {
+        reader(&mut harness, |reader, ctx| {
+            let epoch = reader.epoch();
+            // Each edit replaces the eight bytes of the item's text.
+            let end = unit.range.start + 8;
+            reader.apply_edit(ctx, epoch, unit.range.start, end, text.into())
+        });
+        service(&mut harness);
+    }
+    settle(&mut harness, &manual);
+    let edits = reader(&mut harness, |reader, _| Ok(reader.take_edits()));
+    assert_eq!(edits.len(), 2);
+    let source = reader(&mut harness, |reader, _| Ok(reader.accepted_source()));
+    assert!(source.contains("- item AB\n"), "{source:?}");
+    let (_, rows) = marked(&mut harness).unwrap();
+    assert_eq!(
+        rows.start - view(&mut harness).0,
+        row,
+        "the unit keeps its row"
+    );
+    assert_eq!(
+        reader(&mut harness, |reader, _| Ok(reader.selected_block())).map(|unit| unit.range.start),
+        Some(unit.range.start)
+    );
 }

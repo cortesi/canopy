@@ -8,7 +8,8 @@ use canopy::{
     input::key::{self, Key},
     testing::harness::Harness,
 };
-use proptest::{collection::vec, prelude::*};
+use canopy_widgets::editor::{EditMode, EditorConfig};
+use proptest::{collection::vec, option, prelude::*};
 
 use super::*;
 use crate::{
@@ -30,23 +31,32 @@ pub(super) fn reader(
     width: u32,
     height: u32,
 ) -> (Harness, ManualExecutor) {
+    reader_with(text, resting, width, height, |_| {})
+}
+
+/// A reader as [`reader`] makes one, whose options `configure` adjusts.
+fn reader_with(
+    text: &str,
+    resting: Mode,
+    width: u32,
+    height: u32,
+    configure: impl FnOnce(&mut MarkdownOptions),
+) -> (Harness, ManualExecutor) {
     let (executor, manual) = MarkdownExecutor::manual(ExecutorOptions {
         worker_count: 1,
         ..ExecutorOptions::default()
     });
-    let reader = Markdown::new(
-        text.to_owned(),
-        MarkdownOptions {
-            executor,
-            resting_mode: resting,
-            external_search: true,
-            clipboard: true,
-            status_row: false,
-            coalesce: Duration::ZERO,
-            ..MarkdownOptions::default()
-        },
-    )
-    .unwrap();
+    let mut options = MarkdownOptions {
+        executor,
+        resting_mode: resting,
+        external_search: true,
+        clipboard: true,
+        status_row: false,
+        coalesce: Duration::ZERO,
+        ..MarkdownOptions::default()
+    };
+    configure(&mut options);
+    let reader = Markdown::new(text.to_owned(), options).unwrap();
     let harness = Harness::builder(reader)
         .register::<Markdown>()
         .script("markdown-defaults", "markdown.default_bindings()")
@@ -1020,6 +1030,17 @@ enum Action {
     /// A press on a row of the view and a drag along it, with Scroll
     /// between two drags, or not.
     Drag(u32, bool),
+    /// The block editor opened on the marked unit, then `select_block_at`
+    /// the unit at this index if any, a change if `change`, and a commit
+    /// if `commit`, or else a discard.
+    Edit {
+        /// The unit `select_block_at` asks for while the editor is open.
+        select: Option<usize>,
+        /// Whether the editor's text changes.
+        change: bool,
+        /// Whether a commit, or else a discard, closes the editor.
+        commit: bool,
+    },
 }
 
 /// Generate an action.
@@ -1046,6 +1067,8 @@ fn action() -> impl Strategy<Value = Action> {
         1 => Just(Action::Escape),
         1 => any::<bool>().prop_map(Action::Select),
         1 => (0..12u32, any::<bool>()).prop_map(|(row, scroll)| Action::Drag(row, scroll)),
+        1 => (option::of(0..8usize), any::<bool>(), any::<bool>())
+            .prop_map(|(select, change, commit)| Action::Edit { select, change, commit }),
     ]
 }
 
@@ -1436,6 +1459,64 @@ fn step(
             service(harness);
             leave_selection(harness, *scroll)?;
         }
+        Action::Edit {
+            select,
+            change,
+            commit,
+        } => {
+            press(harness, "e");
+            if !harness.with_root_widget(|reader: &mut Markdown| reader.block_open()) {
+                return check_screen(harness, *width);
+            }
+            let draft = |harness: &mut Harness| {
+                harness
+                    .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                        Ok(reader.block_draft(ctx).map(|edit| edit.range))
+                    })
+                    .unwrap()
+            };
+            let opened = draft(harness);
+            if let Some(index) = select {
+                let byte = harness.with_root_widget(|reader: &mut Markdown| {
+                    let mut state = reader.shared.borrow_mut();
+                    let (units, _) = state.cursor_map()?;
+                    Some(units.get(index % units.len().max(1))?.range.start)
+                });
+                if let Some(byte) = byte {
+                    harness
+                        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                            reader.select_block_at(ctx, byte)
+                        })
+                        .unwrap();
+                    service(harness);
+                    prop_assert_eq!(draft(harness), opened, "the open editor keeps its unit");
+                }
+            }
+            if *change {
+                harness.key('x').unwrap();
+                service(harness);
+            }
+            let edits = |harness: &mut Harness| {
+                harness.with_root_widget(|reader: &mut Markdown| reader.take_edits().len())
+            };
+            if *commit {
+                press(harness, "Escape");
+            } else {
+                harness
+                    .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                        reader.discard_block(ctx, true)
+                    })
+                    .unwrap();
+                service(harness);
+            }
+            prop_assert!(!harness.with_root_widget(|reader: &mut Markdown| reader.block_open()));
+            settle(harness, manual);
+            prop_assert_eq!(edits(harness), usize::from(*commit && *change));
+            let waiting = harness.with_root_widget(|reader: &mut Markdown| {
+                reader.slot.shows() || reader.shared.borrow().awaiting()
+            });
+            prop_assert!(!waiting, "nothing waits once the edit shows");
+        }
     }
     check_screen(harness, *width)
 }
@@ -1478,7 +1559,9 @@ proptest! {
         actions in vec(action(), 1..24),
     ) {
         let resting = if interact { Mode::Interact } else { Mode::Scroll };
-        let (mut harness, manual) = reader(&text, resting, width + 1, height + 1);
+        let (mut harness, manual) = reader_with(&text, resting, width + 1, height + 1, |options| {
+            options.block_editor = Some(EditorConfig::new().with_mode(EditMode::Text));
+        });
         settle(&mut harness, &manual);
         let mut width = width;
         check_screen(&mut harness, width)?;

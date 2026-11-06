@@ -203,11 +203,11 @@ pub(super) fn state(reader: &Markdown, ctx: &dyn ViewContext) -> Result<ArgValue
         ("block", block),
         (
             "block_editor",
-            reader.slot.as_ref().map_or(ArgValue::Null, |slot| {
+            reader.slot.slot().map_or(ArgValue::Null, |slot| {
                 map([
                     ("range", range(&slot.range)),
                     ("new_block", ArgValue::Bool(slot.new_block.is_some())),
-                    ("committed", ArgValue::Bool(slot.committed)),
+                    ("committed", ArgValue::Bool(reader.slot.is_committed())),
                 ])
             }),
         ),

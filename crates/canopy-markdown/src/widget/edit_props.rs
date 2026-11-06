@@ -59,7 +59,7 @@ fn settle(harness: &mut Harness, work: &mut Schedule, node: NodeId) {
     assert!(work.pump(harness, &[node]).unwrap(), "the reader settles");
     harness
         .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            if reader.slot.is_none() {
+            if !reader.slot.shows() {
                 ctx.set_focus(reader.navigation_node().unwrap())?;
             }
             Ok(())

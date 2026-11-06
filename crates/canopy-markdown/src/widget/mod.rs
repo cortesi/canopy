@@ -57,7 +57,7 @@ use crate::{
     },
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, SourceAnchor, SourceMatches, SourceOptions},
-    surface::{Focus, Interaction, PendingMark, RenderedSurface, SurfaceState},
+    surface::{Focus, Interaction, Pending, PendingMark, RenderedSurface, SurfaceState},
     units::EditUnit,
 };
 
@@ -247,8 +247,8 @@ pub struct Markdown {
     restoring: bool,
     /// Whether pointer capture postpones a completed surface swap.
     deferred_publication: bool,
-    /// The open slot and the edit in it.
-    slot: Option<slot::OpenSlot>,
+    /// The block editor's slot, and the edit in it.
+    slot: slot::Edit,
     /// The dialog that asks before a discard drops changes, once mounted.
     confirm: Option<TypedId<Confirm>>,
     /// Edits of the text that the host has not taken, oldest first.
@@ -458,7 +458,7 @@ impl Markdown {
             last_size: None,
             restoring: false,
             deferred_publication: false,
-            slot: None,
+            slot: slot::Edit::Idle,
             confirm: None,
             edits: VecDeque::new(),
             lock: None,
@@ -538,8 +538,7 @@ impl Markdown {
             let resting = state.resting;
             state.rest(resting);
             state.marked = None;
-            state.pending_mark = None;
-            state.awaiting = false;
+            state.clear_pending();
             state.cursor_scroll = None;
             state.follow = if receiving {
                 Follow::Following
@@ -728,7 +727,7 @@ impl Markdown {
     }
     /// Reject switches while a modal or any reader drag owns interaction.
     fn can_switch(&self, ctx: &dyn ViewContext) -> Result<bool> {
-        Ok(self.inspector.is_none() && self.slot.is_none() && !self.drag_active(ctx)?)
+        Ok(self.inspector.is_none() && !self.slot.shows() && !self.drag_active(ctx)?)
     }
     /// Whether any Rendered, scrollbar, or mounted Source drag owns the
     /// pointer.
@@ -807,7 +806,7 @@ impl Markdown {
     /// Enter or leave the block cursor of the rendered view.
     #[command]
     pub fn set_mode(&mut self, ctx: &mut dyn Context, mode: Mode) -> Result<()> {
-        if mode == Mode::Interact && self.inspector.is_some() || self.slot.is_some() {
+        if mode == Mode::Interact && self.inspector.is_some() || self.slot.is_open() {
             return Ok(());
         }
         if mode == Mode::Interact {
@@ -834,6 +833,10 @@ impl Markdown {
     /// once it does, as for a host that restores a place after a reload.
     #[command]
     pub fn select_block_at(&mut self, ctx: &mut dyn Context, byte: usize) -> Result<()> {
+        // An open block editor keeps its unit.
+        if self.slot.is_open() {
+            return Ok(());
+        }
         let epoch = self.epoch();
         let shown = self
             .shared
@@ -842,7 +845,7 @@ impl Markdown {
             .as_ref()
             .is_some_and(|p| p.document.source.epoch == epoch);
         if !shown {
-            self.shared.borrow_mut().pending_mark = Some(PendingMark {
+            self.shared.borrow_mut().ask_mark(PendingMark {
                 epoch,
                 byte,
                 row: None,
@@ -942,21 +945,18 @@ impl Markdown {
     /// it. A committed editor that still shows while its text's layout
     /// prepares is closed.
     pub fn block_editor(&self) -> Option<TypedId<Editor>> {
-        self.slot
-            .as_ref()
-            .filter(|slot| !slot.committed)
-            .map(|slot| slot.editor)
+        self.slot.open().map(|slot| slot.editor)
     }
     /// Return whether the block editor is open. A committed editor that
     /// still shows while its text's layout prepares is closed.
     #[command]
     pub fn block_open(&self) -> bool {
-        self.slot.as_ref().is_some_and(|slot| !slot.committed)
+        self.slot.is_open()
     }
     /// Move focus to the open block editor.
     #[command]
     pub fn focus_block(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if let Some(slot) = self.slot.as_ref() {
+        if let Some(slot) = self.slot.open() {
             ctx.set_focus(slot.editor.into())?;
         }
         Ok(())
@@ -1023,11 +1023,9 @@ impl Markdown {
         // The unit's screen row, from the shown layout. While an earlier
         // edit awaits its layout, the shown rows are stale, so the edit
         // takes the row that the earlier one keeps.
-        let waiting = {
-            let state = self.shared.borrow();
-            state
-                .awaiting
-                .then(|| state.pending_mark.and_then(|mark| mark.row))
+        let waiting = match self.shared.borrow().pending() {
+            Pending::Edit(mark) => Some(mark.row),
+            Pending::None | Pending::Mark(_) => None,
         };
         let row = waiting.unwrap_or_else(|| {
             self.nodes.as_ref().and_then(|nodes| {
@@ -1115,8 +1113,7 @@ impl Markdown {
             state.overlays.search_current = None;
             state.clear_marks();
             let mark = slot::pending_mark(&state, epoch, first, row);
-            state.pending_mark = Some(mark);
-            state.awaiting = true;
+            state.await_edit(mark);
         }
         self.edits.push_back(edit);
         self.schedule(ctx, true)?;
@@ -1125,7 +1122,7 @@ impl Markdown {
     /// Extend or start rendered text selection at the reading position.
     #[command]
     pub fn select_text(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.inspector.is_some() || self.slot.is_some() {
+        if self.inspector.is_some() || self.slot.is_open() {
             return Ok(());
         }
         if self.active != ViewType::Rendered {
@@ -1145,7 +1142,8 @@ impl Markdown {
     #[command]
     pub fn escape(&mut self, ctx: &mut dyn Context) -> Result<bool> {
         // Esc that the block editor leaves, with no other work, commits it.
-        if self.slot.is_some() {
+        // A committed editor takes no keys, so Esc reaches the reader.
+        if self.slot.is_open() {
             slot::commit(self, ctx)?;
             return Ok(true);
         }
@@ -1174,7 +1172,7 @@ impl Markdown {
     /// the object's unit, or leave through normal focus traversal.
     #[command(enabled = "rendered_action_status")]
     pub fn next_object(&mut self, ctx: &mut dyn Context, delta: i32) -> Result<()> {
-        if self.active != ViewType::Rendered || self.slot.is_some() {
+        if self.active != ViewType::Rendered || self.slot.is_open() {
             return Ok(());
         }
         if let Some(nodes) = &self.nodes {
@@ -1187,7 +1185,7 @@ impl Markdown {
     /// Resume tail following explicitly.
     #[command(enabled = "follow_status")]
     pub fn follow(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.inspector.is_some() || self.slot.is_some() {
+        if self.inspector.is_some() || self.slot.is_open() {
             return Ok(());
         }
         self.shared.borrow_mut().follow = Follow::Following;
@@ -1439,7 +1437,7 @@ impl Markdown {
     #[command]
     pub fn start_search(&mut self, ctx: &mut dyn Context) -> Result<()> {
         // The block editor has a search of its own.
-        if self.slot.is_some() {
+        if self.slot.is_open() {
             return Ok(());
         }
         self.shared.borrow_mut().follow = Follow::Paused;
@@ -1529,7 +1527,7 @@ impl Markdown {
     /// Visit a retained match in the active representation.
     #[command(enabled = "search_step_status")]
     pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32) -> Result<()> {
-        if self.slot.is_some() {
+        if self.slot.is_open() {
             return Ok(());
         }
         let Some(next) = view_search::step(self.search_index, self.search_matches(), delta) else {
@@ -1561,7 +1559,7 @@ impl Markdown {
     /// a search is current.
     #[command(enabled = "rendered_action_status")]
     pub fn activate(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.active != ViewType::Rendered || self.slot.is_some() {
+        if self.active != ViewType::Rendered || self.slot.is_open() {
             return Ok(());
         }
         let p = self.shared.borrow().presentation.clone();
@@ -1709,7 +1707,7 @@ impl Markdown {
     /// Inspect a pinned snapshot of the displayed source.
     #[command]
     pub fn inspect_source(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.inspector.is_some() || self.slot.is_some() {
+        if self.inspector.is_some() || self.slot.is_open() {
             return Ok(());
         }
         let Some(snapshot) = self.displayed.clone() else {
@@ -2091,7 +2089,7 @@ impl Markdown {
     /// Return once from a fragment or footnote jump.
     #[command]
     pub fn return_from_jump(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.slot.is_some() {
+        if self.slot.is_open() {
             return Ok(());
         }
         if let Some(position) = self.return_position.take() {
@@ -2102,7 +2100,7 @@ impl Markdown {
     /// Copy the reader's own item: the text selection, else the active
     /// object's default payload, else the marked unit's exact source.
     fn copy(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.displayed.is_none() || self.slot.is_some() {
+        if self.displayed.is_none() || self.slot.is_open() {
             return Ok(());
         }
         if self.active == ViewType::Source {
@@ -2258,7 +2256,7 @@ impl Markdown {
     }
     /// Admit `follow` while the reader can follow and does not.
     fn follow_status(&self, _: &dyn ViewContext) -> Result<CommandStatus> {
-        Ok(if self.inspector.is_some() || self.slot.is_some() {
+        Ok(if self.inspector.is_some() || self.slot.is_open() {
             CommandStatus::Disabled("Following waits for the inspector or block editor".into())
         } else if self.shared.borrow().follow == Follow::Following {
             CommandStatus::Disabled("The reader follows its tail".into())
@@ -2268,7 +2266,7 @@ impl Markdown {
     }
     /// Admit `search_next` while a search has matches to visit.
     fn search_step_status(&self, _: &dyn ViewContext) -> Result<CommandStatus> {
-        Ok(if self.slot.is_none() && self.search_matches() > 0 {
+        Ok(if !self.slot.is_open() && self.search_matches() > 0 {
             CommandStatus::Enabled
         } else {
             CommandStatus::Disabled("No search matches".into())
@@ -2286,7 +2284,7 @@ impl Markdown {
     fn rendered_actions_available(&self) -> bool {
         self.active == ViewType::Rendered
             && self.displayed.is_some()
-            && self.slot.is_none()
+            && !self.slot.is_open()
             && self.shared.borrow().presentation.is_some()
     }
     /// Reserve a host action before submitting bounded immutable copy work.
@@ -2535,9 +2533,11 @@ impl Markdown {
                 self.failure = Some(error.to_string());
                 self.switching = None;
                 self.dirty = false;
-                // A commit whose text cannot be laid out ends its slot; the
-                // text keeps the edit.
-                if self.slot.as_ref().is_some_and(|slot| slot.committed) {
+                // A commit whose text cannot be laid out ends its slot, and
+                // block steps work on the shown layout again; the text and
+                // the host's queued edits keep the edit.
+                self.shared.borrow_mut().edit_failed();
+                if self.slot.is_committed() {
                     slot::close(self, ctx)?;
                 }
                 self.wake_publication_host()?;
@@ -2613,7 +2613,7 @@ impl Markdown {
         // A committed slot shows its text until the text's layout shows. An
         // open slot keeps its place in a new layout of the same text.
         if tags.view == ViewType::Rendered {
-            if self.slot.as_ref().is_some_and(|slot| slot.committed) {
+            if self.slot.is_committed() {
                 slot::close(self, ctx)?;
             } else {
                 slot::layout_parts(self, ctx)?;
@@ -2835,7 +2835,7 @@ impl Markdown {
     /// reveal it as every searchable view does.
     fn reveal_rendered_match(&mut self, ctx: &mut dyn Context, index: usize) -> Result<()> {
         // The reader's search does nothing while the block editor is open.
-        if self.slot.is_some() {
+        if self.slot.is_open() {
             return Ok(());
         }
         let Some(found) = self
@@ -3044,7 +3044,7 @@ impl Markdown {
         };
         let mode = if self.active == ViewType::Source {
             "Source"
-        } else if self.slot.is_some() {
+        } else if self.slot.shows() {
             "Editing"
         } else if self.shared.borrow().mode() == Mode::Interact {
             "Interact"
@@ -3098,7 +3098,7 @@ impl Markdown {
     fn tracks(&self, ctx: &dyn ViewContext) -> ScrollbarTracks {
         // An open inspector covers the document, whose position it hides,
         // and the block editor's context does not scroll.
-        if self.inspector.is_some() || self.slot.is_some() {
+        if self.inspector.is_some() || self.slot.shows() {
             return (vec![], vec![]);
         }
         let Some(node) = self.navigation_node() else {

@@ -69,12 +69,8 @@ pub struct SurfaceState {
     /// the cursor marks again if it still shows when Interact starts.
     pub marked: Option<usize>,
     /// A unit for the cursor to mark once a presentation of its epoch
-    /// shows.
-    pub pending_mark: Option<PendingMark>,
-    /// Whether a newer text than the shown presentation's, from an edit,
-    /// waits for its presentation. Moves that need geometry do nothing
-    /// until it shows.
-    pub awaiting: bool,
+    /// shows, and whether an edit's text waits for it.
+    pending: Pending,
     /// How the view must scroll for the block cursor, which the controller
     /// does when it next polls.
     pub cursor_scroll: Option<CursorScroll>,
@@ -205,6 +201,63 @@ pub struct PendingMark {
     pub mode: Mode,
 }
 
+/// A unit for the cursor to mark once a presentation of its epoch shows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Pending {
+    /// Nothing waits.
+    #[default]
+    None,
+    /// A host asked for this mark before the presentation of its epoch
+    /// showed.
+    Mark(PendingMark),
+    /// An edit's newer text than the shown presentation's waits for its
+    /// presentation, which marks this. Moves that need geometry do nothing
+    /// until it shows.
+    Edit(PendingMark),
+}
+
+impl Pending {
+    /// The mark that waits.
+    #[cfg(test)]
+    pub fn mark(&self) -> Option<&PendingMark> {
+        match self {
+            Self::Mark(mark) | Self::Edit(mark) => Some(mark),
+            Self::None => None,
+        }
+    }
+
+    /// Whether an edit's text waits for its presentation.
+    pub fn awaiting(&self) -> bool {
+        matches!(self, Self::Edit(_))
+    }
+
+    /// A host asks for `mark`. An edit that waits still waits, now for
+    /// this mark.
+    fn ask(&mut self, mark: PendingMark) {
+        *self = match self {
+            Self::Edit(_) => Self::Edit(mark),
+            Self::None | Self::Mark(_) => Self::Mark(mark),
+        };
+    }
+
+    /// A presentation of `epoch` shows, of the shown epoch when
+    /// `same_epoch`. Return the mark that waited for it. A new epoch ends
+    /// the wait of an edit, whose mark waits on for its own epoch.
+    fn shown(&mut self, epoch: u64, same_epoch: bool) -> Option<PendingMark> {
+        match *self {
+            Self::Mark(mark) | Self::Edit(mark) if mark.epoch == epoch => {
+                *self = Self::None;
+                Some(mark)
+            }
+            Self::Edit(mark) if !same_epoch => {
+                *self = Self::Mark(mark);
+                None
+            }
+            _ => None,
+        }
+    }
+}
+
 /// How the view must scroll for the block cursor after it painted.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CursorScroll {
@@ -279,6 +332,39 @@ impl SurfaceState {
     /// match's while scrolling.
     pub fn object(&self) -> Option<u64> {
         self.interaction.object()
+    }
+
+    /// The mark that waits for a presentation, and whether an edit waits.
+    pub fn pending(&self) -> &Pending {
+        &self.pending
+    }
+
+    /// Whether an edit's text waits for its presentation.
+    pub fn awaiting(&self) -> bool {
+        self.pending.awaiting()
+    }
+
+    /// A host asks for `mark` once a presentation of its epoch shows.
+    pub fn ask_mark(&mut self, mark: PendingMark) {
+        self.pending.ask(mark);
+    }
+
+    /// An edit's text waits for its presentation, which marks `mark`.
+    pub fn await_edit(&mut self, mark: PendingMark) {
+        self.pending = Pending::Edit(mark);
+    }
+
+    /// The edit's text failed to lay out: nothing waits for it, and moves
+    /// work on the shown layout again.
+    pub fn edit_failed(&mut self) {
+        if self.pending.awaiting() {
+            self.pending = Pending::None;
+        }
+    }
+
+    /// Drop any mark that waits, as a new text does.
+    pub fn clear_pending(&mut self) {
+        self.pending = Pending::None;
     }
 
     /// Whether a left-button press, and the drag it may start, lasts.
@@ -624,16 +710,10 @@ impl RenderedSurface {
         let epoch = next.document.source.epoch;
         state.document = Some(next.document.clone());
         state.presentation = Some(next);
-        if !same_epoch {
-            state.awaiting = false;
-        }
         let mut target = target;
         // A unit that a host asked for, or that an edit changed, before its
         // presentation showed. An edit keeps its unit on its screen row.
-        if let Some(pending) = state.pending_mark
-            && pending.epoch == epoch
-        {
-            state.pending_mark = None;
+        if let Some(pending) = state.pending.shown(epoch, same_epoch) {
             state.marked = Some(pending.byte);
             state.take_mode(pending.mode, may_enter);
             let rows = state
@@ -730,7 +810,7 @@ impl RenderedSurface {
         let step = {
             let mut state = self.state.borrow_mut();
             // The rows of an edited text are not laid out yet.
-            if state.awaiting {
+            if state.awaiting() {
                 return Ok(());
             }
             let Some((_, rows)) = state.cursor_map() else {
@@ -1200,7 +1280,7 @@ impl RenderedSurface {
         {
             let mut state = self.state.borrow_mut();
             if state.mode() == Mode::Interact
-                && !state.awaiting
+                && !state.awaiting()
                 && let Some(unit) = state
                     .cursor_map()
                     .and_then(|(_, rows)| cursor::at_row(&rows, point.y))
@@ -1584,6 +1664,86 @@ mod tests {
             button: mouse::Button::Left,
             modifiers: key::Empty,
             location: PointI32 { x, y },
+        }
+    }
+
+    #[test]
+    fn a_pending_mark_waits_for_its_epoch() {
+        let mark = |epoch, byte| PendingMark {
+            epoch,
+            byte,
+            row: None,
+            mode: Mode::Interact,
+        };
+        // (state, presentation epoch, same epoch) -> (state, mark taken)
+        for (state, epoch, same, next, taken) in [
+            (Pending::None, 1, false, Pending::None, None),
+            (
+                Pending::Mark(mark(1, 3)),
+                1,
+                false,
+                Pending::None,
+                Some(mark(1, 3)),
+            ),
+            (
+                Pending::Mark(mark(2, 3)),
+                1,
+                false,
+                Pending::Mark(mark(2, 3)),
+                None,
+            ),
+            (
+                Pending::Mark(mark(2, 3)),
+                1,
+                true,
+                Pending::Mark(mark(2, 3)),
+                None,
+            ),
+            (
+                Pending::Edit(mark(1, 3)),
+                1,
+                false,
+                Pending::None,
+                Some(mark(1, 3)),
+            ),
+            (
+                Pending::Edit(mark(2, 3)),
+                1,
+                false,
+                Pending::Mark(mark(2, 3)),
+                None,
+            ),
+            (
+                Pending::Edit(mark(2, 3)),
+                1,
+                true,
+                Pending::Edit(mark(2, 3)),
+                None,
+            ),
+        ] {
+            let mut pending = state;
+            assert_eq!(pending.shown(epoch, same), taken, "{state:?}");
+            assert_eq!(pending, next, "{state:?}");
+        }
+        // A host's mark keeps an edit waiting.
+        for (state, next) in [
+            (Pending::None, Pending::Mark(mark(1, 5))),
+            (Pending::Mark(mark(1, 3)), Pending::Mark(mark(1, 5))),
+            (Pending::Edit(mark(1, 3)), Pending::Edit(mark(1, 5))),
+        ] {
+            let mut pending = state;
+            pending.ask(mark(1, 5));
+            assert_eq!(pending, next, "{state:?}");
+        }
+        // A failed layout ends an edit's wait, and only an edit's.
+        let mut state = SurfaceState::default();
+        for (before, after) in [
+            (Pending::Edit(mark(1, 3)), Pending::None),
+            (Pending::Mark(mark(1, 3)), Pending::Mark(mark(1, 3))),
+        ] {
+            state.pending = before;
+            state.edit_failed();
+            assert_eq!(state.pending, after);
         }
     }
 
