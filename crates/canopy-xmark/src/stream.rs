@@ -8,7 +8,7 @@
 //! open tail starts.
 
 use alloc::vec::Vec;
-use core::ops::Range;
+use core::{num::NonZeroUsize, ops::Range};
 
 use crate::{CodeBlockKind, Event, Tag, TagEnd};
 
@@ -50,12 +50,47 @@ pub struct TailWatch {
     last: Option<(Last, usize)>,
     /// The source ranges of the quotes seen.
     quotes: Vec<Range<usize>>,
-    /// How many quotes are open.
-    open_quotes: usize,
-    /// How many leaf blocks are open.
-    open_leaves: usize,
-    /// Whether the inline run outside any leaf block was already counted.
-    in_run: bool,
+    /// Where the parse stands against leaf blocks and inline runs.
+    run: Run,
+}
+
+/// Where a parse stands against leaf blocks: outside any, in an inline run
+/// outside any that was already counted as a paragraph, or inside some.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Run {
+    /// Outside any leaf block and any counted inline run.
+    #[default]
+    Idle,
+    /// In an inline run outside any leaf block, already counted.
+    Inline,
+    /// Inside this many open leaf blocks.
+    Leaf(NonZeroUsize),
+}
+
+impl Run {
+    /// A leaf block opens.
+    fn open_leaf(self) -> Self {
+        Self::Leaf(match self {
+            Self::Leaf(open) => open.saturating_add(1),
+            Self::Idle | Self::Inline => NonZeroUsize::MIN,
+        })
+    }
+
+    /// A leaf block closes.
+    fn close_leaf(self) -> Self {
+        match self {
+            Self::Leaf(open) => NonZeroUsize::new(open.get() - 1).map_or(Self::Idle, Self::Leaf),
+            Self::Idle | Self::Inline => Self::Idle,
+        }
+    }
+
+    /// Something other than inline content ends any inline run.
+    fn break_run(self) -> Self {
+        match self {
+            Self::Inline => Self::Idle,
+            other => other,
+        }
+    }
 }
 
 /// Where a watch stood after some part of a parse, so a watch of a parse
@@ -95,27 +130,24 @@ impl TailWatch {
         match event {
             Event::Start(Tag::BlockQuote(_) | Tag::Callout(_)) => {
                 self.quotes.push(range.clone());
-                self.open_quotes += 1;
-                self.in_run = false;
+                self.run = self.run.break_run();
             }
             Event::End(TagEnd::BlockQuote(_) | TagEnd::Callout(_)) => {
-                self.open_quotes = self.open_quotes.saturating_sub(1);
-                self.in_run = false;
+                self.run = self.run.break_run();
             }
             Event::Start(tag) => match leaf(tag, range) {
                 Some(kind) => {
                     self.block(kind, range.start);
-                    self.open_leaves += 1;
+                    self.run = self.run.open_leaf();
                 }
                 None if is_inline(tag) => self.inline(range.start),
-                None => self.in_run = false,
+                None => self.run = self.run.break_run(),
             },
             Event::End(end) => {
                 if is_leaf_end(*end) {
-                    self.open_leaves = self.open_leaves.saturating_sub(1);
-                }
-                if !is_inline_end(*end) {
-                    self.in_run = false;
+                    self.run = self.run.close_leaf();
+                } else if !is_inline_end(*end) {
+                    self.run = self.run.break_run();
                 }
             }
             Event::Rule => self.block(Last::Rule, range.start),
@@ -180,7 +212,7 @@ impl TailWatch {
 
     /// A block of `kind` starts at `start`.
     fn block(&mut self, kind: Last, start: usize) {
-        self.in_run = false;
+        self.run = self.run.break_run();
         if self.last.is_none_or(|(_, last)| start >= last) {
             self.last = Some((kind, start));
         }
@@ -189,9 +221,9 @@ impl TailWatch {
     /// Inline content starts at `start`: outside any leaf block, as in a
     /// tight list item, it reads as a paragraph.
     fn inline(&mut self, start: usize) {
-        if self.open_leaves == 0 && !self.in_run {
+        if self.run == Run::Idle {
             self.block(Last::Text, start);
-            self.in_run = true;
+            self.run = Run::Inline;
         }
     }
 }
@@ -375,6 +407,27 @@ mod tests {
         }
         for text in ["a\n\n", "a\r\n\r\n", "a\r\r", "a\n \t\n", "a\r\n  \r\nb"] {
             assert!(blank_line_after_first(text), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn a_run_counts_leaves_and_ends_with_other_content() {
+        let one = NonZeroUsize::MIN;
+        let two = one.saturating_add(1);
+        for (run, open, close, broken) in [
+            (Run::Idle, Run::Leaf(one), Run::Idle, Run::Idle),
+            (Run::Inline, Run::Leaf(one), Run::Idle, Run::Idle),
+            (Run::Leaf(one), Run::Leaf(two), Run::Idle, Run::Leaf(one)),
+            (
+                Run::Leaf(two),
+                Run::Leaf(two.saturating_add(1)),
+                Run::Leaf(one),
+                Run::Leaf(two),
+            ),
+        ] {
+            assert_eq!(run.open_leaf(), open, "{run:?} opens a leaf");
+            assert_eq!(run.close_leaf(), close, "{run:?} closes a leaf");
+            assert_eq!(run.break_run(), broken, "{run:?} breaks its run");
         }
     }
 
