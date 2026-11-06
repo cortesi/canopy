@@ -41,7 +41,7 @@ use crate::{
     config::LoadedConfig,
     replay::{ReplayEnvelope, ReplayStep, load_replay, write_replay},
     session::{Session, SessionKind, SessionManager},
-    term::TermRequest,
+    term::{Read, TermRequest},
 };
 
 /// How long the `launch` tool waits for an app to serve automation, builds
@@ -364,45 +364,21 @@ impl CanopyctlMcpServer {
             let mut session = self.sessions.session().await.map_err(tool_error)?;
             session.apply_fixture(fixture).await.map_err(tool_error)?;
         }
-        terminal_tool(
-            &self.sessions,
-            TermRequest {
-                screen: true,
-                ..TermRequest::default()
-            },
-        )
-        .await
+        terminal_tool(&self.sessions, &[], Read::Now).await
     }
 
     #[tool]
     /// Press keys in the launched app's terminal, as a person types them, and
     /// return the screen once the app has drawn them.
     async fn keys(&self, params: KeysRequest) -> ToolResult<CallToolResult> {
-        terminal_tool(
-            &self.sessions,
-            TermRequest {
-                keys: params.keys,
-                screen: true,
-                until: params.until,
-                stop: false,
-            },
-        )
-        .await
+        terminal_tool(&self.sessions, &params.keys, screen_read(params.until)).await
     }
 
     #[tool(read_only)]
     /// Return the launched app's screen as its terminal shows it, once the
     /// terminal has read the app's latest frame.
     async fn screen(&self, params: ScreenRequest) -> ToolResult<CallToolResult> {
-        terminal_tool(
-            &self.sessions,
-            TermRequest {
-                screen: true,
-                until: params.until,
-                ..TermRequest::default()
-            },
-        )
-        .await
+        terminal_tool(&self.sessions, &[], screen_read(params.until)).await
     }
 
     #[tool]
@@ -599,11 +575,13 @@ async fn detach_host(config: &LoadedConfig, args: &RunArgs, size: ScreenSize) ->
 async fn keys_command(args: KeysArgs) -> Result<()> {
     let response = term::send(
         &args.socket,
-        &TermRequest {
+        &TermRequest::Drive {
             keys: args.keys,
-            screen: args.screen,
-            until: args.until,
-            stop: false,
+            read: match args.until {
+                Some(text) => Read::Until(text),
+                None if args.screen => Read::Now,
+                None => Read::None,
+            },
         },
     )
     .await?;
@@ -617,10 +595,9 @@ async fn keys_command(args: KeysArgs) -> Result<()> {
 async fn screen_command(args: ScreenArgs) -> Result<()> {
     let response = term::send(
         &args.socket,
-        &TermRequest {
-            screen: true,
-            until: args.until,
-            ..TermRequest::default()
+        &TermRequest::Drive {
+            keys: Vec::new(),
+            read: screen_read(args.until),
         },
     )
     .await?;
@@ -630,14 +607,7 @@ async fn screen_command(args: ScreenArgs) -> Result<()> {
 
 /// Execute `canopyctl stop`.
 async fn stop_command(args: HostArgs) -> Result<()> {
-    term::send(
-        &args.socket,
-        &TermRequest {
-            stop: true,
-            ..TermRequest::default()
-        },
-    )
-    .await?;
+    term::send(&args.socket, &TermRequest::Stop).await?;
     Ok(())
 }
 
@@ -1000,13 +970,20 @@ fn tool_error(error: impl Display) -> ToolError {
     ToolError::internal(error.to_string())
 }
 
-/// Serve a request on the launched app's terminal and return its screen.
+/// Return the read of a screen, once it shows `until` if that is given.
+fn screen_read(until: Option<String>) -> Read {
+    until.map_or(Read::Now, Read::Until)
+}
+
+/// Press `keys` in the launched app's terminal, then return what `read`
+/// asks for.
 async fn terminal_tool(
     sessions: &SessionManager,
-    request: TermRequest,
+    keys: &[String],
+    read: Read,
 ) -> ToolResult<CallToolResult> {
-    let response = sessions.terminal(&request).await.map_err(tool_error)?;
-    Ok(CallToolResult::new().with_text_content(response.screen.unwrap_or_default().join("\n")))
+    let screen = sessions.terminal(keys, &read).await.map_err(tool_error)?;
+    Ok(CallToolResult::new().with_text_content(screen.unwrap_or_default().join("\n")))
 }
 
 /// Encode a typed MCP response.

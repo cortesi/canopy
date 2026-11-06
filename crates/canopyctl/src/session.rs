@@ -25,7 +25,7 @@ use tokio::{
 
 use crate::{
     config::{LoadedConfig, ResolvedCommand},
-    term::{self, TermRequest, TermResponse},
+    term::{self, Read},
 };
 
 /// MCP client name reported to spawned or connected servers.
@@ -215,8 +215,9 @@ impl SessionManager {
         Ok(())
     }
 
-    /// Serve one request on the terminal hosting the current app.
-    pub async fn terminal(&self, request: &TermRequest) -> Result<TermResponse> {
+    /// Press `keys` in the terminal hosting the current app, then return the
+    /// screen if `read` asks for it.
+    pub async fn terminal(&self, keys: &[String], read: &Read) -> Result<Option<Vec<String>>> {
         *self.last_activity.lock().await = Instant::now();
         // The host acknowledges input through the app's session, which the
         // state lock also guards from script tools.
@@ -224,7 +225,7 @@ impl SessionManager {
         let Some(Current::Hosted(host, _)) = state.as_mut() else {
             bail!("no app is hosted in a terminal; launch one first");
         };
-        term::serve(host, request).await
+        term::drive(host, keys, read).await
     }
 
     /// Drop and shut down the current session and any app canopyctl hosts.
