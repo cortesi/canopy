@@ -84,6 +84,9 @@ pub trait Context: ViewContext + Context {
     fn clear_identity(&mut self, node: NodeId) -> crate::error::Result<()>;
 
     /// Close this scope and its nested scopes after active callbacks return.
+    ///
+    /// The modal reads closed at once. Opening it again before the close
+    /// commits fails with [`Error::ModalClosing`].
     fn close_modal(&mut self, token: ModalToken) -> crate::error::Result<()>;
 
     /// Create a new widget node detached from the tree.
@@ -351,6 +354,19 @@ pub trait Context: ViewContext + Context {
     /// Attachment handles require this node to be attached when acquired.
     fn wake_handle(&self, lifetime: PollLifetime) -> crate::error::Result<NodeWakeHandle>;
 
+    /// Wake `handle` once when the scope of `token` ends for any reason: a
+    /// close, retirement with an older modal, or removal of its owner. A
+    /// scope that is already gone wakes it at once.
+    ///
+    /// The wake follows the commit of the removal, after the dispatch that
+    /// closes the modal, so a close that a failure discards wakes nothing.
+    /// The owner reads [`ViewContext::modal_retired`] in its poll.
+    fn wake_on_modal_close(
+        &mut self,
+        token: ModalToken,
+        handle: NodeWakeHandle,
+    ) -> crate::error::Result<()>;
+
     /// Execute a closure with mutable access to a widget and its node-bound
     /// context.
     fn with_widget_dyn_mut(
@@ -572,8 +588,15 @@ pub trait ViewContext: ViewContext {
     /// a new modal. Every node is admitted while no modal is open.
     fn modal_admits(&self, node: NodeId) -> bool;
 
-    /// Whether a modal remains open, including pending deferred closes.
+    /// Whether a modal is open. A modal whose close is queued reads closed
+    /// at once, though its scope stays until the dispatch that closes it
+    /// ends; a failure that discards the close gives back an open modal.
     fn modal_is_open(&self, token: ModalToken) -> bool;
+
+    /// Whether a modal's scope is gone: closed, retired with an older modal,
+    /// or retired with its owner. A modal whose close is queued is not
+    /// retired yet.
+    fn modal_retired(&self, token: ModalToken) -> bool;
 
     /// Return whether cells move: the motion settings allow motion, and the
     /// adapter shows it. Headless runs and the test harness return false
@@ -2131,6 +2154,10 @@ pub mod error {
          a widget notifies its host with Context::post"
         )]
         WidgetRunning(NodeId),
+        /// A modal opened on the subtree or region of a modal whose close is
+        /// queued. The close commits when the dispatch that queued it ends.
+        #[error("the modal is closing: open it again after the dispatch that closes it")]
+        ModalClosing,
         /// Node-bound widget operation failure with its original source.
         #[error("{kind} {operation} for node {node:?} at {path}: {source}")]
         NodeOperation {

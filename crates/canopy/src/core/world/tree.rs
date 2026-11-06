@@ -250,6 +250,7 @@ impl Core {
                 self.prune_semantic_keys();
                 self.sync_work_stamps()?;
                 self.retire_invalid_modals()?;
+                self.wake_ended_modals()?;
                 Ok(value)
             }
             Err(err) => {

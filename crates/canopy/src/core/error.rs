@@ -246,6 +246,10 @@ pub enum Error {
          a widget notifies its host with Context::post"
     )]
     WidgetRunning(NodeId),
+    /// A modal opened on the subtree or region of a modal whose close is
+    /// queued. The close commits when the dispatch that queued it ends.
+    #[error("the modal is closing: open it again after the dispatch that closes it")]
+    ModalClosing,
     /// Node-bound widget operation failure with its original source.
     #[error("{kind} {operation} for node {node:?} at {path}: {source}")]
     NodeOperation {
@@ -391,6 +395,7 @@ impl Error {
             | Self::Internal(_)
             | Self::ReentrantWidgetBorrow(_)
             | Self::WidgetRunning(_)
+            | Self::ModalClosing
             | Self::MultipleMatches
             | Self::DuplicateSlot(_)
             | Self::DuplicateChild { .. }
@@ -437,6 +442,7 @@ impl Error {
             | Self::Internal(_)
             | Self::ReentrantWidgetBorrow(_)
             | Self::WidgetRunning(_)
+            | Self::ModalClosing
             | Self::Invalid(_)
             | Self::NotFound(_)
             | Self::NodeTypeMismatch { .. }

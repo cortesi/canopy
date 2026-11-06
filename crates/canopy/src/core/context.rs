@@ -206,8 +206,15 @@ pub trait ViewContext: sealed::ViewContext {
     /// Return whether a node exists and is attached to the root tree.
     fn is_attached(&self, node: NodeId) -> bool;
 
-    /// Whether a modal remains open, including pending deferred closes.
+    /// Whether a modal is open. A modal whose close is queued reads closed
+    /// at once, though its scope stays until the dispatch that closes it
+    /// ends; a failure that discards the close gives back an open modal.
     fn modal_is_open(&self, token: ModalToken) -> bool;
+
+    /// Whether a modal's scope is gone: closed, retired with an older modal,
+    /// or retired with its owner. A modal whose close is queued is not
+    /// retired yet.
+    fn modal_retired(&self, token: ModalToken) -> bool;
 
     /// Whether the top modal admits `node`, so it can receive input and own
     /// a new modal. Every node is admitted while no modal is open.
@@ -595,7 +602,19 @@ pub trait Context: ViewContext + sealed::Context {
     fn open_modal(&mut self, options: ModalOptions) -> Result<ModalToken>;
 
     /// Close this scope and its nested scopes after active callbacks return.
+    ///
+    /// The modal reads closed at once. Opening it again before the close
+    /// commits fails with [`Error::ModalClosing`].
     fn close_modal(&mut self, token: ModalToken) -> Result<()>;
+
+    /// Wake `handle` once when the scope of `token` ends for any reason: a
+    /// close, retirement with an older modal, or removal of its owner. A
+    /// scope that is already gone wakes it at once.
+    ///
+    /// The wake follows the commit of the removal, after the dispatch that
+    /// closes the modal, so a close that a failure discards wakes nothing.
+    /// The owner reads [`ViewContext::modal_retired`] in its poll.
+    fn wake_on_modal_close(&mut self, token: ModalToken, handle: NodeWakeHandle) -> Result<()>;
 
     /// Scroll this node's view.
     ///
@@ -1219,6 +1238,10 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.core.modal_is_open(token)
     }
 
+    fn modal_retired(&self, token: ModalToken) -> bool {
+        self.core.modal_retired(token)
+    }
+
     fn modal_admits(&self, node: NodeId) -> bool {
         self.core.modal_admits(node)
     }
@@ -1285,6 +1308,10 @@ impl Context for NodeCtx<&mut Core> {
 
     fn close_modal(&mut self, token: ModalToken) -> Result<()> {
         self.core.close_modal_after_dispatch(token)
+    }
+
+    fn wake_on_modal_close(&mut self, token: ModalToken, handle: NodeWakeHandle) -> Result<()> {
+        self.core.wake_on_modal_close(token, handle)
     }
 
     fn scroll(&mut self, op: ScrollOp) -> ChangeOutcome {

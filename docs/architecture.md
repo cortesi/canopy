@@ -937,6 +937,17 @@ closes. Root then calls `close_modal` with the returned
 Removing or replacing a subtree retires modals whose owner or modal widget
 no longer belongs to the tree.
 
+A close takes effect when the dispatch that queued it ends, but the modal reads
+closed at once: `modal_is_open` is false while a close of it, or of an older
+modal, waits in the queue. Closing is read from the queue, so a failure that
+discards the close gives back an open modal. Opening a modal on the subtree or
+region of a closing one fails with `Error::ModalClosing`. `modal_retired` is
+true once the scope is gone. A widget whose modal can end without its own
+close, such as one stacked on another modal, registers a wake handle with
+`Context::wake_on_modal_close`: the core wakes it once when the scope's removal
+commits, for a close, a retirement with an older modal, or the removal of its
+owner, and the widget reads `modal_retired` in its poll.
+
 Key routing gives a transient mode the next key before any widget sees it. It
 pops the mode, then runs the binding that the key resolved to, if there is one.
 `Setup::register_mode_hook` registers a function that runs against the root

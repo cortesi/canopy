@@ -2,18 +2,20 @@
 
 use std::{
     borrow::Cow,
+    mem,
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
 };
 
-use super::{Core, focus::is_focus_candidate};
+use super::{Core, completion::CompletionRequest, focus::is_focus_candidate};
 use crate::{
     Invalidation, NodeId,
     error::{Error, Result},
     input::FrameworkBindingGroup,
     path::Path,
+    runtime::NodeWakeHandle,
     style::{effects, effects::Effect},
 };
 
@@ -119,6 +121,8 @@ struct ModalScope {
     dim_effect: Effect,
     /// Exact prior focus followed by its nearest ancestors.
     focus_ancestry: Vec<Identity>,
+    /// Handles woken once when the scope ends.
+    close_wakes: Vec<NodeWakeHandle>,
     /// Whether the modal sits in the overlay layer rather than inside its
     /// owner, so its route ends at the modal itself.
     overlay: bool,
@@ -129,6 +133,9 @@ struct ModalScope {
 pub(super) struct ModalStack {
     /// Last scope is the sole normal input region.
     scopes: Vec<ModalScope>,
+    /// Close handles of scopes that ended inside an open tree edit, woken
+    /// when it commits. A rollback restores the list with the scopes.
+    ended_wakes: Vec<NodeWakeHandle>,
 }
 
 impl Core {
@@ -185,10 +192,74 @@ impl Core {
         Cow::Owned(order)
     }
 
-    /// Whether a token still owns a scope, including a close awaiting
-    /// completion.
+    /// Return the stack position of the scope that `token` owns.
+    fn modal_index(&self, token: ModalToken) -> Option<usize> {
+        self.modals
+            .scopes
+            .iter()
+            .position(|scope| scope.token == token)
+    }
+
+    /// Return the stack position of the oldest scope that a queued close
+    /// ends. The close also ends every younger scope.
+    ///
+    /// Closing is read from the queue, not stored, so each path that
+    /// discards a queued close gives back an open modal.
+    fn closing_from(&self) -> Option<usize> {
+        self.completion
+            .requests
+            .iter()
+            .filter_map(|request| match request {
+                CompletionRequest::CloseModal(token) => self.modal_index(*token),
+                CompletionRequest::Post(_)
+                | CompletionRequest::Remove(_)
+                | CompletionRequest::Notify(_) => None,
+            })
+            .min()
+    }
+
+    /// Whether a token owns a scope that no queued close ends.
     pub(crate) fn modal_is_open(&self, token: ModalToken) -> bool {
-        self.modals.scopes.iter().any(|scope| scope.token == token)
+        self.modal_index(token)
+            .is_some_and(|index| self.closing_from().is_none_or(|closing| index < closing))
+    }
+
+    /// Whether the scope of a token is gone: closed, retired with an older
+    /// scope, or retired with its owner. A closing scope is not gone yet.
+    pub(crate) fn modal_retired(&self, token: ModalToken) -> bool {
+        self.modal_index(token).is_none()
+    }
+
+    /// Wake `handle` once when the scope of `token` ends, for any reason. A
+    /// scope that is already gone wakes it at once.
+    ///
+    /// The wake follows the commit of the scope's removal, so a close that a
+    /// failure discards wakes nothing.
+    pub(crate) fn wake_on_modal_close(
+        &mut self,
+        token: ModalToken,
+        handle: NodeWakeHandle,
+    ) -> Result<()> {
+        match self.modal_index(token) {
+            Some(index) => {
+                self.modals.scopes[index].close_wakes.push(handle);
+                Ok(())
+            }
+            None => handle.wake().map(drop),
+        }
+    }
+
+    /// Wake the close handles of scopes that ended, unless a tree edit is
+    /// open: its commit wakes them, and its rollback restores them with
+    /// their scopes.
+    pub(crate) fn wake_ended_modals(&mut self) -> Result<()> {
+        if self.tree_edit.is_some() {
+            return Ok(());
+        }
+        for handle in mem::take(&mut self.modals.ended_wakes) {
+            handle.wake()?;
+        }
+        Ok(())
     }
 
     /// Return the top normal-input subtree, if any.
@@ -298,16 +369,25 @@ impl Core {
         // only its owner must be admitted.
         let overlay = self.is_overlay(options.modal)
             && !self.is_ancestor_or_self(options.owner, options.modal);
-        if !(overlay || self.is_ancestor_or_self(options.owner, options.modal))
-            || !self.is_ancestor_or_self(options.modal, options.initial_focus)
-            || !(overlay || self.modal_admits(options.modal))
-            || !self.modal_admits(options.owner)
-            || self
-                .modals
-                .scopes
-                .iter()
-                .any(|scope| scope.options.modal == options.modal)
-        {
+        let formed = (overlay || self.is_ancestor_or_self(options.owner, options.modal))
+            && self.is_ancestor_or_self(options.modal, options.initial_focus);
+        let admitted =
+            (overlay || self.modal_admits(options.modal)) && self.modal_admits(options.owner);
+        let duplicate = self
+            .modals
+            .scopes
+            .iter()
+            .position(|scope| scope.options.modal == options.modal);
+        if !formed || !admitted || duplicate.is_some() {
+            // A scope whose close is queued still holds its subtree and its
+            // region until the close commits.
+            let closing = self.closing_from();
+            let held_by_closing = duplicate
+                .is_some_and(|index| closing.is_some_and(|closing| closing <= index))
+                || (duplicate.is_none() && !admitted && closing.is_some());
+            if formed && held_by_closing {
+                return Err(Error::ModalClosing);
+            }
             return Err(Error::Invalid(
                 "modal owner, subtree, and focus must form an admitted route".into(),
             ));
@@ -337,6 +417,7 @@ impl Core {
             dim,
             dim_effect: effects::modal_dim(),
             focus_ancestry,
+            close_wakes: Vec::new(),
             overlay,
         });
         self.sync_modal_bindings();
@@ -370,6 +451,11 @@ impl Core {
             return Ok(());
         };
         let retired: Vec<_> = self.modals.scopes.drain(index..).collect();
+        for scope in &retired {
+            self.modals
+                .ended_wakes
+                .extend(scope.close_wakes.iter().cloned());
+        }
         self.sync_modal_bindings();
         self.mouse_capture = None;
         for scope in retired.iter().rev() {
@@ -405,8 +491,9 @@ impl Core {
                 .into_iter()
                 .find(|node| is_focus_candidate(self, *node, false))
         });
-        self.transition_focus(focus)?;
-        Ok(())
+        let focused = self.transition_focus(focus).map(drop);
+        let woken = self.wake_ended_modals();
+        focused.and(woken)
     }
 
     /// Retire scopes invalidated by a successful structural commit.
@@ -440,9 +527,10 @@ mod tests {
 
     use super::*;
     use crate::{
-        Context, ViewContext, Widget,
+        Context, ViewContext, Widget, WidgetStamp,
         core::world::CoreOwner,
         input::{Event, key, mouse},
+        runtime::PollLifetime,
         testing::ttree::{Bb, TestTree, get_state, reset_state, run_ttree},
         widget::EventOutcome,
     };
@@ -747,5 +835,157 @@ mod tests {
         core.dispatch_event(nodes[3], &Event::Paste("text".into()))?;
         assert_eq!(*log.borrow(), ["leaf", "modal", "owner"]);
         Ok(())
+    }
+
+    /// Options for a modal at `modal`, owned by `owner`, focused at `focus`.
+    fn modal_at(owner: NodeId, modal: NodeId, focus: NodeId) -> ModalOptions {
+        ModalOptions {
+            owner,
+            modal,
+            initial_focus: focus,
+            dim_target: None,
+            bindings: ModalBindings::Application,
+        }
+    }
+
+    /// Return a wake handle on `node`.
+    fn wake_probe(core: &Core, node: NodeId) -> Result<NodeWakeHandle> {
+        core.wake_handle(node, PollLifetime::Node)
+    }
+
+    /// Return whether the registry woke `node` since the last drain, and
+    /// drain it.
+    fn woke(core: &Core, node: NodeId) -> Result<bool> {
+        Ok(core
+            .wake_registry
+            .drain()?
+            .iter()
+            .any(|owner| owner.node == node))
+    }
+
+    #[test]
+    fn regression_a_closing_modal_reads_closed_and_refuses_a_reopen() -> Result<()> {
+        run_ttree(|canopy, _, tree| {
+            let core = &mut canopy.core;
+            core.set_focus(tree.a_a)?;
+            let token = core.open_modal(modal_at(tree.root, tree.b, tree.b_a))?;
+            let mut scope = core.enter_dispatch();
+            scope.close_modal_after_dispatch(token)?;
+            scope.close_modal_after_dispatch(token)?;
+            assert!(!scope.modal_is_open(token), "a closing modal reads closed");
+            assert!(!scope.modal_retired(token), "its scope is not gone yet");
+            assert!(matches!(
+                scope.open_modal(modal_at(tree.root, tree.b, tree.b_a)),
+                Err(Error::ModalClosing)
+            ));
+            scope.finish(true)?;
+            assert!(core.modal_retired(token));
+            assert!(!core.modal_is_open(token));
+            let reopened = core.open_modal(modal_at(tree.root, tree.b, tree.b_a))?;
+            assert!(core.modal_is_open(reopened));
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn regression_a_discarded_close_gives_back_an_open_modal() -> Result<()> {
+        run_ttree(|canopy, _, tree| {
+            let core = &mut canopy.core;
+            core.set_focus(tree.a_a)?;
+            let token = core.open_modal(modal_at(tree.root, tree.b, tree.b_a))?;
+            let probe = wake_probe(core, tree.a)?;
+            core.wake_on_modal_close(token, probe)?;
+
+            // A failed dispatch.
+            let mut scope = core.enter_dispatch();
+            scope.close_modal_after_dispatch(token)?;
+            assert!(!scope.modal_is_open(token));
+            scope.finish(false)?;
+            assert!(core.modal_is_open(token));
+
+            // A nested dispatch that fails.
+            let mut outer = core.enter_dispatch();
+            let mut nested = outer.enter_dispatch();
+            nested.close_modal_after_dispatch(token)?;
+            assert!(!nested.modal_is_open(token));
+            nested.finish(false)?;
+            assert!(outer.modal_is_open(token));
+            outer.finish(true)?;
+            assert!(core.modal_is_open(token));
+
+            // A tree edit that rolls back.
+            let mut scope = core.enter_dispatch();
+            let failed: Result<()> = scope.with_tree_edit("failed edit", |core| {
+                core.close_modal_after_dispatch(token)?;
+                assert!(!core.modal_is_open(token));
+                Err(Error::Invalid("abort edit".into()))
+            });
+            assert!(failed.is_err());
+            assert!(scope.modal_is_open(token));
+            scope.finish(true)?;
+            assert!(core.modal_is_open(token));
+
+            // An earlier posted call that fails before the queued close.
+            let stamp = WidgetStamp::new(tree.b_a, core.nodes[tree.b_a].incarnation);
+            let mut scope = core.enter_dispatch();
+            let ran = scope.with_widget_ctx(tree.b_a, |_widget, ctx| -> Result<()> {
+                ctx.with_widget_dyn_mut_or_post(
+                    stamp,
+                    Box::new(|_, _| Err(Error::Invalid("posted call failed".into()))),
+                )?;
+                ctx.close_modal(token)?;
+                assert!(!ctx.modal_is_open(token));
+                Ok(())
+            })?;
+            ran?;
+            assert!(
+                scope.finish(true).is_err(),
+                "the posted call stops the drain"
+            );
+            assert!(core.modal_is_open(token));
+            assert!(!woke(core, tree.a)?, "a discarded close wakes nothing");
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn closing_an_older_modal_closes_and_wakes_the_younger() -> Result<()> {
+        run_ttree(|canopy, _, tree| {
+            let core = &mut canopy.core;
+            core.set_focus(tree.a_a)?;
+            let outer = core.open_modal(modal_at(tree.root, tree.b, tree.b_a))?;
+            let inner = core.open_modal(modal_at(tree.b, tree.b_b, tree.b_b))?;
+            core.wake_on_modal_close(inner, wake_probe(core, tree.a)?)?;
+            core.wake_on_modal_close(outer, wake_probe(core, tree.a_b)?)?;
+            let mut scope = core.enter_dispatch();
+            scope.close_modal_after_dispatch(outer)?;
+            assert!(!scope.modal_is_open(inner), "the younger modal closes too");
+            assert!(!woke(&scope, tree.a)?, "no wake before the close commits");
+            scope.finish(true)?;
+            assert!(core.modal_retired(inner));
+            let woken = core.wake_registry.drain()?;
+            assert!(woken.iter().any(|owner| owner.node == tree.a));
+            assert!(woken.iter().any(|owner| owner.node == tree.a_b));
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn removing_a_modal_owner_wakes_its_close_handle_once() -> Result<()> {
+        run_ttree(|canopy, _, tree| {
+            let core = &mut canopy.core;
+            core.set_focus(tree.a_a)?;
+            let token = core.open_modal(modal_at(tree.b, tree.b_b, tree.b_b))?;
+            core.wake_on_modal_close(token, wake_probe(core, tree.a)?)?;
+            core.replace_subtree(tree.b, Bb::new())?;
+            assert!(core.modal_retired(token));
+            assert!(woke(core, tree.a)?);
+            core.remove_subtree(tree.a_b)?;
+            assert!(!woke(core, tree.a)?, "the handle wakes once");
+            // A handle registered after the scope is gone wakes at once.
+            core.wake_on_modal_close(token, wake_probe(core, tree.a)?)?;
+            assert!(woke(core, tree.a)?);
+            Ok(())
+        })
     }
 }
