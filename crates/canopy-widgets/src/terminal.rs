@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{mem, path::PathBuf, sync::Arc, time::Duration};
 
 use canopy::{
     Context, EventOutcome, NodeName, ViewContext, Widget,
@@ -148,24 +148,85 @@ impl TerminalConfig {
     }
 }
 
+/// The life of a terminal's process.
+enum Life {
+    /// The terminal has not mounted, so it has no session.
+    Unmounted,
+    /// The process runs and takes the terminal's input.
+    Running(Session),
+    /// The process exited. The session keeps its scrollback and selection.
+    Exited {
+        /// The session of the exited process.
+        session: Session,
+        /// Whether the terminal reported the exit.
+        reported: bool,
+    },
+}
+
+impl Life {
+    /// Borrow the session, live or exited.
+    fn session(&self) -> Option<&Session> {
+        match self {
+            Self::Unmounted => None,
+            Self::Running(session) | Self::Exited { session, .. } => Some(session),
+        }
+    }
+
+    /// Borrow the session mutably, live or exited.
+    fn session_mut(&mut self) -> Option<&mut Session> {
+        match self {
+            Self::Unmounted => None,
+            Self::Running(session) | Self::Exited { session, .. } => Some(session),
+        }
+    }
+
+    /// Borrow the session of a process that still runs, which alone takes
+    /// input. A process that exited before the terminal observed it does not.
+    fn running(&self) -> Option<&Session> {
+        match self {
+            Self::Running(session) if !session.child_exited() => Some(session),
+            _ => None,
+        }
+    }
+
+    /// Move a running session whose process has exited to `Exited`.
+    fn settle(&mut self) {
+        *self = match mem::replace(self, Self::Unmounted) {
+            Self::Running(session) if session.child_exited() => Self::Exited {
+                session,
+                reported: false,
+            },
+            life => life,
+        };
+    }
+
+    /// Mark the exit reported, and return whether this call reported it.
+    fn report_exit(&mut self) -> bool {
+        self.settle();
+        match self {
+            Self::Exited { reported, .. } if !*reported => {
+                *reported = true;
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
 /// Terminal widget backed by `itty`.
 pub struct Terminal {
     /// User-provided configuration.
     config: TerminalConfig,
-    /// Backend terminal session.
-    session: Option<Session>,
+    /// The process and its session.
+    life: Life,
     /// Most recent terminal size.
     last_size: TerminalSize,
     /// Cursor the child program shows, cached for rendering.
     cursor: Option<(geom::Point, CursorRequest)>,
-    /// Whether a selection drag is active.
-    selection_active: bool,
-    /// Selection anchor in viewport coordinates.
-    selection_anchor: Option<geom::Point>,
+    /// Anchor of the selection drag in progress, in viewport coordinates.
+    selection_drag: Option<geom::Point>,
     /// Multi-click tracking state.
     last_click: ClickTracker,
-    /// Whether the exit call has run.
-    exit_reported: bool,
 }
 
 #[derive_commands]
@@ -174,16 +235,14 @@ impl Terminal {
     pub fn new(config: TerminalConfig) -> Self {
         Self {
             config,
-            session: None,
+            life: Life::Unmounted,
             last_size: TerminalSize {
                 columns: DEFAULT_COLUMNS,
                 rows: DEFAULT_LINES,
             },
             cursor: None,
-            selection_active: false,
-            selection_anchor: None,
+            selection_drag: None,
             last_click: ClickTracker::default(),
-            exit_reported: false,
         }
     }
 
@@ -205,7 +264,7 @@ impl Terminal {
 
     /// Lazily create the backend session.
     fn mount_session(&mut self) -> Result<()> {
-        if self.session.is_some() {
+        if !matches!(self.life, Life::Unmounted) {
             return Ok(());
         }
 
@@ -214,18 +273,28 @@ impl Terminal {
             Session::from_config(&cfg).map_err(|error| Error::Internal(error.to_string()))?;
         session.set_clipboard_handler(Arc::new(SystemClipboard));
 
-        self.session = Some(session);
+        self.life = Life::Running(session);
         Ok(())
     }
 
     /// Borrow the live backend session.
     fn session(&self) -> Option<&Session> {
-        self.session.as_ref()
+        self.life.session()
     }
 
     /// Borrow the live backend session mutably.
     fn session_mut(&mut self) -> Option<&mut Session> {
-        self.session.as_mut()
+        self.life.session_mut()
+    }
+
+    /// Return the exit call when this observation is the first to see the
+    /// process exited, so that the caller posts it once.
+    fn observe_exit(&mut self) -> Option<CommandCall> {
+        if self.life.report_exit() {
+            self.config.on_exit.clone()
+        } else {
+            None
+        }
     }
 
     /// Ensure the terminal grid matches the current view.
@@ -236,7 +305,7 @@ impl Terminal {
         }
 
         self.last_size = size;
-        if let Some(session) = self.session.as_mut() {
+        if let Some(session) = self.session_mut() {
             drop(session.resize_grid_and_pty(size.columns, size.rows, 1.0));
         }
     }
@@ -251,8 +320,7 @@ impl Terminal {
         if let Some(session) = self.session_mut() {
             session.set_selection(None);
         }
-        self.selection_active = false;
-        self.selection_anchor = None;
+        self.selection_drag = None;
     }
 
     /// Update the viewport selection overlay between two points.
@@ -355,18 +423,15 @@ impl Terminal {
 
         match self.last_click.count(point) {
             2 => {
-                self.selection_active = false;
-                self.selection_anchor = None;
+                self.selection_drag = None;
                 self.select_word(point)
             }
             3 => {
-                self.selection_active = false;
-                self.selection_anchor = None;
+                self.selection_drag = None;
                 self.select_line(point)
             }
             _ => {
-                self.selection_active = true;
-                self.selection_anchor = Some(point);
+                self.selection_drag = Some(point);
                 self.set_selection(point, point)
             }
         }
@@ -374,11 +439,7 @@ impl Terminal {
 
     /// Update the active selection while dragging.
     fn handle_selection_update(&mut self, location: geom::Point) -> bool {
-        if !self.selection_active {
-            return false;
-        }
-
-        let Some(anchor) = self.selection_anchor else {
+        let Some(anchor) = self.selection_drag else {
             return false;
         };
         let Some(point) = self.selection_point(location) else {
@@ -389,20 +450,13 @@ impl Terminal {
 
     /// Finalize the current selection.
     fn handle_selection_end(&mut self) -> bool {
-        if !self.selection_active {
-            return false;
-        }
-        self.selection_active = false;
-        true
+        self.selection_drag.take().is_some()
     }
 
     /// Send a mouse input sequence to the terminal when mouse reporting is
     /// enabled.
-    fn send_mouse_sequence(&self, event: &mouse::MouseEvent, state: &TerminalState) {
+    fn send_mouse_sequence(session: &Session, event: &mouse::MouseEvent, state: &TerminalState) {
         let Some(bytes) = encode_mouse(event, state) else {
-            return;
-        };
-        let Some(session) = self.session() else {
             return;
         };
         drop(session.send_input_bytes(bytes, "mouse"));
@@ -416,12 +470,17 @@ impl Terminal {
         drop(SystemClipboard.set_text(&text));
     }
 
-    /// Send pasted content to the PTY.
-    fn handle_paste(&self, content: &str) {
-        let Some(session) = self.session() else {
-            return;
-        };
-        drop(session.paste(content));
+    /// Send pasted content to a running process, and return whether one
+    /// took it.
+    fn handle_paste(&mut self, content: &str) -> bool {
+        if self.life.running().is_none() {
+            return false;
+        }
+        self.clear_selection();
+        if let Some(session) = self.life.running() {
+            drop(session.paste(content));
+        }
+        true
     }
 
     /// Encode and send a keyboard event to the backend session.
@@ -445,7 +504,7 @@ impl Terminal {
             }
             Some(TerminalKey::Forward(mapped)) => {
                 self.clear_selection();
-                if let Some(session) = self.session() {
+                if let Some(session) = self.life.running() {
                     drop(session.send_key(mapped));
                     true
                 } else {
@@ -459,9 +518,10 @@ impl Terminal {
     /// Classify one key without running its effect.
     ///
     /// This is the only place the terminal decides which keys it consumes, so
-    /// prediction and dispatch cannot drift.
+    /// prediction and dispatch cannot drift. Scrollback and copy keys work
+    /// while a session remains; only a running process takes other keys.
     fn classify_key(&self, key: key::Key) -> Option<TerminalKey> {
-        self.session.as_ref()?;
+        self.session()?;
         if key.mods.shift {
             match key.key {
                 key::KeyCode::PageUp => return Some(TerminalKey::ScrollPageUp),
@@ -472,6 +532,7 @@ impl Terminal {
         if key.mods.ctrl && key.mods.shift && matches!(key.key, key::KeyCode::Char('c' | 'C')) {
             return Some(TerminalKey::CopySelection);
         }
+        self.life.running()?;
         map_key(key).map(TerminalKey::Forward)
     }
 
@@ -480,12 +541,12 @@ impl Terminal {
         self.state().is_some_and(|state| state.modes.focus_in_out)
     }
 
-    /// Forward a focus change to the terminal as a focus report.
+    /// Forward a focus change to a running process as a focus report.
     fn sync_focus(&self, focused: bool) {
         if !self.focus_reporting() {
             return;
         }
-        if let Some(session) = self.session() {
+        if let Some(session) = self.life.running() {
             session.send_focus_report(focused);
         }
     }
@@ -555,7 +616,7 @@ impl Widget for Terminal {
     }
 
     fn on_event(&mut self, event: &input::Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
-        if self.session.is_none() {
+        if self.session().is_none() {
             return Ok(EventOutcome::Ignore);
         }
 
@@ -568,9 +629,11 @@ impl Widget for Terminal {
                 }
             }
             input::Event::Paste(content) => {
-                self.clear_selection();
-                self.handle_paste(content);
-                Ok(EventOutcome::Handle)
+                if self.handle_paste(content) {
+                    Ok(EventOutcome::Handle)
+                } else {
+                    Ok(EventOutcome::Ignore)
+                }
             }
             input::Event::Mouse(mouse_event) if mouse_event.action == mouse::Action::Leave => {
                 Ok(EventOutcome::Ignore)
@@ -584,8 +647,11 @@ impl Widget for Terminal {
                 let mouse_reporting = state.modes.mouse_report_click
                     || state.modes.mouse_drag
                     || state.modes.mouse_motion;
-                if mouse_reporting {
-                    self.send_mouse_sequence(mouse_event, &state);
+                // Only a running process reports the mouse. It takes the
+                // mouse in the middle of a drag, so the drag ends.
+                if mouse_reporting && let Some(session) = self.life.running() {
+                    Self::send_mouse_sequence(session, mouse_event, &state);
+                    self.selection_drag = None;
                     return Ok(EventOutcome::Handle);
                 }
 
@@ -660,13 +726,12 @@ impl Widget for Terminal {
     }
 
     fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
-        if !self.exit_reported && self.exited() {
-            self.exit_reported = true;
-            if let Some(call) = &self.config.on_exit {
-                ctx.post(&call.with_arg("node", ctx.node_id()))?;
-            }
+        if let Some(call) = self.observe_exit() {
+            ctx.post(&call.with_arg("node", ctx.node_id()))?;
         }
-        Ok(Some(Duration::from_millis(POLL_INTERVAL_MS)))
+        // A process that exited sends no more output, and an unmounted
+        // terminal has none to drain.
+        Ok(matches!(self.life, Life::Running(_)).then(|| Duration::from_millis(POLL_INTERVAL_MS)))
     }
 
     fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {
@@ -1021,7 +1086,7 @@ mod tests {
             Session::new_stream(DEFAULT_COLUMNS, DEFAULT_LINES, builtin::one_dark())
                 .expect("stream terminal");
         let mut terminal = Terminal::new(TerminalConfig::default());
-        terminal.session = Some(session);
+        terminal.life = Life::Running(session);
         (terminal, receiver)
     }
 
@@ -1515,6 +1580,147 @@ mod tests {
         assert!(
             harness.canopy.notices().is_empty(),
             "no failure, then or later"
+        );
+        Ok(())
+    }
+
+    /// Mount a terminal that runs `script` under `sh`, and wait for its
+    /// process to exit.
+    #[cfg(unix)]
+    fn exited_terminal(script: &str, ready: impl Fn(&Terminal) -> bool) -> Result<Terminal> {
+        use std::{thread, time::Instant};
+
+        let mut terminal = Terminal::new(TerminalConfig::new().with_program(["sh", "-c", script]));
+        terminal.mount_session()?;
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !(terminal.exited() && ready(&terminal)) {
+            assert!(Instant::now() < deadline, "the process should exit");
+            thread::sleep(Duration::from_millis(10));
+        }
+        Ok(terminal)
+    }
+
+    /// Build a left-button mouse event at a cell.
+    fn left(action: mouse::Action, x: i32, y: i32) -> input::Event {
+        input::Event::Mouse(mouse::MouseEvent {
+            action,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: geom::PointI32 { x, y },
+        })
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn regression_an_exited_terminal_asks_for_no_more_polls() -> Result<()> {
+        let mut app = CanopyBuilder::new().build()?;
+        let (mut running, _receiver) = stream_terminal();
+        let poll = app.with_root_context(|ctx| running.poll(ctx))?;
+        assert!(poll.is_some(), "a running terminal drains its output");
+
+        let mut terminal = exited_terminal("exit 0", |_| true)?;
+        let first = app.with_root_context(|ctx| terminal.poll(ctx))?;
+        let second = app.with_root_context(|ctx| terminal.poll(ctx))?;
+        assert_eq!(first, None, "the poll that reports the exit is the last");
+        assert_eq!(second, None);
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn regression_an_exited_terminal_keeps_only_its_own_keys() -> Result<()> {
+        let mut app = CanopyBuilder::new().build()?;
+        let mut terminal = exited_terminal("exit 0", |_| true)?;
+        for (spec, expected) in [
+            ("a", EventOutcome::Ignore),
+            ("enter", EventOutcome::Ignore),
+            ("shift-pageup", EventOutcome::Handle),
+            ("shift-pagedown", EventOutcome::Handle),
+        ] {
+            let key = key::Key::parse_spec(spec).expect("valid key spec");
+            let (predicted, outcome) = app.with_root_context(|ctx| {
+                let predicted = terminal.key_outcome(key, ctx);
+                Ok((predicted, terminal.on_event(&input::Event::Key(key), ctx)?))
+            })?;
+            assert_eq!(predicted, expected, "prediction for {spec}");
+            assert_eq!(outcome, expected, "handling of {spec}");
+        }
+        let copy = key::Mods {
+            shift: true,
+            ctrl: true,
+            alt: false,
+        } + key::KeyCode::Char('c');
+        let (predicted, outcome) = app.with_root_context(|ctx| {
+            let predicted = terminal.key_outcome(copy, ctx);
+            Ok((predicted, terminal.on_event(&input::Event::Key(copy), ctx)?))
+        })?;
+        assert_eq!(
+            (predicted, outcome),
+            (EventOutcome::Handle, EventOutcome::Handle)
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn regression_an_exited_terminal_ignores_paste_and_selects_its_text() -> Result<()> {
+        let mut app = CanopyBuilder::new().build()?;
+        let mut terminal = exited_terminal("printf '\\033[?1000hhello'; exit 0", |terminal| {
+            terminal
+                .state()
+                .is_some_and(|state| state.modes.mouse_report_click)
+        })?;
+        let paste =
+            app.with_root_context(|ctx| terminal.on_event(&input::Event::Paste("x".into()), ctx))?;
+        assert_eq!(paste, EventOutcome::Ignore, "no process takes the paste");
+
+        for event in [
+            left(mouse::Action::Down, 0, 0),
+            left(mouse::Action::Drag, 4, 0),
+            left(mouse::Action::Up, 4, 0),
+        ] {
+            let outcome = app.with_root_context(|ctx| terminal.on_event(&event, ctx))?;
+            assert_eq!(outcome, EventOutcome::Handle);
+        }
+        let selected = terminal.session().and_then(Session::copy_selection);
+        assert_eq!(
+            selected.as_deref(),
+            Some("hello"),
+            "the left-on mouse reporting of a dead process does not take the mouse"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn regression_mouse_reporting_ends_a_selection_drag() -> Result<()> {
+        let mut app = CanopyBuilder::new().build()?;
+        let (mut terminal, _receiver) = stream_terminal();
+        let mut send = |terminal: &mut Terminal, event: input::Event| {
+            app.with_root_context(|ctx| terminal.on_event(&event, ctx))
+        };
+        let feed = |terminal: &Terminal, bytes: &[u8]| {
+            terminal
+                .session()
+                .expect("session")
+                .feed_stream_output(bytes)
+                .expect("feed output");
+        };
+
+        assert_eq!(
+            send(&mut terminal, left(mouse::Action::Down, 1, 0))?,
+            EventOutcome::Handle
+        );
+        feed(&terminal, b"\x1b[?1000h");
+        assert_eq!(
+            send(&mut terminal, left(mouse::Action::Drag, 3, 0))?,
+            EventOutcome::Handle,
+            "the program takes the drag"
+        );
+        feed(&terminal, b"\x1b[?1000l");
+        assert_eq!(
+            send(&mut terminal, left(mouse::Action::Drag, 4, 0))?,
+            EventOutcome::Ignore,
+            "the interrupted drag left no anchor"
         );
         Ok(())
     }
