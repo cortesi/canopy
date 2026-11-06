@@ -979,6 +979,88 @@ fn the_panel_edits_lists_and_saves() {
     assert!(!bound(&harness, "X", "Clear the option from its file"));
 }
 
+/// Set the editor list of `store` to `items` through the harness.
+fn set_editor(harness: &mut Harness, store: &Store<Root>, items: &[&str]) {
+    let handle = store.handle();
+    let items: Vec<String> = items.iter().map(|item| (*item).to_string()).collect();
+    harness
+        .with_root_widget_context(|_: &mut Options, context| {
+            handle.update(context, move |root| root.programs.editor = Some(items))
+        })
+        .unwrap();
+}
+
+/// Open an editor list of `start`, start an edit of the item at `index`,
+/// write `during` while the edit is open, then finish the edit with
+/// `finish`. Return the list, whether the edit is still open, and the last
+/// notice.
+fn edit_editor_item(
+    start: &[&str],
+    index: usize,
+    during: &[&str],
+    finish: &[&str],
+) -> (Vec<String>, bool, String) {
+    let store: Store<Root> = Store::default();
+    let mut harness = options_harness(&store);
+    set_editor(&mut harness, &store, start);
+    harness.script("options.open()").unwrap();
+    keys(&mut harness, &["p", "Enter"]);
+    for _ in 0..index {
+        keys(&mut harness, &["j"]);
+    }
+    keys(&mut harness, &["Enter"]);
+    set_editor(&mut harness, &store, during);
+    keys(&mut harness, finish);
+    let editing = bound(&harness, "Enter", "Commit the edit");
+    let items = store.current().programs.editor.clone().unwrap_or_default();
+    (items, editing, last_notice(&harness))
+}
+
+#[test]
+fn regression_a_list_edit_follows_its_item_when_a_write_moves_it() {
+    let (items, editing, _) =
+        edit_editor_item(&["a", "b", "c"], 1, &["b", "a", "c"], &["X", "Enter"]);
+    assert_eq!(items, ["bX", "a", "c"]);
+    assert!(!editing);
+    // A deletion follows the item too.
+    let (items, _, _) =
+        edit_editor_item(&["a", "b", "c"], 1, &["b", "a", "c"], &["ctrl+u", "Enter"]);
+    assert_eq!(items, ["a", "c"]);
+}
+
+#[test]
+fn regression_a_list_edit_of_a_removed_item_changes_nothing() {
+    let (items, editing, notice) =
+        edit_editor_item(&["a", "b", "c"], 1, &["a", "c"], &["X", "Enter"]);
+    assert_eq!(items, ["a", "c"]);
+    assert!(editing, "the edit stays open with its text");
+    assert!(
+        notice.contains("changed while it was being edited"),
+        "{notice}"
+    );
+}
+
+#[test]
+fn regression_a_list_edit_with_two_duplicates_changes_nothing() {
+    for finish in [&["X", "Enter"][..], &["ctrl+u", "Enter"][..]] {
+        let (items, _, notice) = edit_editor_item(&["a", "b", "c"], 1, &["b", "x", "b"], finish);
+        assert_eq!(items, ["b", "x", "b"], "{finish:?}");
+        assert!(
+            notice.contains("changed while it was being edited"),
+            "{notice}"
+        );
+    }
+}
+
+#[test]
+fn an_unchanged_item_at_its_index_wins_over_a_duplicate() {
+    let (items, _, _) = edit_editor_item(&["a", "b", "c"], 1, &["b", "b", "c"], &["X", "Enter"]);
+    assert_eq!(items, ["b", "bX", "c"]);
+    let (items, _, _) =
+        edit_editor_item(&["a", "b", "c"], 1, &["b", "b", "c"], &["ctrl+u", "Enter"]);
+    assert_eq!(items, ["b", "c"]);
+}
+
 #[test]
 fn the_save_level_keys_are_no_reserved_keys() {
     let store: Store<Root> = Store::default();

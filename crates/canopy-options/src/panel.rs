@@ -457,7 +457,37 @@ enum EditTarget {
     /// The value of the leaf.
     Value,
     /// One item of a list, or a new item at the end.
-    ListItem(Option<usize>),
+    ListItem(Option<ItemTarget>),
+}
+
+/// The list item that an edit changes, as it was when the edit began.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ItemTarget {
+    /// The item's place in the list.
+    index: usize,
+    /// The item's text.
+    original: String,
+}
+
+impl ItemTarget {
+    /// Return the place of the edited item in `items`: its place if it still
+    /// holds the item, or else the only other place that does. A write
+    /// during the edit can move the item, remove it, or leave copies of it,
+    /// so no place, or more than one other, means the item is lost.
+    fn find(&self, items: &[String]) -> Option<usize> {
+        if items.get(self.index) == Some(&self.original) {
+            return Some(self.index);
+        }
+        let mut others = items
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| **item == self.original)
+            .map(|(index, _)| index);
+        match (others.next(), others.next()) {
+            (Some(index), None) => Some(index),
+            _ => None,
+        }
+    }
 }
 
 /// An inline edit of a text, an integer, or a list item.
@@ -1074,8 +1104,11 @@ impl PanelBody {
                     .unwrap_or_default();
                 self.mode = Mode::Edit(Edit {
                     path,
-                    buffer,
-                    target: EditTarget::ListItem(Some(index)),
+                    buffer: buffer.clone(),
+                    target: EditTarget::ListItem(Some(ItemTarget {
+                        index,
+                        original: buffer,
+                    })),
                 });
                 Ok(())
             }
@@ -1156,19 +1189,21 @@ impl PanelBody {
                 }
                 _ => Value::Text(edit.buffer.clone()),
             },
-            EditTarget::ListItem(index) => {
+            EditTarget::ListItem(ref target) => {
                 let mut items = self.list_items(&edit.path);
-                match index {
-                    Some(index) if text.is_empty() => {
-                        if index < items.len() {
-                            items.remove(index);
-                        }
+                let found = target.as_ref().map(|target| target.find(&items));
+                match found {
+                    Some(None) => {
+                        context.notify(NoticePost::error(
+                            "The item changed while it was being edited",
+                        ))?;
+                        self.mode = Mode::Edit(edit);
+                        return Ok(());
                     }
-                    Some(index) => {
-                        if let Some(item) = items.get_mut(index) {
-                            item.clone_from(&text);
-                        }
+                    Some(Some(index)) if text.is_empty() => {
+                        items.remove(index);
                     }
+                    Some(Some(index)) => items[index].clone_from(&text),
                     None if text.is_empty() => {
                         self.mode = Mode::Browse;
                         return Ok(());
