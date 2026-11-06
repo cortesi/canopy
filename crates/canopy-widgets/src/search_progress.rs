@@ -18,6 +18,43 @@ use crate::Spinner;
 /// that holds it.
 const MIN_WIDTH: u32 = 12;
 
+/// Whether the search of a row runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Run {
+    /// The search does not run.
+    Idle,
+    /// The search runs.
+    Running {
+        /// When the spinner started to turn, after the first poll of a run.
+        since: Option<Instant>,
+    },
+}
+
+impl Run {
+    /// Record whether the search runs, and return whether a run started.
+    fn set(&mut self, running: bool) -> bool {
+        let started = running && *self == Self::Idle;
+        match (running, *self) {
+            (false, _) => *self = Self::Idle,
+            (true, Self::Idle) => *self = Self::Running { since: None },
+            (true, Self::Running { .. }) => {}
+        }
+        started
+    }
+
+    /// Start the spinner of a run at `now`, once. Return whether the
+    /// search runs.
+    fn turn(&mut self, now: Instant) -> bool {
+        match self {
+            Self::Idle => false,
+            Self::Running { since } => {
+                since.get_or_insert(now);
+                true
+            }
+        }
+    }
+}
+
 /// One row under a list of search results: a spinner while the search runs,
 /// and what the search found, such as `12 matches`.
 ///
@@ -34,10 +71,8 @@ pub struct SearchProgress {
     name: NodeName,
     /// What the search found.
     text: String,
-    /// Whether the search runs.
-    running: bool,
-    /// When the spinner started to turn, after the first poll of a run.
-    since: Option<Instant>,
+    /// Whether the search runs, and when its spinner started.
+    run: Run,
     /// Wake handle that starts the polls of a run, after the row mounts.
     wake: Option<NodeWakeHandle>,
 }
@@ -54,8 +89,7 @@ impl SearchProgress {
         Self {
             name: NodeName::convert("search_progress"),
             text: String::new(),
-            running: false,
-            since: None,
+            run: Run::Idle,
             wake: None,
         }
     }
@@ -72,15 +106,13 @@ impl SearchProgress {
     /// search runs.
     pub fn set(&mut self, text: impl Into<String>, running: bool) {
         self.text = text.into();
-        if running && !self.running {
-            self.since = None;
-            if let Some(wake) = &self.wake {
-                // An expired handle means that the row left the tree, and its
-                // next mount takes a new one.
-                let _outcome = wake.wake();
-            }
+        if self.run.set(running)
+            && let Some(wake) = &self.wake
+        {
+            // An expired handle means that the row left the tree, and its
+            // next mount takes a new one.
+            let _outcome = wake.wake();
         }
-        self.running = running;
     }
 
     /// Return the text, without the spinner.
@@ -90,18 +122,18 @@ impl SearchProgress {
 
     /// Return whether the search runs.
     pub fn running(&self) -> bool {
-        self.running
+        self.run != Run::Idle
     }
 
     /// Return the glyph before the text: a spinner frame while the search
     /// runs, and a blank otherwise.
     fn lead(&self, ctx: &dyn ViewContext) -> char {
-        match self.since {
-            _ if !self.running => ' ',
-            Some(since) if ctx.motion_active() => {
+        match self.run {
+            Run::Idle => ' ',
+            Run::Running { since: Some(since) } if ctx.motion_active() => {
                 Spinner::DOTS.frame(ctx.now().saturating_duration_since(since))
             }
-            _ => Spinner::DOTS.step(0),
+            Run::Running { .. } => Spinner::DOTS.step(0),
         }
     }
 }
@@ -131,10 +163,9 @@ impl Widget for SearchProgress {
     }
 
     fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
-        if !self.running || !ctx.motion_active() {
+        if !ctx.motion_active() || !self.run.turn(ctx.now()) {
             return Ok(None);
         }
-        self.since.get_or_insert(ctx.now());
         Ok(Some(Spinner::DOTS.period()))
     }
 
@@ -198,6 +229,34 @@ mod tests {
     /// Returns the first glyph of the row.
     fn lead(harness: &Harness) -> Option<char> {
         harness.tbuf().lines()[0].chars().next()
+    }
+
+    #[test]
+    fn run_transitions() {
+        let now = Instant::now();
+        let later = now + Duration::from_secs(1);
+        let turning = Run::Running { since: Some(now) };
+        let waiting = Run::Running { since: None };
+        for (run, running, next, started) in [
+            (Run::Idle, false, Run::Idle, false),
+            (Run::Idle, true, waiting, true),
+            (waiting, true, waiting, false),
+            (turning, true, turning, false),
+            (turning, false, Run::Idle, false),
+        ] {
+            let mut moved = run;
+            assert_eq!(moved.set(running), started, "{run:?} set {running}");
+            assert_eq!(moved, next, "{run:?} set {running}");
+        }
+        for (run, next, runs) in [
+            (Run::Idle, Run::Idle, false),
+            (waiting, Run::Running { since: Some(later) }, true),
+            (turning, turning, true),
+        ] {
+            let mut moved = run;
+            assert_eq!(moved.turn(later), runs, "{run:?} turns");
+            assert_eq!(moved, next, "{run:?} turns");
+        }
     }
 
     #[test]

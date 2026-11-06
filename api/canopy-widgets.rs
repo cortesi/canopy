@@ -1434,7 +1434,8 @@ where
     /// Get the currently selected index.
     pub fn selected_index(&self) -> usize;
 
-    /// Toggle the dropdown expanded state.
+    /// Toggle the dropdown expanded state. Collapsing keeps the selection,
+    /// as [`Self::cancel`] does.
     pub fn toggle(&mut self, c: &mut dyn Context) -> canopy::error::Result<()>;
 }
 

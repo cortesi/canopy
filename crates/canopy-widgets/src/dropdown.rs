@@ -16,6 +16,16 @@ use crate::{
     row_cursor::{CursorMove, RowCursor, is_primary_click, label_rows, widest_label},
 };
 
+/// Whether a dropdown shows its options.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Open {
+    /// The dropdown shows the selected item.
+    Collapsed,
+    /// The dropdown shows every option, with a highlight to navigate before
+    /// a confirm.
+    Expanded(RowCursor),
+}
+
 /// A dropdown widget for single-value selection.
 ///
 /// When collapsed, displays the currently selected item with a dropdown
@@ -29,11 +39,8 @@ where
     items: Vec<T>,
     /// Currently selected index.
     selected: usize,
-    /// Whether the dropdown is expanded.
-    expanded: bool,
-    /// Cursor over the highlighted row when expanded (for navigation before
-    /// confirming).
-    cursor: RowCursor,
+    /// Whether the dropdown is expanded, with its highlight.
+    open: Open,
 }
 
 #[derive_commands]
@@ -50,12 +57,10 @@ where
                 "Dropdown must have at least one item".into(),
             ));
         }
-        let cursor = RowCursor::new(items.len());
         Ok(Self {
             items,
             selected: 0,
-            expanded: false,
-            cursor,
+            open: Open::Collapsed,
         })
     }
 
@@ -69,15 +74,22 @@ where
         self.selected
     }
 
-    /// Toggle the dropdown expanded state.
+    /// Return whether the dropdown shows its options.
+    fn expanded(&self) -> bool {
+        matches!(self.open, Open::Expanded(_))
+    }
+
+    /// Toggle the dropdown expanded state. Collapsing keeps the selection,
+    /// as [`Self::cancel`] does.
     #[command]
     pub fn toggle(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.expanded = !self.expanded;
-        self.cursor.set_index(self.selected);
-
-        if self.expanded {
-            self.cursor.reveal(c);
+        if self.expanded() {
+            return self.cancel();
         }
+        let mut cursor = RowCursor::new(self.items.len());
+        cursor.set_index(self.selected);
+        cursor.reveal(c);
+        self.open = Open::Expanded(cursor);
         debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
@@ -85,12 +97,11 @@ where
     /// Move highlight by a signed offset (when expanded).
     #[command]
     pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
-        if !self.expanded {
+        let Open::Expanded(cursor) = &mut self.open else {
             return Ok(());
-        }
-
-        self.cursor.select_by(delta);
-        self.cursor.reveal(c);
+        };
+        cursor.select_by(delta);
+        cursor.reveal(c);
         debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
@@ -111,12 +122,12 @@ where
     /// @param delta Negative values move up; positive values move down.
     #[command]
     pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
-        if !self.expanded {
+        let Open::Expanded(cursor) = &mut self.open else {
             return Ok(());
-        }
+        };
         let rows = c.view().view_rect().h;
-        self.cursor.page(delta, rows);
-        self.cursor.reveal(c);
+        cursor.page(delta, rows);
+        cursor.reveal(c);
         debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
@@ -124,9 +135,9 @@ where
     /// Confirm the highlighted selection and collapse.
     #[command]
     pub fn confirm(&mut self) -> Result<()> {
-        if self.expanded {
-            self.selected = self.cursor.index().unwrap_or(self.selected);
-            self.expanded = false;
+        if let Open::Expanded(cursor) = self.open {
+            self.selected = cursor.index().unwrap_or(self.selected);
+            self.open = Open::Collapsed;
         }
         debug_assert!(self.selection_invariant_holds());
         Ok(())
@@ -137,11 +148,11 @@ where
         if !is_primary_click(event) {
             return Ok(());
         }
-        if !self.expanded {
+        let Open::Expanded(cursor) = &mut self.open else {
             return self.toggle(c);
-        }
-        if let Some(row) = self.cursor.row_at(&c.view(), event.location) {
-            self.cursor.set_index(row);
+        };
+        if let Some(row) = cursor.row_at(&c.view(), event.location) {
+            cursor.set_index(row);
             self.confirm()?;
         }
         Ok(())
@@ -150,10 +161,7 @@ where
     /// Collapse without changing selection.
     #[command]
     pub fn cancel(&mut self) -> Result<()> {
-        if self.expanded {
-            self.expanded = false;
-            self.cursor.set_index(self.selected);
-        }
+        self.open = Open::Collapsed;
         debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
@@ -162,7 +170,7 @@ where
     fn content_size(&self) -> Size {
         let max_label_width = widest_label(self.items.iter().map(ItemLabel::label));
         let width = max_label_width.saturating_add(2);
-        let height = if self.expanded {
+        let height = if self.expanded() {
             u32::try_from(self.items.len()).unwrap_or(u32::MAX)
         } else {
             1
@@ -173,12 +181,11 @@ where
 
     /// Return whether selection and highlight indices point at current items.
     fn selection_invariant_holds(&self) -> bool {
-        !self.items.is_empty()
-            && self.selected < self.items.len()
-            && self
-                .cursor
-                .index()
-                .is_some_and(|index| index < self.items.len())
+        let highlight = match self.open {
+            Open::Collapsed => true,
+            Open::Expanded(cursor) => cursor.index().is_some_and(|index| index < self.items.len()),
+        };
+        !self.items.is_empty() && self.selected < self.items.len() && highlight
     }
 }
 
@@ -187,7 +194,7 @@ where
     T: ItemLabel + 'static,
 {
     fn accepts_intent(&self, intent: &str, _ctx: &dyn ViewContext) -> bool {
-        self.expanded && CursorMove::of(intent).is_some()
+        self.expanded() && CursorMove::of(intent).is_some()
     }
 
     fn on_intent(&mut self, intent: &str, ctx: &mut dyn Context) -> Result<EventOutcome> {
@@ -215,7 +222,7 @@ where
         let selection = roles::selection(ctx.is_focused());
         let rect = view.view_rect_local();
 
-        if self.expanded {
+        if let Open::Expanded(cursor) = self.open {
             // Render visible items
             for (row, idx) in label_rows(self.items.len(), view.scroll.y, rect.h) {
                 let item = &self.items[idx];
@@ -223,7 +230,7 @@ where
                 let (label, _) =
                     text::slice_by_columns(item.label(), view.scroll.x as usize, rect.w as usize);
 
-                if Some(idx) == self.cursor.index() {
+                if Some(idx) == cursor.index() {
                     rndr.fill(selection, line_rect.rect(), ' ')?;
                     rndr.text(selection, line_rect, label)?;
                 } else if idx == self.selected {
@@ -283,7 +290,7 @@ mod tests {
         let items = vec!["Option 1".to_string(), "Option 2".to_string()];
         let dropdown = Dropdown::new(items).expect("nonempty dropdown");
         assert_eq!(dropdown.selected_index(), 0);
-        assert!(!dropdown.expanded);
+        assert!(!dropdown.expanded());
     }
 
     #[test]
@@ -295,9 +302,62 @@ mod tests {
         ];
         let mut dropdown = Dropdown::new(items).expect("nonempty dropdown");
         dropdown.selected = 1;
-        dropdown.cursor.set_index(1);
         assert_eq!(dropdown.selected_index(), 1);
         assert_eq!(dropdown.selected().label(), "Option 2");
+    }
+
+    #[test]
+    fn open_transitions() -> Result<()> {
+        let items = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let mut harness = Harness::builder(Dropdown::new(items)?)
+            .register::<Dropdown<String>>()
+            .size(20, 6)
+            .build()?;
+        /// An event of the dropdown.
+        #[derive(Clone, Copy, Debug)]
+        enum Step {
+            Toggle,
+            Down,
+            Confirm,
+            Cancel,
+        }
+        // From collapsed on 1, and from expanded on 1 with the highlight on
+        // 2: the next highlight, or none when collapsed, and the selection.
+        for (expanded, step, highlight, selected) in [
+            (false, Step::Toggle, Some(1), 1),
+            (false, Step::Down, None, 1),
+            (false, Step::Confirm, None, 1),
+            (false, Step::Cancel, None, 1),
+            (true, Step::Toggle, None, 1),
+            (true, Step::Down, Some(2), 1),
+            (true, Step::Confirm, None, 2),
+            (true, Step::Cancel, None, 1),
+        ] {
+            harness.with_root_widget_context(|dropdown: &mut Dropdown<String>, ctx| {
+                dropdown.open = Open::Collapsed;
+                dropdown.selected = 1;
+                if expanded {
+                    dropdown.toggle(ctx)?;
+                    dropdown.select_by(ctx, 1)?;
+                }
+                match step {
+                    Step::Toggle => dropdown.toggle(ctx)?,
+                    Step::Down => dropdown.select_by(ctx, 1)?,
+                    Step::Confirm => dropdown.confirm()?,
+                    Step::Cancel => dropdown.cancel()?,
+                }
+                let shown = match dropdown.open {
+                    Open::Collapsed => None,
+                    Open::Expanded(cursor) => cursor.index(),
+                };
+                let from = if expanded { "expanded" } else { "collapsed" };
+                assert_eq!(shown, highlight, "{step:?} from {from}");
+                assert_eq!(dropdown.selected_index(), selected, "{step:?} from {from}");
+                assert!(dropdown.selection_invariant_holds());
+                Ok(())
+            })?;
+        }
+        Ok(())
     }
 
     #[test]
@@ -322,7 +382,7 @@ mod tests {
         harness.script(include_str!("../tests/luau/dropdown_select_second.luau"))?;
         harness.with_root_widget::<Dropdown<String>, _>(|dropdown| {
             assert_eq!(dropdown.selected_index(), 1);
-            assert!(!dropdown.expanded);
+            assert!(!dropdown.expanded());
         });
         Ok(())
     }
@@ -341,19 +401,18 @@ mod tests {
         harness.with_root_widget_context(|dropdown: &mut Dropdown<String>, ctx| {
             assert!(dropdown.selection_invariant_holds());
             dropdown.selected = 1;
-            dropdown.cursor.set_index(1);
             dropdown.toggle(ctx)?;
             dropdown.select_by(ctx, 99)?;
             dropdown.confirm()?;
             assert_eq!(dropdown.selected_index(), 2);
-            assert!(!dropdown.expanded);
+            assert!(!dropdown.expanded());
             assert!(dropdown.selection_invariant_holds());
 
             dropdown.toggle(ctx)?;
             dropdown.select_by(ctx, -99)?;
             dropdown.cancel()?;
             assert_eq!(dropdown.selected_index(), 2);
-            assert!(!dropdown.expanded);
+            assert!(!dropdown.expanded());
             assert!(dropdown.selection_invariant_holds());
             Ok(())
         })

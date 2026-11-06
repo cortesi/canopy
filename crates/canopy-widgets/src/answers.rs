@@ -78,6 +78,38 @@ impl Answer {
     }
 }
 
+/// Whether a row of answers acts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Arming {
+    /// The answers act.
+    Armed,
+    /// The answers act from this time.
+    Until(Instant),
+}
+
+impl Arming {
+    /// Return whether the answers act at `now`.
+    fn armed(self, now: Instant) -> bool {
+        match self {
+            Self::Armed => true,
+            Self::Until(at) => now >= at,
+        }
+    }
+
+    /// Return the wait left at `now`, or arm once the wait is over.
+    fn wait(&mut self, now: Instant) -> Option<Duration> {
+        let Self::Until(at) = *self else {
+            return None;
+        };
+        let wait = at.saturating_duration_since(now);
+        if wait.is_zero() {
+            *self = Self::Armed;
+            return None;
+        }
+        Some(wait)
+    }
+}
+
 /// A centred row of buttons, one for each answer.
 ///
 /// Each button posts [`Answers::give`] with its index, aimed at the row, and
@@ -100,8 +132,8 @@ pub struct Answers {
     answers: Vec<Answer>,
     /// The button of each answer, left to right.
     buttons: Vec<NodeId>,
-    /// Time from which the answers act, when the row waits to arm.
-    armed_at: Option<Instant>,
+    /// Whether the answers act, or the time from which they do.
+    arming: Arming,
 }
 
 impl Default for Answers {
@@ -123,7 +155,7 @@ impl Answers {
             look: ButtonLook::Solid,
             answers: Vec::new(),
             buttons: Vec::new(),
-            armed_at: None,
+            arming: Arming::Armed,
         }
     }
 
@@ -163,7 +195,7 @@ impl Answers {
             self.buttons.push(ctx.add_child(row, button)?.into());
         }
         self.answers = answers;
-        self.armed_at = None;
+        self.arming = Arming::Armed;
         Ok(())
     }
 
@@ -175,7 +207,7 @@ impl Answers {
     /// Ignore every answer for `delay` from now. `ctx` is the context of the
     /// row. The buttons show as disabled until then.
     pub fn arm_after(&mut self, ctx: &mut dyn Context, delay: Duration) -> Result<()> {
-        self.armed_at = Some(ctx.now() + delay);
+        self.arming = Arming::Until(ctx.now() + delay);
         // The poll that ends the wait repaints the buttons as armed.
         ctx.request_poll()
     }
@@ -234,7 +266,7 @@ impl Answers {
 
     /// Return whether the answers act at `now`.
     pub(crate) fn armed(&self, now: Instant) -> bool {
-        self.armed_at.is_none_or(|at| now >= at)
+        self.arming.armed(now)
     }
 
     /// Return the answer that `key` names, when it is a plain character.
@@ -263,10 +295,7 @@ impl Widget for Answers {
     }
 
     fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
-        Ok(self
-            .armed_at
-            .map(|at| at.saturating_duration_since(ctx.now()))
-            .filter(|wait| !wait.is_zero()))
+        Ok(self.arming.wait(ctx.now()))
     }
 
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
@@ -363,6 +392,29 @@ mod tests {
     /// Return the key of an answer labelled `label`.
     fn key_of(label: &str) -> Option<char> {
         Answer::new(label, Answers::call_focus(FocusDirection::Next)).key()
+    }
+
+    #[test]
+    fn arming_transitions() {
+        let now = Instant::now();
+        let later = now + Duration::from_secs(1);
+        assert!(Arming::Armed.armed(now));
+        assert!(!Arming::Until(later).armed(now));
+        assert!(Arming::Until(later).armed(later));
+        for (arming, at, wait, next) in [
+            (Arming::Armed, now, None, Arming::Armed),
+            (
+                Arming::Until(later),
+                now,
+                Some(Duration::from_secs(1)),
+                Arming::Until(later),
+            ),
+            (Arming::Until(later), later, None, Arming::Armed),
+        ] {
+            let mut moved = arming;
+            assert_eq!(moved.wait(at), wait, "{arming:?} at {at:?}");
+            assert_eq!(moved, next, "{arming:?} at {at:?}");
+        }
     }
 
     #[test]
