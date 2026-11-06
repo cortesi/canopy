@@ -8,6 +8,7 @@ use canopy::{
         IntentName, ModalBindings, ModalOptions, ModalToken, NavIntent, key::Key,
     },
     layout::{Direction, Layout, LayoutOverride},
+    widget::Mount,
 };
 use canopy_widgets::{Container, Dialog, KeyHint, Root, Selector, StatusBar, Text};
 
@@ -24,18 +25,23 @@ const VIEW_LABELS: [&str; 3] = [
 
 /// A demo and its footer, constrained together by the chosen view preset.
 pub struct DemoShell {
-    /// Demo to attach on first mount.
-    app: Option<Box<dyn Widget>>,
+    /// The demo, until its first mount takes it, and the mounted nodes.
+    mount: Mount<Option<Box<dyn Widget>>, Parts>,
     /// Name displayed in the footer.
     status: String,
     /// Index of the current preset in the selector.
     view: usize,
-    /// Demo and footer, dimmed together behind the selector.
-    content: Option<TypedId<Container>>,
-    /// Lazily mounted selector dialog and its body.
-    selector: Option<(TypedId<Dialog>, TypedId<Selector<&'static str>>)>,
     /// Scope that restores focus when the selector closes.
     token: Option<ModalToken>,
+}
+
+/// The nodes that the shell builds.
+struct Parts {
+    /// Demo and footer, dimmed together behind the selector.
+    content: TypedId<Container>,
+    /// The selector dialog and its body, built when the selector first
+    /// opens.
+    selector: Option<(TypedId<Dialog>, TypedId<Selector<&'static str>>)>,
 }
 
 #[derive_commands]
@@ -44,10 +50,8 @@ impl DemoShell {
     pub(crate) fn new(app: impl Widget + 'static) -> Self {
         Self {
             status: app.name().to_string(),
-            app: Some(Box::new(app)),
+            mount: Mount::new(Some(Box::new(app))),
             view: 0,
-            content: None,
-            selector: None,
             token: None,
         }
     }
@@ -62,7 +66,9 @@ impl DemoShell {
         if !c.modal_admits(c.node_id()) {
             return Ok(());
         }
-        let (dialog, selector) = match self.selector {
+        let parts = self.mount.mounted_mut()?;
+        let content = parts.content;
+        let (dialog, selector) = match parts.selector {
             Some(nodes) => nodes,
             None => {
                 let parent = c.node_id();
@@ -72,7 +78,7 @@ impl DemoShell {
                     Selector::new(VIEW_LABELS.to_vec()).with_label("Gym view"),
                 )?;
                 c.set_hidden(nodes.0.into(), true)?;
-                self.selector = Some(nodes);
+                parts.selector = Some(nodes);
                 nodes
             }
         };
@@ -84,7 +90,7 @@ impl DemoShell {
             owner: c.node_id(),
             modal: dialog.into(),
             initial_focus: selector.into(),
-            dim_target: self.content.map(Into::into),
+            dim_target: Some(content.into()),
             bindings: ModalBindings::Framework {
                 groups: &[VIEW_BINDINGS],
                 intents: &[],
@@ -96,7 +102,7 @@ impl DemoShell {
     /// Apply the selected preset and restore the gym's previous focus.
     #[command]
     pub fn accept_view(&mut self, c: &mut dyn Context) -> Result<()> {
-        let Some((_, selector)) = self.selector else {
+        let Some((_, selector)) = self.mount.mounted()?.selector else {
             return Ok(());
         };
         self.view = c.with_widget_mut(selector, |selector: &mut Selector<&'static str>, _| {
@@ -136,29 +142,38 @@ impl Widget for DemoShell {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let app = self
-            .app
-            .take()
-            .ok_or_else(|| Error::Internal("demo app missing".into()))?;
-        let content = c.add_child(c.node_id(), Container::column().with_name("gym_content"))?;
-        self.content = Some(content);
-        let node = c.create_detached_boxed(app)?;
-        c.attach(content.into(), node)?;
-        c.set_layout_override(
-            node,
-            LayoutOverride {
-                min_width: Some(None),
-                max_width: Some(None),
-                ..flex_row(1)
-            },
-        )?;
-        c.add_child(
-            content,
-            StatusBar::new()
-                .with_left(Text::new(self.status.clone()))
-                .with_right(KeyHint::for_command(Root::call_toggle_help(), HELP_LABEL)),
-        )?;
-        Ok(())
+        let status = self.status.clone();
+        self.mount.mount(|app| {
+            let app = app
+                .take()
+                .ok_or_else(|| Error::Internal("the demo mounted once already".into()))?;
+            let content = c.add_child(c.node_id(), Container::column().with_name("gym_content"))?;
+            let node = c.create_detached_boxed(app)?;
+            c.attach(content.into(), node)?;
+            c.set_layout_override(
+                node,
+                LayoutOverride {
+                    min_width: Some(None),
+                    max_width: Some(None),
+                    ..flex_row(1)
+                },
+            )?;
+            c.add_child(
+                content,
+                StatusBar::new()
+                    .with_left(Text::new(status))
+                    .with_right(KeyHint::for_command(Root::call_toggle_help(), HELP_LABEL)),
+            )?;
+            Ok(Parts {
+                content,
+                selector: None,
+            })
+        })
+    }
+
+    fn on_unmount(&mut self, _c: &mut dyn Context) {
+        self.mount.unmount();
+        self.token = None;
     }
 }
 

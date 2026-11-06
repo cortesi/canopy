@@ -16,6 +16,7 @@ use canopy::{
     geom::Line,
     layout::{Direction, Layout, LayoutOverride},
     render::Render,
+    widget::Mount,
 };
 use canopy_widgets::{
     ImageView, Text,
@@ -139,10 +140,9 @@ struct Nodes {
 
 /// The image viewer gym.
 pub struct ImgGym {
-    /// The image view, before the gym mounts.
-    view: Option<ImageView>,
-    /// The mounted nodes.
-    nodes: Option<Nodes>,
+    /// The image view, until its first mount takes it, and the mounted
+    /// nodes.
+    mount: Mount<Option<ImageView>, Nodes>,
     /// The view's own tier, or none to follow the terminal's glyphs.
     tier: Option<Tier>,
     /// Whether the stage shows the glyph chart.
@@ -154,8 +154,7 @@ impl ImgGym {
     /// Construct the gym around an image view.
     pub fn new(view: ImageView) -> Self {
         Self {
-            view: Some(view),
-            nodes: None,
+            mount: Mount::new(Some(view)),
             tier: None,
             chart: false,
         }
@@ -172,7 +171,7 @@ impl ImgGym {
 
     /// Show the label, and the image or the chart.
     fn sync(&self, ctx: &mut dyn Context) -> Result<()> {
-        let Some(nodes) = &self.nodes else {
+        let Ok(nodes) = self.mount.mounted() else {
             return Ok(());
         };
         let label = self.label();
@@ -196,7 +195,7 @@ impl ImgGym {
     #[command]
     pub fn cycle_tier(&mut self, ctx: &mut dyn Context) -> Result<()> {
         self.tier = mosaic::cycle(self.tier);
-        if let Some(nodes) = &self.nodes {
+        if let Ok(nodes) = self.mount.mounted() {
             let tier = self.tier;
             ctx.with_widget_mut(nodes.view, |view: &mut ImageView, _| {
                 view.set_tier(tier);
@@ -220,25 +219,31 @@ impl Widget for ImgGym {
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let view = self
-            .view
-            .take()
-            .ok_or_else(|| Error::Internal("image view missing".into()))?;
-        let label = ctx.add_child(ctx.node_id(), Text::new(self.label()))?;
-        ctx.set_layout_override(
-            label.into(),
-            LayoutOverride::new().flex_horizontal(1).fixed_height(1),
-        )?;
-        let view = ctx.add_child(ctx.node_id(), view)?;
-        let chart = ctx.add_child(ctx.node_id(), GlyphChart)?;
-        for node in [view.into(), chart.into()] {
+        let text = self.label();
+        self.mount.mount(|view| {
+            let view = view
+                .take()
+                .ok_or_else(|| Error::Internal("the image view mounted once already".into()))?;
+            let label = ctx.add_child(ctx.node_id(), Text::new(text))?;
             ctx.set_layout_override(
-                node,
-                LayoutOverride::new().flex_horizontal(1).flex_vertical(1),
+                label.into(),
+                LayoutOverride::new().flex_horizontal(1).fixed_height(1),
             )?;
-        }
-        self.nodes = Some(Nodes { label, view, chart });
+            let view = ctx.add_child(ctx.node_id(), view)?;
+            let chart = ctx.add_child(ctx.node_id(), GlyphChart)?;
+            for node in [view.into(), chart.into()] {
+                ctx.set_layout_override(
+                    node,
+                    LayoutOverride::new().flex_horizontal(1).flex_vertical(1),
+                )?;
+            }
+            Ok(Nodes { label, view, chart })
+        })?;
         self.sync(ctx)
+    }
+
+    fn on_unmount(&mut self, _ctx: &mut dyn Context) {
+        self.mount.unmount();
     }
 
     fn name(&self) -> NodeName {
