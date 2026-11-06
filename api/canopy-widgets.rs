@@ -4488,7 +4488,7 @@ pub mod editor {
         /// The edit stands alone in the undo history: an open entry ends first, and
         /// text typed later starts a new step. The call works in both edit modes,
         /// leaves the vi mode unchanged, and records nothing for vi repetition. A
-        /// read-only editor ignores it.
+        /// read-only editor ignores it. An open prompt closes.
         pub fn replace(&mut self, ctx: &mut dyn Context, range: TextRange, text: &str);
 
         /// Highlight precomputed match ranges without moving the view, as when
@@ -4534,6 +4534,10 @@ pub mod editor {
         pub fn selection_drag_active(&self) -> bool;
 
         /// Replace the editor configuration.
+        ///
+        /// An open prompt closes. A change of edit mode ends the entry of the
+        /// old mode: text mode commits its typing, and a vi editor leaves for
+        /// normal mode.
         pub fn set_config(&mut self, config: EditorConfig);
 
         /// Move the cursor to `position`, and scroll it into view. A position
@@ -4580,6 +4584,9 @@ pub mod editor {
         pub fn set_selection(&mut self, selection: Selection);
 
         /// Replace the buffer contents.
+        ///
+        /// An open prompt closes and a pointer drag ends. The mode stays, and
+        /// the typing of an insert ends.
         pub fn set_text(&mut self, text: impl Into<String>);
 
         /// Switch a vi editor to `mode`, as its keys would. Leaving insert mode

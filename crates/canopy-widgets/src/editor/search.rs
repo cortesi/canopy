@@ -37,33 +37,59 @@ pub enum SearchDirection {
     Backward,
 }
 
+/// Where the matches of a search come from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Source {
+    /// No search.
+    None,
+    /// A literal query, which an edit searches again.
+    Query {
+        /// The query text.
+        text: String,
+        /// The direction of the search.
+        direction: SearchDirection,
+        /// Whether matching ignores ASCII case.
+        ignore_case: bool,
+    },
+    /// Matches that the host installed, which an edit drops.
+    Installed,
+}
+
 /// Search state and cached matches.
 #[derive(Debug, Clone)]
 pub struct SearchState {
-    /// Current search query.
-    query: String,
-    /// Direction of the current search.
-    direction: SearchDirection,
+    /// Where the matches come from.
+    source: Source,
     /// Cached match ranges.
     matches: Vec<TextRange>,
     /// Current match index.
     current: Option<usize>,
     /// Buffer revision that matches were computed for.
     revision: u64,
-    /// Whether matching ignores ASCII case.
-    ignore_case: bool,
 }
 
 impl SearchState {
     /// Construct an empty search state.
     pub fn new() -> Self {
         Self {
-            query: String::new(),
-            direction: SearchDirection::Forward,
+            source: Source::None,
             matches: Vec::new(),
             current: None,
             revision: 0,
-            ignore_case: false,
+        }
+    }
+
+    /// Return where the matches come from.
+    #[cfg(test)]
+    pub(super) fn source(&self) -> &Source {
+        &self.source
+    }
+
+    /// Return the direction of the search: forward without a query.
+    fn direction(&self) -> SearchDirection {
+        match self.source {
+            Source::Query { direction, .. } => direction,
+            Source::None | Source::Installed => SearchDirection::Forward,
         }
     }
 
@@ -74,9 +100,11 @@ impl SearchState {
         query: impl Into<String>,
         direction: SearchDirection,
     ) {
-        self.query = query.into();
-        self.direction = direction;
-        self.ignore_case = false;
+        self.source = Source::Query {
+            text: query.into(),
+            direction,
+            ignore_case: false,
+        };
         self.recompute(buffer);
         self.current = if self.matches.is_empty() {
             None
@@ -98,9 +126,12 @@ impl SearchState {
         query: impl Into<String>,
         from: TextPosition,
     ) {
-        self.query = query.into();
-        self.direction = SearchDirection::Forward;
-        self.ignore_case = !self.query.chars().any(char::is_uppercase);
+        let text = query.into();
+        self.source = Source::Query {
+            ignore_case: !text.chars().any(char::is_uppercase),
+            text,
+            direction: SearchDirection::Forward,
+        };
         self.recompute(buffer);
         self.current = self.first_at_or_after(from);
     }
@@ -110,10 +141,9 @@ impl SearchState {
     ///
     /// The ranges must arrive in ascending order without spanning lines, the
     /// way [`find_matches`] produces them, because the per-line renderer
-    /// locates one line's slice by partition points. The query stays empty:
-    /// the buffer is read-only under an installed set, and a new buffer
-    /// replaces the search state outright, so no recompute can clobber these
-    /// ranges. When no match follows `from`, the search wraps to the first.
+    /// locates one line's slice by partition points. An edit drops installed
+    /// matches, since no query can find them again. When no match follows
+    /// `from`, the search wraps to the first.
     pub fn set_matches(
         &mut self,
         buffer: &TextBuffer,
@@ -126,9 +156,7 @@ impl SearchState {
                 .all(|pair| pair[0].start <= pair[1].start),
             "installed matches must arrive in ascending order"
         );
-        self.query.clear();
-        self.direction = SearchDirection::Forward;
-        self.ignore_case = false;
+        self.source = Source::Installed;
         self.matches = matches;
         self.revision = buffer.revision();
         self.current = self.first_at_or_after(from);
@@ -154,34 +182,25 @@ impl SearchState {
         self.current = index.filter(|&index| index < self.matches.len());
     }
 
-    /// Update match cache if the buffer changed.
+    /// Update match cache if the buffer changed: search a query again, and
+    /// drop installed matches.
     pub fn update(&mut self, buffer: &TextBuffer) {
-        if self.query.is_empty() {
-            // Without a query there is nothing to recompute. An installed
-            // match set pins its revision, so a matching revision keeps it;
-            // only a changed buffer drops it. Clearing an already empty set
-            // is a no-op either way, so no existing flow changes behavior.
-            if self.revision != buffer.revision() {
-                self.matches.clear();
-                self.current = None;
-            }
+        if self.revision == buffer.revision() {
             return;
         }
-        if self.revision != buffer.revision() {
-            let current_range = self.current.and_then(|idx| self.matches.get(idx).copied());
-            self.recompute(buffer);
-            if let Some(range) = current_range {
-                self.current = self
-                    .matches
-                    .iter()
-                    .position(|candidate| *candidate == range)
-                    .or({
-                        if self.matches.is_empty() {
-                            None
-                        } else {
-                            Some(0)
-                        }
-                    });
+        match self.source {
+            Source::None => {}
+            Source::Installed => *self = Self::new(),
+            Source::Query { .. } => {
+                let current_range = self.current_match();
+                self.recompute(buffer);
+                if let Some(range) = current_range {
+                    self.current = self
+                        .matches
+                        .iter()
+                        .position(|candidate| *candidate == range)
+                        .or((!self.matches.is_empty()).then_some(0));
+                }
             }
         }
     }
@@ -211,13 +230,10 @@ impl SearchState {
         if self.matches.is_empty() {
             return None;
         }
-        let direction = if reverse {
-            match self.direction {
-                SearchDirection::Forward => SearchDirection::Backward,
-                SearchDirection::Backward => SearchDirection::Forward,
-            }
-        } else {
-            self.direction
+        let direction = match (self.direction(), reverse) {
+            (direction, false) => direction,
+            (SearchDirection::Forward, true) => SearchDirection::Backward,
+            (SearchDirection::Backward, true) => SearchDirection::Forward,
         };
 
         let current = self.current.unwrap_or(0);
@@ -246,7 +262,7 @@ impl SearchState {
         if count == 0 {
             return None;
         }
-        let forward = (self.direction == SearchDirection::Forward) != reverse;
+        let forward = (self.direction() == SearchDirection::Forward) != reverse;
         let index = if forward {
             let after = self.matches.partition_point(|range| range.start <= from);
             if after < count { after } else { 0 }
@@ -273,12 +289,12 @@ impl SearchState {
 
     /// Recompute match cache for the current query.
     fn recompute(&mut self, buffer: &TextBuffer) {
-        self.matches = find_matches_in(
-            buffer,
-            &self.query,
-            TextPosition::new(0, 0),
-            self.ignore_case,
-        );
+        if let Source::Query {
+            text, ignore_case, ..
+        } = &self.source
+        {
+            self.matches = find_matches_in(buffer, text, TextPosition::new(0, 0), *ignore_case);
+        }
         self.revision = buffer.revision();
     }
 }
@@ -456,6 +472,40 @@ mod tests {
         assert_eq!(state.current_match(), Some(ranges[1]));
         state.move_next(&buffer, false);
         assert_eq!(state.current_match(), Some(ranges[0]));
+    }
+
+    #[test]
+    fn an_edit_drops_installed_matches_and_ends_the_search() {
+        let mut buffer = TextBuffer::new("one two one");
+        let ranges = find_matches(&buffer, "one");
+        let mut state = SearchState::new();
+        state.set_matches(&buffer, ranges, TextPosition::new(0, 0));
+        assert_eq!(state.source(), &Source::Installed);
+        state.update(&buffer);
+        assert_eq!(state.match_count(), 2, "an unchanged text keeps them");
+        buffer.insert_text("x");
+        state.update(&buffer);
+        assert_eq!(state.match_count(), 0);
+        assert_eq!(state.current_match(), None);
+        assert_eq!(state.source(), &Source::None);
+    }
+
+    #[test]
+    fn an_edit_searches_a_query_again() {
+        let mut buffer = TextBuffer::new("ONE two");
+        let mut state = SearchState::new();
+        state.set_smart_query(&buffer, "ONE", TextPosition::new(0, 0));
+        assert_eq!(state.match_count(), 1);
+        buffer.insert_text(" one ONE");
+        state.update(&buffer);
+        assert_eq!(state.match_count(), 2, "an uppercase query keeps case");
+        assert!(matches!(
+            state.source(),
+            Source::Query {
+                ignore_case: false,
+                ..
+            }
+        ));
     }
 
     #[test]

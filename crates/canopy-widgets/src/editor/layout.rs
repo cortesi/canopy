@@ -112,10 +112,9 @@ pub struct LayoutCache {
     total_lines: usize,
     /// Maximum display width across all lines.
     max_line_width: usize,
-    /// Cached wrap parameters.
-    wrap: Wrap,
-    /// Cached buffer revision.
-    revision: u64,
+    /// The wrap parameters and the buffer revision of the last build, or
+    /// `None` before the first.
+    built: Option<(Wrap, u64)>,
 }
 
 impl LayoutCache {
@@ -148,45 +147,38 @@ impl LayoutCache {
             line_offsets: vec![0],
             total_lines: 0,
             max_line_width: 0,
-            // No wrap parameters have a width of zero, so the first sync
-            // rebuilds.
-            wrap: Wrap {
-                mode: WrapMode::None,
-                width: 0,
-                tab_stop: 4,
-                caret: false,
-            },
-            revision: 0,
+            built: None,
         }
     }
 
     /// Synchronize layout state with the buffer and wrapping parameters.
     pub fn sync(&mut self, buffer: &mut TextBuffer, wrap: Wrap) {
-        if self.wrap != wrap {
-            let _ = buffer.take_change();
-            self.rebuild_all(buffer, wrap);
-            return;
-        }
-
         let revision = buffer.revision();
-        if revision == self.revision {
-            return;
+        match self.built {
+            Some((built, at)) if built == wrap => {
+                if at == revision {
+                    return;
+                }
+                match buffer.take_change() {
+                    Some(change) => {
+                        self.apply_change(buffer, wrap, change);
+                        self.built = Some((wrap, revision));
+                    }
+                    None => self.rebuild_all(buffer, wrap),
+                }
+            }
+            _ => {
+                let _ = buffer.take_change();
+                self.rebuild_all(buffer, wrap);
+            }
         }
-
-        if let Some(change) = buffer.take_change() {
-            self.apply_change(buffer, change);
-        } else {
-            self.rebuild_all(buffer, wrap);
-        }
-
-        self.revision = revision;
     }
 
     /// Return the cached `(total_lines, max_line_width)` when the cache is
     /// current for the buffer and the wrap parameters. A stale cache returns
     /// `None` so the caller can fall back to a direct scan.
     pub fn metrics_for(&self, buffer: &TextBuffer, wrap: Wrap) -> Option<(usize, usize)> {
-        (self.wrap == wrap && self.revision == buffer.revision())
+        (self.built == Some((wrap, buffer.revision())))
             .then_some((self.total_lines, self.max_line_width))
     }
 
@@ -194,10 +186,11 @@ impl LayoutCache {
     /// for the buffer and the tab stop. Line widths do not depend on
     /// wrapping.
     pub fn widest_for(&self, buffer: &TextBuffer, tab_stop: usize) -> Option<usize> {
-        (self.wrap.width > 0
-            && self.wrap.tab_stop == tab_stop
-            && self.revision == buffer.revision())
-        .then_some(self.max_line_width)
+        self.built
+            .is_some_and(|(wrap, revision)| {
+                wrap.tab_stop == tab_stop && revision == buffer.revision()
+            })
+            .then_some(self.max_line_width)
     }
 
     /// Return the total number of display lines.
@@ -221,15 +214,15 @@ impl LayoutCache {
     /// Map a text position to display coordinates.
     pub fn point_for_position(&self, buffer: &TextBuffer, position: TextPosition) -> Point {
         let line = position.line.min(self.lines.len().saturating_sub(1));
-        let Some(layout) = self.lines.get(line) else {
+        let (Some(layout), Some((wrap, _))) = (self.lines.get(line), self.built) else {
             return Point { x: 0, y: 0 };
         };
-        let display_col = buffer.column_for_position(position, self.wrap.tab_stop);
+        let display_col = buffer.column_for_position(position, wrap.tab_stop);
         segment_point(
             layout,
             display_col,
             self.line_offset(line),
-            self.wrap.caret_limit(),
+            wrap.caret_limit(),
         )
     }
 
@@ -240,7 +233,7 @@ impl LayoutCache {
     /// the wrap width, past which hanging blanks do not show.
     pub fn position_in_row(&self, buffer: &TextBuffer, row: usize, column: usize) -> TextPosition {
         let line = self.line_for_display(row);
-        let Some(layout) = self.lines.get(line) else {
+        let (Some(layout), Some((wrap, _))) = (self.lines.get(line), self.built) else {
             return TextPosition::new(0, 0);
         };
         let index = row
@@ -254,11 +247,11 @@ impl LayoutCache {
         } else {
             segment.width().saturating_sub(1)
         }
-        .min(self.wrap.caret_limit());
+        .min(wrap.caret_limit());
         buffer.position_for_column(
             line,
             segment.start_col.saturating_add(column.min(widest)),
-            self.wrap.tab_stop,
+            wrap.tab_stop,
         )
     }
 
@@ -289,23 +282,22 @@ impl LayoutCache {
             self.lines.push(layout_line("", wrap));
         }
         self.rebuild_offsets();
-        self.wrap = wrap;
-        self.revision = buffer.revision();
+        self.built = Some((wrap, buffer.revision()));
     }
 
     /// Apply an incremental line change to the layout cache.
-    fn apply_change(&mut self, buffer: &TextBuffer, change: LineChange) {
+    fn apply_change(&mut self, buffer: &TextBuffer, wrap: Wrap, change: LineChange) {
         let start = change.start_line.min(self.lines.len());
         let end = start
             .saturating_add(change.old_line_count)
             .min(self.lines.len());
         let new_end = start.saturating_add(change.new_line_count);
         let replacement: Vec<_> = (start..new_end)
-            .map(|line| layout_line(&buffer.line_text(line), self.wrap))
+            .map(|line| layout_line(&buffer.line_text(line), wrap))
             .collect();
         self.lines.splice(start..end, replacement);
         if self.lines.is_empty() {
-            self.lines.push(layout_line("", self.wrap));
+            self.lines.push(layout_line("", wrap));
         }
         self.rebuild_offsets();
     }
@@ -729,6 +721,27 @@ mod tests {
                 prop_assert!(cached.x as usize <= width);
             }
         }
+    }
+
+    #[test]
+    fn a_cache_answers_only_once_built_and_while_current() {
+        let mut buffer = TextBuffer::new("ab\tc");
+        let mut cache = LayoutCache::new();
+        assert_eq!(cache.metrics_for(&buffer, soft(4)), None);
+        assert_eq!(cache.widest_for(&buffer, 4), None);
+        assert_eq!(
+            cache.point_for_position(&buffer, TextPosition::new(0, 2)),
+            Point { x: 0, y: 0 }
+        );
+        cache.sync(&mut buffer, soft(4));
+        assert_eq!(cache.metrics_for(&buffer, soft(4)), Some((2, 5)));
+        assert_eq!(cache.metrics_for(&buffer, soft(3)), None);
+        assert_eq!(cache.widest_for(&buffer, 4), Some(5));
+        assert_eq!(cache.widest_for(&buffer, 8), None);
+        buffer.insert_text("d");
+        assert_eq!(cache.metrics_for(&buffer, soft(4)), None);
+        cache.sync(&mut buffer, soft(4));
+        assert_eq!(cache.metrics_for(&buffer, soft(4)), Some((2, 6)));
     }
 
     #[test]
