@@ -16,7 +16,7 @@ use std::{
 use canopy::{
     Context,
     error::Result as CanopyResult,
-    runtime::{NodeWakeHandle, NoticePost, WakeOutcome},
+    runtime::{NodeWakeHandle, NoticePost},
 };
 
 use crate::{
@@ -223,6 +223,9 @@ struct Inner<T> {
     subscribers: Vec<Subscriber>,
     /// The widgets to poll as the options panel closes.
     close_wakes: Vec<NodeWakeHandle>,
+    /// How many times the panel closed.
+    #[cfg(test)]
+    panel_closes: usize,
     /// Whether subscribers are being notified, with the changes that wait.
     round: Round,
     /// Warnings that wait for a context to show them.
@@ -423,6 +426,8 @@ impl<T: OptionGroup + Send + Sync> Store<T> {
             current: Arc::new(T::default()),
             subscribers: Vec::new(),
             close_wakes: Vec::new(),
+            #[cfg(test)]
+            panel_closes: 0,
             round: Round::Idle,
             warnings,
         };
@@ -487,8 +492,17 @@ pub trait Backend {
     /// Poll the widget of `wake` as the options panel closes.
     fn wake_on_close(&self, wake: NodeWakeHandle);
 
-    /// Poll the widgets that asked to hear the panel close.
+    /// Return the wakes of the widgets that asked to hear the panel close.
+    /// The panel registers them with its modal as it opens, so the runtime
+    /// polls them as the modal's end commits.
+    fn close_wakes(&self) -> Vec<NodeWakeHandle>;
+
+    /// Note that the panel closed.
     fn panel_closed(&self);
+
+    /// Return how many times the panel closed.
+    #[cfg(test)]
+    fn panel_closes(&self) -> usize;
 
     /// Return the current value of the leaf at `path`.
     fn get(&self, path: &str) -> Option<Value>;
@@ -800,12 +814,20 @@ impl<T: OptionGroup + Send + Sync> Backend for Shared<T> {
         self.inner.borrow_mut().close_wakes.push(wake);
     }
 
+    fn close_wakes(&self) -> Vec<NodeWakeHandle> {
+        self.inner.borrow().close_wakes.clone()
+    }
+
     fn panel_closed(&self) {
-        // A widget that is gone cannot be woken, so it is forgotten.
-        self.inner
-            .borrow_mut()
-            .close_wakes
-            .retain(|wake| !matches!(wake.wake(), Ok(WakeOutcome::Expired) | Err(_)));
+        #[cfg(test)]
+        {
+            self.inner.borrow_mut().panel_closes += 1;
+        }
+    }
+
+    #[cfg(test)]
+    fn panel_closes(&self) -> usize {
+        self.inner.borrow().panel_closes
     }
 
     fn get(&self, path: &str) -> Option<Value> {

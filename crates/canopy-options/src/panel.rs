@@ -5,7 +5,7 @@ use std::{path::Path, rc::Rc, result::Result as StdResult};
 
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, Setup, TypedId, ViewContext, Widget,
-    error::{Error, Result},
+    error::Result,
     format::Home,
     geom::{Line, Rect, Size},
     input::{
@@ -17,6 +17,7 @@ use canopy::{
     render::Render,
     runtime::NoticePost,
     text,
+    widget::Mount,
 };
 use canopy_widgets::{
     Dialog, Frame,
@@ -334,18 +335,15 @@ pub fn register(setup: &mut Setup) -> Result<()> {
 
 /// The modal root of the options panel, in the overlay layer.
 pub struct OptionsPanel {
-    /// The store.
-    backend: Rc<dyn Backend>,
-    /// The body, once mounted.
-    body: Option<TypedId<PanelBody>>,
+    /// The store, and the body that the mount builds.
+    mount: Mount<Rc<dyn Backend>, TypedId<PanelBody>>,
 }
 
 impl OptionsPanel {
     /// Build a panel for the options of `backend`.
     pub(crate) fn new(backend: Rc<dyn Backend>) -> Self {
         Self {
-            backend,
-            body: None,
+            mount: Mount::new(backend),
         }
     }
 
@@ -358,9 +356,7 @@ impl OptionsPanel {
         group: &str,
         quick: bool,
     ) -> Result<TypedId<PanelBody>> {
-        let body = self
-            .body
-            .ok_or_else(|| Error::Invalid("the options panel body is not mounted".into()))?;
+        let body = *self.mount.mounted()?;
         context.with_widget_mut(body, |body: &mut PanelBody, context| {
             body.reset(host, group, quick);
             body.retitle(context)
@@ -381,18 +377,23 @@ impl Widget for OptionsPanel {
     }
 
     fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
-        let me = context.node_id();
-        let (dialog, body) = Dialog::new()
-            .with_title("Options")
-            .with_max_width(MAX_WIDTH + CHROME_WIDTH)
-            .add(context, me, PanelBody::new(Rc::clone(&self.backend)))?;
-        let frame = Dialog::frame(context, dialog.into())?;
-        context.with_widget_mut(body, |body: &mut PanelBody, _| {
-            body.frame = Some(frame);
-            Ok(())
-        })?;
-        self.body = Some(body);
-        Ok(())
+        self.mount.mount(|backend| {
+            let me = context.node_id();
+            let (dialog, body) = Dialog::new()
+                .with_title("Options")
+                .with_max_width(MAX_WIDTH + CHROME_WIDTH)
+                .add(context, me, PanelBody::new(Rc::clone(backend)))?;
+            let frame = Dialog::frame(context, dialog.into())?;
+            context.with_widget_mut(body, |body: &mut PanelBody, _| {
+                body.frame = Some(frame);
+                Ok(())
+            })?;
+            Ok(body)
+        })
+    }
+
+    fn on_unmount(&mut self, _context: &mut dyn Context) {
+        self.mount.unmount();
     }
 
     fn name(&self) -> NodeName {

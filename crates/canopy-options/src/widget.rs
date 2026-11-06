@@ -10,7 +10,8 @@ use canopy::{
     error::{Error, Result},
     input::{ModalBindings, ModalOptions, ModalToken},
     layout::Layout,
-    runtime::NoticePost,
+    runtime::{NoticePost, PollLifetime},
+    widget::Mount,
 };
 use canopy_widgets::menu;
 
@@ -36,14 +37,27 @@ type PendingApp = Box<dyn FnOnce(&mut dyn Context, NodeId) -> Result<NodeId>>;
 pub struct Options {
     /// The store.
     backend: Rc<dyn Backend>,
-    /// The application, until it mounts.
-    pending: Option<PendingApp>,
+    /// The application, until it mounts, and the nodes the mount built.
+    mount: Mount<Option<PendingApp>, Parts>,
+    /// Whether the panel is open, and its modal.
+    panel: PanelState,
+}
+
+/// The nodes that the options widget builds as it mounts.
+struct Parts {
     /// The application node.
-    app: Option<NodeId>,
+    app: NodeId,
     /// The panel, in the overlay layer.
-    panel: Option<TypedId<OptionsPanel>>,
-    /// The open panel's modal.
-    token: Option<ModalToken>,
+    panel: TypedId<OptionsPanel>,
+}
+
+/// Whether the options panel is open.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PanelState {
+    /// The panel is closed.
+    Closed,
+    /// The panel opened as this modal, which may be closing.
+    Open(ModalToken),
 }
 
 #[derive_commands]
@@ -60,12 +74,22 @@ impl Options {
     {
         Self {
             backend: store.backend(),
-            pending: Some(Box::new(move |context, parent| {
+            mount: Mount::new(Some(Box::new(move |context, parent| {
                 Ok(context.add_child(parent, app)?.into())
-            })),
-            app: None,
-            panel: None,
-            token: None,
+            }))),
+            panel: PanelState::Closed,
+        }
+    }
+
+    /// Note the end of the panel's modal, for any reason: a close, or
+    /// retirement with another modal that it opened over. The panel then
+    /// reads closed, and the store hears of it once.
+    fn reconcile(&mut self, context: &dyn ViewContext) {
+        if let PanelState::Open(token) = self.panel
+            && context.modal_retired(token)
+        {
+            self.panel = PanelState::Closed;
+            self.backend.panel_closed();
         }
     }
 
@@ -98,12 +122,15 @@ impl Options {
         )))
     }
 
-    /// Close the panel, if it is open.
+    /// Close the panel, if it is open. The panel reads closed at once, and
+    /// the widget's poll notes the end of its modal once the close commits.
     pub(crate) fn close_panel(&mut self, context: &mut dyn Context) {
-        // A modal that closed with its owner has nothing left to close.
-        if let Some(token) = self.token.take() {
+        self.reconcile(context);
+        if let PanelState::Open(token) = self.panel
+            && context.modal_is_open(token)
+        {
+            // A modal that closed with its owner has nothing left to close.
             context.close_modal(token).ok();
-            self.backend.panel_closed();
         }
     }
 
@@ -246,10 +273,8 @@ impl Options {
         path: Option<String>,
         quick: Option<bool>,
     ) -> Result<()> {
-        let panel = self
-            .panel
-            .ok_or_else(|| Error::Invalid("the options panel is not mounted".into()))?;
-        let app = self.app;
+        self.reconcile(context);
+        let &Parts { app, panel } = self.mount.mounted()?;
         let group = path.unwrap_or_default();
         if self.backend.schema().group(&group).is_none() {
             return Err(Error::Invalid(format!("unknown option group: {group}")));
@@ -258,20 +283,18 @@ impl Options {
         let body = context.with_widget_mut(panel, |panel: &mut OptionsPanel, context| {
             panel.reset(context, host, &group, quick.unwrap_or(false))
         })?;
-        // An open panel shows the new group in place. A modal that closed
-        // with another one that owned it is gone already.
-        if let Some(token) = self.token {
-            if context.modal_is_open(token) {
-                context.set_focus(body.into())?;
-                return Ok(());
-            }
-            self.token = None;
+        // An open panel shows the new group in place.
+        if let PanelState::Open(token) = self.panel
+            && context.modal_is_open(token)
+        {
+            context.set_focus(body.into())?;
+            return Ok(());
         }
         let options = |owner| ModalOptions {
             owner,
             modal: panel.into(),
             initial_focus: body.into(),
-            dim_target: app,
+            dim_target: Some(app),
             bindings: ModalBindings::Framework {
                 groups: panel::BINDING_GROUPS,
                 intents: &[],
@@ -287,7 +310,14 @@ impl Options {
                 None => return Err(error),
             },
         };
-        self.token = Some(token);
+        self.panel = PanelState::Open(token);
+        // The poll notes the end of the modal, also when it ends with the
+        // modal it opened over. The widgets that wait for the close poll in
+        // the same turn.
+        context.wake_on_modal_close(token, context.wake_handle(PollLifetime::Node)?)?;
+        for wake in self.backend.close_wakes() {
+            context.wake_on_modal_close(token, wake)?;
+        }
         Ok(())
     }
 
@@ -301,7 +331,7 @@ impl Options {
     #[command]
     #[must_use]
     pub fn is_open(&self, context: &dyn Context) -> bool {
-        self.token.is_some_and(|token| context.modal_is_open(token))
+        matches!(self.panel, PanelState::Open(token) if context.modal_is_open(token))
     }
 }
 
@@ -311,17 +341,32 @@ impl Widget for Options {
     }
 
     fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
-        let pending = self
-            .pending
-            .take()
-            .ok_or_else(|| Error::Invalid("the options host mounts once".into()))?;
-        let host = context.node_id();
-        self.app = Some(pending(context, host)?);
-        self.panel = Some(context.add_modal(OptionsPanel::new(Rc::clone(&self.backend)))?);
+        let backend = Rc::clone(&self.backend);
+        self.mount.mount(|app| {
+            // The application is one value, which its first mount takes.
+            if app.is_none() {
+                return Err(Error::Invalid(
+                    "the options host's application mounted once already".into(),
+                ));
+            }
+            // The panel goes first, so a panel that fails leaves the
+            // application to a later mount.
+            let panel = context.add_modal(OptionsPanel::new(backend))?;
+            let build = app.take().expect("checked above");
+            let host = context.node_id();
+            let app = build(context, host)?;
+            Ok(Parts { app, panel })
+        })?;
         context.request_poll()
     }
 
+    fn on_unmount(&mut self, _context: &mut dyn Context) {
+        self.mount.unmount();
+        self.panel = PanelState::Closed;
+    }
+
     fn poll(&mut self, context: &mut dyn Context) -> Result<Option<Duration>> {
+        self.reconcile(context);
         for warning in self.backend.take_warnings() {
             context.notify(NoticePost::warning(warning))?;
         }
@@ -506,5 +551,239 @@ pub const fn source_mark(source: &Source) -> &'static str {
             ..
         } => "L",
         Source::Live => "●",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use canopy::{
+        derive_commands,
+        input::{ModalBindings, key::KeyCode},
+        runtime::{PollLifetime, TurnInput},
+        script::EvalRequest,
+        testing::harness::Harness,
+    };
+
+    use super::*;
+    use crate::tests::Root;
+
+    /// A modal pane that takes the focus.
+    struct Pane;
+
+    impl Widget for Pane {
+        fn accept_focus(&self, _context: &dyn ViewContext) -> bool {
+            true
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("pane")
+        }
+    }
+
+    /// An application that opens a modal of its own, as an inspector does,
+    /// and counts the polls that the panel's close sends it.
+    struct Opener {
+        /// The store, to hear the panel close.
+        store: Store<Root>,
+        /// The modal pane.
+        pane: Option<TypedId<Pane>>,
+        /// The pane's open modal.
+        other: Option<ModalToken>,
+        /// How many times the opener polled.
+        polls: usize,
+    }
+
+    #[derive_commands]
+    impl Opener {
+        /// Open the pane as a modal.
+        #[command]
+        pub fn open_other(&mut self, context: &mut dyn Context) -> Result<()> {
+            let pane = self.pane.expect("the opener mounted");
+            self.other = Some(context.open_modal(ModalOptions {
+                owner: context.node_id(),
+                modal: pane.into(),
+                initial_focus: pane.into(),
+                dim_target: None,
+                bindings: ModalBindings::Application,
+            })?);
+            Ok(())
+        }
+
+        /// Close the pane's modal.
+        #[command]
+        pub fn close_other(&mut self, context: &mut dyn Context) -> Result<()> {
+            context.close_modal(self.other.take().expect("the pane is open"))
+        }
+
+        /// Close the options panel, check that it reads closed, and fail, so
+        /// that the dispatch discards the close.
+        #[command]
+        pub fn close_options_and_fail(&self, context: &mut dyn Context) -> Result<()> {
+            let root = context.root_id();
+            context.with_widget_mut(root, |options: &mut Options, context| {
+                options.close_panel(context);
+                assert!(!options.is_open(context), "a closing panel reads closed");
+                Ok(())
+            })?;
+            Err(Error::Invalid("the dispatch fails".into()))
+        }
+    }
+
+    impl Widget for Opener {
+        fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
+            self.pane = Some(context.add_modal(Pane)?);
+            self.store
+                .handle()
+                .wake_on_close(context.wake_handle(PollLifetime::Node)?);
+            Ok(())
+        }
+
+        fn accept_focus(&self, _context: &dyn ViewContext) -> bool {
+            true
+        }
+
+        fn poll(&mut self, _context: &mut dyn Context) -> Result<Option<Duration>> {
+            self.polls += 1;
+            Ok(None)
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("opener")
+        }
+    }
+
+    impl Register for Opener {
+        fn register(setup: &mut Setup) -> Result<()> {
+            setup.add_commands::<Self>()
+        }
+    }
+
+    /// Host an opener inside the options widget of `store`.
+    fn harness(store: &Store<Root>) -> Harness {
+        let opener = Opener {
+            store: store.clone(),
+            pane: None,
+            other: None,
+            polls: 0,
+        };
+        let mut harness = Harness::builder(Options::new(store, opener))
+            .register::<Options>()
+            .register::<Opener>()
+            .size(80, 24)
+            .build()
+            .expect("the harness builds");
+        harness.render().expect("the harness renders");
+        harness
+    }
+
+    /// Run `source` in one turn of the app.
+    fn turn_eval(harness: &mut Harness, source: &str) {
+        harness
+            .canopy
+            .turn(TurnInput::StartEval(EvalRequest::new(source)))
+            .expect("the turn runs");
+    }
+
+    /// Return the opener's poll count.
+    fn polls(harness: &mut Harness) -> usize {
+        harness
+            .with_unique(|opener: &mut Opener, _| Ok(opener.polls))
+            .expect("one opener")
+    }
+
+    /// Return whether the panel is open.
+    fn panel_open(harness: &mut Harness) -> bool {
+        harness
+            .with_root_widget_context(|options: &mut Options, context| Ok(options.is_open(context)))
+            .expect("the root is the options widget")
+    }
+
+    #[test]
+    fn regression_a_panel_over_another_modal_closes_with_it() {
+        let store = Store::<Root>::default();
+        let mut harness = harness(&store);
+        harness.script("opener.open_other()").unwrap();
+        harness.script("options.open()").unwrap();
+        assert!(panel_open(&mut harness));
+        let before = polls(&mut harness);
+        turn_eval(&mut harness, "opener.close_other()");
+        assert!(!panel_open(&mut harness));
+        // The eval runs after the turn's polls, so the runtime polls the
+        // widgets that its close woke in the next turn.
+        harness.canopy.turn(TurnInput::Wake).unwrap();
+        assert_eq!(store.backend().panel_closes(), 1);
+        assert!(polls(&mut harness) > before, "the close polls the follower");
+        // The panel opens again over the application.
+        harness.script("options.open()").unwrap();
+        assert!(panel_open(&mut harness));
+        assert_eq!(store.backend().panel_closes(), 1);
+    }
+
+    #[test]
+    fn an_explicit_close_notes_the_close_once() {
+        let store = Store::<Root>::default();
+        let mut harness = harness(&store);
+        harness.script("options.open()").unwrap();
+        let before = polls(&mut harness);
+        turn_eval(
+            &mut harness,
+            "options.close(); canopy.assert(not options.is_open()); options.close()",
+        );
+        assert!(!panel_open(&mut harness));
+        harness.script("options.close()").unwrap();
+        assert_eq!(store.backend().panel_closes(), 1);
+        assert!(polls(&mut harness) > before);
+    }
+
+    #[test]
+    fn esc_closes_the_panel_and_polls_the_follower_in_that_turn() {
+        let store = Store::<Root>::default();
+        let mut harness = harness(&store);
+        harness.script("options.open()").unwrap();
+        let before = polls(&mut harness);
+        harness.key(KeyCode::Esc).unwrap();
+        assert!(!panel_open(&mut harness));
+        assert_eq!(store.backend().panel_closes(), 1);
+        assert!(
+            polls(&mut harness) > before,
+            "the follower polled in the turn"
+        );
+    }
+
+    #[test]
+    fn a_discarded_close_reads_closed_then_open_and_notes_nothing() {
+        let store = Store::<Root>::default();
+        let mut harness = harness(&store);
+        harness.script("options.open()").unwrap();
+        assert!(harness.script("opener.close_options_and_fail()").is_err());
+        assert!(panel_open(&mut harness));
+        assert_eq!(store.backend().panel_closes(), 0);
+    }
+
+    /// An application whose mount fails.
+    struct Failing;
+
+    impl Widget for Failing {
+        fn on_mount(&mut self, _context: &mut dyn Context) -> Result<()> {
+            Err(Error::Invalid("the application fails to mount".into()))
+        }
+    }
+
+    #[test]
+    fn a_failed_mount_leaves_the_widget_pending() {
+        let store = Store::<Root>::default();
+        let mut harness = Harness::new(Pane).expect("the harness builds");
+        let result = harness.with_root_widget_context(|_: &mut Pane, context| {
+            let options = context.create_detached(Options::new(&store, Failing))?;
+            let root = context.root_id();
+            let attached = context.attach(root, options.into());
+            assert!(attached.is_err(), "the application's mount fails");
+            context.with_widget_mut(options, |options: &mut Options, _| {
+                assert!(!options.mount.is_mounted(), "the mount is pending");
+                assert_eq!(options.panel, PanelState::Closed);
+                Ok(())
+            })
+        });
+        result.expect("the detached widget stays");
     }
 }
