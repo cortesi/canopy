@@ -1,4 +1,9 @@
-use std::{mem, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    mem,
+    path::PathBuf,
+    sync::{Arc, Mutex, PoisonError},
+    time::Duration,
+};
 
 use canopy::{
     Context, EventOutcome, NodeName, ViewContext, Widget,
@@ -15,11 +20,13 @@ use canopy::{
         cursor::{self, CursorRequest},
     },
     rgb,
+    runtime::{NodeWakeHandle, PollLifetime},
     style::{AttrSet, Color, ResolvedStyle, Style},
     text,
 };
 use itty_core::{
     SelectionSnapshot, SelectionSpec, Session,
+    backend::event_loop::RepaintNotifier,
     clipboard::{ClipboardHandler, SystemClipboard},
     config::{EguiTTYConfig, EguiTTYConfigBuilder, Hex, PaletteConfig, PaletteKind, PaletteMeta},
     inspect::{StyledRunPublic, TerminalState},
@@ -148,6 +155,46 @@ impl TerminalConfig {
     }
 }
 
+/// What the session's output wakes the terminal with.
+#[derive(Default)]
+struct Wake {
+    /// The wake handle of the current mount.
+    handle: Option<NodeWakeHandle>,
+    /// Whether output wakes the terminal: once it stops polling, after it
+    /// reports the exit. A running terminal's poll draws its output.
+    armed: bool,
+}
+
+/// The wake of a terminal, shared with its session's event loop.
+///
+/// The slot outlives a mount, and each mount puts its own handle in it.
+#[derive(Clone, Default)]
+struct WakeSlot(Arc<Mutex<Wake>>);
+
+impl WakeSlot {
+    /// Change the wake under its lock.
+    fn update(&self, change: impl FnOnce(&mut Wake)) {
+        change(&mut self.0.lock().unwrap_or_else(PoisonError::into_inner));
+    }
+}
+
+impl RepaintNotifier for WakeSlot {
+    fn request_repaint(&self) {
+        let wake = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if wake.armed
+            && let Some(handle) = &wake.handle
+        {
+            // An expired handle means that the terminal left the tree, and
+            // its next mount puts a new one in the slot.
+            let _outcome = handle.wake();
+        }
+    }
+
+    fn request_repaint_after(&self, _after: Duration) {
+        self.request_repaint();
+    }
+}
+
 /// The life of a terminal's process.
 enum Life {
     /// The terminal has not mounted, so it has no session.
@@ -227,6 +274,9 @@ pub struct Terminal {
     selection_drag: Option<geom::Point>,
     /// Multi-click tracking state.
     last_click: ClickTracker,
+    /// The wake that the session's output uses once the terminal stops
+    /// polling.
+    wake: WakeSlot,
 }
 
 #[derive_commands]
@@ -243,6 +293,7 @@ impl Terminal {
             cursor: None,
             selection_drag: None,
             last_click: ClickTracker::default(),
+            wake: WakeSlot::default(),
         }
     }
 
@@ -272,9 +323,22 @@ impl Terminal {
         let mut session =
             Session::from_config(&cfg).map_err(|error| Error::Internal(error.to_string()))?;
         session.set_clipboard_handler(Arc::new(SystemClipboard));
+        self.watch_output(&session);
 
         self.life = Life::Running(session);
         Ok(())
+    }
+
+    /// Let the session's event loop wake the terminal when it has parsed
+    /// output, once the slot is armed.
+    ///
+    /// The terminal stops polling once it reports the exit, but the event loop
+    /// reads the last output after it marks the process exited, so that
+    /// output can come after the report, and draws on this wake.
+    fn watch_output(&self, session: &Session) {
+        session
+            .proxy_loop
+            .add_repaint_notifier(Arc::new(self.wake.clone()));
     }
 
     /// Borrow the live backend session.
@@ -729,12 +793,17 @@ impl Widget for Terminal {
         if let Some(call) = self.observe_exit() {
             ctx.post(&call.with_arg("node", ctx.node_id()))?;
         }
-        // A process that exited sends no more output, and an unmounted
-        // terminal has none to drain.
+        if matches!(self.life, Life::Exited { .. }) {
+            self.wake.update(|wake| wake.armed = true);
+        }
+        // An exited terminal's last output wakes it rather than a timer, and
+        // an unmounted terminal has none to drain.
         Ok(matches!(self.life, Life::Running(_)).then(|| Duration::from_millis(POLL_INTERVAL_MS)))
     }
 
-    fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {
+    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        let handle = ctx.wake_handle(PollLifetime::Node)?;
+        self.wake.update(|wake| wake.handle = Some(handle));
         self.mount_session()
     }
 
@@ -1023,7 +1092,7 @@ fn encode_mouse(event: &mouse::MouseEvent, state: &TerminalState) -> Option<Vec<
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{sync::Arc, time::Instant};
 
     use canopy::{
         CanopyBuilder, ContextExt,
@@ -1086,6 +1155,7 @@ mod tests {
             Session::new_stream(DEFAULT_COLUMNS, DEFAULT_LINES, builtin::one_dark())
                 .expect("stream terminal");
         let mut terminal = Terminal::new(TerminalConfig::default());
+        terminal.watch_output(&session);
         terminal.life = Life::Running(session);
         (terminal, receiver)
     }
@@ -1444,7 +1514,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn exited_reports_the_end_of_the_process() -> Result<()> {
-        use std::{thread, time::Instant};
+        use std::thread;
 
         let mut terminal =
             Terminal::new(TerminalConfig::new().with_program(["sh", "-c", "exit 0"]));
@@ -1588,7 +1658,7 @@ mod tests {
     /// process to exit.
     #[cfg(unix)]
     fn exited_terminal(script: &str, ready: impl Fn(&Terminal) -> bool) -> Result<Terminal> {
-        use std::{thread, time::Instant};
+        use std::thread;
 
         let mut terminal = Terminal::new(TerminalConfig::new().with_program(["sh", "-c", script]));
         terminal.mount_session()?;
@@ -1722,6 +1792,79 @@ mod tests {
             EventOutcome::Ignore,
             "the interrupted drag left no anchor"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn regression_output_after_the_reported_exit_still_draws() -> Result<()> {
+        let (terminal, _receiver) = stream_terminal();
+        let mut harness = Harness::builder(TerminalHost(Some(terminal)))
+            .size(20, 4)
+            .build()?;
+        harness.render()?;
+        let host = harness.root;
+        let node = harness
+            .canopy
+            .with_root_view(|context| context.children_of(host)[0]);
+        // The process exits, and the terminal reports it, before the reader
+        // has parsed the process's last output.
+        harness.with_widget(node, |terminal: &mut Terminal| {
+            terminal.life = match mem::replace(&mut terminal.life, Life::Unmounted) {
+                Life::Running(session) => Life::Exited {
+                    session,
+                    reported: true,
+                },
+                life => life,
+            };
+        });
+        // The poll that the running terminal scheduled comes due, finds the
+        // exit reported, and schedules no other.
+        let mut turns = 0;
+        harness.wait_until(Duration::from_secs(5), |_| {
+            turns += 1;
+            Ok(turns > 1)
+        })?;
+        // No poll is scheduled, so after the wait's first turn, another runs
+        // only when the session wakes the terminal. The output arrives after
+        // that first turn, as the reader's would. The wait gives up at its
+        // timeout and checks once more, so a check that comes only then means
+        // that no wake came.
+        let timeout = Duration::from_secs(5);
+        let before_timeout = Instant::now() + timeout / 2;
+        let mut checks = 0;
+        harness.wait_until(timeout, |harness| {
+            checks += 1;
+            if checks == 1 {
+                harness.with_widget(node, |terminal: &mut Terminal| {
+                    terminal
+                        .session()
+                        .expect("session")
+                        .feed_stream_output(b"done")
+                        .expect("feed output");
+                });
+                return Ok(false);
+            }
+            assert!(
+                Instant::now() < before_timeout,
+                "the session's output woke no turn"
+            );
+            Ok(harness.tbuf().contains_text("done"))
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_process_that_prints_and_exits_shows_its_output() -> Result<()> {
+        let terminal =
+            Terminal::new(TerminalConfig::new().with_program(["sh", "-c", "printf done"]));
+        let mut harness = Harness::builder(TerminalHost(Some(terminal)))
+            .size(30, 4)
+            .build()?;
+        harness.wait_until(Duration::from_secs(10), |harness| {
+            let exited = harness.with_unique(|terminal: &mut Terminal, _| Ok(terminal.exited()))?;
+            Ok(exited && harness.tbuf().contains_text("done"))
+        })?;
         Ok(())
     }
 
