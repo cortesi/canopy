@@ -37,12 +37,22 @@ const CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct Session {
     /// Connected MCP client, which a hosted app's terminal also uses.
     client: Arc<Client<()>>,
-    /// Managed headless child process, when applicable.
-    child: Option<Child>,
-    /// Session kind.
-    kind: SessionKind,
-    /// Default fixture applied to future headless evals.
-    default_fixture: Option<String>,
+    /// What the client talks to, and the data that only it has.
+    transport: Transport,
+}
+
+/// What a session's client talks to.
+enum Transport {
+    /// A headless stdio MCP server, which builds a fresh app for each eval.
+    Headless {
+        /// The server's process; `None` for an in-process test peer that
+        /// speaks the headless protocol without a process.
+        child: Option<Child>,
+        /// Default fixture applied to future evals.
+        default_fixture: Option<String>,
+    },
+    /// A live app's UDS MCP server.
+    Live,
 }
 
 /// Session mode tracked by `canopyctl`.
@@ -71,27 +81,33 @@ impl Session {
     pub fn share_live(client: Arc<Client<()>>) -> Self {
         Self {
             client,
-            child: None,
-            kind: SessionKind::Live,
-            default_fixture: None,
+            transport: Transport::Live,
         }
     }
 
     /// Spawn a headless stdio MCP server and connect to it.
     pub async fn spawn_headless(command: &ResolvedCommand) -> Result<Self> {
         let mut client = Client::new(CLIENT_NAME, CLIENT_VERSION);
-        let spawned = client.connect_process(command.to_command()).await?;
+        let mut process = command.to_command();
+        // A session that drops without shutdown() still ends its server.
+        process.kill_on_drop(true);
+        let spawned = client.connect_process(process).await?;
         Ok(Self {
             client: Arc::new(client),
-            child: Some(spawned.process),
-            kind: SessionKind::Headless,
-            default_fixture: None,
+            transport: Transport::Headless {
+                child: Some(spawned.process),
+                default_fixture: None,
+            },
         })
     }
 
     /// Shut down the session and any managed child process.
-    pub async fn shutdown(mut self) {
-        if let Some(mut child) = self.child.take() {
+    pub async fn shutdown(self) {
+        if let Transport::Headless {
+            child: Some(mut child),
+            ..
+        } = self.transport
+        {
             let _ignored = child.kill().await;
             let _ignored = child.wait().await;
         }
@@ -99,8 +115,12 @@ impl Session {
 
     /// Evaluate one Luau script through the session.
     pub async fn eval(&self, mut request: ScriptEvalRequest) -> Result<EvalReport> {
-        if self.kind == SessionKind::Headless && request.fixture.is_none() {
-            request.fixture = self.default_fixture.clone();
+        if let Transport::Headless {
+            default_fixture, ..
+        } = &self.transport
+            && request.fixture.is_none()
+        {
+            request.fixture.clone_from(default_fixture);
         }
         let result = self.client.call_tool("script_eval", request).await?;
         result
@@ -115,7 +135,10 @@ impl Session {
 
     /// Return the explicitly selected transport mode.
     pub fn kind(&self) -> SessionKind {
-        self.kind
+        match self.transport {
+            Transport::Headless { .. } => SessionKind::Headless,
+            Transport::Live => SessionKind::Live,
+        }
     }
 
     /// Request bootstrap information at an optional headless screen.
@@ -128,8 +151,8 @@ impl Session {
 
     /// Apply or remember a fixture for the session.
     pub async fn apply_fixture(&mut self, name: String) -> Result<()> {
-        match self.kind {
-            SessionKind::Live => {
+        match &mut self.transport {
+            Transport::Live => {
                 let result = self
                     .client
                     .call_tool("apply_fixture", ApplyFixtureRequest { name })
@@ -146,8 +169,10 @@ impl Session {
                     .extract_as(ToolResultMode::Structured)
                     .context("decode structured apply_fixture response")?;
             }
-            SessionKind::Headless => {
-                self.default_fixture = Some(name);
+            Transport::Headless {
+                default_fixture, ..
+            } => {
+                *default_fixture = Some(name);
             }
         }
         Ok(())
@@ -339,9 +364,10 @@ pub mod tests {
         Ok((
             Session {
                 client: Arc::new(client),
-                child: None,
-                kind: SessionKind::Headless,
-                default_fixture: None,
+                transport: Transport::Headless {
+                    child: None,
+                    default_fixture: None,
+                },
             },
             calls,
             task,
@@ -434,16 +460,7 @@ pub mod tests {
         let (reader, writer) = split(client_stream);
         let mut client = Client::new(CLIENT_NAME, CLIENT_VERSION);
         client.connect_stream(reader, writer).await?;
-        Ok((
-            Session {
-                client: Arc::new(client),
-                child: None,
-                kind: SessionKind::Live,
-                default_fixture: None,
-            },
-            calls,
-            task,
-        ))
+        Ok((Session::share_live(Arc::new(client)), calls, task))
     }
 
     pub fn request(script: &str) -> ScriptEvalRequest {
@@ -492,7 +509,10 @@ pub mod tests {
                 .to_string()
                 .contains("fixture rejected")
         );
-        session.kind = SessionKind::Headless;
+        session.transport = Transport::Headless {
+            child: None,
+            default_fixture: None,
+        };
         session.apply_fixture("default".to_owned()).await?;
         assert_eq!(
             session.eval(request("success")).await?.value,
