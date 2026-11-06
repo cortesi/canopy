@@ -1,0 +1,5 @@
+error: a field takes one of `skip` and `flatten`
+  --> tests/ui/skip_and_flatten.rs:14:20
+   |
+14 |     #[option(skip, flatten)]
+   |                    ^^^^^^^

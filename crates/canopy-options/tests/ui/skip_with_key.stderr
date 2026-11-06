@@ -1,0 +1,5 @@
+error: a skipped field takes no option attribute but `default`
+ --> tests/ui/skip_with_key.rs:8:5
+  |
+8 |     runtime: u32,
+  |     ^^^^^^^

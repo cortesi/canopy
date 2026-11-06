@@ -13,7 +13,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, quote, quote_spanned};
 use syn::{
     Attribute, Data, DeriveInput, Expr, Fields, Ident, Lit, LitStr, Result, UnOp,
-    parse_macro_input, spanned::Spanned,
+    meta::ParseNestedMeta, parse_macro_input, spanned::Spanned,
 };
 
 /// Keys that the options panel uses for its own actions.
@@ -36,7 +36,8 @@ const RESERVED_KEYS: [char; 7] = ['h', 'j', 'k', 'l', 'q', 'R', 'S'];
 /// - `default = expr`: the default value.
 /// - `min = n`, `max = n`, `step = n`: the limits of an integer.
 /// - `global`: the option never reads from a local file.
-/// - `skip`: the field is not an option.
+/// - `skip`: the field is not an option. A skipped field takes no other
+///   attribute but `default`.
 /// - `flatten`: the items of a group field, its leaves and its groups, become
 ///   items of the parent. A flattened field takes no other attribute but
 ///   `default`.
@@ -67,12 +68,20 @@ pub fn derive_option_enum(input: proc_macro::TokenStream) -> proc_macro::TokenSt
     }
 }
 
+/// What a field is to its group.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Kind {
+    /// An option, or a nested group.
+    #[default]
+    Leaf,
+    /// Not an option: the field takes its default and no other attribute.
+    Skip,
+    /// A group whose items join the parent's.
+    Flatten,
+}
+
 /// The parsed `#[option(...)]` attributes of one field or variant.
 #[derive(Default)]
-#[allow(
-    clippy::struct_excessive_bools,
-    reason = "each flag is one independent attribute"
-)]
 struct OptionAttrs {
     /// Accelerator key.
     key: Option<(char, Span)>,
@@ -88,10 +97,8 @@ struct OptionAttrs {
     step: Option<i64>,
     /// Whether local files may not set the option.
     global: bool,
-    /// Whether the field is not an option.
-    skip: bool,
-    /// Whether the field's groups join the parent.
-    flatten: bool,
+    /// What the field is to its group.
+    kind: Kind,
     /// Whether the panel shows the group's items in its parent.
     inline: bool,
     /// Validation function path.
@@ -124,9 +131,9 @@ fn parse_attrs(attrs: &[Attribute]) -> Result<OptionAttrs> {
             } else if path.is_ident("global") {
                 out.global = true;
             } else if path.is_ident("skip") {
-                out.skip = true;
+                out.set_kind(Kind::Skip, &meta)?;
             } else if path.is_ident("flatten") {
-                out.flatten = true;
+                out.set_kind(Kind::Flatten, &meta)?;
             } else if path.is_ident("inline") {
                 out.inline = true;
             } else if path.is_ident("validate") {
@@ -146,6 +153,29 @@ fn parse_attrs(attrs: &[Attribute]) -> Result<OptionAttrs> {
         return Err(syn::Error::new(Span::call_site(), "step must be positive"));
     }
     Ok(out)
+}
+
+impl OptionAttrs {
+    /// Make the field `kind`, which a field may name once.
+    fn set_kind(&mut self, kind: Kind, meta: &ParseNestedMeta<'_>) -> Result<()> {
+        if self.kind != Kind::Leaf {
+            return Err(meta.error("a field takes one of `skip` and `flatten`"));
+        }
+        self.kind = kind;
+        Ok(())
+    }
+
+    /// Return whether an attribute other than `default` is set.
+    fn has_more_than_default(&self) -> bool {
+        self.key.is_some()
+            || self.label.is_some()
+            || self.global
+            || self.inline
+            || self.validate.is_some()
+            || self.min.is_some()
+            || self.max.is_some()
+            || self.step.is_some()
+    }
 }
 
 /// Read an integer literal, which may be negative.
@@ -278,27 +308,26 @@ fn expand_group(input: &DeriveInput) -> Result<TokenStream> {
             ToTokens::to_token_stream,
         );
         defaults.push(quote! { #name: #default });
-        if attrs.skip {
-            continue;
-        }
-        if let Some(key) = attrs.key {
-            check_key(&mut seen_keys, key, &name.to_string())?;
-        }
-        if attrs.flatten {
-            let ignored = attrs.key.is_some()
-                || attrs.label.is_some()
-                || attrs.global
-                || attrs.inline
-                || attrs.validate.is_some()
-                || attrs.min.is_some()
-                || attrs.max.is_some()
-                || attrs.step.is_some();
-            if ignored {
+        match attrs.kind {
+            Kind::Skip if attrs.has_more_than_default() => {
+                return Err(syn::Error::new_spanned(
+                    name,
+                    "a skipped field takes no option attribute but `default`",
+                ));
+            }
+            Kind::Skip => continue,
+            Kind::Flatten if attrs.has_more_than_default() => {
                 return Err(syn::Error::new_spanned(
                     name,
                     "a flattened field takes no option attribute but `default`",
                 ));
             }
+            Kind::Flatten | Kind::Leaf => {}
+        }
+        if let Some(key) = attrs.key {
+            check_key(&mut seen_keys, key, &name.to_string())?;
+        }
+        if attrs.kind == Kind::Flatten {
             items.push(quote! {
                 items.extend(<#ty as ::canopy_options::OptionGroup>::items());
             });

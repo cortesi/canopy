@@ -20,6 +20,7 @@ toml_edit = "0.25.15"
 anyhow.workspace = true
 canopy = { workspace = true, features = ["testing"] }
 proptest.workspace = true
+trybuild = "1.0.121"
 
 [lints]
 workspace = true

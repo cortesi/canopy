@@ -35,7 +35,8 @@ pub fn OptionEnum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {}
 /// - `default = expr`: the default value.
 /// - `min = n`, `max = n`, `step = n`: the limits of an integer.
 /// - `global`: the option never reads from a local file.
-/// - `skip`: the field is not an option.
+/// - `skip`: the field is not an option. A skipped field takes no other
+///   attribute but `default`.
 /// - `flatten`: the items of a group field, its leaves and its groups, become
 ///   items of the parent. A flattened field takes no other attribute but
 ///   `default`.

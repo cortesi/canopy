@@ -1,6 +1,6 @@
 # Compile fixtures build an isolated dependency graph on a cold cache.
 [[profile.default.overrides]]
-filter = 'package(canopy-derive) & binary(compile)'
+filter = '(package(canopy-derive) | package(canopy-options)) & binary(compile)'
 slow-timeout = { period = "60s", terminate-after = 3 }
 
 # Tests that drive an app through a real terminal open a pseudo-terminal

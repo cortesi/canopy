@@ -457,6 +457,7 @@ dependencies = [
  "proptest",
  "tempfile",
  "toml_edit",
+ "trybuild",
 ]
 
 [[package]]
