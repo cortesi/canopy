@@ -26,6 +26,7 @@ use canopy::{
     commands::{
         ArgValue, CommandCall, CommandNode, CommandSpec, CommandType, FromArgValue, ToArgValue,
     },
+    input::NavIntent,
     layout::ScrollOp,
     render::Render,
     runtime::NodeWakeHandle,
@@ -169,6 +170,12 @@ impl Markdown {
     /// and commits it when it differs from the text before the edit.
     /// Neither copy of the text changes until the editor closes.
     pub fn checkpoint_block(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Return whether a step of `nav` moves within the rendered view, its
+    /// text selection or its block cursor, rather than scrolling it. A host
+    /// that binds the reader's keys to moves of its own asks this first.
+    #[must_use]
+    pub fn claims(&self, nav: NavIntent) -> bool;
 
     /// Drop the query and close the built-in field.
     pub fn clear_search(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;

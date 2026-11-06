@@ -192,6 +192,13 @@ impl TableReader {
         self.first.get()
     }
 
+    /// Return whether a view `width` cells wide cuts columns at its right
+    /// margin, so that a shift right shows another column.
+    #[must_use]
+    pub fn cuts_columns(&self, width: u32) -> bool {
+        self.laid(width).flow.cut()
+    }
+
     /// Show the columns from `delta` columns past the first one shown,
     /// within the table.
     /// @param delta Columns to move; negative values move left.

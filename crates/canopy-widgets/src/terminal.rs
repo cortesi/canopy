@@ -194,6 +194,15 @@ impl Terminal {
         self.session().is_some_and(|session| session.child_exited())
     }
 
+    /// Return whether a program other than the terminal's own process runs
+    /// in its foreground, as when a shell runs a command. A shell at its
+    /// prompt, a process that has exited, and a terminal without a session
+    /// report false.
+    pub fn runs_program(&self) -> bool {
+        self.session()
+            .is_some_and(|session| session.runs_foreground_program())
+    }
+
     /// Lazily create the backend session.
     fn mount_session(&mut self) -> Result<()> {
         if self.session.is_some() {

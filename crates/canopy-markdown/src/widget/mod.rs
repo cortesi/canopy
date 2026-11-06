@@ -860,6 +860,13 @@ impl Markdown {
         }
         self.update_chrome(ctx)
     }
+    /// Return whether a step of `nav` moves within the rendered view, its
+    /// text selection or its block cursor, rather than scrolling it. A host
+    /// that binds the reader's keys to moves of its own asks this first.
+    #[must_use]
+    pub fn claims(&self, nav: NavIntent) -> bool {
+        self.active == ViewType::Rendered && self.shared.borrow().claims(nav)
+    }
     /// Return the edit unit that the block cursor marks, or `None` outside
     /// the block cursor or with no unit.
     pub fn selected_block(&self) -> Option<EditUnit> {

@@ -111,6 +111,8 @@ fn a_wide_table_names_its_columns_and_pages_through_them() {
         "{lines:?}"
     );
     assert!(lines[1].contains('›'));
+    let cuts = |h: &mut Harness| with(h, |reader, ctx| reader.cuts_columns(ctx.view().content.w));
+    assert!(cuts(&mut h), "the first columns cut the rest");
     with(&mut h, |reader, ctx| reader.shift_columns(ctx, 1));
     h.render().unwrap();
     let lines = h.tbuf().lines();
@@ -123,6 +125,7 @@ fn a_wide_table_names_its_columns_and_pages_through_them() {
     }
     h.render().unwrap();
     assert!(h.tbuf().lines()[1].contains("Echo"));
+    assert!(!cuts(&mut h), "the last columns cut nothing");
     let last = with(&mut h, |reader, _| reader.first_column());
     assert!(last < columns.len());
     with(&mut h, |reader, ctx| reader.shift_columns(ctx, -10));

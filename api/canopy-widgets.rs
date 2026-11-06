@@ -821,6 +821,10 @@ impl !Sync for ColumnChart {}
 /// with its own glyphs and `columns/divider/focused`. A [`Pane`](crate::Pane)
 /// paints the same ground inside it.
 ///
+/// A framed row can also [label](Columns::set_label) a pane: a short text at
+/// the right end of the rule above it, such as a mark that the pane holds
+/// unsaved changes.
+///
 /// `Columns` owns the scrollbars of its panes, so an enclosing frame draws none
 /// for them. Dividers use `columns/divider`, thumbs `columns/thumb`, and a
 /// thumb a drag holds `columns/thumb/active`.
@@ -845,6 +849,10 @@ impl Columns {
     /// @param delta Panes to move; negative values move left.
     pub fn focus_column(&mut self, c: &mut dyn Context, delta: i32) -> canopy::error::Result<()>;
 
+    /// Return the label text of `pane`, or none.
+    #[must_use]
+    pub fn label(&self, pane: NodeId) -> Option<&str>;
+
     /// Return the pane that the columns at `columns` mark, as their frame
     /// does: the displayed pane on the focus path, or the first displayed home
     /// pane while focus is on the columns or an ancestor.
@@ -863,6 +871,14 @@ impl Columns {
     /// keys names that pane here. While focus is on this widget or an
     /// ancestor, the frame marks the first displayed pane of `panes`.
     pub fn set_home(&mut self, panes: Vec<NodeId>);
+
+    /// Label `pane` with `text` in `style`, at the right end of the frame's
+    /// rule above it, or take its label away with an empty `text`.
+    ///
+    /// The label draws with a space on each side, and a cell of the rule
+    /// between it and the corner. A label too wide for the rule, and the
+    /// label of a row without a frame, do not draw.
+    pub fn set_label(&mut self, pane: NodeId, style: impl Into<String>, text: impl Into<String>);
 
     /// Build columns that box each pane in `light` and the pane with focus
     /// in `focused`.
@@ -3421,6 +3437,11 @@ impl TableReader {
 
     /// Return the selected cell, by body row and data column.
     pub fn cursor(&self) -> Option<(usize, usize)>;
+
+    /// Return whether a view `width` cells wide cuts columns at its right
+    /// margin, so that a shift right shows another column.
+    #[must_use]
+    pub fn cuts_columns(&self, width: u32) -> bool;
 
     /// Return the table shown.
     pub fn data(&self) -> &Arc<TableData>;
@@ -6141,6 +6162,12 @@ pub mod terminal {
 
         /// Construct a new terminal widget with the provided configuration.
         pub fn new(config: TerminalConfig) -> Self;
+
+        /// Return whether a program other than the terminal's own process runs
+        /// in its foreground, as when a shell runs a command. A shell at its
+        /// prompt, a process that has exited, and a terminal without a session
+        /// report false.
+        pub fn runs_program(&self) -> bool;
     }
 
     impl CommandNode for Terminal {}
