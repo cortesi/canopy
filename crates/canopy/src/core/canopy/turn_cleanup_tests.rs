@@ -25,6 +25,8 @@ use crate::{
     error::{Error, Result},
     geom::Size,
     input::Event,
+    layout::Layout,
+    render::Render,
     runtime::{NodeWakeHandle, PollLifetime},
     widget::{EventOutcome, Widget},
 };
@@ -454,4 +456,103 @@ fn eval_admission_reports_each_busy_cause() -> Result<()> {
     assert!(matches!(canopy.eval_admission(), Err(Error::ScriptBusy(_))));
     canopy.script.context_stack.clear();
     canopy.eval_admission()
+}
+
+/// Root widget that requests an exit and then fails, in its key handler, its
+/// poll, or its render.
+#[derive(Clone, Default)]
+struct ExitThenFail {
+    /// Wake handle captured on mount.
+    wake: Rc<RefCell<Option<NodeWakeHandle>>>,
+    /// Where the next failure happens: 1 key, 2 poll, 3 render.
+    stage: Rc<Cell<u8>>,
+    /// Count of keys seen.
+    keys: Rc<Cell<usize>>,
+}
+
+impl Widget for ExitThenFail {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
+
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
+
+    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        *self.wake.borrow_mut() = Some(ctx.wake_handle(PollLifetime::Node)?);
+        Ok(())
+    }
+
+    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
+        if matches!(event, Event::Key(_)) {
+            self.keys.set(self.keys.get() + 1);
+            if self.stage.get() == 1 {
+                self.stage.set(0);
+                ctx.exit(3);
+                return Err(Error::Invalid("key failed".into()));
+            }
+            if self.stage.get() == 3 {
+                ctx.exit(3);
+            }
+        }
+        Ok(EventOutcome::Ignore)
+    }
+
+    fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
+        if self.stage.get() == 2 {
+            self.stage.set(0);
+            ctx.exit(3);
+            return Err(Error::Internal("poll failed".into()));
+        }
+        Ok(None)
+    }
+
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        if self.stage.get() == 3 {
+            self.stage.set(0);
+            return Err(Error::Internal("render failed".into()));
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn regression_a_failed_turn_carries_its_exit() -> Result<()> {
+    let probe = ExitThenFail::default();
+    let mut canopy = CanopyBuilder::new().build()?;
+    canopy.replace_root(probe.clone())?;
+    canopy.set_screen_size(Size::new(10, 3))?;
+    canopy.core.set_focus(canopy.root_id())?;
+    canopy.turn(TurnInput::Prepare)?;
+    let keys = || TurnInput::Events(vec![Event::Key('a'.into()), Event::Key('b'.into())]);
+
+    for (stage, work, message) in [
+        (1, keys(), "key failed"),
+        (2, TurnInput::Wake, "poll failed"),
+        (
+            3,
+            TurnInput::Events(vec![Event::Key('x'.into())]),
+            "render failed",
+        ),
+    ] {
+        probe.stage.set(stage);
+        if stage == 2 {
+            probe.wake.borrow().as_ref().expect("mounted").wake()?;
+        }
+        let Err(failure) = canopy.turn(work) else {
+            panic!("stage {stage} fails its turn");
+        };
+        assert!(failure.error.to_string().contains(message), "{failure}");
+        assert_eq!(failure.exit_code, Some(3), "stage {stage} carries its exit");
+        let before = probe.keys.get();
+        let outcome = canopy.turn(keys())?;
+        assert_eq!(
+            probe.keys.get(),
+            before + 2,
+            "the next turn takes its whole batch"
+        );
+        assert_eq!(outcome.exit_code, None);
+    }
+    Ok(())
 }

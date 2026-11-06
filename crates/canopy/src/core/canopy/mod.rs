@@ -55,7 +55,8 @@ mod testing;
 mod tests;
 mod turn;
 pub use turn::{
-    EvalId, EvalOutcome, EvalRequest, EvalTicket, FrameId, TurnInput, TurnOutcome, TurnSelector,
+    EvalId, EvalOutcome, EvalRequest, EvalTicket, FrameId, TurnError, TurnInput, TurnOutcome,
+    TurnSelector,
 };
 #[cfg(test)]
 mod turn_cleanup_tests;

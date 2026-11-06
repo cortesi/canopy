@@ -14,7 +14,7 @@ mod tests {
         input::{Event, key, mouse},
         layout::Layout,
         render::Render,
-        runtime::TurnInput,
+        runtime::{TurnError, TurnInput},
         script::EvalRequest,
         testing::ManualClock,
     };
@@ -149,7 +149,13 @@ mod tests {
             source: "return 7".into(),
             timeout: None,
         }));
-        assert!(matches!(second, Err(Error::ScriptBusy(_))));
+        assert!(matches!(
+            second,
+            Err(TurnError {
+                error: Error::ScriptBusy(_),
+                exit_code: None
+            })
+        ));
         assert!(matches!(
             canopy.invalidate_script_modules(None),
             Err(Error::ScriptBusy(_))

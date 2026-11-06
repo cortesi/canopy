@@ -26,7 +26,7 @@ The root holds the application, the widget, the contexts, and node handles:
 | `canopy::tree` | `ChildSlot`, `NodeIdentity`, `FocusDirection`, `FocusScope` |
 | `canopy::layout` | Layout, `View`, scrolling (`ScrollOp`, `ScrollDirection`, `ScrollAxis`, `ScrollMark`), and `RevealAlign` |
 | `canopy::render` | `Render` (including `Render::runs`), `RenderBackend`, `NopBackend`, `TermBuf`, `Cell`, `RenderLimits`, and `cursor` |
-| `canopy::runtime` | `TurnInput`, `TurnOutcome`, published frames (`FrameId`, `FrameSnapshot`, `NodeSnapshot`, `WidgetSemantics`), polls and wakes (`PollLifetime`, `NodeWakeHandle`), background work (`Watch`, `wake_channel`, `request_slot`), and notices |
+| `canopy::runtime` | `TurnInput`, `TurnOutcome`, `TurnError`, published frames (`FrameId`, `FrameSnapshot`, `NodeSnapshot`, `WidgetSemantics`), polls and wakes (`PollLifetime`, `NodeWakeHandle`), background work (`Watch`, `wake_channel`, `request_slot`), and notices |
 | `canopy::script` | Evaluation (`EvalRequest`, `EvalTicket`, `EvalOutcome`), automation, the script journal, trust, and fixtures |
 | `canopy::commands` | Command metadata, calls (`CommandCall::with_arg`), and arguments |
 | `canopy::style` | Style maps, `PartialStyle`, colors, effects, shared part `roles`, and `themes` with its `Palette` |
@@ -689,8 +689,10 @@ paint with `Pause::Never` ignores the idle pause and focus.
 `Canopy::turn(TurnInput)` drives input, background wakes, evaluation start or cancellation,
 and explicit preparation. `TurnOutcome` reports the published `FrameId`, whether
 moving cells changed without a new frame, evaluation admission, unticketed
-completion, and exit status. Ticket-backed evaluations complete
-through their `EvalTicket`. Crossterm, headless evaluation, and the test harness use
+completion, and exit status. A failed turn returns a `TurnError`, which holds
+the error and any exit status the turn requested before it failed: a turn takes
+the exit request on every path, so none survives into the next turn.
+Ticket-backed evaluations complete through their `EvalTicket`. Crossterm, headless evaluation, and the test harness use
 this driver.
 
 `TurnInput::Events` carries the input events that arrived together. The turn dispatches

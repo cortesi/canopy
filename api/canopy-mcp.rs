@@ -18,6 +18,7 @@ use canopy::{
     commands::CommandError,
     error::ScriptErrorKind,
     geom::Size,
+    runtime::TurnError,
     script::{AutomationHandle, FixtureInfo, ScriptAssertion, ScriptCheckDiagnostic},
     terminal::RunOptions,
 };
@@ -255,6 +256,8 @@ impl Error {
 }
 
 impl From<CommandError> for Error {}
+
+impl From<TurnError> for Error {}
 
 impl From<canopy::error::Error> for Error {}
 

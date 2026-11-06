@@ -77,7 +77,7 @@ pub mod tree {
 /// The runtime: turns, published frames, polls and wakes, and notices.
 pub mod runtime {
     pub use crate::core::{
-        canopy::{FrameId, TurnInput, TurnOutcome},
+        canopy::{FrameId, TurnError, TurnInput, TurnOutcome},
         notice::{
             Failure, Notice, NoticeId, NoticeLevel, NoticeLog, NoticePost, NoticeSource,
             TOAST_LIMIT,

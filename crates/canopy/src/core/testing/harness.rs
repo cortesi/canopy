@@ -180,6 +180,7 @@ impl Harness {
         self.canopy
             .turn(TurnInput::Events(vec![Event::Key(k.into())]))
             .map(|_| ())
+            .map_err(Into::into)
     }
 
     /// Send a mouse event and render.
@@ -187,6 +188,7 @@ impl Harness {
         self.canopy
             .turn(TurnInput::Events(vec![Event::Mouse(m)]))
             .map(|_| ())
+            .map_err(Into::into)
     }
 
     /// Send a sequence of key events and render after each.

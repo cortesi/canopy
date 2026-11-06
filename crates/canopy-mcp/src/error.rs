@@ -1,6 +1,6 @@
 use std::{error::Error as StdError, io, path::PathBuf, result::Result as StdResult};
 
-use canopy::{commands::CommandError, error::Error as CanopyError};
+use canopy::{commands::CommandError, error::Error as CanopyError, runtime::TurnError};
 use thiserror::Error;
 
 /// Result type used by `canopy-mcp`.
@@ -42,6 +42,12 @@ impl Error {
     /// Wrap an application-specific setup error.
     pub fn app(error: impl Into<Box<dyn StdError + Send + Sync>>) -> Self {
         Self::App(error.into())
+    }
+}
+
+impl From<TurnError> for Error {
+    fn from(failure: TurnError) -> Self {
+        Self::Canopy(failure.into())
     }
 }
 

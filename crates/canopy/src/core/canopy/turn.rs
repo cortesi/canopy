@@ -1,9 +1,12 @@
 //! Adapter-independent runtime turns and frame publication.
 
 use std::{
+    error::Error as StdError,
+    fmt,
     future::Future,
     mem,
     ops::{Deref, DerefMut},
+    result::Result as StdResult,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -143,6 +146,38 @@ pub struct TurnOutcome {
     pub completed: Vec<EvalOutcome>,
     /// Requested application exit status.
     pub exit_code: Option<i32>,
+}
+
+/// A turn that failed, with the exit that the turn requested before it
+/// failed.
+///
+/// A turn takes the exit request on every path, so no request survives into
+/// the next turn. `?` converts it to [`Error`], keeping the inner error and
+/// dropping the code; a host that exits on request reads `exit_code` first.
+#[derive(Debug)]
+pub struct TurnError {
+    /// The failure.
+    pub error: Error,
+    /// Exit status requested in the turn, if any.
+    pub exit_code: Option<i32>,
+}
+
+impl fmt::Display for TurnError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.error.fmt(f)
+    }
+}
+
+impl StdError for TurnError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        Some(&self.error)
+    }
+}
+
+impl From<TurnError> for Error {
+    fn from(failure: TurnError) -> Self {
+        failure.error
+    }
 }
 
 /// Shared state for publication subscriptions.
@@ -568,11 +603,28 @@ impl Canopy {
     }
 
     /// Advance one bounded runtime turn.
-    pub fn turn(&mut self, work: TurnInput) -> Result<TurnOutcome> {
+    ///
+    /// The turn takes the application's exit request whether it succeeds or
+    /// fails: a success reports it in [`TurnOutcome::exit_code`], and a
+    /// failure in [`TurnError::exit_code`]. A turn refused because another
+    /// runs takes nothing.
+    pub fn turn(&mut self, work: TurnInput) -> StdResult<TurnOutcome, TurnError> {
         if self.driver.in_turn {
-            return Err(busy());
+            return Err(TurnError {
+                error: busy(),
+                exit_code: None,
+            });
         }
-        TurnScope::enter(self).turn_inner(work)
+        let mut scope = TurnScope::enter(self);
+        let result = scope.turn_inner(work);
+        let exit_code = scope.core.exit_requested.take();
+        match result {
+            Ok(mut outcome) => {
+                outcome.exit_code = exit_code;
+                Ok(outcome)
+            }
+            Err(error) => Err(TurnError { error, exit_code }),
+        }
     }
     /// Dispatch, poll and publish one turn after admission.
     ///
@@ -622,7 +674,6 @@ impl Canopy {
         if let Some(error) = dispatch_error {
             return Err(error);
         }
-        outcome.exit_code = self.core.exit_requested.take();
         Ok(outcome)
     }
 

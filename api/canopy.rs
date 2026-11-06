@@ -856,7 +856,12 @@ pub struct Canopy {/* private fields */}
 
 impl Canopy {
     /// Advance one bounded runtime turn.
-    pub fn turn(&mut self, work: TurnInput) -> crate::error::Result<TurnOutcome>;
+    ///
+    /// The turn takes the application's exit request whether it succeeds or
+    /// fails: a success reports it in [`TurnOutcome::exit_code`], and a
+    /// failure in [`TurnError::exit_code`]. A turn refused because another
+    /// runs takes nothing.
+    pub fn turn(&mut self, work: TurnInput) -> Result<TurnOutcome, TurnError>;
 }
 
 impl Canopy {
@@ -2263,6 +2268,8 @@ pub mod error {
     impl From<ParseError> for Error {}
 
     impl From<RecvError> for Error {}
+
+    impl From<TurnError> for Error {}
 
     impl From<canopy_geom::Error> for Error {}
 
@@ -4920,6 +4927,20 @@ pub mod runtime {
     }
 
     impl<T> Drop for SlotSender<T> {}
+
+    /// A turn that failed, with the exit that the turn requested before it
+    /// failed.
+    ///
+    /// A turn takes the exit request on every path, so no request survives into
+    /// the next turn. `?` converts it to [`Error`], keeping the inner error and
+    /// dropping the code; a host that exits on request reads `exit_code` first.
+    #[derive(Debug, Display, std::error::Error)]
+    pub struct TurnError {
+        /// The failure.
+        pub error: Error,
+        /// Exit status requested in the turn, if any.
+        pub exit_code: Option<i32>,
+    }
 
     /// One runtime input.
     pub enum TurnInput {
