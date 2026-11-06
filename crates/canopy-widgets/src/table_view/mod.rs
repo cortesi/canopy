@@ -16,7 +16,7 @@ use canopy::{
     },
     layout::{
         CanvasContext, Constraint, Edges, Layout, MeasureConstraints, Measurement, RevealAlign,
-        ScrollOp,
+        ScrollAxis, ScrollOp,
     },
     render::Render,
     runtime::{NodeWakeHandle, WidgetSemantics},
@@ -33,6 +33,34 @@ use crate::{
 
 /// Scrollbar targets and their shell-local tracks.
 type Tracks = Vec<(NodeId, Rect)>;
+
+/// The pointer gesture that holds the view's mouse capture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Gesture {
+    /// No gesture holds capture.
+    Idle,
+    /// A press on a cell selects the rectangle it drags out.
+    Cells,
+    /// The scrollbar on an axis drags its thumb.
+    Scrollbar(ScrollAxis),
+}
+
+impl Gesture {
+    /// Return the gesture after the scrollbar on `axis` used an event, where
+    /// `dragging` is whether that scrollbar now holds a drag.
+    ///
+    /// Only a scrollbar that holds a drag enters its gesture. A scrollbar
+    /// that used an event without a drag, as a press on a full track or a
+    /// press while another gesture holds capture, leaves another gesture as
+    /// it is, and ends its own.
+    fn after_scrollbar(self, axis: ScrollAxis, dragging: bool) -> Self {
+        match self {
+            _ if dragging => Self::Scrollbar(axis),
+            Self::Scrollbar(held) if held == axis => Self::Idle,
+            gesture => gesture,
+        }
+    }
+}
 
 /// Immutable data and lightweight selection shared with the sole body node.
 struct BodyPaint {
@@ -127,10 +155,8 @@ pub struct TableView {
     selection: TableSelection,
     /// Indexed origin of the current rectangle gesture.
     anchor: Option<(usize, usize)>,
-    /// Whether a cell-selection gesture holds capture.
-    drag: bool,
-    /// Whether a scrollbar gesture holds capture.
-    scroll_drag: bool,
+    /// The pointer gesture that holds capture.
+    gesture: Gesture,
     /// Text of the optional coordinate prompt.
     prompt: Option<String>,
     /// Lightweight immutable paint state shared with the body.
@@ -172,8 +198,7 @@ impl TableView {
             cursor,
             selection: TableSelection::default(),
             anchor: None,
-            drag: false,
-            scroll_drag: false,
+            gesture: Gesture::Idle,
             prompt: None,
             paint,
             body: None,
@@ -595,9 +620,10 @@ impl TableView {
     }
     /// End either pointer gesture and release this shell's capture.
     fn end_drag(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.drag || self.scroll_drag {
-            self.drag = false;
-            self.scroll_drag = false;
+        self.vertical.cancel_drag();
+        self.horizontal.cancel_drag();
+        if self.gesture != Gesture::Idle {
+            self.gesture = Gesture::Idle;
             if ctx.has_mouse_capture() {
                 ctx.release_mouse()?;
             }
@@ -656,7 +682,7 @@ impl TableView {
                 );
         }
         if key.key == KeyCode::Esc {
-            return self.drag || self.scroll_drag || !self.selection.is_empty();
+            return self.gesture != Gesture::Idle || !self.selection.is_empty();
         }
         if !self.copy_enabled
             && ((key.mods.ctrl && matches!(key.key, KeyCode::Char('c' | 'C')))
@@ -920,8 +946,7 @@ impl Widget for TableView {
         let outer = ctx.view().outer_rect_local();
         render.fill("table", outer, ' ')?;
         if !ctx.has_mouse_capture() {
-            self.drag = false;
-            self.scroll_drag = false;
+            self.gesture = Gesture::Idle;
         }
         if self.narrow(ctx) {
             if let Some((r, c)) = self.cursor {
@@ -1015,23 +1040,23 @@ impl Widget for TableView {
             return Ok(EventOutcome::Ignore);
         };
         if !ctx.has_mouse_capture() {
-            self.drag = false;
-            self.scroll_drag = false;
+            self.gesture = Gesture::Idle;
         }
-        if self.drag && mouse.action == mouse::Action::Up {
+        if self.gesture == Gesture::Cells && mouse.action == mouse::Action::Up {
             self.end_drag(ctx)?;
             return Ok(EventOutcome::Handle);
         }
         let (vertical, horizontal) = self.tracks(ctx);
-        if self.vertical.handle_mouse(ctx, mouse, &vertical)? == EventOutcome::Handle
-            || self.horizontal.handle_mouse(ctx, mouse, &horizontal)? == EventOutcome::Handle
-        {
-            if matches!(mouse.action, mouse::Action::Down | mouse::Action::Drag) {
-                self.scroll_drag = true;
-            }
-            if mouse.action == mouse::Action::Up {
-                self.scroll_drag = false;
-            }
+        if self.vertical.handle_mouse(ctx, mouse, &vertical)? == EventOutcome::Handle {
+            let dragging = self.vertical.is_dragging();
+            self.gesture = self.gesture.after_scrollbar(ScrollAxis::Vertical, dragging);
+            return Ok(EventOutcome::Handle);
+        }
+        if self.horizontal.handle_mouse(ctx, mouse, &horizontal)? == EventOutcome::Handle {
+            let dragging = self.horizontal.is_dragging();
+            self.gesture = self
+                .gesture
+                .after_scrollbar(ScrollAxis::Horizontal, dragging);
             return Ok(EventOutcome::Handle);
         }
         if !self.options.interactive {
@@ -1074,7 +1099,7 @@ impl Widget for TableView {
                     if !extend {
                         self.anchor = Some((row, column));
                     }
-                    self.drag = true;
+                    self.gesture = Gesture::Cells;
                     ctx.capture_mouse()?;
                 }
                 TableHit::Header(column) => {
@@ -1088,7 +1113,7 @@ impl Widget for TableView {
             }
             return Ok(EventOutcome::Handle);
         }
-        if self.drag && mouse.action == mouse::Action::Drag {
+        if self.gesture == Gesture::Cells && mouse.action == mouse::Action::Drag {
             let point = view.viewport_to_outer(mouse.location)?.clamped_point();
             let x = point.x.saturating_add(view.scroll.x);
             let y = point.y.saturating_add(view.scroll.y);
@@ -1104,8 +1129,7 @@ impl Widget for TableView {
     }
     fn on_unmount(&mut self, _ctx: &mut dyn Context) {
         self.body = None;
-        self.drag = false;
-        self.scroll_drag = false;
+        self.gesture = Gesture::Idle;
         self.events.clear();
         self.event_bytes = 0;
     }

@@ -5542,6 +5542,13 @@ pub mod scrollbar {
     pub struct Scrollbar {/* private fields */}
 
     impl Scrollbar {
+        /// End a drag at once, without releasing mouse capture.
+        ///
+        /// An owner that ends its pointer gesture, as on Esc, calls this and
+        /// releases its capture itself, so that the scrollbar is idle before the
+        /// next render or event.
+        pub fn cancel_drag(&mut self);
+
         /// Handle a mouse event for the scrollbars drawn in `tracks`.
         ///
         /// `tracks` holds the tracks resolved for this event, as passed to
@@ -5557,6 +5564,9 @@ pub mod scrollbar {
 
         /// Construct a horizontal scrollbar whose thumb uses `style` and `glyph`.
         pub const fn horizontal(style: &'static str, glyph: char) -> Self;
+
+        /// Return whether a drag holds the thumb.
+        pub fn is_dragging(&self) -> bool;
 
         /// Draw the thumb of each track's node.
         ///

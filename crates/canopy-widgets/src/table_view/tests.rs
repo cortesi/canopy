@@ -240,7 +240,7 @@ fn pointer_drag_has_rectangular_membership_and_releases_capture() -> Result<()> 
     h.mouse(mouse(mouse::Action::Up, 9, 3))?;
     with(&mut h, |v, c| {
         assert!(!c.has_mouse_capture());
-        assert!(!v.drag);
+        assert_eq!(v.gesture, Gesture::Idle);
         Ok(())
     })?;
     Ok(())
@@ -622,14 +622,82 @@ fn scrollbar_escape_releases_capture_without_moving_cursor() -> Result<()> {
     h.mouse(mouse(mouse::Action::Down, 14, 3))?;
     with(&mut h, |v, c| {
         assert!(c.has_mouse_capture());
-        assert!(v.scroll_drag);
+        assert_eq!(v.gesture, Gesture::Scrollbar(ScrollAxis::Vertical));
+        assert!(v.vertical.is_dragging());
         assert_eq!(v.cursor_index(), Some((0, 0)));
         Ok(())
     })?;
     h.key(KeyCode::Esc)?;
     with(&mut h, |v, c| {
         assert!(!c.has_mouse_capture());
-        assert!(!v.scroll_drag);
+        assert_eq!(v.gesture, Gesture::Idle);
+        assert!(
+            !v.vertical.is_dragging(),
+            "Esc leaves the scrollbar idle before a render"
+        );
+        Ok(())
+    })?;
+    Ok(())
+}
+#[test]
+fn gesture_transitions() {
+    use Gesture::{Cells, Idle, Scrollbar};
+    use ScrollAxis::{Horizontal, Vertical};
+    for (gesture, axis, dragging, next) in [
+        (Idle, Vertical, true, Scrollbar(Vertical)),
+        (Idle, Vertical, false, Idle),
+        (Cells, Vertical, false, Cells),
+        (Cells, Horizontal, true, Scrollbar(Horizontal)),
+        (Scrollbar(Vertical), Vertical, true, Scrollbar(Vertical)),
+        (Scrollbar(Vertical), Vertical, false, Idle),
+        (
+            Scrollbar(Horizontal),
+            Vertical,
+            false,
+            Scrollbar(Horizontal),
+        ),
+        (Scrollbar(Horizontal), Horizontal, false, Idle),
+    ] {
+        assert_eq!(
+            gesture.after_scrollbar(axis, dragging),
+            next,
+            "{gesture:?} after the {axis:?} scrollbar, dragging {dragging}"
+        );
+    }
+}
+#[test]
+fn a_press_on_a_full_track_starts_no_scrollbar_gesture() -> Result<()> {
+    // One body row leaves a vertical track of one cell, which its thumb
+    // fills.
+    let mut h = harness(50, 15, 3)?;
+    h.render()?;
+    with(&mut h, |v, c| {
+        let (vertical, _) = v.tracks(c);
+        assert_eq!(
+            vertical.iter().map(|t| t.1).collect::<Vec<_>>(),
+            [Rect::new(14, 1, 1, 1)]
+        );
+        Ok(())
+    })?;
+    h.mouse(mouse(mouse::Action::Down, 14, 1))?;
+    with(&mut h, |v, c| {
+        assert!(!c.has_mouse_capture());
+        assert!(!v.vertical.is_dragging());
+        assert_eq!(v.gesture, Gesture::Idle);
+        Ok(())
+    })?;
+    Ok(())
+}
+#[test]
+fn a_track_press_during_a_cell_drag_keeps_the_cell_gesture() -> Result<()> {
+    let mut h = harness(50, 15, 6)?;
+    h.render()?;
+    h.mouse(mouse(mouse::Action::Down, 3, 1))?;
+    h.mouse(mouse(mouse::Action::Down, 14, 3))?;
+    with(&mut h, |v, c| {
+        assert!(c.has_mouse_capture());
+        assert!(!v.vertical.is_dragging());
+        assert_eq!(v.gesture, Gesture::Cells);
         Ok(())
     })?;
     Ok(())

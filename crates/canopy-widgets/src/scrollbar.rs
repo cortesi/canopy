@@ -250,9 +250,18 @@ struct Drag {
     track: Rect,
     /// Pointer offset within the thumb.
     grip: u32,
-    /// Whether rendering found the target or track changed. The next event
-    /// releases capture.
-    cancelled: bool,
+}
+
+/// The drag state of a scrollbar.
+#[derive(Clone, Copy, Debug)]
+enum DragState {
+    /// No drag holds the thumb.
+    Idle,
+    /// A drag holds the thumb, with the mouse captured.
+    Held(Drag),
+    /// Rendering found the drag's node or track changed. The capture stays
+    /// until the next event releases it.
+    Orphaned,
 }
 
 /// A proportional scrollbar for one axis.
@@ -272,7 +281,7 @@ pub struct Scrollbar {
     /// Style path and glyph of the track around the thumb, when drawn.
     track: Option<(&'static str, char)>,
     /// The drag in progress.
-    drag: Option<Drag>,
+    drag: DragState,
 }
 
 impl Scrollbar {
@@ -293,8 +302,22 @@ impl Scrollbar {
             thumb: (style, glyph),
             active: None,
             track: None,
-            drag: None,
+            drag: DragState::Idle,
         }
+    }
+
+    /// Return whether a drag holds the thumb.
+    pub fn is_dragging(&self) -> bool {
+        matches!(self.drag, DragState::Held(_))
+    }
+
+    /// End a drag at once, without releasing mouse capture.
+    ///
+    /// An owner that ends its pointer gesture, as on Esc, calls this and
+    /// releases its capture itself, so that the scrollbar is idle before the
+    /// next render or event.
+    pub fn cancel_drag(&mut self) {
+        self.drag = DragState::Idle;
     }
 
     /// Draw the thumb with `style` while a drag holds it.
@@ -345,12 +368,12 @@ impl Scrollbar {
         tracks: &[(NodeId, Rect)],
     ) -> Result<()> {
         if !ctx.has_mouse_capture() {
-            self.drag = None;
+            self.drag = DragState::Idle;
         }
-        if let Some(drag) = &mut self.drag
+        if let DragState::Held(drag) = self.drag
             && !tracks.contains(&(drag.target, drag.track))
         {
-            drag.cancelled = true;
+            self.drag = DragState::Orphaned;
         }
         for &(target, track) in tracks {
             let Some(view) = ctx.view_of(target) else {
@@ -363,9 +386,10 @@ impl Scrollbar {
                 render.fill(style, before, glyph)?;
                 render.fill(style, after, glyph)?;
             }
-            let held = self.drag.is_some_and(|drag| {
-                !drag.cancelled && drag.target == target && drag.track == track
-            });
+            let held = matches!(
+                self.drag,
+                DragState::Held(drag) if drag.target == target && drag.track == track
+            );
             let style = match self.active {
                 Some(active) if held => active,
                 _ => self.thumb.0,
@@ -471,7 +495,7 @@ impl Scrollbar {
                 }
             }
             mouse::Action::Drag => {
-                let Some(drag) = self.drag else {
+                let DragState::Held(drag) = self.drag else {
                     return Ok(EventOutcome::Ignore);
                 };
                 // A captured drag can leave the widget, so clamp it to the
@@ -480,8 +504,8 @@ impl Scrollbar {
                 self.drag_to(ctx, drag, pointer)?;
                 Ok(EventOutcome::Handle)
             }
-            mouse::Action::Up if event.button == mouse::Button::Left && self.drag.is_some() => {
-                self.drag = None;
+            mouse::Action::Up if event.button == mouse::Button::Left && self.is_dragging() => {
+                self.drag = DragState::Idle;
                 ctx.release_mouse()?;
                 Ok(EventOutcome::Handle)
             }
@@ -497,18 +521,20 @@ impl Scrollbar {
         event: &mouse::MouseEvent,
         tracks: &[(NodeId, Rect)],
     ) -> Result<Option<EventOutcome>> {
-        let Some(drag) = self.drag else {
+        if matches!(self.drag, DragState::Idle) {
             return Ok(None);
-        };
+        }
         if !ctx.has_mouse_capture() {
             // Another node took capture, which is not ours to release.
-            self.drag = None;
+            self.drag = DragState::Idle;
             return Ok(None);
         }
-        if !drag.cancelled && tracks.contains(&(drag.target, drag.track)) {
+        if let DragState::Held(drag) = self.drag
+            && tracks.contains(&(drag.target, drag.track))
+        {
             return Ok(None);
         }
-        self.drag = None;
+        self.drag = DragState::Idle;
         ctx.release_mouse()?;
         let ends = matches!(event.action, mouse::Action::Drag | mouse::Action::Up);
         Ok(ends.then_some(EventOutcome::Handle))
@@ -582,11 +608,10 @@ impl Scrollbar {
             thumb_len / 2
         };
         ctx.capture_mouse()?;
-        self.drag = Some(Drag {
+        self.drag = DragState::Held(Drag {
             target,
             track,
             grip,
-            cancelled: false,
         });
         if !on_thumb {
             let start = position.saturating_sub(grip);
