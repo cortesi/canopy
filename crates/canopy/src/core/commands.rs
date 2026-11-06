@@ -12,7 +12,11 @@ use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 
 use crate::{
     Context, NodeId, ViewContext,
-    core::{Core, context::CoreViewContext, world::WidgetOperation},
+    core::{
+        Core,
+        context::CoreViewContext,
+        world::{CoreOwner, WidgetOperation},
+    },
     error::{Result as CoreResult, ScriptErrorKind},
     input::{Event, mouse::MouseEvent},
 };
@@ -1465,9 +1469,9 @@ pub(crate) fn dispatch(
     origin: NodeId,
     call: &CommandCall,
 ) -> Result<ArgValue, CommandError> {
-    let checkpoint = core.begin_dispatch();
-    let result = dispatch_inner(core, call.target_or(origin), call);
-    let completion = core.finish_dispatch(checkpoint, result.is_ok());
+    let mut scope = core.enter_dispatch();
+    let result = dispatch_inner(&mut scope, call.target_or(origin), call);
+    let completion = scope.finish(result.is_ok());
     let value = result?;
     completion.map_err(CommandError::execution)?;
     Ok(value)

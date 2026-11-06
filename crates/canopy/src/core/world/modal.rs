@@ -441,6 +441,7 @@ mod tests {
     use super::*;
     use crate::{
         Context, ViewContext, Widget,
+        core::world::CoreOwner,
         input::{Event, key, mouse},
         testing::ttree::{Bb, TestTree, get_state, reset_state, run_ttree},
         widget::EventOutcome,
@@ -655,15 +656,15 @@ mod tests {
                 dim_target: Some(tree.a),
                 bindings: ModalBindings::Application,
             })?;
-            let checkpoint = core.begin_dispatch();
-            core.close_modal_after_dispatch(token)?;
+            let mut scope = core.enter_dispatch();
+            scope.close_modal_after_dispatch(token)?;
+            assert_eq!(scope.modal_region(), Some(tree.b));
+            scope.finish(false)?;
             assert_eq!(core.modal_region(), Some(tree.b));
-            core.finish_dispatch(checkpoint, false)?;
-            assert_eq!(core.modal_region(), Some(tree.b));
-            let checkpoint = core.begin_dispatch();
-            core.close_modal_after_dispatch(token)?;
-            assert!(!core.nodes[tree.b].hidden);
-            core.finish_dispatch(checkpoint, true)?;
+            let mut scope = core.enter_dispatch();
+            scope.close_modal_after_dispatch(token)?;
+            assert!(!scope.nodes[tree.b].hidden);
+            scope.finish(true)?;
             assert!(core.nodes[tree.b].hidden);
             let _token = core.open_modal(ModalOptions {
                 owner: tree.root,

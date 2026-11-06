@@ -13,7 +13,7 @@ use crate::{
         snapshot,
         termbuf::TermBuf,
         view::View,
-        world::WidgetOperation,
+        world::{CoreOwner, WidgetOperation},
     },
     error::Result,
     geom::{Point, Rect, Size},
@@ -61,13 +61,13 @@ impl Canopy {
         // An explicit wake can arrive before the existing timer. Consume that
         // timer too, so the callback's return value decides all future polling.
         self.poller.cancel_owner(stamp.node, stamp.incarnation);
-        let sources = self.core.push_notice_source(NoticeSource::Poll);
-        let result = self.with_dispatch_boundary(|canopy| {
-            canopy
-                .core
-                .with_widget_ctx(node_id, |widget, ctx| widget.poll(ctx))?
-        });
-        self.core.pop_notice_source(sources);
+        let result = self
+            .enter_notice(NoticeSource::Poll)
+            .with_dispatch_boundary(|canopy| {
+                canopy
+                    .core
+                    .with_widget_ctx(node_id, |widget, ctx| widget.poll(ctx))?
+            });
         let next = match result {
             Ok(next) => {
                 self.poller.set_interval(stamp, next);

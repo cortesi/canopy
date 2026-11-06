@@ -2,6 +2,7 @@
 
 use std::{
     cell::{Cell, RefCell},
+    panic::{AssertUnwindSafe, catch_unwind},
     rc::Rc,
     sync::{
         Arc,
@@ -379,4 +380,46 @@ fn regression_failed_abort_settles_the_ticket() -> Result<()> {
     drop(held);
     assert!(error.to_string().contains("abort"), "{error}");
     assert_settled(&mut canopy, ticket, source, "abort")
+}
+
+/// Root widget whose key handler panics while its flag is set.
+#[derive(Clone, Default)]
+struct PanicKey {
+    /// Whether the next key panics.
+    panics: Rc<Cell<bool>>,
+    /// Count of keys handled.
+    keys: Rc<Cell<usize>>,
+}
+
+impl Widget for PanicKey {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
+
+    fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+        if matches!(event, Event::Key(_)) {
+            self.keys.set(self.keys.get() + 1);
+            assert!(!self.panics.replace(false), "key panic");
+        }
+        Ok(EventOutcome::Ignore)
+    }
+}
+
+#[test]
+fn regression_a_turn_runs_after_a_caught_panic_in_a_turn() -> Result<()> {
+    let probe = PanicKey::default();
+    let mut canopy = CanopyBuilder::new().build()?;
+    canopy.replace_root(probe.clone())?;
+    canopy.set_screen_size(Size::new(10, 3))?;
+    canopy.core.set_focus(canopy.root_id())?;
+    canopy.turn(TurnInput::Prepare)?;
+    probe.panics.set(true);
+    let caught = catch_unwind(AssertUnwindSafe(|| {
+        let _ignored = canopy.turn(TurnInput::Events(vec![Event::Key('x'.into())]));
+    }));
+    assert!(caught.is_err());
+    canopy.turn(TurnInput::Events(vec![Event::Key('y'.into())]))?;
+    assert_eq!(probe.keys.get(), 2);
+    canopy.prepare()?;
+    Ok(())
 }

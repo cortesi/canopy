@@ -9,7 +9,12 @@
 use crate::{
     NodeId,
     commands::{CommandCall, CommandResolver},
-    core::{Core, context::CoreViewContext, inputmap::BindingRecord, world::WidgetOperation},
+    core::{
+        Core,
+        context::CoreViewContext,
+        inputmap::BindingRecord,
+        world::{CoreOwner, WidgetOperation},
+    },
     error::Result,
     input::{BindingAction, BindingId, Event, InputSpec, NavIntent, key::Key},
     path::Path,
@@ -178,11 +183,7 @@ impl Core {
                 return Ok(EventOutcome::Handle);
             }
         }
-        let depth = self.push_event_scope(event);
-        let outcome =
-            self.with_widget_ctx(node, |widget, context| widget.on_intent(action, context));
-        self.pop_event_scope(depth);
-        let outcome = outcome??;
-        Ok(outcome)
+        self.enter_event(event)
+            .with_widget_ctx(node, |widget, context| widget.on_intent(action, context))?
     }
 }

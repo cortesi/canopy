@@ -12,10 +12,7 @@ impl Core {
         event: &Event,
     ) -> Result<EventOutcome> {
         let start = start.into();
-        let depth = self.push_event_scope(event);
-        let outcome = self.dispatch_event_inner(start, event);
-        self.pop_event_scope(depth);
-        outcome
+        self.enter_event(event).dispatch_event_inner(start, event)
     }
 
     /// Dispatch an event along the route until a widget handles it.
@@ -41,10 +38,7 @@ impl Core {
         event: &Event,
     ) -> Result<EventOutcome> {
         let node_id = node_id.into();
-        let depth = self.push_event_scope(event);
-        let outcome = self.with_widget_ctx(node_id, |w, ctx| w.on_event(event, ctx));
-        self.pop_event_scope(depth);
-        let outcome = outcome??;
-        Ok(outcome)
+        self.enter_event(event)
+            .with_widget_ctx(node_id, |w, ctx| w.on_event(event, ctx))?
     }
 }

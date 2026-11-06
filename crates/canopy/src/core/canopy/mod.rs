@@ -19,6 +19,7 @@ use super::{
     poll::{Clock, Poller, SystemClock},
     snapshot::FrameSnapshot,
     termbuf::{RenderLimits, TermBuf},
+    world::CoreOwner,
 };
 
 mod builder;
@@ -500,9 +501,9 @@ impl Canopy {
         &mut self,
         f: impl FnOnce(&mut Self) -> Result<R>,
     ) -> Result<R> {
-        let checkpoint = self.core.begin_dispatch();
-        let result = f(self);
-        let completion = self.core.finish_dispatch(checkpoint, result.is_ok());
+        let mut scope = self.enter_dispatch();
+        let result = f(&mut scope);
+        let completion = scope.finish(result.is_ok());
         result.and_then(|value| completion.map(|()| value))
     }
 
@@ -522,9 +523,9 @@ impl Canopy {
         node: Option<NodeId>,
         f: impl FnOnce(&mut Self) -> Result<R>,
     ) -> Result<R> {
-        let checkpoint = self.core.begin_dispatch();
-        let result = f(self);
-        let completion = self.core.finish_dispatch(checkpoint, result.is_ok());
+        let mut scope = self.enter_dispatch();
+        let result = f(&mut scope);
+        let completion = scope.finish(result.is_ok());
         let value = result?;
         if let Err(error) = completion {
             let (node, source) = match self.core.take_failed_post() {

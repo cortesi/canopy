@@ -1,6 +1,10 @@
 use std::{cell::RefCell, collections::HashSet, mem, rc::Rc};
 
-use super::{focus::FocusRecoveryHint, *};
+use super::{
+    focus::FocusRecoveryHint,
+    scope::{CleanupOp, CoreOwner},
+    *,
+};
 use crate::{
     core::{
         context::CoreContext,
@@ -36,7 +40,7 @@ impl TreeStateSnapshot {
     }
 
     /// Restore a previously captured core state.
-    fn restore(self, core: &mut Core) {
+    pub(super) fn restore(self, core: &mut Core) {
         core.completion.requests.truncate(self.removal_checkpoint);
         core.nodes = self.nodes;
         core.semantic_keys = self.semantic_keys;
@@ -224,9 +228,7 @@ impl Core {
         operation: &'static str,
         f: impl FnOnce(&mut Self) -> Result<R>,
     ) -> Result<R> {
-        if self.rolling_back_tree_edit {
-            return Err(Error::TreeEditDuringRollback { operation });
-        }
+        self.cleanup.admits(CleanupOp::TreeEdit(operation))?;
         self.invalidate(crate::Invalidation::Layout);
         if self.tree_edit.is_some() {
             let before = TreeStateSnapshot::capture(self);
@@ -244,8 +246,7 @@ impl Core {
                         let unmounted = mem::replace(&mut journal.unmounted, unmounted_before);
                         (mounted, unmounted)
                     };
-                    self.unwind_mounted_widgets(&mounted, &unmounted);
-                    before.restore(self);
+                    self.unwind_mounted_widgets(before, &mounted, &unmounted);
                     // Keep committed registrations until the outer edit
                     // settles.
                     Err(error)
@@ -253,9 +254,10 @@ impl Core {
             };
         }
 
-        self.tree_edit = Some(TreeEditJournal::new(self));
-        let result = f(self);
-        let journal = self.tree_edit.take().expect("tree edit journal missing");
+        let mut scope = self.enter_tree_edit(TreeEditJournal::new(self));
+        let result = f(&mut scope);
+        let journal = scope.tree_edit.take().expect("tree edit journal missing");
+        drop(scope);
 
         match result {
             Ok(value) => {
@@ -272,17 +274,31 @@ impl Core {
     }
 
     /// Unwind completed mounts in reverse order and restore the captured state.
-    fn rollback_tree_edit(&mut self, journal: TreeEditJournal) -> Result<()> {
-        self.unwind_mounted_widgets(&journal.mounted, &journal.unmounted);
-        journal.before.restore(self);
+    pub(super) fn rollback_tree_edit(&mut self, journal: TreeEditJournal) -> Result<()> {
+        let TreeEditJournal {
+            before,
+            mounted,
+            unmounted,
+        } = journal;
+        self.unwind_mounted_widgets(before, &mounted, &unmounted);
         self.sync_work_stamps()?;
         self.debug_assert_tree_invariants();
         Ok(())
     }
 
-    /// Run rollback cleanup for mounts completed after a journal checkpoint.
-    fn unwind_mounted_widgets(&mut self, mounted: &[MountedWidget], unmounted: &HashSet<usize>) {
-        self.rolling_back_tree_edit = true;
+    /// Run rollback cleanup for mounts completed after a journal checkpoint,
+    /// then restore `before`.
+    ///
+    /// Each unmount hook runs as a callback, sealed against new work and tree
+    /// edits. A hook that unwinds stops the cleanup, and the tree still
+    /// returns to `before`.
+    fn unwind_mounted_widgets(
+        &mut self,
+        before: TreeStateSnapshot,
+        mounted: &[MountedWidget],
+        unmounted: &HashSet<usize>,
+    ) {
+        let mut rollback = self.enter_rollback(before);
         for mounted in mounted.iter().rev() {
             if unmounted.contains(&mounted.identity()) {
                 continue;
@@ -295,10 +311,10 @@ impl Core {
                 debug_assert!(false, "mounted widget missing during tree rollback");
                 continue;
             };
-            let mut ctx = CoreContext::new(self, mounted.node_id);
+            let mut callback = rollback.enter_callback();
+            let mut ctx = CoreContext::new(&mut callback, mounted.node_id);
             widget.on_unmount(&mut ctx);
         }
-        self.rolling_back_tree_edit = false;
     }
 
     /// Run an unmount hook once for a successfully mounted node.
@@ -579,11 +595,8 @@ impl Core {
 
     /// Create a node in the arena detached from the tree using a boxed widget.
     pub fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId> {
-        if self.rolling_back_tree_edit {
-            return Err(Error::TreeEditDuringRollback {
-                operation: "create detached",
-            });
-        }
+        self.cleanup
+            .admits(CleanupOp::TreeEdit("create detached"))?;
         let generation = self.next_generation();
         let node = Node::new(widget, generation);
         node.layout.validate()?;

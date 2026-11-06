@@ -5,7 +5,7 @@ use std::{cell::Cell, rc::Rc, sync::Arc};
 use super::{Canopy, CanopyBuilder};
 use crate::{
     Invalidation, ViewContext, Widget,
-    core::snapshot,
+    core::{snapshot, world::CoreOwner},
     error::{Error, Result},
     geom::{RectI32, Size},
     runtime::{FrameId, WidgetSemantics},
@@ -113,9 +113,7 @@ fn prepare_rejects_an_active_empty_widget_cell_before_preparation() -> Result<()
     let root = app.core.root;
     let slot = app.core.nodes[root].widget.clone();
     let widget = slot.borrow_mut().take();
-    app.core.callback_depth = 1;
-    let result = app.prepare();
-    app.core.callback_depth = 0;
+    let result = app.enter_callback().prepare();
     *slot.borrow_mut() = widget;
     assert!(matches!(
         result,

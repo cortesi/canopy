@@ -3,6 +3,7 @@
 use std::{
     future::Future,
     mem,
+    ops::{Deref, DerefMut},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -555,10 +556,7 @@ impl Canopy {
         if self.driver.in_turn {
             return Err(busy());
         }
-        self.driver.in_turn = true;
-        let result = self.turn_inner(work);
-        self.driver.in_turn = false;
-        result
+        TurnScope::enter(self).turn_inner(work)
     }
     /// Dispatch, poll and publish one turn after admission.
     ///
@@ -726,6 +724,38 @@ impl Canopy {
         turn
     }
 }
+/// A turn in progress, which admits no nested turn until it ends, by return
+/// or by unwind.
+struct TurnScope<'a>(&'a mut Canopy);
+
+impl<'a> TurnScope<'a> {
+    /// Mark a turn as running on `canopy`.
+    fn enter(canopy: &'a mut Canopy) -> Self {
+        canopy.driver.in_turn = true;
+        Self(canopy)
+    }
+}
+
+impl Deref for TurnScope<'_> {
+    type Target = Canopy;
+
+    fn deref(&self) -> &Canopy {
+        self.0
+    }
+}
+
+impl DerefMut for TurnScope<'_> {
+    fn deref_mut(&mut self) -> &mut Canopy {
+        self.0
+    }
+}
+
+impl Drop for TurnScope<'_> {
+    fn drop(&mut self) {
+        self.0.driver.in_turn = false;
+    }
+}
+
 /// Structured admission error shared by driver entry points.
 fn busy() -> Error {
     Error::ScriptBusy("another runtime turn or evaluation is active".into())

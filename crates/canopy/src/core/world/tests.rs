@@ -884,7 +884,116 @@ fn widget_slot_restores_after_callback_panic() -> Result<()> {
 
     assert!(result.is_err());
     core.with_widget_dyn_mut(child, |_widget, _core| ())?;
+    // Completion work drains once the panicked callback has left its scope.
+    let doomed = core.create_detached(simple_widget())?;
+    core.remove_after_dispatch(doomed)?;
+    assert!(!core.nodes.contains_key(doomed));
     Ok(())
+}
+
+#[test]
+fn regression_completion_drains_after_a_dispatch_panic() -> Result<()> {
+    let mut core = Core::new();
+    let child = core.create_detached(simple_widget())?;
+    let doomed = core.create_detached(simple_widget())?;
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let mut scope = core.enter_dispatch();
+        scope.remove_after_dispatch(doomed).expect("queued");
+        let _ignored = scope.with_widget_dyn_mut(child, |_widget, _core| {
+            panic!("callback panic");
+        });
+    }));
+    assert!(result.is_err());
+    assert!(
+        core.nodes.contains_key(doomed),
+        "the panic discards its work"
+    );
+    core.remove_after_dispatch(doomed)?;
+    assert!(!core.nodes.contains_key(doomed));
+    Ok(())
+}
+
+#[test]
+fn regression_a_panicked_tree_edit_rolls_back_and_the_next_edit_commits_alone() -> Result<()> {
+    let mut core = Core::new();
+    let first = core.create_detached(simple_widget())?;
+    let second = core.create_detached(simple_widget())?;
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let _ignored: Result<()> = core.with_tree_edit("panicking edit", |core| {
+            core.attach(core.root, first)?;
+            panic!("edit panic");
+        });
+    }));
+    assert!(result.is_err());
+    assert!(
+        !core.is_attached_to_root(first),
+        "the panicked edit rolls back"
+    );
+    let failed: Result<()> = core.with_tree_edit("failing edit", |core| {
+        core.attach(core.root, second)?;
+        Err(Error::Invalid("abort edit".into()))
+    });
+    assert!(failed.is_err());
+    assert!(!core.is_attached_to_root(second));
+    assert!(
+        !core.is_attached_to_root(first),
+        "no edit joins the panicked one"
+    );
+    core.attach(core.root, second)?;
+    assert!(core.is_attached_to_root(second));
+    core.validate_invariants()
+}
+
+/// Widget whose unmount hook panics while its flag is set.
+struct PanicUnmount {
+    /// Whether the next unmount panics.
+    panics: Arc<AtomicBool>,
+    /// Count of unmount hooks run.
+    unmounts: Arc<Mutex<usize>>,
+}
+
+impl Widget for PanicUnmount {
+    fn on_unmount(&mut self, _ctx: &mut dyn Context) {
+        *self.unmounts.lock().unwrap() += 1;
+        if self.panics.swap(false, Ordering::Relaxed) {
+            panic!("unmount panic");
+        }
+    }
+}
+
+#[test]
+fn regression_an_unmount_panic_during_rollback_leaves_the_restored_tree() -> Result<()> {
+    let mut core = Core::new();
+    let panics = Arc::new(AtomicBool::new(true));
+    let unmounts = Arc::new(Mutex::new(0));
+    let first = core.create_detached(PanicUnmount {
+        panics: Arc::new(AtomicBool::new(false)),
+        unmounts: Arc::clone(&unmounts),
+    })?;
+    let second = core.create_detached(PanicUnmount {
+        panics: Arc::clone(&panics),
+        unmounts: Arc::clone(&unmounts),
+    })?;
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let _ignored: Result<()> = core.with_tree_edit("failing edit", |core| {
+            core.attach(core.root, first)?;
+            core.attach(core.root, second)?;
+            Err(Error::Invalid("abort edit".into()))
+        });
+    }));
+    assert!(result.is_err());
+    // The second widget's hook ran first and panicked; no hook runs twice.
+    assert_eq!(*unmounts.lock().unwrap(), 1);
+    assert!(!core.is_attached_to_root(first));
+    assert!(!core.is_attached_to_root(second));
+    core.validate_invariants()?;
+    let doomed = core.create_detached(simple_widget())?;
+    core.remove_after_dispatch(doomed)?;
+    assert!(!core.nodes.contains_key(doomed));
+    core.attach(core.root, first)?;
+    assert!(core.is_attached_to_root(first));
+    assert_eq!(*unmounts.lock().unwrap(), 1);
+    core.validate_invariants()
 }
 
 #[test]

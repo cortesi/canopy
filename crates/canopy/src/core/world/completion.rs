@@ -9,14 +9,15 @@
 //!
 //! - The drain pops the next request only after the current one, and every edit
 //!   nested in it, has finished.
-//! - A nested `finish_dispatch` neither drains nor clears the shared queue.
+//! - A nested dispatch scope's finish neither drains nor clears the shared
+//!   queue.
 //! - No drain starts while a tree edit is open, because a tree edit runs inside
 //!   a callback or a dispatch boundary.
 //! - The drain restores `draining` on every exit.
 
-use std::{collections::VecDeque, mem};
+use std::collections::VecDeque;
 
-use super::Core;
+use super::{Core, CoreOwner, scope};
 use crate::{
     NodeId, WidgetStamp,
     commands::{self, CommandCall, CommandTarget},
@@ -120,16 +121,14 @@ pub(super) struct CompletionBatch {
     /// FIFO requests from active dispatches.
     pub(super) requests: VecDeque<CompletionRequest>,
     /// Active explicit dispatch boundaries.
-    depth: usize,
+    pub(super) depth: usize,
     /// Whether a drain loop runs, so a boundary that finishes inside it does
     /// not start another.
-    draining: bool,
-    /// Lifecycle hooks running. No work can be queued while any runs.
-    sealed: usize,
+    pub(super) draining: bool,
     /// The posted call whose failure stopped the last drain.
     failed: Option<PostFailure>,
     /// Kinds of the running handlers, innermost last.
-    notice_sources: Vec<NoticeSource>,
+    pub(super) notice_sources: Vec<NoticeSource>,
 }
 
 impl Core {
@@ -176,29 +175,6 @@ impl Core {
             .work_stamp(node, lifetime)?
             .ok_or(Error::NodeDetached(node))?;
         self.wake_registry.handle(stamp)
-    }
-
-    /// Start a dispatch boundary and return its queue checkpoint.
-    pub(crate) fn begin_dispatch(&mut self) -> usize {
-        self.completion.depth += 1;
-        self.completion.requests.len()
-    }
-
-    /// Restore a failed dispatch checkpoint or drain the successful outer
-    /// boundary.
-    pub(crate) fn finish_dispatch(&mut self, checkpoint: usize, success: bool) -> Result<()> {
-        if !success {
-            self.completion.requests.truncate(checkpoint);
-        }
-        self.completion.depth = self
-            .completion
-            .depth
-            .checked_sub(1)
-            .expect("dispatch completion requires an active boundary");
-        if success && self.completion.depth == 0 && self.callback_depth == 0 {
-            self.drain_completion()?;
-        }
-        Ok(())
     }
 
     /// Queue removal of this widget incarnation after callbacks return.
@@ -285,10 +261,7 @@ impl Core {
 
     /// Run `hook`, a lifecycle hook, with the batch sealed against new work.
     pub(crate) fn sealed<R>(&mut self, hook: impl FnOnce(&mut Self) -> R) -> R {
-        self.completion.sealed += 1;
-        let result = hook(self);
-        self.completion.sealed -= 1;
-        result
+        hook(&mut self.enter_hooks())
     }
 
     /// Return how many requests wait in the batch.
@@ -303,37 +276,19 @@ impl Core {
         self.completion.failed.take()
     }
 
-    /// Note that a handler of kind `source` runs, and return the depth to
-    /// restore when it returns. A call it posts keeps the kind, so the call's
-    /// failure reads as the handler's own.
-    pub(crate) fn push_notice_source(&mut self, source: NoticeSource) -> usize {
-        let depth = self.completion.notice_sources.len();
-        self.completion.notice_sources.push(source);
-        depth
-    }
-
-    /// Restore the running handler kinds to `depth`.
-    pub(crate) fn pop_notice_source(&mut self, depth: usize) {
-        self.completion.notice_sources.truncate(depth);
-    }
-
     /// Admit a completion request unless lifecycle cleanup forbids new work or
     /// the batch is full, then drain the outer boundary when no dispatch
     /// remains open.
     fn enqueue_completion(&mut self, request: CompletionRequest) -> Result<()> {
-        if self.completion.sealed > 0 || self.rolling_back_tree_edit {
-            return Err(Error::Invalid(format!(
-                "cannot queue {} during lifecycle cleanup",
-                request.label()
-            )));
-        }
+        self.cleanup
+            .admits(scope::CleanupOp::Queue(request.label()))?;
         if self.completion.requests.len() >= MAX_COMPLETION_REQUESTS {
             return Err(Error::Invalid(format!(
                 "dispatch completion batch exceeds {MAX_COMPLETION_REQUESTS} requests"
             )));
         }
         self.completion.requests.push_back(request);
-        if self.completion.depth == 0 && self.callback_depth == 0 {
+        if self.completion_ready() {
             self.drain_completion()?;
         }
         Ok(())
@@ -341,16 +296,12 @@ impl Core {
 
     /// Apply the current FIFO batch, stopping and discarding the tail on
     /// failure.
-    fn drain_completion(&mut self) -> Result<()> {
+    pub(super) fn drain_completion(&mut self) -> Result<()> {
         if self.completion.draining {
             return Ok(());
         }
-        self.completion.draining = true;
         self.completion.failed = None;
-        let result = self.drain_completion_inner();
-        self.completion.requests.clear();
-        self.completion.draining = false;
-        result
+        self.enter_drain().drain_completion_inner()
     }
 
     /// Apply requests in FIFO order. A posted call or a removal applies only
@@ -402,22 +353,20 @@ impl Core {
     /// The call's dispatch is its own boundary: a failure discards what the
     /// call queued, and a success leaves its work for this drain to pick up.
     fn deliver(&mut self, request: PostRequest) -> Result<()> {
-        let outer = mem::replace(&mut self.event_scope, request.event.into_iter().collect());
-        let result = match request.work {
-            PostedWork::Command(call) => commands::dispatch(self, request.target, &call)
+        let mut scope = self.enter_events(request.event.into_iter().collect());
+        match request.work {
+            PostedWork::Command(call) => commands::dispatch(&mut scope, request.target, &call)
                 .map(|_| ())
                 .map_err(Error::from),
             PostedWork::Widget(call) => {
-                let checkpoint = self.begin_dispatch();
-                let result = self
+                let mut dispatch = scope.enter_dispatch();
+                let result = dispatch
                     .with_widget_ctx(request.target, |widget, ctx| call(widget, ctx))
                     .and_then(|result| result);
-                let completion = self.finish_dispatch(checkpoint, result.is_ok());
+                let completion = dispatch.finish(result.is_ok());
                 result.and(completion)
             }
-        };
-        self.event_scope = outer;
-        result
+        }
     }
 }
 
@@ -448,8 +397,8 @@ mod tests {
         let mut core = Core::new();
         let trigger = core.create_detached(Leaf { veto: false })?;
         let target = core.create_detached(Leaf { veto: false })?;
-        let checkpoint = core.begin_dispatch();
-        let result = core.with_widget_ctx(trigger, |_widget, ctx| {
+        let mut scope = core.enter_dispatch();
+        let result = scope.with_widget_ctx(trigger, |_widget, ctx| {
             for _ in 0..=MAX_COMPLETION_REQUESTS {
                 ctx.remove_after_dispatch(target)?;
             }
@@ -457,13 +406,12 @@ mod tests {
         })?;
         assert!(matches!(&result, Err(Error::Invalid(message))
             if message == "dispatch completion batch exceeds 1024 requests"));
-        assert_eq!(core.completion.requests.len(), MAX_COMPLETION_REQUESTS);
-        assert!(core.nodes.contains_key(trigger));
-        assert!(core.nodes.contains_key(target));
-        core.finish_dispatch(checkpoint, result.is_ok())?;
+        assert_eq!(scope.completion.requests.len(), MAX_COMPLETION_REQUESTS);
+        assert!(scope.nodes.contains_key(trigger));
+        assert!(scope.nodes.contains_key(target));
+        scope.finish(result.is_ok())?;
         assert!(core.completion.requests.is_empty());
-        let checkpoint = core.begin_dispatch();
-        core.finish_dispatch(checkpoint, true)?;
+        core.enter_dispatch().finish(true)?;
         assert!(core.nodes.contains_key(trigger));
         assert!(core.nodes.contains_key(target));
         Ok(())
@@ -474,13 +422,13 @@ mod tests {
         let mut core = Core::new();
         let first = core.create_detached(Leaf { veto: false })?;
         let second = core.create_detached(Leaf { veto: false })?;
-        let outer = core.begin_dispatch();
-        core.remove_after_dispatch(first)?;
-        let nested = core.begin_dispatch();
-        core.remove_after_dispatch(second)?;
-        core.finish_dispatch(nested, false)?;
-        assert!(core.nodes.contains_key(first));
-        core.finish_dispatch(outer, true)?;
+        let mut outer = core.enter_dispatch();
+        outer.remove_after_dispatch(first)?;
+        let mut nested = outer.enter_dispatch();
+        nested.remove_after_dispatch(second)?;
+        nested.finish(false)?;
+        assert!(outer.nodes.contains_key(first));
+        outer.finish(true)?;
         assert!(!core.nodes.contains_key(first));
         assert!(core.nodes.contains_key(second));
         Ok(())
@@ -493,12 +441,12 @@ mod tests {
         let child = core.create_detached(Leaf { veto: false })?;
         let replacement = core.create_detached(Leaf { veto: false })?;
         core.attach(parent, child)?;
-        let checkpoint = core.begin_dispatch();
+        let mut scope = core.enter_dispatch();
         for node in [parent, child, parent, replacement] {
-            core.remove_after_dispatch(node)?;
+            scope.remove_after_dispatch(node)?;
         }
-        core.replace_subtree(replacement, Leaf { veto: false })?;
-        core.finish_dispatch(checkpoint, true)?;
+        scope.replace_subtree(replacement, Leaf { veto: false })?;
+        scope.finish(true)?;
         assert!(!core.nodes.contains_key(parent));
         assert!(!core.nodes.contains_key(child));
         assert!(core.nodes.contains_key(replacement));
@@ -511,16 +459,15 @@ mod tests {
         let first = core.create_detached(Leaf { veto: false })?;
         let veto = core.create_detached(Leaf { veto: true })?;
         let last = core.create_detached(Leaf { veto: false })?;
-        let checkpoint = core.begin_dispatch();
+        let mut scope = core.enter_dispatch();
         for node in [first, veto, last] {
-            core.remove_after_dispatch(node)?;
+            scope.remove_after_dispatch(node)?;
         }
-        assert!(core.finish_dispatch(checkpoint, true).is_err());
+        assert!(scope.finish(true).is_err());
         assert!(!core.nodes.contains_key(first));
         assert!(core.nodes.contains_key(veto));
         assert!(core.nodes.contains_key(last));
-        let checkpoint = core.begin_dispatch();
-        core.finish_dispatch(checkpoint, true)?;
+        core.enter_dispatch().finish(true)?;
         assert!(core.nodes.contains_key(last));
         Ok(())
     }
@@ -554,9 +501,9 @@ mod tests {
         assert!(!core.nodes[node].initialized);
         core.attach(core.root, node)?;
         assert!(!core.nodes[node].initialized);
-        let checkpoint = core.begin_dispatch();
-        core.remove_after_dispatch(node)?;
-        core.finish_dispatch(checkpoint, true)?;
+        let mut scope = core.enter_dispatch();
+        scope.remove_after_dispatch(node)?;
+        scope.finish(true)?;
         assert!(!core.nodes.contains_key(node));
         Ok(())
     }

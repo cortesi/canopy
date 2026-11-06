@@ -11,7 +11,7 @@ use crate::{
         Core, inputmap,
         inputmap::{ResolvedBinding, RunBinding, RunTarget},
         notice::NoticeSource,
-        world::scroll::DefaultAction,
+        world::{CoreOwner, scroll::DefaultAction},
     },
     error::{Error, Result},
     geom::{Point, PointI32, Size},
@@ -383,11 +383,11 @@ impl Canopy {
                     RoutedInput::Key(key) => self.core.node_key_outcome(id, key, route_focus).ok(),
                     RoutedInput::Mouse(_) => None,
                 };
-                let sources = self.core.push_notice_source(NoticeSource::Widget);
-                let dispatched = self.with_dispatch_boundary(|canopy| {
-                    canopy.core.dispatch_event_on_node(id, &event)
-                });
-                self.core.pop_notice_source(sources);
+                let dispatched = self
+                    .enter_notice(NoticeSource::Widget)
+                    .with_dispatch_boundary(|canopy| {
+                        canopy.core.dispatch_event_on_node(id, &event)
+                    });
                 let outcome = match dispatched {
                     Ok(outcome) => outcome,
                     Err(error) => return self.route_notice(error, NoticeSource::Widget, id, &path),
@@ -678,39 +678,39 @@ impl Canopy {
         );
 
         let event = input.event_for_node(&self.core, node_id);
-        let depth = self.core.push_event_scope(&event);
-        let sources = self.core.push_notice_source(NoticeSource::Binding);
         // The run has its own completion boundary, so a failed run drops the
         // removals it queued even when its failure becomes a notice.
-        let result = self.with_dispatch_boundary(|canopy| match binding.target {
-            RunTarget::Script(function) => canopy
-                .execute_binding_with_scope(node_id, function, scope)
-                .map(|()| None),
-            // A menu that conflicts with an active mode or waiting menu
-            // reports a notice, as a failing script binding does.
-            RunTarget::Menu(mode) => canopy
-                .core
-                .input_map
-                .open_menu(&mode)
-                .map(|()| None)
-                .map_err(|error| Error::App(Box::new(error))),
-            RunTarget::Command(call) => {
-                // Eligibility is read here, inside the event scope, rather than
-                // taken from the last frame, so a status hook sees the same
-                // injections the command would.
-                match commands::command_status(&canopy.core, node_id, &call) {
-                    Ok(commands::CommandStatus::Disabled(reason)) => Ok(Some(reason)),
-                    Ok(commands::CommandStatus::Enabled) => {
-                        commands::dispatch(&mut canopy.core, node_id, &call)
-                            .map(|_| None)
-                            .map_err(Into::into)
+        let result = self
+            .enter_event(&event)
+            .enter_notice(NoticeSource::Binding)
+            .with_dispatch_boundary(|canopy| match binding.target {
+                RunTarget::Script(function) => canopy
+                    .execute_binding_with_scope(node_id, function, scope)
+                    .map(|()| None),
+                // A menu that conflicts with an active mode or waiting menu
+                // reports a notice, as a failing script binding does.
+                RunTarget::Menu(mode) => canopy
+                    .core
+                    .input_map
+                    .open_menu(&mode)
+                    .map(|()| None)
+                    .map_err(|error| Error::App(Box::new(error))),
+                RunTarget::Command(call) => {
+                    // Eligibility is read here, inside the event scope, rather
+                    // than taken from the last frame, so a
+                    // status hook sees the same injections
+                    // the command would.
+                    match commands::command_status(&canopy.core, node_id, &call) {
+                        Ok(commands::CommandStatus::Disabled(reason)) => Ok(Some(reason)),
+                        Ok(commands::CommandStatus::Enabled) => {
+                            commands::dispatch(&mut canopy.core, node_id, &call)
+                                .map(|_| None)
+                                .map_err(Into::into)
+                        }
+                        Err(error) => Err(error),
                     }
-                    Err(error) => Err(error),
                 }
-            }
-        });
-        self.core.pop_notice_source(sources);
-        self.core.pop_event_scope(depth);
+            });
         let skipped = match result {
             Ok(skipped) => skipped,
             Err(error) => return self.route_notice(error, NoticeSource::Binding, node_id, path),
@@ -773,10 +773,9 @@ impl Canopy {
                 break;
             }
             let local = Event::Mouse(RoutedInput::local_mouse(&self.core, node, event));
-            let sources = self.core.push_notice_source(NoticeSource::Widget);
             let dispatched = self
+                .enter_notice(NoticeSource::Widget)
                 .with_dispatch_boundary(|canopy| canopy.core.dispatch_event_on_node(node, &local));
-            self.core.pop_notice_source(sources);
             if let Err(error) = dispatched {
                 self.notice_or_fail(error, NoticeSource::Widget, Some(node))?;
             }
@@ -842,13 +841,13 @@ impl Canopy {
         guard: &mut Option<&mut KeyRouteGuard>,
     ) -> Result<Option<EventOutcome>> {
         let event = input.event_for_node(&self.core, node);
-        let sources = self.core.push_notice_source(NoticeSource::Widget);
-        let outcome = self.with_dispatch_boundary(|canopy| {
-            canopy
-                .core
-                .dispatch_action_on_node(node, action.as_str(), &event)
-        });
-        self.core.pop_notice_source(sources);
+        let outcome = self
+            .enter_notice(NoticeSource::Widget)
+            .with_dispatch_boundary(|canopy| {
+                canopy
+                    .core
+                    .dispatch_action_on_node(node, action.as_str(), &event)
+            });
         let outcome = outcome?;
         debug_assert_eq!(
             outcome,

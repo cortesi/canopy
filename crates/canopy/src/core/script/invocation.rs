@@ -1,5 +1,7 @@
 //! Owned detached script invocations, polled only at runtime turn boundaries.
 
+#[cfg(test)]
+use std::cell::Ref;
 use std::{
     fmt, mem,
     sync::{Arc, Mutex},
@@ -7,6 +9,8 @@ use std::{
     time::Duration,
 };
 
+#[cfg(test)]
+use ruau::session::Runtime;
 use ruau::{
     session::{InvocationError, InvocationHandle},
     vm::{CallOptions, Limits, ValueSnapshot},
@@ -172,9 +176,7 @@ impl LuauHost {
     /// Hold the runtime borrowed, so that an abort fails as it would inside a
     /// live VM scope.
     #[cfg(test)]
-    pub(crate) fn hold_runtime_for_testing(
-        &self,
-    ) -> std::cell::Ref<'_, Option<ruau::session::Runtime>> {
+    pub(crate) fn hold_runtime_for_testing(&self) -> Ref<'_, Option<Runtime>> {
         self.runtime.borrow()
     }
 

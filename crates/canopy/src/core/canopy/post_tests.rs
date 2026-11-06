@@ -413,9 +413,9 @@ impl Site {
 
     /// Run `f` inside a dispatch boundary on the core, and finish it.
     fn boundary(&mut self, f: impl FnOnce(&mut Core) -> Result<()>) -> Result<()> {
-        let checkpoint = self.canopy.core.begin_dispatch();
-        let result = f(&mut self.canopy.core);
-        let completion = self.canopy.core.finish_dispatch(checkpoint, result.is_ok());
+        let mut scope = self.canopy.core.enter_dispatch();
+        let result = f(&mut scope);
+        let completion = scope.finish(result.is_ok());
         result.and(completion)
     }
 }
@@ -801,11 +801,11 @@ fn a_call_keeps_the_event_it_was_posted_in() -> Result<()> {
 
     // A call posted without an event sees none, even when an event is in
     // scope as it runs.
-    let checkpoint = site.canopy.core.begin_dispatch();
-    site.canopy.core.post(host, &Host::call_key_seen())?;
+    let mut scope = site.canopy.core.enter_dispatch();
+    scope.post(host, &Host::call_key_seen())?;
     let ambient = Event::Key('z'.into());
-    let depth = site.canopy.core.push_event_scope(&ambient);
-    site.canopy.core.finish_dispatch(checkpoint, true)?;
+    let depth = scope.push_event_scope(&ambient);
+    scope.finish(true)?;
     assert_eq!(site.log().last().map(String::as_str), Some("no event"));
     assert!(
         is_key(site.canopy.core.current_event(), 'z'),
@@ -813,11 +813,11 @@ fn a_call_keeps_the_event_it_was_posted_in() -> Result<()> {
     );
 
     // A failed delivery restores the scope too.
-    let checkpoint = site.canopy.core.begin_dispatch();
-    let inner = site.canopy.core.push_event_scope(&Event::Key('q'.into()));
-    site.canopy.core.post(host, &Host::call_fail())?;
-    site.canopy.core.pop_event_scope(inner);
-    assert!(site.canopy.core.finish_dispatch(checkpoint, true).is_err());
+    let mut scope = site.canopy.core.enter_dispatch();
+    let inner = scope.push_event_scope(&Event::Key('q'.into()));
+    scope.post(host, &Host::call_fail())?;
+    scope.pop_event_scope(inner);
+    assert!(scope.finish(true).is_err());
     assert!(is_key(site.canopy.core.current_event(), 'z'));
     site.canopy.core.pop_event_scope(depth);
     Ok(())

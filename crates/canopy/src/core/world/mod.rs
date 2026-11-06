@@ -44,6 +44,8 @@ mod focus;
 pub mod layout_driver;
 /// Open modals, their input admission, and retirement.
 pub mod modal;
+/// Guards for the core state that a call holds for its length.
+mod scope;
 /// Viewport scroll mutation and default input actions.
 pub mod scroll;
 /// Scoped application identity and index invariants.
@@ -55,6 +57,8 @@ pub mod test_support;
 mod tests;
 /// Arena mutation, structural invariants, and path helpers.
 mod tree;
+
+pub use scope::CoreOwner;
 
 /// Core state for the arena, layout engine, and focus.
 pub struct Core {
@@ -94,8 +98,8 @@ pub struct Core {
     completion: completion::CompletionBatch,
     /// Cross-thread work handles synchronized with committed structural state.
     pub(crate) wake_registry: WakeRegistry,
-    /// Whether lifecycle cleanup is unwinding a failed tree edit.
-    rolling_back_tree_edit: bool,
+    /// The lifecycle cleanup that runs, which limits the work it may start.
+    cleanup: scope::Cleanup,
     /// Registered command specs.
     pub(crate) commands: CommandSet,
     /// Application and framework input bindings.
@@ -234,7 +238,7 @@ impl Core {
             callback_depth: 0,
             completion: completion::CompletionBatch::default(),
             wake_registry: WakeRegistry::default(),
-            rolling_back_tree_edit: false,
+            cleanup: scope::Cleanup::None,
             commands: CommandSet::default(),
             input_map: InputMap::new(),
             event_scope: Vec::new(),
@@ -258,7 +262,9 @@ impl Core {
     }
 
     /// Put an event in scope for command injection and return the previous
-    /// depth.
+    /// depth. Code outside tests puts an event in scope with
+    /// [`CoreOwner::enter_event`].
+    #[cfg(test)]
     pub(crate) fn push_event_scope(&mut self, event: &Event) -> usize {
         let depth = self.event_scope.len();
         self.event_scope.push(event.clone());
@@ -266,6 +272,7 @@ impl Core {
     }
 
     /// Restore the event scope to a previous depth.
+    #[cfg(test)]
     pub(crate) fn pop_event_scope(&mut self, depth: usize) {
         self.event_scope.truncate(depth);
     }
@@ -301,10 +308,11 @@ impl Core {
         if let Some(node) = self.nodes.get_mut(node_id) {
             node.layout_dirty = true;
         }
-        self.callback_depth += 1;
-        let result = f(guard.widget_mut(), self);
+        let result = {
+            let mut scope = self.enter_callback();
+            f(guard.widget_mut(), &mut scope)
+        };
         drop(guard);
-        self.callback_depth -= 1;
         if self.callback_depth == 0 {
             self.run_deferred_focus_repair()?;
         }
