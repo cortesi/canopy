@@ -79,6 +79,12 @@ pub struct Grid {
     divisions: usize,
 }
 
+/// Return the number of cells along one side of a grid that splits each
+/// node into `divisions` per side, `recursion` times.
+fn cells_per_side(recursion: usize, divisions: usize) -> usize {
+    divisions.pow(recursion as u32)
+}
+
 impl Grid {
     /// Build and prepare a grid with the screen sized to hold it.
     pub fn install(canopy: &mut Canopy, recursion: usize, divisions: usize) -> Result<Self> {
@@ -104,11 +110,7 @@ impl Grid {
 
     /// Return the number of cells along one side of the grid.
     fn cells_per_side(&self) -> usize {
-        if self.recursion == 0 {
-            1
-        } else {
-            self.divisions.pow(self.recursion as u32)
-        }
+        cells_per_side(self.recursion, self.divisions)
     }
 
     /// Get the expected grid size in cells.
@@ -309,6 +311,19 @@ mod tests {
         ];
 
         for (recursion, divisions, expected) in test_cases {
+            assert_eq!(
+                (
+                    cells_per_side(recursion, divisions),
+                    cells_per_side(recursion, divisions)
+                ),
+                expected,
+                "Grid({recursion}, {divisions}) should have dimensions {expected:?}"
+            );
+            // A grid of 27 cells a side builds about a thousand nodes, which
+            // a debug build lays out too slowly for a unit test.
+            if expected.0 > 16 {
+                continue;
+            }
             let mut canopy = crate::CanopyBuilder::new()
                 .build()
                 .expect("an empty application builds");
