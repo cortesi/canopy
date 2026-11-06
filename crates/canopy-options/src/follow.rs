@@ -160,7 +160,8 @@ mod tests {
     use std::{mem, time::Duration};
 
     use canopy::{
-        Context, NodeId, NodeName, Register, Setup, ViewContextExt, Widget, derive_commands,
+        Context, ContextExt, NodeId, NodeName, Register, Setup, ViewContextExt, Widget,
+        derive_commands,
         error::{Error, Result},
         runtime::{NoticeLevel, NoticePost},
         testing::harness::Harness,
@@ -336,6 +337,29 @@ mod tests {
             .unwrap();
         assert!(harness.canopy.notices().is_empty());
         assert!(hidden(&store.current()));
+    }
+
+    #[test]
+    fn regression_remounted_followers_leave_a_bounded_list_of_close_wakes() {
+        let store = Store::<Root>::default();
+        let mut harness = harness(&store);
+        let backend = store.backend();
+        assert_eq!(backend.close_wake_count(), 1, "the hosted shower");
+        for _ in 0..50 {
+            harness
+                .canopy
+                .with_root_context(|context| {
+                    let root = context.root_id();
+                    let shower = context.add_child(root, Shower::new(&store))?;
+                    context.remove_subtree(shower.into())
+                })
+                .unwrap();
+            // The newest follower's wake waits for the next prune.
+            assert!(backend.close_wake_count() <= 2);
+        }
+        // Opening the panel prunes the wake of the removed follower.
+        harness.script("options.open()").unwrap();
+        assert_eq!(backend.close_wake_count(), 1);
     }
 
     #[test]

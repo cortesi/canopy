@@ -94,9 +94,16 @@ impl NodeWakeHandle {
         self.stamp
     }
 
-    /// Return whether the registered lifetime of this handle has ended. A
-    /// poisoned registry counts as ended: its application has panicked.
-    pub(crate) fn is_expired(&self) -> bool {
+    /// Return whether the registered lifetime of this handle has ended, so
+    /// that a wake would report [`WakeOutcome::Expired`]. The lifetime ends
+    /// when its node is removed or replaced, when a node-and-attachment
+    /// lifetime's node detaches, or when the runtime is gone. A poisoned
+    /// registry counts as ended: its application has panicked.
+    ///
+    /// The query queues nothing, so a holder of many handles, such as a
+    /// list of widgets to notify, can prune the ended ones without waking
+    /// the live ones.
+    pub fn is_expired(&self) -> bool {
         let Some(shared) = self.shared.upgrade() else {
             return true;
         };
@@ -327,6 +334,29 @@ mod tests {
         assert_eq!(attachment.wake()?, WakeOutcome::Expired);
         assert_eq!(registry.drain()?, [owner.node_lifetime()]);
         assert!(registry.drain()?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn expiry_reads_the_lifetime_without_queueing_a_wake() -> Result<()> {
+        let registry = WakeRegistry::default();
+        let owner = owner();
+        let attachment = registry.handle(owner)?;
+        let node = registry.handle(owner.node_lifetime())?;
+        assert!(!attachment.is_expired());
+        assert!(!node.is_expired());
+        assert!(registry.drain()?.is_empty(), "a query queues nothing");
+        // A detach ends the attachment's lifetime and keeps the node's.
+        registry.sync([owner.node_lifetime()])?;
+        assert!(attachment.is_expired());
+        assert!(!node.is_expired());
+        // Removal ends the node's, and a dropped registry ends every one.
+        registry.sync([])?;
+        assert!(node.is_expired());
+        let other = WakeRegistry::default();
+        let held = other.handle(owner)?;
+        drop(other);
+        assert!(held.is_expired());
         Ok(())
     }
 

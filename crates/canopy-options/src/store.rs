@@ -221,7 +221,9 @@ struct Inner<T> {
     current: Arc<T>,
     /// The subscribers.
     subscribers: Vec<Subscriber>,
-    /// The widgets to poll as the options panel closes.
+    /// The widgets to poll as the options panel closes. The store prunes
+    /// the wakes of widgets that are gone as it adds one and as the panel
+    /// opens, so the list holds about one wake for each live follower.
     close_wakes: Vec<NodeWakeHandle>,
     /// How many times the panel closed.
     #[cfg(test)]
@@ -492,10 +494,15 @@ pub trait Backend {
     /// Poll the widget of `wake` as the options panel closes.
     fn wake_on_close(&self, wake: NodeWakeHandle);
 
-    /// Return the wakes of the widgets that asked to hear the panel close.
-    /// The panel registers them with its modal as it opens, so the runtime
-    /// polls them as the modal's end commits.
+    /// Return the wakes of the live widgets that asked to hear the panel
+    /// close, and forget those of widgets that are gone. The panel registers
+    /// them with its modal as it opens, so the runtime polls them as the
+    /// modal's end commits.
     fn close_wakes(&self) -> Vec<NodeWakeHandle>;
+
+    /// Return how many close wakes the store holds.
+    #[cfg(test)]
+    fn close_wake_count(&self) -> usize;
 
     /// Note that the panel closed.
     fn panel_closed(&self);
@@ -811,11 +818,20 @@ impl<T: OptionGroup + Send + Sync> Backend for Shared<T> {
     }
 
     fn wake_on_close(&self, wake: NodeWakeHandle) {
-        self.inner.borrow_mut().close_wakes.push(wake);
+        let mut inner = self.inner.borrow_mut();
+        inner.close_wakes.retain(|known| !known.is_expired());
+        inner.close_wakes.push(wake);
     }
 
     fn close_wakes(&self) -> Vec<NodeWakeHandle> {
-        self.inner.borrow().close_wakes.clone()
+        let mut inner = self.inner.borrow_mut();
+        inner.close_wakes.retain(|known| !known.is_expired());
+        inner.close_wakes.clone()
+    }
+
+    #[cfg(test)]
+    fn close_wake_count(&self) -> usize {
+        self.inner.borrow().close_wakes.len()
     }
 
     fn panel_closed(&self) {

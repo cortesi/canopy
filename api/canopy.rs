@@ -4772,6 +4772,17 @@ pub mod runtime {
     pub struct NodeWakeHandle {/* private fields */}
 
     impl NodeWakeHandle {
+        /// Return whether the registered lifetime of this handle has ended, so
+        /// that a wake would report [`WakeOutcome::Expired`]. The lifetime ends
+        /// when its node is removed or replaced, when a node-and-attachment
+        /// lifetime's node detaches, or when the runtime is gone. A poisoned
+        /// registry counts as ended: its application has panicked.
+        ///
+        /// The query queues nothing, so a holder of many handles, such as a
+        /// list of widgets to notify, can prune the ended ones without waking
+        /// the live ones.
+        pub fn is_expired(&self) -> bool;
+
         /// Queue one owner poll, coalesce with existing work, or report expiration.
         pub fn wake(&self) -> crate::error::Result<WakeOutcome>;
     }
