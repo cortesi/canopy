@@ -61,6 +61,7 @@ pub mod input {
             KeyDispatchDivergence, KeyExpectation, KeyRouteExplanation, KeyRouteStep, RouteOutcome,
             RouteWinner, StepBinding,
         },
+        modal_session::ModalSession,
         world::modal::{ModalBindings, ModalOptions, ModalToken},
     };
 }

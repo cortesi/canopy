@@ -52,6 +52,8 @@ pub mod id;
 /// Input mapping.
 pub mod inputmap;
 pub mod keyroute;
+/// An owner's record of the one modal it has open.
+pub mod modal_session;
 /// Polling utilities.
 pub mod poll;
 /// Consumer-aware binding selection.

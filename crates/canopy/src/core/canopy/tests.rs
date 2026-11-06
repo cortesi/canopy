@@ -3278,3 +3278,59 @@ fn a_mouse_menu_cannot_bury_a_waiting_menu() -> Result<()> {
         Ok(())
     })
 }
+
+#[test]
+fn a_modal_session_closes_through_closing_and_reconciles_to_closed() -> Result<()> {
+    use crate::{core::context::CoreContext, input::ModalSession};
+
+    let mut canopy = app();
+    let modal = focused_leaf(&mut canopy, PredictingLeaf)?;
+    let token = canopy.core.open_modal(ModalOptions {
+        owner: canopy.root_id(),
+        modal,
+        initial_focus: modal,
+        dim_target: None,
+        bindings: ModalBindings::Application,
+    })?;
+    let mut session = ModalSession::Closed;
+    session.opened(token, "question");
+    {
+        let mut ctx = CoreContext::new(&mut canopy.core, modal);
+        assert!(!session.can_open(&ctx));
+        assert_eq!(session.close(&mut ctx)?, Some("question"));
+    }
+    assert_eq!(session, ModalSession::Closing { token });
+    // A queued close keeps the scope, so a new modal still waits.
+    if canopy.core.modal_is_open(token) {
+        let ctx = CoreContext::new(&mut canopy.core, modal);
+        assert!(!session.can_open(&ctx));
+    }
+    canopy.core.close_modal_now(token).ok();
+    let ctx = CoreContext::new(&mut canopy.core, modal);
+    assert!(session.can_open(&ctx));
+    assert_eq!(session, ModalSession::Closed);
+    Ok(())
+}
+
+#[test]
+fn a_modal_session_sees_an_outside_close() -> Result<()> {
+    use crate::{core::context::CoreContext, input::ModalSession};
+
+    let mut canopy = app();
+    let modal = focused_leaf(&mut canopy, PredictingLeaf)?;
+    let token = canopy.core.open_modal(ModalOptions {
+        owner: canopy.root_id(),
+        modal,
+        initial_focus: modal,
+        dim_target: None,
+        bindings: ModalBindings::Application,
+    })?;
+    let mut session = ModalSession::Closed;
+    session.opened(token, 1);
+    canopy.core.close_modal_now(token)?;
+    let ctx = CoreContext::new(&mut canopy.core, modal);
+    session.reconcile(&ctx);
+    assert_eq!(session, ModalSession::Closed);
+    assert_eq!(session.kind(), None);
+    Ok(())
+}

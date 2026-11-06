@@ -2904,6 +2904,60 @@ pub mod input {
         pub bindings: ModalBindings,
     }
 
+    /// An owner's record of its modal, of kind `K`.
+    #[derive(Clone, Debug, Default, Eq, PartialEq)]
+    pub enum ModalSession<K> {
+        /// No modal is open.
+        #[default]
+        Closed,
+        /// A modal is open.
+        Open {
+            /// The modal's scope.
+            token: ModalToken,
+            /// What the modal is for.
+            kind: K,
+        },
+        /// A close was queued, and the scope is not gone yet.
+        Closing {
+            /// The modal's scope.
+            token: ModalToken,
+        },
+    }
+
+    impl<K> ModalSession<K> {
+        /// Reconcile, then return whether a new modal may open.
+        pub fn can_open(&mut self, ctx: &(impl ?Sized + ViewContext)) -> bool;
+
+        /// Queue the close of the open modal. On success the session is
+        /// `Closing`, and the kind is returned; on failure it stays `Open`.
+        pub fn close(
+            &mut self,
+            ctx: &mut (impl ?Sized + Context),
+        ) -> crate::error::Result<Option<K>>;
+
+        /// Record that the modal's widget closed it, as a dialog does on an
+        /// answer. Return the modal's kind.
+        pub fn closed_by_widget(&mut self) -> Option<K>;
+
+        /// Whether a modal is open, and not closing.
+        pub fn is_open(&self) -> bool;
+
+        /// The open modal's kind.
+        pub fn kind(&self) -> Option<&K>;
+
+        /// The open modal's token and kind.
+        pub fn open(&self) -> Option<(ModalToken, &K)>;
+
+        /// Record a modal that opened.
+        pub fn opened(&mut self, token: ModalToken, kind: K);
+
+        /// Return to `Closed` when the modal's scope is gone.
+        pub fn reconcile(&mut self, ctx: &(impl ?Sized + ViewContext));
+
+        /// The token of a modal that is open or closing.
+        pub fn token(&self) -> Option<ModalToken>;
+    }
+
     /// Opaque identity of one modal, unique across applications.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub struct ModalToken(_);
