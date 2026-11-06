@@ -53,6 +53,51 @@ const AXIS: char = '─';
 /// Formats a value of the scale for the gutter.
 type Format = Box<dyn Fn(f64) -> String>;
 
+/// Where a chart's cursor rests.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Cursor {
+    /// The chart has no cursor.
+    None,
+    /// The cursor rests on a column, whatever columns arrive.
+    At(usize),
+    /// The cursor follows the newest column. Without columns, the chart
+    /// shows no cursor until columns arrive.
+    Newest,
+}
+
+impl Cursor {
+    /// Return the cursor that a placement on `column` makes among `len`
+    /// columns. A placement on the newest column follows it.
+    fn place(column: Option<usize>, len: usize) -> Self {
+        match column.zip(len.checked_sub(1)) {
+            Some((column, last)) if column >= last => Self::Newest,
+            Some((column, _)) => Self::At(column),
+            None => Self::None,
+        }
+    }
+
+    /// Return the cursor after the columns change to `len`. A resting
+    /// cursor clamps to the columns, and stays resting on the last one.
+    fn refill(self, len: usize) -> Self {
+        match self {
+            Self::At(column) => match len.checked_sub(1) {
+                Some(last) => Self::At(column.min(last)),
+                None => Self::None,
+            },
+            cursor => cursor,
+        }
+    }
+
+    /// Return the column of the cursor among `len` columns.
+    fn column(self, len: usize) -> Option<usize> {
+        match self {
+            Self::None => None,
+            Self::At(column) => Some(column),
+            Self::Newest => len.checked_sub(1),
+        }
+    }
+}
+
 /// Stacked columns above and below one axis.
 ///
 /// Each [`Column`] has a stack that grows up from the axis on the upper scale
@@ -94,12 +139,10 @@ pub struct ColumnChart {
     lower: Scale,
     /// Axis labels: the column that each names, and its text.
     labels: Vec<(usize, String)>,
-    /// Cursor column.
-    cursor: Option<usize>,
+    /// Where the cursor rests.
+    cursor: Cursor,
     /// Hover column.
     hover: Option<usize>,
-    /// Whether the cursor stays on the newest column.
-    following: bool,
     /// Whether every column fits the width.
     fit: bool,
     /// First column in view, when the chart scrolls.
@@ -136,9 +179,8 @@ impl ColumnChart {
             upper: Scale::linear(1.0),
             lower: Scale::linear(1.0),
             labels: Vec::new(),
-            cursor: None,
+            cursor: Cursor::None,
             hover: None,
-            following: false,
             fit: false,
             offset: 0,
             slots: Vec::new(),
@@ -215,13 +257,7 @@ impl ColumnChart {
         self.upper = upper;
         self.lower = lower;
         self.hover = None;
-        let last = self.columns.len().checked_sub(1);
-        self.cursor = if self.following {
-            last
-        } else {
-            self.cursor
-                .and_then(|cursor| last.map(|last| cursor.min(last)))
-        };
+        self.cursor = self.cursor.refill(self.columns.len());
         self.lay_out();
     }
 
@@ -238,15 +274,13 @@ impl ColumnChart {
     /// Places the cursor on a column, or removes it. Following turns on when
     /// the cursor is on the newest column.
     pub fn set_cursor(&mut self, cursor: Option<usize>) {
-        let last = self.columns.len().checked_sub(1);
-        self.cursor = cursor.and_then(|cursor| last.map(|last| cursor.min(last)));
-        self.following = self.cursor.is_some() && self.cursor == last;
+        self.cursor = Cursor::place(cursor, self.columns.len());
         self.lay_out();
     }
 
     /// Returns the cursor column.
     pub fn cursor(&self) -> Option<usize> {
-        self.cursor
+        self.cursor.column(self.columns.len())
     }
 
     /// Returns the hover column.
@@ -261,7 +295,7 @@ impl ColumnChart {
 
     /// Returns whether the cursor follows the newest column.
     pub fn following(&self) -> bool {
-        self.following
+        self.cursor == Cursor::Newest
     }
 
     /// Returns the columns in view: the first, and how many.
@@ -304,7 +338,7 @@ impl ColumnChart {
         let Some(last) = self.columns.len().checked_sub(1) else {
             return Ok(());
         };
-        let from = self.cursor.unwrap_or(last);
+        let from = self.cursor().unwrap_or(last);
         let fitted = self.fit && self.columns.len() > self.cells;
         let to = match self.cell_of(from) {
             Some(slot) if fitted => {
@@ -329,7 +363,7 @@ impl ColumnChart {
         let Some(last) = self.columns.len().checked_sub(1) else {
             return Ok(());
         };
-        let from = self.cursor.unwrap_or(last);
+        let from = self.cursor().unwrap_or(last);
         let mut columns = self
             .labels
             .iter()
@@ -378,7 +412,7 @@ impl ColumnChart {
     /// Moves the cursor to one column by a key or the wheel, and clears the
     /// hover.
     fn move_to(&mut self, ctx: &mut dyn Context, column: usize) -> Result<()> {
-        let before = (self.cursor, self.hover);
+        let before = (self.cursor(), self.hover);
         self.set_cursor(Some(column));
         self.hover = None;
         self.changed(ctx, before)
@@ -386,7 +420,7 @@ impl ColumnChart {
 
     /// Posts the command when the cursor or the hover changed from `before`.
     fn changed(&self, ctx: &mut dyn Context, before: (Option<usize>, Option<usize>)) -> Result<()> {
-        if before == (self.cursor, self.hover) {
+        if before == (self.cursor(), self.hover) {
             return Ok(());
         }
         match &self.command {
@@ -456,7 +490,7 @@ impl ColumnChart {
             return;
         }
         let latest = count.saturating_sub(cells);
-        self.offset = match self.cursor {
+        self.offset = match self.cursor() {
             None => latest,
             Some(cursor) if cursor < self.offset => cursor,
             Some(cursor) if cursor >= self.offset + cells => cursor + 1 - cells,
@@ -507,7 +541,7 @@ impl ColumnChart {
     fn paint_axis(&self, render: &mut Render<'_>, x: u32, y: u32, width: u32) -> Result<()> {
         let rule = AXIS.to_string().repeat(width as usize);
         render.text("axis", Line::new(x, y, width), &rule)?;
-        let cursor = self.cursor.and_then(|cursor| self.cell_of(cursor));
+        let cursor = self.cursor().and_then(|cursor| self.cell_of(cursor));
         let hover = self.hover.and_then(|hover| self.cell_of(hover));
         let marks = [cursor, hover].into_iter().flatten().collect::<Vec<_>>();
         // A label needs one blank cell after the one before it, and gives
@@ -672,7 +706,7 @@ impl Widget for ColumnChart {
             }
         }
         let plot = x0 + gutter;
-        let cursor = self.cursor.and_then(|cursor| self.cell_of(cursor));
+        let cursor = self.cursor().and_then(|cursor| self.cell_of(cursor));
         for (at, slot) in self.slots.iter().enumerate() {
             let drawn = self.drawn(slot);
             let x = plot + at as u32;
@@ -707,7 +741,7 @@ impl Widget for ColumnChart {
         let Event::Mouse(m) = event else {
             return Ok(EventOutcome::Ignore);
         };
-        let before = (self.cursor, self.hover);
+        let before = (self.cursor(), self.hover);
         match m.action {
             mouse::Action::Down if m.button == mouse::Button::Left => {
                 let Some(column) = self.column_at(ctx, m.location) else {
@@ -868,6 +902,72 @@ mod tests {
     /// Returns `count` columns of one value each.
     fn bars(count: usize) -> Vec<Column> {
         (0..count).map(|_| bar(8.0, 8.0)).collect()
+    }
+
+    #[test]
+    fn cursor_transitions() {
+        use Cursor::{At, Newest};
+        for (column, len, next) in [
+            (None, 4, Cursor::None),
+            (Some(1), 4, At(1)),
+            (Some(3), 4, Newest),
+            (Some(9), 4, Newest),
+            (Some(0), 0, Cursor::None),
+            (Some(0), 1, Newest),
+        ] {
+            assert_eq!(Cursor::place(column, len), next, "{column:?} of {len}");
+        }
+        for (cursor, len, next) in [
+            (Cursor::None, 4, Cursor::None),
+            (At(2), 4, At(2)),
+            (At(5), 4, At(3)),
+            (At(2), 0, Cursor::None),
+            (Newest, 0, Newest),
+            (Newest, 4, Newest),
+        ] {
+            assert_eq!(cursor.refill(len), next, "{cursor:?} into {len}");
+        }
+        for (cursor, len, column) in [
+            (Cursor::None, 4, None),
+            (At(2), 4, Some(2)),
+            (Newest, 4, Some(3)),
+            (Newest, 0, None),
+        ] {
+            assert_eq!(cursor.column(len), column, "{cursor:?} of {len}");
+        }
+    }
+
+    #[test]
+    fn following_survives_empty_columns_and_selects_the_newest_on_refill() {
+        let scale = || Scale::linear(8.0);
+        let mut chart = ColumnChart::new();
+        chart.set_columns(bars(4), scale(), scale());
+        chart.set_cursor(Some(3));
+        assert!(chart.following());
+        chart.set_columns(vec![], scale(), scale());
+        assert_eq!((chart.cursor(), chart.following()), (None, true));
+        chart.set_columns(bars(6), scale(), scale());
+        assert_eq!((chart.cursor(), chart.following()), (Some(5), true));
+    }
+
+    #[test]
+    fn a_fixed_cursor_clamped_onto_the_last_column_stays_fixed() {
+        let scale = || Scale::linear(8.0);
+        let mut chart = ColumnChart::new();
+        chart.set_columns(bars(8), scale(), scale());
+        chart.set_cursor(Some(5));
+        assert!(!chart.following());
+        chart.set_columns(bars(3), scale(), scale());
+        assert_eq!((chart.cursor(), chart.following()), (Some(2), false));
+        chart.set_columns(bars(8), scale(), scale());
+        assert_eq!(
+            chart.cursor(),
+            Some(2),
+            "the clamped cursor does not follow"
+        );
+        chart.set_columns(vec![], scale(), scale());
+        chart.set_columns(bars(8), scale(), scale());
+        assert_eq!((chart.cursor(), chart.following()), (None, false));
     }
 
     #[test]
