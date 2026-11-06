@@ -1,7 +1,6 @@
 //! Adapter-independent runtime turns and frame publication.
 
 use std::{
-    collections::HashMap,
     future::Future,
     mem,
     sync::{
@@ -244,6 +243,15 @@ impl PublicationWatch {
             .waiters
             .clear();
     }
+    /// Count the pending subscribers.
+    #[cfg(test)]
+    pub(super) fn waiter_count(&self) -> usize {
+        self.0
+            .lock()
+            .expect("publication lock poisoned")
+            .waiters
+            .len()
+    }
     /// Earliest subscribed timeout.
     fn next_deadline(&self) -> Option<Instant> {
         self.0
@@ -286,11 +294,72 @@ struct ActiveEval {
     invocation: script::ScriptInvocation,
     /// Journal origin time.
     started: Instant,
+    /// Completion receiver of an automation ticket. An evaluation that a turn
+    /// started reports in that turn's outcome instead.
+    reply: Option<oneshot::Sender<EvalOutcome>>,
 }
+
+/// The driver's one evaluation, from admission until its outcome is settled.
+#[derive(Default)]
+enum EvalSlot {
+    /// No evaluation is admitted.
+    #[default]
+    Idle,
+    /// An admitted evaluation waits for its next VM step.
+    Parked(ActiveEval),
+    /// An evaluation has ended, and settles at the end of this turn.
+    Finishing(ActiveEval, Result<ArgValue>),
+}
+
+impl EvalSlot {
+    /// Return whether no evaluation holds the slot.
+    fn is_idle(&self) -> bool {
+        matches!(self, Self::Idle)
+    }
+
+    /// Return the parked evaluation.
+    fn parked(&self) -> Option<&ActiveEval> {
+        match self {
+            Self::Parked(active) => Some(active),
+            Self::Idle | Self::Finishing(..) => None,
+        }
+    }
+
+    /// Take the parked evaluation, leaving the slot idle.
+    fn take_parked(&mut self) -> Option<ActiveEval> {
+        match mem::take(self) {
+            Self::Parked(active) => Some(active),
+            other => {
+                *self = other;
+                None
+            }
+        }
+    }
+
+    /// Take the evaluation that has ended, with its result.
+    fn take_finishing(&mut self) -> Option<(ActiveEval, Result<ArgValue>)> {
+        match mem::take(self) {
+            Self::Finishing(active, result) => Some((active, result)),
+            other => {
+                *self = other;
+                None
+            }
+        }
+    }
+
+    /// Take the evaluation in any state, leaving the slot idle.
+    fn take(&mut self) -> Option<ActiveEval> {
+        match mem::take(self) {
+            Self::Idle => None,
+            Self::Parked(active) | Self::Finishing(active, _) => Some(active),
+        }
+    }
+}
+
 /// Runtime scheduling state, held independently of adapters.
 pub(super) struct Driver {
-    /// Current evaluation, if parked.
-    active: Option<ActiveEval>,
+    /// The admitted evaluation, until its outcome is settled.
+    eval: EvalSlot,
     /// VM notification shared with host futures.
     wake: Arc<VmWake>,
     /// Snapshot publication subscribers.
@@ -299,14 +368,12 @@ pub(super) struct Driver {
     pub(super) in_turn: bool,
     /// Whether automatic startup has already been attempted.
     pub(super) startup_attempted: bool,
-    /// Live completion receivers awaiting a terminal evaluation outcome.
-    tickets: HashMap<EvalId, oneshot::Sender<EvalOutcome>>,
 }
 impl Driver {
     /// Construct an idle driver.
     pub(super) fn new(tx: UnboundedSender<AdapterEvent>) -> Self {
         Self {
-            active: None,
+            eval: EvalSlot::Idle,
             wake: Arc::new(VmWake {
                 ready: AtomicBool::new(false),
                 tx,
@@ -314,7 +381,6 @@ impl Driver {
             publication: PublicationWatch::default(),
             in_turn: false,
             startup_attempted: false,
-            tickets: Default::default(),
         }
     }
 }
@@ -325,7 +391,7 @@ impl Canopy {
     /// evaluation at once, and the returned outcome reports it with the
     /// source's diagnostics.
     fn start_eval(&mut self, id: EvalId, request: EvalRequest) -> Result<Option<EvalOutcome>> {
-        if self.driver.active.is_some() || self.script.host.is_eval_active() {
+        if !self.driver.eval.is_idle() || self.script.host.is_eval_active() {
             return Err(busy());
         }
         let started = self.now();
@@ -368,13 +434,14 @@ impl Canopy {
                 }));
             }
         };
-        self.driver.active = Some(ActiveEval {
+        self.driver.eval = EvalSlot::Parked(ActiveEval {
             id,
             request,
             deadline,
             gas: script::SCRIPT_GAS_LIMIT,
             invocation,
             started,
+            reply: None,
         });
         self.driver.wake.ready.store(true, Ordering::Release);
         Ok(None)
@@ -386,7 +453,9 @@ impl Canopy {
             AutomationMessage::Eval(_, _, sender) if sender.is_canceled() => {}
             AutomationMessage::Eval(id, request, sender) => match self.start_eval(id, request) {
                 Ok(None) => {
-                    self.driver.tickets.insert(id, sender);
+                    if let EvalSlot::Parked(active) = &mut self.driver.eval {
+                        active.reply = Some(sender);
+                    }
                 }
                 Ok(Some(outcome)) => {
                     let _closed = sender.send(outcome);
@@ -413,7 +482,7 @@ impl Canopy {
     }
     /// Register an adapter for coalesced node-worker notifications.
     pub(crate) fn poll_runtime_wake(&self, cx: &Context<'_>) -> Poll<Result<()>> {
-        if self.driver.active.is_some() && self.driver.wake.ready.load(Ordering::Acquire) {
+        if self.driver.eval.parked().is_some() && self.driver.wake.ready.load(Ordering::Acquire) {
             return Poll::Ready(Ok(()));
         }
         self.core.wake_registry.poll_notified(cx)
@@ -422,7 +491,7 @@ impl Canopy {
     pub(crate) fn next_deadline(&mut self) -> Option<Instant> {
         [
             self.poller.next_deadline(),
-            self.driver.active.as_ref().and_then(|a| a.deadline),
+            self.driver.eval.parked().and_then(|a| a.deadline),
             self.driver.publication.next_deadline(),
             self.motion_deadline(),
         ]
@@ -492,12 +561,16 @@ impl Canopy {
         result
     }
     /// Dispatch, poll and publish one turn after admission.
+    ///
+    /// An evaluation that ends in this turn settles at its end on every path:
+    /// a runtime failure replaces its result, and the turn returns that
+    /// failure after the evaluation is journaled and its ticket answered.
     fn turn_inner(&mut self, work: TurnInput) -> Result<TurnOutcome> {
         let mut outcome = TurnOutcome::default();
-        let mut completed = None;
         let before = self.driver.publication.generation();
         let mut dispatch_error = None;
         self.driver.publication.advance(self.now());
+        let mut failure = None;
         match work {
             TurnInput::Events(events) => {
                 dispatch_error = self.dispatch_batch(&events).err();
@@ -511,76 +584,22 @@ impl Canopy {
                 outcome.started = Some(id);
             }
             TurnInput::CancelEval(id) => {
-                if self.driver.active.as_ref().is_some_and(|a| a.id == id) {
-                    let mut active = self.driver.active.take().expect("active evaluation exists");
-                    self.script.host.abort_invocation(&mut active.invocation)?;
-                    completed = Some((active, Err(Error::ScriptCancelled)));
+                if self.driver.eval.parked().is_some_and(|a| a.id == id)
+                    && let Some(active) = self.driver.eval.take_parked()
+                {
+                    failure = self.end_eval(active, Err(Error::ScriptCancelled), true);
                 }
             }
             TurnInput::Wake | TurnInput::Prepare => {}
         }
-        self.service_automation();
-        self.poller
-            .retain(|stamp| self.core.work_stamp_valid(stamp));
-        let mut due = self.poller.collect_due();
-        due.extend(self.core.wake_registry.drain()?);
-        self.poll_owners(due)?;
-        if let Some(mut active) = self.driver.active.take() {
-            let now = self.now();
-            // Clear before registering cancellation: a concurrent receiver
-            // drop must leave a fresh wake for the next turn.
-            let vm_ready = self.driver.wake.ready.swap(false, Ordering::AcqRel);
-            let waker = Waker::from(Arc::clone(&self.driver.wake));
-            let mut cx = Context::from_waker(&waker);
-            let cancelled = self
-                .driver
-                .tickets
-                .get_mut(&active.id)
-                .is_some_and(|sender| sender.poll_canceled(&mut cx).is_ready());
-            if cancelled {
-                self.script.host.abort_invocation(&mut active.invocation)?;
-                completed = Some((active, Err(Error::ScriptCancelled)));
-            } else if active.deadline.is_some_and(|d| now >= d) {
-                self.script.host.abort_invocation(&mut active.invocation)?;
-                let error = script::script_timeout(active.request.timeout);
-                completed = Some((active, Err(error)));
-            } else if vm_ready {
-                let host = self.script.host.clone();
-                let step = host.poll_invocation(
-                    self,
-                    &mut active.invocation,
-                    &mut cx,
-                    active.gas,
-                    active.deadline.map(|d| d.saturating_duration_since(now)),
-                );
-                active.gas = active.gas.saturating_sub(step.gas_spent);
-                match step.poll {
-                    Poll::Ready(result) => completed = Some((active, result)),
-                    Poll::Pending => self.driver.active = Some(active),
-                }
-            } else {
-                self.driver.active = Some(active);
-            }
+        if failure.is_none() {
+            failure = self.service_turn().err();
         }
-        let prepared = self.prepare_frame(false);
-        if let Some((mut active, result)) = completed {
-            let result = prepared.and(result);
-            let (logs, assertions) = self.finish_eval(&mut active, &result);
-            let completion = EvalOutcome {
-                id: active.id,
-                result,
-                logs,
-                assertions,
-                diagnostics: Vec::new(),
-            };
-            if let Some(sender) = self.driver.tickets.remove(&active.id) {
-                let _closed = sender.send(completion);
-            } else {
-                outcome.completed.push(completion);
-            }
-        } else {
-            prepared?;
-        }
+        let prepared = match failure {
+            Some(_) => Ok(()),
+            None => self.prepare_frame(false).map(|_| ()),
+        };
+        self.settle_eval(failure, prepared, &mut outcome)?;
         if self.driver.publication.generation() != before {
             outcome.frame = Some(FrameId(self.driver.publication.generation()));
         } else {
@@ -591,6 +610,120 @@ impl Canopy {
         }
         outcome.exit_code = self.core.exit_requested.take();
         Ok(outcome)
+    }
+
+    /// Service automation, poll due and woken owners, and step the parked
+    /// evaluation.
+    fn service_turn(&mut self) -> Result<()> {
+        self.service_automation();
+        self.poller
+            .retain(|stamp| self.core.work_stamp_valid(stamp));
+        let mut due = self.poller.collect_due();
+        due.extend(self.core.wake_registry.drain()?);
+        self.poll_owners(due)?;
+        self.step_eval().map_or(Ok(()), Err)
+    }
+
+    /// Run one VM step of the parked evaluation, or end it on cancellation or
+    /// timeout. Return a runtime failure, which the evaluation then reports.
+    fn step_eval(&mut self) -> Option<Error> {
+        let mut active = self.driver.eval.take_parked()?;
+        let now = self.now();
+        // Clear before registering cancellation: a concurrent receiver
+        // drop must leave a fresh wake for the next turn.
+        let vm_ready = self.driver.wake.ready.swap(false, Ordering::AcqRel);
+        let waker = Waker::from(Arc::clone(&self.driver.wake));
+        let mut cx = Context::from_waker(&waker);
+        let cancelled = active
+            .reply
+            .as_mut()
+            .is_some_and(|sender| sender.poll_canceled(&mut cx).is_ready());
+        if cancelled {
+            return self.end_eval(active, Err(Error::ScriptCancelled), true);
+        }
+        if active.deadline.is_some_and(|d| now >= d) {
+            let error = script::script_timeout(active.request.timeout);
+            return self.end_eval(active, Err(error), true);
+        }
+        if !vm_ready {
+            self.driver.eval = EvalSlot::Parked(active);
+            return None;
+        }
+        let host = self.script.host.clone();
+        let step = host.poll_invocation(
+            self,
+            &mut active.invocation,
+            &mut cx,
+            active.gas,
+            active.deadline.map(|d| d.saturating_duration_since(now)),
+        );
+        active.gas = active.gas.saturating_sub(step.gas_spent);
+        match step.poll {
+            Poll::Ready(result) => self.end_eval(active, result, false),
+            Poll::Pending => {
+                self.driver.eval = EvalSlot::Parked(active);
+                None
+            }
+        }
+    }
+
+    /// Move an evaluation to `Finishing` with `result`, aborting its VM work
+    /// first when `abort` is set. Return the abort's failure.
+    fn end_eval(
+        &mut self,
+        mut active: ActiveEval,
+        result: Result<ArgValue>,
+        abort: bool,
+    ) -> Option<Error> {
+        let failure = if abort {
+            self.script
+                .host
+                .abort_invocation(&mut active.invocation)
+                .err()
+        } else {
+            None
+        };
+        self.driver.eval = EvalSlot::Finishing(active, result);
+        failure
+    }
+
+    /// Settle an evaluation that ended in this turn, and return the turn's
+    /// result.
+    ///
+    /// A runtime `failure` replaces the evaluation's own result, and the turn
+    /// still returns it. Otherwise a frame failure in `prepared` joins the
+    /// evaluation's result, and the turn succeeds. With no evaluation to
+    /// settle, the turn returns the failure, or the frame result.
+    fn settle_eval(
+        &mut self,
+        failure: Option<Error>,
+        prepared: Result<()>,
+        outcome: &mut TurnOutcome,
+    ) -> Result<()> {
+        let Some((mut active, result)) = self.driver.eval.take_finishing() else {
+            return failure.map_or(prepared, Err);
+        };
+        // The error is not `Clone`: the evaluation reports its text, and the
+        // turn returns the error itself.
+        let (result, turn) = match failure {
+            Some(error) => (Err(Error::Driver(error.to_string())), Err(error)),
+            None => (prepared.and(result), Ok(())),
+        };
+        let (logs, assertions) = self.finish_eval(&mut active, &result);
+        let completion = EvalOutcome {
+            id: active.id,
+            result,
+            logs,
+            assertions,
+            diagnostics: Vec::new(),
+        };
+        match active.reply.take() {
+            Some(sender) => {
+                let _closed = sender.send(completion);
+            }
+            None => outcome.completed.push(completion),
+        }
+        turn
     }
 }
 /// Structured admission error shared by driver entry points.
@@ -643,7 +776,7 @@ impl Canopy {
 
     /// Drive bounded turns inside the owned blocking runtime.
     async fn eval_async(&mut self, request: EvalRequest) -> Result<EvalOutcome> {
-        if self.driver.in_turn || self.driver.active.is_some() || script::in_live_scope(self) {
+        if self.driver.in_turn || !self.driver.eval.is_idle() || script::in_live_scope(self) {
             return Err(busy());
         }
         let events = self.event_rx.take().ok_or_else(busy)?;
@@ -660,7 +793,7 @@ impl Canopy {
 
     /// Release pending work and preserve its diagnostics on driver failure.
     fn abort_headless_eval<T>(&mut self, result: &Result<T>) {
-        if let Some(mut active) = self.driver.active.take() {
+        if let Some(mut active) = self.driver.eval.take() {
             if let Err(error) = self.script.host.abort_invocation(&mut active.invocation) {
                 tracing::error!(%error, "aborting failed headless evaluation");
             }
@@ -815,10 +948,11 @@ impl Drop for Canopy {
             tracing::error!(%error, "closing wake registry");
         }
         self.driver.publication.clear_waiters();
-        self.driver.active.take();
-        for (id, sender) in self.driver.tickets.drain() {
+        if let Some(mut active) = self.driver.eval.take()
+            && let Some(sender) = active.reply.take()
+        {
             let _closed = sender.send(EvalOutcome {
-                id,
+                id: active.id,
                 result: Err(Error::Driver(
                     "application stopped before evaluation completed".into(),
                 )),

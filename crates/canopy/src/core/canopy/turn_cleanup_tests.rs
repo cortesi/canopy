@@ -1,6 +1,8 @@
 //! Cleanup regressions for synchronous adapters and completed VM wake signals.
 
 use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -12,7 +14,7 @@ use std::{
 use futures::{channel::mpsc, task::noop_waker};
 use tokio::{runtime::Builder, time::sleep};
 
-use super::{AdapterEvent, Canopy, CanopyBuilder, EvalRequest, TurnInput};
+use super::{AdapterEvent, Canopy, CanopyBuilder, EvalRequest, EvalTicket, TurnInput};
 use crate::{
     Context, ViewContext,
     commands::ArgValue,
@@ -20,6 +22,7 @@ use crate::{
     error::{Error, Result},
     geom::Size,
     input::Event,
+    runtime::{NodeWakeHandle, PollLifetime},
     widget::{EventOutcome, Widget},
 };
 
@@ -275,4 +278,105 @@ fn dropping_live_ticket_cancels_before_admission_and_while_parked() -> Result<()
         assert_eq!(canopy.eval_script("return 7")?, ArgValue::Int(7));
     }
     Ok(())
+}
+
+/// Root widget whose poll fails fatally on demand.
+#[derive(Clone, Default)]
+struct FailingPoll {
+    /// Wake handle captured on mount.
+    wake: Rc<RefCell<Option<NodeWakeHandle>>>,
+    /// Whether the next poll fails with a fatal error.
+    fail: Rc<Cell<bool>>,
+}
+
+impl Widget for FailingPoll {
+    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        *self.wake.borrow_mut() = Some(ctx.wake_handle(PollLifetime::Node)?);
+        Ok(())
+    }
+
+    fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {
+        if self.fail.get() {
+            return Err(Error::Internal("poll broke".into()));
+        }
+        Ok(None)
+    }
+}
+
+/// Construct a rendered application whose root poll can fail, with a parked
+/// evaluation submitted through an automation ticket.
+fn parked_ticket(source: &str) -> Result<(Canopy, FailingPoll, EvalTicket)> {
+    let probe = FailingPoll::default();
+    let mut canopy = CanopyBuilder::new().build()?;
+    canopy.replace_root(probe.clone())?;
+    canopy.set_screen_size(Size::new(10, 3))?;
+    canopy.turn(TurnInput::Prepare)?;
+    let ticket = canopy
+        .automation_handle()
+        .submit_eval(EvalRequest::new(source))?;
+    for _ in 0..10 {
+        canopy.turn(TurnInput::Wake)?;
+    }
+    assert!(canopy.script.host.is_eval_active());
+    assert!(canopy.driver.publication.waiter_count() > 0);
+    Ok((canopy, probe, ticket))
+}
+
+/// Assert that a turn's failure settled the ticket with `expected`, journaled
+/// the evaluation, released its waiters, and left the driver admitting work.
+fn assert_settled(
+    canopy: &mut Canopy,
+    mut ticket: EvalTicket,
+    source: &str,
+    expected: &str,
+) -> Result<()> {
+    let outcome = ticket
+        .completion
+        .try_recv()
+        .expect("the ticket is live")
+        .expect("the ticket settles in the failing turn");
+    assert_eq!(outcome.id, ticket.id);
+    let error = outcome
+        .result
+        .expect_err("the evaluation reports the failure");
+    assert!(error.to_string().contains(expected), "{error}");
+    let entries: Vec<_> = canopy
+        .script_journal()
+        .iter()
+        .filter(|entry| entry.source == source)
+        .collect();
+    assert_eq!(entries.len(), 1);
+    assert!(!entries[0].ok);
+    assert_eq!(canopy.driver.publication.waiter_count(), 0);
+    assert!(!canopy.script.host.is_eval_active());
+    assert_eq!(canopy.eval_script("return 7")?, ArgValue::Int(7));
+    Ok(())
+}
+
+#[test]
+fn regression_fatal_poll_in_a_cancel_turn_settles_the_ticket() -> Result<()> {
+    let source = "canopy.wait_for(function() return false end)";
+    let (mut canopy, probe, ticket) = parked_ticket(source)?;
+    probe.fail.set(true);
+    probe.wake.borrow().as_ref().expect("mounted").wake()?;
+    let Err(error) = canopy.turn(TurnInput::CancelEval(ticket.id)) else {
+        panic!("the poll fails the turn");
+    };
+    assert!(error.to_string().contains("poll broke"), "{error}");
+    probe.fail.set(false);
+    assert_settled(&mut canopy, ticket, source, "poll broke")
+}
+
+#[test]
+fn regression_failed_abort_settles_the_ticket() -> Result<()> {
+    let source = "canopy.wait_for(function() return false end)";
+    let (mut canopy, _probe, ticket) = parked_ticket(source)?;
+    let host = canopy.script.host.clone();
+    let held = host.hold_runtime_for_testing();
+    let Err(error) = canopy.turn(TurnInput::CancelEval(ticket.id)) else {
+        panic!("the abort fails the turn");
+    };
+    drop(held);
+    assert!(error.to_string().contains("abort"), "{error}");
+    assert_settled(&mut canopy, ticket, source, "abort")
 }

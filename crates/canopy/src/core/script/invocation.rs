@@ -169,6 +169,15 @@ impl LuauHost {
         Ok(())
     }
 
+    /// Hold the runtime borrowed, so that an abort fails as it would inside a
+    /// live VM scope.
+    #[cfg(test)]
+    pub(crate) fn hold_runtime_for_testing(
+        &self,
+    ) -> std::cell::Ref<'_, Option<ruau::session::Runtime>> {
+        self.runtime.borrow()
+    }
+
     /// Whether a top-level evaluation still owns admission.
     pub(crate) fn is_eval_active(&self) -> bool {
         self.state.borrow().active_eval
