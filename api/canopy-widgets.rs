@@ -201,7 +201,8 @@ impl Answers {
     /// [`Answers::arm_after`] says otherwise.
     ///
     /// Two answers with the same key are refused, and the row keeps its
-    /// current answers.
+    /// current answers. The old buttons go and the new ones come in one tree
+    /// edit, so a failure keeps the current answers too.
     pub fn set(&mut self, ctx: &mut dyn Context, answers: Vec<Answer>)
     -> canopy::error::Result<()>;
 
@@ -940,7 +941,8 @@ impl Confirm {
     /// Tab and Shift-Tab move focus inside the dialog. [`Confirm::open`]
     /// admits it with [`Answers::BINDINGS`].
     pub const BINDINGS: FrameworkBindingGroup = _;
-    /// Give the answer at `index`, as the request's `closing` says.
+    /// Give the answer at `index`, as the request's `closing` says. A dialog
+    /// that is not open gives nothing.
     /// @param index Position of the answer, from the left.
     pub fn answer(&mut self, ctx: &mut dyn Context, index: usize) -> canopy::error::Result<()>;
 
@@ -971,7 +973,9 @@ impl Confirm {
     /// the owner.
     ///
     /// A request with no answers, a `decline` out of range, or two answers with
-    /// one key is refused, as is a request while the dialog is open.
+    /// one key is refused, as is a request while the dialog is open. An open
+    /// that fails, such as one while the earlier question's close waits,
+    /// leaves the dialog as it was, with the earlier question.
     pub fn open(
         ctx: &mut dyn Context,
         confirm: TypedId<Self>,

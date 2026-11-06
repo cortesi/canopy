@@ -22,7 +22,7 @@ use canopy::{
     widget::Mount,
 };
 
-use crate::{Answer, Answers, ButtonLook, Dialog, Text, frame::Frame};
+use crate::{Answer, Answers, ButtonLook, Dialog, Text, answers, frame::Frame};
 
 /// Columns of blank between the body's text and each of its sides.
 const SIDE_PADDING: u32 = 1;
@@ -178,16 +178,16 @@ impl ConfirmRequest {
 pub struct Confirm {
     /// How each answer draws, and the parts of the dialog once mounted.
     parts: Mount<ButtonLook, Parts>,
-    /// The answers of the open question, left to right.
-    answers: Vec<Answer>,
-    /// The answer that declines.
-    decline: usize,
-    /// Who closes the dialog when an answer is given.
-    closing: Closing,
-    /// How the dialog shows.
-    tone: Tone,
-    /// The modal of the open question.
-    token: Option<ModalToken>,
+    /// The latest question that opened. It is open while its modal is.
+    question: Option<Question>,
+}
+
+/// A question that opened: what it asks, and the modal it opened in.
+struct Question {
+    /// What the question asks, and its answers.
+    request: ConfirmRequest,
+    /// The modal of the question.
+    token: ModalToken,
 }
 
 /// The children a confirm dialog builds when it mounts.
@@ -219,11 +219,7 @@ impl Confirm {
     pub fn new() -> Self {
         Self {
             parts: Mount::new(ButtonLook::Solid),
-            answers: Vec::new(),
-            decline: 0,
-            closing: Closing::ByCall,
-            tone: Tone::Plain,
-            token: None,
+            question: None,
         }
     }
 
@@ -241,50 +237,80 @@ impl Confirm {
     /// the owner.
     ///
     /// A request with no answers, a `decline` out of range, or two answers with
-    /// one key is refused, as is a request while the dialog is open.
+    /// one key is refused, as is a request while the dialog is open. An open
+    /// that fails, such as one while the earlier question's close waits,
+    /// leaves the dialog as it was, with the earlier question.
     pub fn open(
         ctx: &mut dyn Context,
         confirm: TypedId<Self>,
         owner: NodeId,
         request: ConfirmRequest,
     ) -> Result<ModalToken> {
-        let dim_target = request.dim_target;
-        let focus =
-            ctx.with_widget_mut(confirm, |dialog: &mut Self, ctx| dialog.show(ctx, request))?;
-        let token = ctx.open_modal(ModalOptions {
-            owner,
-            modal: confirm.into(),
-            initial_focus: focus,
-            dim_target,
-            bindings: ModalBindings::Framework {
-                groups: &[Self::BINDINGS, Answers::BINDINGS],
-                intents: &[],
-            },
-        })?;
-        ctx.with_widget_mut(confirm, |dialog: &mut Self, _| {
-            dialog.token = Some(token);
+        ctx.with_widget(confirm, |dialog: &Self| dialog.check(ctx, &request))?;
+        let mut request = Some(request);
+        let mut replaced = None;
+        let mut opened = None;
+        // The answers and the modal change in one tree edit, so a failure
+        // gives the row back the buttons of the earlier question.
+        let edit = ctx.edit_structure(&mut |ctx| {
+            let request = request
+                .take()
+                .ok_or_else(|| Error::Invalid("a question opens once".into()))?;
+            let focus = ctx.with_widget_mut(confirm, |dialog: &mut Self, ctx| {
+                replaced = Some(dialog.answers_shown(ctx)?);
+                dialog.show(ctx, &request)
+            })?;
+            let token = ctx.open_modal(ModalOptions {
+                owner,
+                modal: confirm.into(),
+                initial_focus: focus,
+                dim_target: request.dim_target,
+                bindings: ModalBindings::Framework {
+                    groups: &[Self::BINDINGS, Answers::BINDINGS],
+                    intents: &[],
+                },
+            })?;
+            ctx.with_widget_mut(confirm, |dialog: &mut Self, _| {
+                dialog.question = Some(Question { request, token });
+                Ok(())
+            })?;
+            opened = Some(token);
             Ok(())
-        })?;
-        Ok(token)
+        });
+        if let Err(error) = edit {
+            // A question that opened stays open with its parts, whatever
+            // failed after it. One that did not open rolled back the buttons,
+            // and the dialog shows the earlier question again.
+            if opened.is_none()
+                && let Some(shown) = replaced
+            {
+                ctx.with_widget_mut(confirm, |dialog: &mut Self, ctx| dialog.restore(ctx, shown))?;
+            }
+            return Err(error);
+        }
+        opened.ok_or_else(|| Error::Invalid("the question did not open".into()))
     }
 
     /// Return whether the dialog is open. A dialog that a call closed reads as
     /// closed.
     pub fn is_open(&self, ctx: &dyn ViewContext) -> bool {
-        self.token.is_some_and(|token| ctx.modal_is_open(token))
+        self.open_question(ctx).is_some()
     }
 
-    /// Give the answer at `index`, as the request's `closing` says.
+    /// Give the answer at `index`, as the request's `closing` says. A dialog
+    /// that is not open gives nothing.
     /// @param index Position of the answer, from the left.
     #[command(enabled = "answer_status")]
     pub fn answer(&mut self, ctx: &mut dyn Context, index: usize) -> Result<()> {
-        let Some(call) = self.answers.get(index).map(|answer| answer.call().clone()) else {
+        let Some(question) = self.open_question(ctx) else {
             return Ok(());
         };
-        if self.closing == Closing::BeforeCall
-            && let Some(token) = self.token.take()
-        {
-            ctx.close_modal(token)?;
+        let Some(answer) = question.request.answers.get(index) else {
+            return Ok(());
+        };
+        let call = answer.call().clone();
+        if question.request.closing == Closing::BeforeCall {
+            ctx.close_modal(question.token)?;
         }
         ctx.post(&call)
     }
@@ -295,8 +321,12 @@ impl Confirm {
     pub fn decline(&mut self, ctx: &mut dyn Context) -> Result<()> {
         // The row checks and posts the answer once this command returns, so
         // the check can read this dialog.
+        let Some(question) = self.open_question(ctx) else {
+            return Ok(());
+        };
+        let decline = question.request.decline;
         let row = CommandTarget::Exact(self.row()?.into());
-        ctx.post(&Answers::call_give(self.decline).with_target(row))
+        ctx.post(&Answers::call_give(decline).with_target(row))
     }
 
     /// Move focus inside the dialog.
@@ -311,9 +341,13 @@ impl Confirm {
     }
 
     /// Report the status of the call of the answer at `index`, so a disabled
-    /// answer stays inert by key and by click.
+    /// answer stays inert by key and by click. A dialog that is not open
+    /// takes no answer.
     fn answer_status(&self, ctx: &dyn ViewContext, index: usize) -> Result<CommandStatus> {
-        match self.answers.get(index) {
+        let Some(question) = self.open_question(ctx) else {
+            return Ok(CommandStatus::Disabled("no question is open".into()));
+        };
+        match question.request.answers.get(index) {
             Some(answer) => ctx.command_status(answer.call()),
             None => Ok(CommandStatus::Disabled(format!("no answer {index}"))),
         }
@@ -334,7 +368,17 @@ impl Confirm {
                 "the answers are not armed yet".into(),
             ));
         }
-        self.answer_status(ctx, self.decline)
+        let Some(question) = self.open_question(ctx) else {
+            return Ok(CommandStatus::Disabled("no question is open".into()));
+        };
+        self.answer_status(ctx, question.request.decline)
+    }
+
+    /// Return the question, while its modal is open.
+    fn open_question(&self, ctx: &dyn ViewContext) -> Option<&Question> {
+        self.question
+            .as_ref()
+            .filter(|question| ctx.modal_is_open(question.token))
     }
 
     /// Return the row of answers, or an error before it mounts.
@@ -342,8 +386,9 @@ impl Confirm {
         Ok(self.parts.mounted()?.row)
     }
 
-    /// Show `request`, and return the button that takes the keyboard.
-    fn show(&mut self, ctx: &mut dyn Context, request: ConfirmRequest) -> Result<NodeId> {
+    /// Refuse `request` while the dialog is open, and a request with no
+    /// answers or with a `decline` out of range.
+    fn check(&self, ctx: &dyn ViewContext, request: &ConfirmRequest) -> Result<()> {
         if self.is_open(ctx) {
             return Err(Error::Invalid("the dialog is already open".into()));
         }
@@ -357,12 +402,17 @@ impl Confirm {
                 request.answers.len()
             )));
         }
-        let &Parts {
-            frame,
-            body,
-            message,
-            row,
-        } = self.parts.mounted()?;
+        Ok(())
+    }
+
+    /// Return what the row of answers shows.
+    fn answers_shown(&self, ctx: &dyn ViewContext) -> Result<answers::Shown> {
+        ctx.with_widget(self.row()?, |row: &Answers| Ok(row.shown()))
+    }
+
+    /// Show `request`, and return the button that takes the keyboard.
+    fn show(&self, ctx: &mut dyn Context, request: &ConfirmRequest) -> Result<NodeId> {
+        let row = self.row()?;
         // The row's buttons give the dialog's own answers, so the dialog
         // decides when the modal closes.
         let owner = CommandTarget::Exact(ctx.node_id());
@@ -375,34 +425,62 @@ impl Confirm {
                     .with_key(answer.key())
             })
             .collect();
-        let (focus, row_width) = ctx.with_widget_mut(row, |row: &mut Answers, ctx| {
+        let focus = ctx.with_widget_mut(row, |row: &mut Answers, ctx| {
             row.set(ctx, shown)?;
             if let Some(delay) = request.arm_after {
                 row.arm_after(ctx, delay)?;
             }
-            let focus = row
-                .button(request.decline)
-                .ok_or_else(|| Error::NotFound("declining answer".into()))?;
-            Ok((focus, row.width()))
+            row.button(request.decline)
+                .ok_or_else(|| Error::NotFound("declining answer".into()))
         })?;
-        ctx.with_widget_mut(frame, |frame: &mut Frame, _| {
-            frame.set_title(request.title.as_str());
+        self.show_text(ctx, &request.title, &request.message, request.message_width)?;
+        Ok(focus)
+    }
+
+    /// Put back the row of answers that `shown` holds, after a failed open
+    /// rolled back its buttons, with the text of the earlier question.
+    fn restore(&self, ctx: &mut dyn Context, shown: answers::Shown) -> Result<()> {
+        ctx.with_widget_mut(self.row()?, |row: &mut Answers, _| {
+            row.restore(shown);
             Ok(())
         })?;
-        ctx.with_widget_mut(message, |text: &mut Text, _| {
-            text.set_text(request.message.as_str());
-            text.set_wrap_width(request.message_width);
+        match &self.question {
+            Some(Question { request, .. }) => {
+                self.show_text(ctx, &request.title, &request.message, request.message_width)
+            }
+            None => self.show_text(ctx, "", "", MESSAGE_WIDTH),
+        }
+    }
+
+    /// Show `title` on the frame, and `message`, wrapped to `width`, above
+    /// the answers the row holds.
+    fn show_text(
+        &self,
+        ctx: &mut dyn Context,
+        title: &str,
+        message: &str,
+        width: u32,
+    ) -> Result<()> {
+        let &Parts {
+            frame,
+            body,
+            message: text,
+            row,
+        } = self.parts.mounted()?;
+        let row_width = ctx.with_widget(row, |row: &Answers| Ok(row.width()))?;
+        ctx.with_widget_mut(frame, |frame: &mut Frame, _| {
+            frame.set_title(title);
+            Ok(())
+        })?;
+        ctx.with_widget_mut(text, |text: &mut Text, _| {
+            text.set_text(message);
+            text.set_wrap_width(width);
             Ok(())
         })?;
         ctx.with_widget_mut(body, |body: &mut ConfirmBody, _| {
-            body.show(&request.message, request.message_width, row_width);
+            body.show(message, width, row_width);
             Ok(())
-        })?;
-        self.answers = request.answers;
-        self.decline = request.decline;
-        self.closing = request.closing;
-        self.tone = request.tone;
-        Ok(focus)
+        })
     }
 }
 
@@ -444,7 +522,11 @@ impl Widget for Confirm {
 
     fn render(&mut self, render: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         render.push_layer("confirm");
-        if self.tone == Tone::Error {
+        let tone = self
+            .question
+            .as_ref()
+            .map_or(Tone::Plain, |question| question.request.tone);
+        if tone == Tone::Error {
             render.push_layer(ERROR_LAYER);
         }
         Ok(())
@@ -1225,6 +1307,123 @@ mod tests {
     }
 
     #[test]
+    fn regression_an_answer_after_a_call_closes_the_dialog_posts_nothing() -> Result<()> {
+        let mut harness = dialog("/tmp/a", 40, 12)?;
+        // The first answer's call closes the dialog, and the second finds the
+        // dialog before the close commits.
+        let scripted = harness.script("confirm.answer(0)\nconfirm.answer(0)");
+        assert!(scripted.is_err(), "the second answer finds no open dialog");
+        harness.render()?;
+        assert_eq!(
+            answered(&mut harness),
+            ["yes"],
+            "a closing question takes no answer"
+        );
+        assert!(!open(&mut harness)?, "the host's call closed the dialog");
+
+        // A call aimed at the closed dialog posts nothing either.
+        let node = dialog_node(&mut harness)?;
+        let posted = harness.with_root_widget_context(|_: &mut Host, ctx| {
+            ctx.post(&Confirm::call_answer(0).with_target(CommandTarget::Exact(node)))
+        });
+        let Err(Error::Command(error)) = posted else {
+            panic!("a closed dialog refuses the call: {posted:?}");
+        };
+        assert!(error.to_string().contains("no question is open"), "{error}");
+        harness.canopy.with_context(node, |ctx| {
+            ctx.with_widget_mut(node, |confirm: &mut Confirm, ctx| confirm.answer(ctx, 0))
+        })?;
+        harness.render()?;
+        assert_eq!(
+            answered(&mut harness),
+            ["yes"],
+            "a closed question takes no answer"
+        );
+        Ok(())
+    }
+
+    /// Ask another question in the callback that closes the open one, before
+    /// the close commits, so the open fails. Return the error of the open.
+    fn ask_while_closing(harness: &mut Harness) -> Result<Error> {
+        harness.with_root_widget_context(|host: &mut Host, ctx| {
+            host.close(ctx)?;
+            let owner = ctx.node_id();
+            let target = CommandTarget::Exact(owner);
+            let request = ConfirmRequest::new("Other", "/tmp/other")
+                .answer(labelled(target, "keep"))
+                .declining(labelled(target, "drop"));
+            match Confirm::open(ctx, host.dialog()?, owner, request) {
+                Ok(_) => Err(Error::Invalid("the open succeeded".into())),
+                Err(error) => Ok(error),
+            }
+        })
+    }
+
+    #[test]
+    fn regression_a_failed_open_leaves_the_dialog_closed_with_the_earlier_parts() -> Result<()> {
+        let mut harness = dialog("/tmp/a", 40, 12)?;
+        let error = ask_while_closing(&mut harness)?;
+        assert!(matches!(error, Error::ModalClosing), "{error:?}");
+        harness.render()?;
+        assert!(!open(&mut harness)?, "the earlier question closed");
+        let node = dialog_node(&mut harness)?;
+        harness.with_root_widget_context(|_: &mut Host, ctx| ctx.set_hidden(node, false))?;
+        harness.render()?;
+        let shown = screen(&harness).join("\n");
+        assert!(shown.contains("/tmp/a"), "{shown}");
+        assert!(
+            !shown.contains("Other") && !shown.contains("keep"),
+            "{shown}"
+        );
+
+        // The dialog asks again.
+        ask(&mut harness, "/tmp/b")?;
+        harness.key('y')?;
+        assert_eq!(answered(&mut harness), ["yes"]);
+        Ok(())
+    }
+
+    #[test]
+    fn regression_a_failed_open_whose_dispatch_fails_keeps_the_earlier_question() -> Result<()> {
+        let mut harness = dialog("/tmp/a", 40, 12)?;
+        let declining = focus(&harness);
+        // A dispatch that fails discards the close it queued, so the earlier
+        // question stands, with its own parts.
+        let propagated = harness.with_root_widget_context(|host: &mut Host, ctx| {
+            host.close(ctx)?;
+            let owner = ctx.node_id();
+            let target = CommandTarget::Exact(owner);
+            let request = ConfirmRequest::new("Other", "/tmp/other")
+                .answer(labelled(target, "keep"))
+                .declining(labelled(target, "drop"));
+            Confirm::open(ctx, host.dialog()?, owner, request).map(|_| ())
+        });
+        assert!(
+            matches!(propagated, Err(Error::ModalClosing)),
+            "{propagated:?}"
+        );
+        harness.render()?;
+        assert!(
+            open(&mut harness)?,
+            "the discarded close leaves the question open"
+        );
+        let shown = screen(&harness).join("\n");
+        assert!(shown.contains("/tmp/a"), "{shown}");
+        assert!(
+            !shown.contains("Other") && !shown.contains("keep"),
+            "{shown}"
+        );
+        assert_eq!(
+            focus(&harness),
+            declining,
+            "the declining answer keeps the keyboard"
+        );
+        harness.key('n')?;
+        assert_eq!(answered(&mut harness), ["no"]);
+        Ok(())
+    }
+
+    #[test]
     fn open_refuses_a_bad_request_and_a_second_question() -> Result<()> {
         let mut harness = host(40, 12)?;
         let refused = |harness: &mut Harness, build: &dyn Fn(CommandTarget) -> ConfirmRequest| {
@@ -1587,25 +1786,24 @@ mod tests {
     fn a_modal_without_the_dialog_group_keeps_the_question_standing() -> Result<()> {
         const GROUP: FrameworkBindingGroup = FrameworkBindingGroup::new("confirm.test_dialog");
         let mut harness = host(40, 12)?;
-        let (owner, node, focus) = harness.with_root_widget_context(|host: &mut Host, ctx| {
-            let dialog = host.dialog()?;
-            let owner = CommandTarget::Exact(ctx.node_id());
-            ctx.set_hidden(dialog.into(), false)?;
-            let focus = ctx.with_widget_mut(dialog, |confirm: &mut Confirm, ctx| {
-                confirm.show(
-                    ctx,
-                    ConfirmRequest::yes_no(
-                        "Bookmark",
-                        "/tmp/a",
-                        record(owner, "yes"),
-                        record(owner, "no"),
-                    ),
-                )
+        let (owner, node, focus, request) =
+            harness.with_root_widget_context(|host: &mut Host, ctx| {
+                let dialog = host.dialog()?;
+                let owner = CommandTarget::Exact(ctx.node_id());
+                ctx.set_hidden(dialog.into(), false)?;
+                let request = ConfirmRequest::yes_no(
+                    "Bookmark",
+                    "/tmp/a",
+                    record(owner, "yes"),
+                    record(owner, "no"),
+                );
+                let focus = ctx.with_widget_mut(dialog, |confirm: &mut Confirm, ctx| {
+                    confirm.show(ctx, &request)
+                })?;
+                Ok((ctx.node_id(), NodeId::from(dialog), focus, request))
             })?;
-            Ok((ctx.node_id(), NodeId::from(dialog), focus))
-        })?;
         harness.canopy.with_root_context(|ctx| {
-            ctx.open_modal(ModalOptions {
+            let token = ctx.open_modal(ModalOptions {
                 owner,
                 modal: node,
                 initial_focus: focus,
@@ -1615,7 +1813,12 @@ mod tests {
                     intents: &[],
                 },
             })?;
-            Ok(())
+            // The question stands, so only the admission keeps it from an
+            // answer.
+            ctx.with_widget_mut(node, |confirm: &mut Confirm, _| {
+                confirm.question = Some(Question { request, token });
+                Ok(())
+            })
         })?;
         harness.render()?;
 

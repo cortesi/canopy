@@ -136,6 +136,16 @@ pub struct Answers {
     arming: Arming,
 }
 
+/// What a row of answers shows: its answers, their buttons, and its arming.
+pub struct Shown {
+    /// The answers, left to right.
+    answers: Vec<Answer>,
+    /// The button of each answer, left to right.
+    buttons: Vec<NodeId>,
+    /// Whether the answers act, or the time from which they do.
+    arming: Arming,
+}
+
 impl Default for Answers {
     fn default() -> Self {
         Self::new()
@@ -171,7 +181,8 @@ impl Answers {
     /// [`Answers::arm_after`] says otherwise.
     ///
     /// Two answers with the same key are refused, and the row keeps its
-    /// current answers.
+    /// current answers. The old buttons go and the new ones come in one tree
+    /// edit, so a failure keeps the current answers too.
     pub fn set(&mut self, ctx: &mut dyn Context, answers: Vec<Answer>) -> Result<()> {
         for (index, answer) in answers.iter().enumerate() {
             if let Some(key) = answer.key
@@ -180,23 +191,53 @@ impl Answers {
                 return Err(Error::Invalid(format!("two answers take the key {key:?}")));
             }
         }
-        for button in self.buttons.drain(..) {
-            ctx.remove_subtree(button)?;
-        }
         let row = ctx.node_id();
-        for (index, answer) in answers.iter().enumerate() {
-            let call = Self::call_give(index).with_target(CommandTarget::Exact(row));
-            let mut button = Button::new(answer.label.as_str())
-                .with_look(self.look)
-                .with_command(call);
-            if let Some(key) = answer.key {
-                button = button.with_accelerator(key);
+        let look = self.look;
+        let old = &self.buttons;
+        let mut buttons = Vec::with_capacity(answers.len());
+        ctx.edit_structure(&mut |ctx| {
+            for button in old {
+                ctx.remove_subtree(*button)?;
             }
-            self.buttons.push(ctx.add_child(row, button)?.into());
-        }
+            for (index, answer) in answers.iter().enumerate() {
+                let call = Self::call_give(index).with_target(CommandTarget::Exact(row));
+                let mut button = Button::new(answer.label.as_str())
+                    .with_look(look)
+                    .with_command(call);
+                if let Some(key) = answer.key {
+                    button = button.with_accelerator(key);
+                }
+                buttons.push(ctx.add_child(row, button)?.into());
+            }
+            Ok(())
+        })?;
+        self.buttons = buttons;
         self.answers = answers;
         self.arming = Arming::Armed;
         Ok(())
+    }
+
+    /// Return what the row shows, so a dialog can put it back with
+    /// [`Answers::restore`].
+    pub(crate) fn shown(&self) -> Shown {
+        Shown {
+            answers: self.answers.clone(),
+            buttons: self.buttons.clone(),
+            arming: self.arming,
+        }
+    }
+
+    /// Show what [`Answers::shown`] returned, once the rollback of the tree
+    /// edit that replaced it has put its buttons back.
+    pub(crate) fn restore(&mut self, shown: Shown) {
+        let Shown {
+            answers,
+            buttons,
+            arming,
+        } = shown;
+        self.answers = answers;
+        self.buttons = buttons;
+        self.arming = arming;
     }
 
     /// Return the button of the answer at `index`.
