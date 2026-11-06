@@ -6461,3 +6461,70 @@ pub mod tree {
         pub key: String,
     }
 }
+
+pub mod widget {
+    //! Widget trait, event outcome types, and the parts a widget mounts.
+
+    pub use crate::{
+        EventOutcome, Widget,
+        layout::{ScrollAxis, ScrollMark},
+    };
+
+    /// What a widget builds when it mounts, held with what it builds it from.
+    ///
+    /// A widget that builds children or other parts in
+    /// [`Widget::on_mount`] keeps them in one `Mount`. The pending value `P`
+    /// holds what the mount needs, such as options and callbacks; the mounted
+    /// value `M` holds what the mount built, such as child node ids. The mount
+    /// keeps `P`, so a widget mounts again from it after an unmount. Callbacks
+    /// that a mount used to move out of the widget belong in `P` as shared
+    /// values (`Rc`), or are rebuilt from it.
+    ///
+    /// A widget value can mount more than once: a failed tree edit runs
+    /// [`Widget::on_unmount`] on the widgets it mounted, and a retained widget
+    /// mounts again when it is next attached. Each widget's `on_unmount` calls
+    /// [`Mount::unmount`], so the next mount starts from the pending value.
+    ///
+    /// The value is in one of two states: pending, with only `P`, or mounted,
+    /// with `P` and `M`.
+    #[derive(Clone, Debug)]
+    pub struct Mount<P, M> {/* private fields */}
+
+    impl<P, M> Mount<P, M> {
+        /// Return whether the parts are mounted.
+        pub fn is_mounted(&self) -> bool;
+
+        /// Build the mounted parts with `f`, from the pending value.
+        ///
+        /// A failure leaves the value pending, so a later mount can try again. A
+        /// value that is already mounted is an error, and stays as it is.
+        pub fn mount(
+            &mut self,
+            f: impl FnOnce(&mut P) -> crate::error::Result<M>,
+        ) -> crate::error::Result<()>;
+
+        /// Return the mounted parts, or an error that the widget is not mounted.
+        pub fn mounted(&self) -> crate::error::Result<&M>;
+
+        /// Return the mounted parts mutably, or an error that the widget is not
+        /// mounted.
+        pub fn mounted_mut(&mut self) -> crate::error::Result<&mut M>;
+
+        /// Hold `pending` until the widget mounts.
+        pub fn new(pending: P) -> Self;
+
+        /// Return the pending value, in either state.
+        pub fn pending(&self) -> &P;
+
+        /// Return the pending value mutably, in either state.
+        pub fn pending_mut(&mut self) -> &mut P;
+
+        /// Return the pending value and the mounted parts together, or an error
+        /// that the widget is not mounted.
+        pub fn split_mut(&mut self) -> crate::error::Result<(&mut P, &mut M)>;
+
+        /// Drop the mounted parts and return to pending. A pending value stays
+        /// as it is.
+        pub fn unmount(&mut self);
+    }
+}

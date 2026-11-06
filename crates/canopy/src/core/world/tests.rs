@@ -1,6 +1,8 @@
 use std::{
     any::TypeId,
+    cell::Cell,
     panic::{AssertUnwindSafe, catch_unwind},
+    rc::Rc,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -28,7 +30,7 @@ use crate::{
     layout::{Layout, LayoutOverride, Measurement},
     path::Path,
     style::StyleMap,
-    widget::Widget,
+    widget::{Mount, Widget},
 };
 
 struct FocusableWidget;
@@ -1854,4 +1856,63 @@ fn hidden_or_refusing_focused_widget_still_recovers_during_callbacks() -> Result
     core.repair_focus_and_capture(None)?;
     assert_eq!(core.focus_id(), None);
     Ok(())
+}
+
+/// Composite widget that builds a child when it mounts, holding it in a
+/// `Mount`.
+struct Composite {
+    /// Count of mounts, kept in the pending value; and the child built.
+    parts: Mount<Rc<Cell<usize>>, NodeId>,
+    /// The child of the latest mount.
+    child: Rc<Cell<Option<NodeId>>>,
+}
+
+impl Widget for Composite {
+    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        let child = &self.child;
+        self.parts.mount(|mounts| {
+            mounts.set(mounts.get() + 1);
+            let id = NodeId::from(ctx.add_child(ctx.node_id(), simple_widget())?);
+            child.set(Some(id));
+            Ok(id)
+        })
+    }
+
+    fn on_unmount(&mut self, _ctx: &mut dyn Context) {
+        self.parts.unmount();
+    }
+}
+
+#[test]
+fn a_retained_composite_mounts_again_after_a_sibling_fails_its_edit() -> Result<()> {
+    let mut core = Core::new();
+    let mounts = Rc::new(Cell::new(0));
+    let child = Rc::new(Cell::new(None));
+    let composite = core.create_detached(Composite {
+        parts: Mount::new(Rc::clone(&mounts)),
+        child: Rc::clone(&child),
+    })?;
+    let failing = core.create_detached(MountFailWidget)?;
+    let failed: Result<()> = core.with_tree_edit("attach both", |core| {
+        core.attach(core.root, composite)?;
+        core.attach(core.root, failing)
+    });
+    assert!(failed.is_err(), "the sibling's mount fails the edit");
+    assert_eq!(mounts.get(), 1);
+    assert!(!core.is_attached_to_root(composite));
+    assert!(
+        core.nodes[composite].children.is_empty(),
+        "the edit's child is gone"
+    );
+
+    core.attach(core.root, composite)?;
+    assert_eq!(
+        mounts.get(),
+        2,
+        "the composite mounts again from its pending value"
+    );
+    let rebuilt = child.get().expect("the mount built a child");
+    assert_eq!(core.nodes[composite].children, vec![rebuilt]);
+    assert!(core.is_attached_to_root(rebuilt));
+    core.validate_invariants()
 }

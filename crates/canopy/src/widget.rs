@@ -1,4 +1,4 @@
-//! Widget trait and event outcome types.
+//! Widget trait, event outcome types, and the parts a widget mounts.
 
 use std::{
     any::{Any, type_name},
@@ -8,7 +8,7 @@ use std::{
 use crate::{
     Context, NodeId, NodeName,
     core::context::ViewContext,
-    error::Result,
+    error::{Error, Result},
     geom::{Rect, Size},
     input::{Event, NavIntent, key::Key},
     layout::{CanvasContext, Layout, MeasureConstraints, Measurement},
@@ -276,5 +276,171 @@ where
 {
     fn from(widget: W) -> Self {
         Box::new(widget)
+    }
+}
+
+/// What a widget builds when it mounts, held with what it builds it from.
+///
+/// A widget that builds children or other parts in
+/// [`Widget::on_mount`] keeps them in one `Mount`. The pending value `P`
+/// holds what the mount needs, such as options and callbacks; the mounted
+/// value `M` holds what the mount built, such as child node ids. The mount
+/// keeps `P`, so a widget mounts again from it after an unmount. Callbacks
+/// that a mount used to move out of the widget belong in `P` as shared
+/// values (`Rc`), or are rebuilt from it.
+///
+/// A widget value can mount more than once: a failed tree edit runs
+/// [`Widget::on_unmount`] on the widgets it mounted, and a retained widget
+/// mounts again when it is next attached. Each widget's `on_unmount` calls
+/// [`Mount::unmount`], so the next mount starts from the pending value.
+///
+/// The value is in one of two states: pending, with only `P`, or mounted,
+/// with `P` and `M`.
+#[derive(Debug, Clone)]
+pub struct Mount<P, M> {
+    /// What the mount builds from, kept in both states.
+    pending: P,
+    /// What the mount built, while mounted.
+    parts: Option<M>,
+}
+
+impl<P, M> Mount<P, M> {
+    /// Hold `pending` until the widget mounts.
+    pub fn new(pending: P) -> Self {
+        Self {
+            pending,
+            parts: None,
+        }
+    }
+
+    /// Build the mounted parts with `f`, from the pending value.
+    ///
+    /// A failure leaves the value pending, so a later mount can try again. A
+    /// value that is already mounted is an error, and stays as it is.
+    pub fn mount(&mut self, f: impl FnOnce(&mut P) -> Result<M>) -> Result<()> {
+        if self.parts.is_some() {
+            return Err(Error::Invalid("widget is already mounted".into()));
+        }
+        self.parts = Some(f(&mut self.pending)?);
+        Ok(())
+    }
+
+    /// Drop the mounted parts and return to pending. A pending value stays
+    /// as it is.
+    pub fn unmount(&mut self) {
+        self.parts = None;
+    }
+
+    /// Return whether the parts are mounted.
+    pub fn is_mounted(&self) -> bool {
+        self.parts.is_some()
+    }
+
+    /// Return the mounted parts, or an error that the widget is not mounted.
+    pub fn mounted(&self) -> Result<&M> {
+        self.parts.as_ref().ok_or_else(not_mounted)
+    }
+
+    /// Return the mounted parts mutably, or an error that the widget is not
+    /// mounted.
+    pub fn mounted_mut(&mut self) -> Result<&mut M> {
+        self.parts.as_mut().ok_or_else(not_mounted)
+    }
+
+    /// Return the pending value and the mounted parts together, or an error
+    /// that the widget is not mounted.
+    pub fn split_mut(&mut self) -> Result<(&mut P, &mut M)> {
+        let parts = self.parts.as_mut().ok_or_else(not_mounted)?;
+        Ok((&mut self.pending, parts))
+    }
+
+    /// Return the pending value, in either state.
+    pub fn pending(&self) -> &P {
+        &self.pending
+    }
+
+    /// Return the pending value mutably, in either state.
+    pub fn pending_mut(&mut self) -> &mut P {
+        &mut self.pending
+    }
+}
+
+/// The error of a widget part read before the widget mounts.
+fn not_mounted() -> Error {
+    Error::Invalid("widget is not mounted".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Apply one event to a mount and report the state after it.
+    fn step(mount: &mut Mount<u32, u32>, event: &str) -> (bool, bool) {
+        let ok = match event {
+            "mount" => mount
+                .mount(|pending| {
+                    *pending += 1;
+                    Ok(*pending * 10)
+                })
+                .is_ok(),
+            "fail" => mount
+                .mount(|_| Err(Error::Invalid("mount failed".into())))
+                .is_ok(),
+            "unmount" => {
+                mount.unmount();
+                true
+            }
+            other => panic!("unknown event {other}"),
+        };
+        (ok, mount.is_mounted())
+    }
+
+    #[test]
+    fn mount_transitions_follow_their_table() {
+        // (start mounted, event, succeeds, mounted after)
+        let table = [
+            (false, "mount", true, true),
+            (false, "fail", false, false),
+            (false, "unmount", true, false),
+            (true, "mount", false, true),
+            (true, "fail", false, true),
+            (true, "unmount", true, false),
+        ];
+        for (start, event, ok, mounted) in table {
+            let mut mount = Mount::new(0);
+            if start {
+                step(&mut mount, "mount");
+            }
+            assert_eq!(
+                step(&mut mount, event),
+                (ok, mounted),
+                "{event} from {start}"
+            );
+            assert_eq!(mount.mounted().is_ok(), mounted);
+            assert_eq!(mount.split_mut().is_ok(), mounted);
+        }
+    }
+
+    #[test]
+    fn a_remount_builds_from_the_kept_pending_value() -> Result<()> {
+        let mut mount = Mount::new(0);
+        mount.mount(|pending| {
+            *pending += 1;
+            Ok(*pending)
+        })?;
+        assert_eq!(*mount.mounted()?, 1);
+        mount.unmount();
+        let error = mount.mounted().expect_err("a pending value has no parts");
+        assert!(error.to_string().contains("not mounted"), "{error}");
+        assert_eq!(*mount.pending(), 1, "the pending value survives an unmount");
+        mount.mount(|pending| {
+            *pending += 1;
+            Ok(*pending)
+        })?;
+        assert_eq!(*mount.mounted()?, 2);
+        *mount.mounted_mut()? += 5;
+        let (pending, parts) = mount.split_mut()?;
+        assert_eq!((*pending, *parts), (2, 7));
+        Ok(())
     }
 }

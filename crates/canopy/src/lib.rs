@@ -30,7 +30,7 @@ mod core;
 // `canopy::geom` is the app-facing path to the geometry crate.
 pub use canopy_geom as geom;
 pub mod layout;
-pub(crate) mod widget;
+pub mod widget;
 
 pub(crate) use core::backend;
 #[cfg(any(test, feature = "testing"))]
