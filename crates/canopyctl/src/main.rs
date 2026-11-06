@@ -110,7 +110,7 @@ struct RunArgs {
     #[arg(long, default_value_t = 600)]
     ready_timeout: u64,
     /// The socket a detached host serves at; set by `--detach` itself.
-    #[arg(long, hide = true)]
+    #[arg(long, hide = true, requires = "pty")]
     host_socket: Option<PathBuf>,
     /// Command override passed after `--`.
     #[arg(last = true)]
@@ -1016,6 +1016,22 @@ mod tests {
         replay::ReplayExpectation,
         session::tests::{factory_session, manager_with_session, peer_session, request},
     };
+
+    #[test]
+    fn regression_a_host_socket_needs_a_terminal() {
+        assert!(Cli::try_parse_from(["canopyctl", "run", "--host-socket", "app.sock"]).is_err());
+        assert!(
+            Cli::try_parse_from([
+                "canopyctl",
+                "run",
+                "--pty",
+                "80x24",
+                "--host-socket",
+                "app.sock"
+            ])
+            .is_ok()
+        );
+    }
 
     #[test]
     fn live_replay_applies_fixture_once_and_preserves_state_between_steps() -> Result<()> {

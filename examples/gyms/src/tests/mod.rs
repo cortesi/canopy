@@ -1,4 +1,5 @@
 mod chart;
+mod cli;
 mod focus;
 mod frame;
 mod help;

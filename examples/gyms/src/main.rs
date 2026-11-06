@@ -167,7 +167,7 @@ struct Args {
     headless: bool,
 
     /// Serve live MCP automation over this Unix-domain socket.
-    #[clap(long, global = true)]
+    #[clap(long, global = true, conflicts_with = "headless")]
     mcp: Option<PathBuf>,
 
     /// The demo to run.
