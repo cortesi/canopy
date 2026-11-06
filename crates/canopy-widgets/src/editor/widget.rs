@@ -353,9 +353,11 @@ impl Editor {
 
     /// Replace the editor configuration.
     ///
-    /// A change of edit mode ends the entry of the old mode: text mode
-    /// commits its typing, and a vi editor leaves for normal mode.
+    /// An open prompt closes. A change of edit mode ends the entry of the
+    /// old mode: text mode commits its typing, and a vi editor leaves for
+    /// normal mode.
     pub fn set_config(&mut self, config: EditorConfig) {
+        self.close_prompt();
         if config.mode != self.config.mode {
             match self.config.mode {
                 EditMode::Text => self.buffer.commit_transaction(),
@@ -383,8 +385,10 @@ impl Editor {
 
     /// Replace the buffer contents.
     ///
-    /// The mode stays, and the typing of an insert ends.
+    /// An open prompt closes. The mode stays, and the typing of an insert
+    /// ends.
     pub fn set_text(&mut self, text: impl Into<String>) {
+        self.close_prompt();
         self.end_entry();
         self.prepared_width = None;
         self.buffer = TextBuffer::new(text);
@@ -422,6 +426,7 @@ impl Editor {
     /// must preserve the selected prefix or remap the selection afterwards.
     /// Undo history belongs to the replaced buffer and is discarded.
     pub fn publish_view(&mut self, prepared: PreparedEditorView, preserve: bool) {
+        self.close_prompt();
         self.end_entry();
         let selection = self.buffer.selection();
         self.buffer = prepared.buffer;
@@ -434,7 +439,6 @@ impl Editor {
         } else {
             self.vi = ViState::new();
             self.mouse = MouseState::new();
-            self.prompt = None;
             self.yank.clear();
             self.yank_linewise = false;
         }
@@ -612,10 +616,17 @@ impl Editor {
         true
     }
 
-    /// Follow an undo or a redo: an insert session repeats only the typing
-    /// after it.
+    /// Follow an undo or a redo: an open prompt closes, and an insert
+    /// session repeats only the typing after it.
     fn history_moved(&mut self) {
+        self.close_prompt();
         self.vi.restart_segment();
+    }
+
+    /// Close an open prompt, whose state was built from the text. The
+    /// replacements of a confirmation do not close it.
+    pub(super) fn close_prompt(&mut self) {
+        self.prompt = None;
     }
 
     /// End the text entry at a relocation of the cursor or a change of the
@@ -1288,12 +1299,13 @@ impl Editor {
     /// The edit stands alone in the undo history: an open entry ends first, and
     /// text typed later starts a new step. The call works in both edit modes,
     /// leaves the vi mode unchanged, and records nothing for vi repetition. A
-    /// read-only editor ignores it.
+    /// read-only editor ignores it. An open prompt closes.
     pub fn replace(&mut self, ctx: &mut dyn Context, range: TextRange, text: &str) {
         let text = self.normalize_insert_text(text);
         if self.config.interaction.read_only() {
             return;
         }
+        self.close_prompt();
         self.buffer.commit_transaction();
         self.end_entry();
         self.replace_range(range, &text);

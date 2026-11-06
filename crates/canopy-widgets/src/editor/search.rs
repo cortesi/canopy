@@ -514,8 +514,6 @@ pub(super) enum PromptState {
         matches: Vec<TextRange>,
         /// Current match index.
         index: usize,
-        /// Whether to replace all remaining matches.
-        replace_all: bool,
     },
 }
 
@@ -584,7 +582,7 @@ impl Editor {
     /// Run one classified prompt command.
     pub(super) fn execute_prompt(&mut self, command: PromptCommand, ctx: &mut dyn Context) {
         match command {
-            PromptCommand::Cancel => self.prompt = None,
+            PromptCommand::Cancel => self.close_prompt(),
             PromptCommand::Backspace => {
                 if let Some(field) = self.prompt.as_mut().and_then(Self::prompt_edit_field) {
                     let _ = field.pop();
@@ -623,7 +621,6 @@ impl Editor {
                     replacement,
                     matches,
                     index: 0,
-                    replace_all: false,
                 });
             }
             prompt => self.prompt = Some(prompt),
@@ -635,7 +632,7 @@ impl Editor {
         if self.config.interaction.read_only()
             && matches!(self.prompt, Some(PromptState::ReplaceConfirm { .. }))
         {
-            self.prompt = None;
+            self.close_prompt();
             return;
         }
         let Some(PromptState::ReplaceConfirm {
@@ -643,7 +640,6 @@ impl Editor {
             replacement,
             matches,
             index,
-            replace_all,
         }) = self.prompt.as_mut()
         else {
             return;
@@ -667,41 +663,29 @@ impl Editor {
                 *index = index.saturating_add(1);
             }
             'a' => {
-                *replace_all = true;
+                // Replace every remaining match, and close.
+                let query = query.clone();
+                let replacement = replacement.clone();
+                let mut matches = mem::take(matches);
+                let mut index = *index;
+                while let Some(range) = matches.get(index).copied() {
+                    matches = self.replace_match(&query, &replacement, range, ctx);
+                    index = 0;
+                }
+                self.close_prompt();
+                return;
             }
             'q' => {
-                self.prompt = None;
+                self.close_prompt();
                 return;
             }
             _ => {}
         }
 
-        let Some(PromptState::ReplaceConfirm {
-            query,
-            replacement,
-            matches,
-            index,
-            replace_all,
-        }) = self.prompt.as_mut()
-        else {
-            return;
-        };
-
-        if *replace_all {
-            let query = query.clone();
-            let replacement = replacement.clone();
-            let mut matches = mem::take(matches);
-            let mut index = *index;
-            while let Some(range) = matches.get(index).copied() {
-                matches = self.replace_match(&query, &replacement, range, ctx);
-                index = 0;
-            }
-            self.prompt = None;
-            return;
-        }
-
-        if *index >= matches.len() {
-            self.prompt = None;
+        if let Some(PromptState::ReplaceConfirm { matches, index, .. }) = &self.prompt
+            && *index >= matches.len()
+        {
+            self.close_prompt();
         }
     }
 

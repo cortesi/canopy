@@ -989,7 +989,6 @@ fn prepare_replace(harness: &mut Harness, query: &str, replacement: &str) {
             replacement: replacement.to_string(),
             matches: find_matches(&editor.buffer, query),
             index: 0,
-            replace_all: false,
         });
     });
 }
@@ -1059,6 +1058,48 @@ fn replacement_keeps_single_line_normalization() {
     prepare_replace(&mut harness, "a", "x\ny");
     harness.key('a').unwrap();
     assert_eq!(editor_text(&mut harness), "x yx y");
+}
+
+/// Open a replace confirmation of `foo` with `bar` on `text` after the keys
+/// of `setup`, run `change`, and answer `y`: the change closed the
+/// confirmation, so the answer leaves the text that the change made.
+fn assert_change_closes_the_confirmation(
+    text: &str,
+    setup: &[char],
+    change: impl FnOnce(&mut Harness),
+) {
+    let config = EditorConfig::new().with_mode(EditMode::Vi);
+    let mut harness = build_harness(text, config, 20, 3);
+    harness.keys(setup.iter().copied()).unwrap();
+    prepare_replace(&mut harness, "foo", "bar");
+    change(&mut harness);
+    let changed = editor_text(&mut harness);
+    harness.key('y').unwrap();
+    assert_eq!(editor_text(&mut harness), changed);
+    assert!(with_editor(&mut harness, |editor| editor.prompt.is_none()));
+}
+
+#[test]
+fn a_change_of_the_text_closes_a_replace_confirmation() {
+    // Regression: the confirmation kept the matches of the old text, and
+    // `y` replaced a clamped range of the new one.
+    assert_change_closes_the_confirmation("foo foo", &[], |harness| {
+        with_editor(harness, |editor| editor.set_text("xy"));
+    });
+    assert_change_closes_the_confirmation("foo foo", &[], |harness| {
+        let config = EditorConfig::new().with_mode(EditMode::Vi);
+        let prepared = Editor::prepare_view("xy", config, 20);
+        with_editor(harness, |editor| editor.publish_view(prepared, true));
+    });
+    assert_change_closes_the_confirmation("foo foo", &[], |harness| {
+        replace_in(harness, first_line(0, 3), "q");
+    });
+    assert_change_closes_the_confirmation("foo foo", &['x'], |harness| {
+        edit_in_one_turn(harness, |editor, ctx| editor.undo(ctx));
+    });
+    assert_change_closes_the_confirmation("foo foo", &['x', 'u'], |harness| {
+        edit_in_one_turn(harness, |editor, ctx| editor.redo(ctx));
+    });
 }
 
 #[test]
