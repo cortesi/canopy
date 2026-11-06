@@ -715,7 +715,7 @@ fn search_activation_uses_the_matching_link_and_declines_plain_prose() {
                         matches!(&object.kind, ObjectKind::Link(link) if link.destination == destination)
                     }).unwrap().id
                 });
-                assert_eq!(reader.shared.borrow().overlays.active_object, expected);
+                assert_eq!(reader.shared.borrow().object(), expected);
                 reader.activate(ctx)?;
                 assert_eq!(reader.inspector.as_ref().and_then(|open| open.object), expected);
                 if expected.is_none() {
@@ -2000,7 +2000,7 @@ fn source_selection_pauses_follow_and_survives_independently_of_rendered_selecti
     let rendered_selection = harness
         .with_root_widget_context(|reader: &mut Markdown, ctx| {
             reader.select_text(ctx)?;
-            let selection = reader.shared.borrow().overlays.selection.clone();
+            let selection = reader.shared.borrow().selection().cloned();
             assert!(selection.is_some());
             reader.set_view_type(ctx, ViewType::Source)?;
             Ok(selection)
@@ -2010,7 +2010,7 @@ fn source_selection_pauses_follow_and_survives_independently_of_rendered_selecti
     harness
         .with_root_widget_context(|reader: &mut Markdown, ctx| {
             assert_eq!(
-                reader.shared.borrow().overlays.selection,
+                reader.shared.borrow().selection().cloned(),
                 rendered_selection
             );
             ctx.with_widget(
@@ -2142,8 +2142,8 @@ fn built_in_search_field_owns_ordinary_reader_command_characters() {
         .with_root_widget_context(|reader: &mut Markdown, ctx| {
             assert_eq!(reader.query.text, "jvifno");
             assert_eq!(reader.active, ViewType::Rendered);
-            assert_eq!(reader.shared.borrow().mode, Mode::Scroll);
-            assert!(reader.shared.borrow().overlays.selection.is_none());
+            assert_eq!(reader.shared.borrow().mode(), Mode::Scroll);
+            assert!(reader.shared.borrow().selection().is_none());
             assert!(reader.inspector.is_none());
             assert_eq!(reader.follow_state(), Follow::Paused);
             assert_eq!(reader.view_offset(ctx), before);
@@ -2354,7 +2354,7 @@ fn source_enter_and_tab_do_not_activate_or_navigate_cached_rendered_objects() {
                 reader.activate(ctx)?;
                 reader.next_object(ctx, 1)?;
                 assert!(reader.inspector.is_none());
-                assert!(reader.shared.borrow().overlays.active_object.is_none());
+                assert!(reader.shared.borrow().object().is_none());
                 Ok(())
             })
             .unwrap();
@@ -2363,7 +2363,7 @@ fn source_enter_and_tab_do_not_activate_or_navigate_cached_rendered_objects() {
         harness
             .with_unique(|reader: &mut Markdown, ctx| {
                 assert!(reader.inspector.is_none());
-                assert!(reader.shared.borrow().overlays.active_object.is_none());
+                assert!(reader.shared.borrow().object().is_none());
                 assert_eq!(
                     ctx.focused_node(),
                     Some(next_host_focus),

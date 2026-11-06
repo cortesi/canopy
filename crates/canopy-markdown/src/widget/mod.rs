@@ -57,7 +57,7 @@ use crate::{
     },
     source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, SourceAnchor, SourceMatches, SourceOptions},
-    surface::{PendingMark, RenderedSurface, SurfaceState},
+    surface::{Focus, Interaction, PendingMark, RenderedSurface, SurfaceState},
     units::EditUnit,
 };
 
@@ -407,8 +407,7 @@ impl Markdown {
         {
             let mut state = shared.borrow_mut();
             state.follow = follow;
-            state.resting = options.resting_mode;
-            state.mode = options.resting_mode;
+            state.rest(options.resting_mode);
         }
         Self {
             options,
@@ -536,7 +535,8 @@ impl Markdown {
             state.presentation = None;
             state.document = None;
             state.overlays = Default::default();
-            state.mode = state.resting;
+            let resting = state.resting;
+            state.rest(resting);
             state.marked = None;
             state.pending_mark = None;
             state.awaiting = false;
@@ -546,7 +546,6 @@ impl Markdown {
             } else {
                 Follow::Paused
             };
-            state.dragging = false;
             state.pending_open = None;
             state.navigation += 1;
         }
@@ -734,7 +733,7 @@ impl Markdown {
     /// Whether any Rendered, scrollbar, or mounted Source drag owns the
     /// pointer.
     fn drag_active(&self, ctx: &dyn ViewContext) -> Result<bool> {
-        if self.shared.borrow().dragging || self.bar_drag {
+        if self.shared.borrow().dragging() || self.bar_drag {
             return Ok(true);
         }
         match self.nodes.as_ref().and_then(|n| n.source) {
@@ -817,8 +816,8 @@ impl Markdown {
                     surface.enter_interact(ctx)
                 })?;
             }
-        } else {
-            self.shared.borrow_mut().leave_interact();
+        } else if self.shared.borrow_mut().leave() {
+            ctx.release_mouse()?;
         }
         self.update_chrome(ctx)
     }
@@ -1114,8 +1113,7 @@ impl Markdown {
             let mut state = self.shared.borrow_mut();
             state.overlays.search.clear();
             state.overlays.search_current = None;
-            state.overlays.selection = None;
-            state.overlays.active_object = None;
+            state.clear_marks();
             let mark = slot::pending_mark(&state, epoch, first, row);
             state.pending_mark = Some(mark);
             state.awaiting = true;
@@ -1568,7 +1566,7 @@ impl Markdown {
         }
         let p = self.shared.borrow().presentation.clone();
         let Some(p) = p else { return Ok(()) };
-        let active = self.shared.borrow().overlays.active_object;
+        let active = self.shared.borrow().object();
         let marked = self.shared.borrow_mut().marked_unit();
         let id = active.or_else(|| match &marked {
             Some((unit, _)) => unit_object(&p.document, unit),
@@ -1816,7 +1814,7 @@ impl Markdown {
     /// followed.
     fn selected_destination(&self) -> Option<String> {
         let shared = self.shared.borrow();
-        let id = shared.overlays.active_object?;
+        let id = shared.object()?;
         let p = shared.presentation.as_ref()?;
         let ObjectKind::Link(link) = &p.document.objects.iter().find(|o| o.id == id)?.kind else {
             return None;
@@ -2124,7 +2122,7 @@ impl Markdown {
         let Some(p) = self.shared.borrow().presentation.clone() else {
             return Ok(());
         };
-        let selection = self.shared.borrow().overlays.selection.clone();
+        let selection = self.shared.borrow().selection().cloned();
         if let Some(selection) = selection {
             return self.queue_copy(
                 ctx,
@@ -2136,7 +2134,7 @@ impl Markdown {
                 p.document.source.revision,
             );
         }
-        let selected = self.shared.borrow().overlays.active_object;
+        let selected = self.shared.borrow().object();
         if let Some(object) = selected.and_then(|id| p.document.objects.iter().find(|o| o.id == id))
         {
             return self.queue_copy(
@@ -2186,10 +2184,13 @@ impl Markdown {
         // Interact selects one, or the unit its block cursor marks.
         let mut shared = self.shared.borrow_mut();
         Ok(shared.presentation.is_some()
-            && (shared.overlays.selection.is_some()
-                || (shared.mode == Mode::Interact
-                    && (shared.overlays.active_object.is_some()
-                        || shared.marked_unit().is_some()))))
+            && match shared.interaction() {
+                Interaction::Scroll { .. } => false,
+                Interaction::Block {
+                    focus: Focus::Object(_) | Focus::Selecting { .. },
+                } => true,
+                Interaction::Block { focus: Focus::Unit } => shared.marked_unit().is_some(),
+            })
     }
     /// Copy the item [`Self::has_item`] finds. With none, copy nothing.
     #[command(enabled = "item_status")]
@@ -2240,7 +2241,7 @@ impl Markdown {
     }
     /// Admit `interact` outside the block cursor.
     fn interact_status(&self, _: &dyn ViewContext) -> Result<CommandStatus> {
-        Ok(if self.shared.borrow().mode == Mode::Interact {
+        Ok(if self.shared.borrow().mode() == Mode::Interact {
             CommandStatus::Disabled("The block cursor is on".into())
         } else {
             CommandStatus::Enabled
@@ -2548,6 +2549,8 @@ impl Markdown {
             || self
                 .navigation_node()
                 .is_some_and(|node| ctx.is_on_focus_path(node));
+        // A pending mark enters the block cursor as `set_mode` would.
+        let may_enter = self.inspector.is_none();
         let Some(nodes) = &mut self.nodes else {
             return Ok(());
         };
@@ -2556,7 +2559,7 @@ impl Markdown {
                 self.last_document = Some(p.document.clone());
                 let clear = ctx
                     .with_widget_mut(nodes.rendered, |surface: &mut RenderedSurface, ctx| {
-                        surface.publish(ctx, p.clone())
+                        surface.publish(ctx, p.clone(), may_enter)
                     })?;
                 if clear {
                     ctx.notify(NoticePost::info(
@@ -2856,7 +2859,7 @@ impl Markdown {
             if let Some(index) = state.unit_of_reading(unit) {
                 state.mark(index, true);
             }
-            state.overlays.active_object = match found.address {
+            let object = match found.address {
                 SearchAddress::Unit { .. } => p.document.unit(unit).and_then(|unit| {
                     unit.spans
                         .iter()
@@ -2872,6 +2875,7 @@ impl Markdown {
                     .find(|o| o.unit_id == unit)
                     .map(|o| o.id),
             };
+            state.set_object(object);
             state.overlays.search.get(index).map_or(0, |range| {
                 p.row_for_unit(range.start.unit_id, range.start.offset)
             })
@@ -3042,7 +3046,7 @@ impl Markdown {
             "Source"
         } else if self.slot.is_some() {
             "Editing"
-        } else if self.shared.borrow().mode == Mode::Interact {
+        } else if self.shared.borrow().mode() == Mode::Interact {
             "Interact"
         } else {
             "Scroll"
@@ -3401,7 +3405,7 @@ impl Widget for Markdown {
         if let Some(object) = pending {
             // A failed pointer activation is a status, not a reason to skip
             // this turn's worker completions.
-            self.shared.borrow_mut().overlays.active_object = Some(object);
+            self.shared.borrow_mut().set_object(Some(object));
             if let Err(error) = self.activate(ctx) {
                 action_failure = Some(error.to_string());
             }
@@ -3594,7 +3598,7 @@ impl Widget for Markdown {
                 self.accepted_revision(),
                 self.follow_state()
             )),
-            selected: Some(self.shared.borrow().overlays.selection.is_some()),
+            selected: Some(self.shared.borrow().selection().is_some()),
             ..Default::default()
         })
     }

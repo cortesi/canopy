@@ -143,7 +143,7 @@ pub(super) fn state(reader: &Markdown, ctx: &dyn ViewContext) -> Result<ArgValue
             false
         }
     } else {
-        shared.overlays.selection.is_some()
+        shared.selection().is_some()
     };
     let inspector = reader.inspector.as_ref().map_or(ArgValue::Null, |open| {
         map([
@@ -158,7 +158,7 @@ pub(super) fn state(reader: &Markdown, ctx: &dyn ViewContext) -> Result<ArgValue
         ("requested_view", view(reader.requested_view_type())),
         (
             "rendered_mode",
-            text(match shared.mode {
+            text(match shared.mode() {
                 Mode::Scroll => "scroll",
                 Mode::Interact => "interact",
             }),
@@ -199,10 +199,7 @@ pub(super) fn state(reader: &Markdown, ctx: &dyn ViewContext) -> Result<ArgValue
         ),
         ("anchor", anchor(position)),
         ("selection", ArgValue::Bool(selection)),
-        (
-            "active_object",
-            optional_number(shared.overlays.active_object),
-        ),
+        ("active_object", optional_number(shared.object())),
         ("block", block),
         (
             "block_editor",
@@ -352,10 +349,7 @@ pub(super) fn objects(reader: &Markdown, offset: usize, limit: usize) -> ArgValu
                     ("label", text(label)),
                     ("destination", optional_text(destination)),
                     ("source", range(&object.source)),
-                    (
-                        "active",
-                        ArgValue::Bool(shared.overlays.active_object == Some(object.id)),
-                    ),
+                    ("active", ArgValue::Bool(shared.object() == Some(object.id))),
                 ])
             })
             .collect()

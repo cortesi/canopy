@@ -1056,9 +1056,9 @@ fn the_readers_commands_wait_while_the_editor_is_open() {
         Ok(reader.block_open()
             && ctx.focused_node() == Some(editor.into())
             && reader.return_position.is_some()
-            && state.overlays.selection.is_none()
+            && state.selection().is_none()
             && state.follow == Follow::Paused
-            && state.mode == Mode::Interact)
+            && state.mode() == Mode::Interact)
     }));
 }
 
@@ -1074,7 +1074,7 @@ fn an_inspector_keeps_the_block_cursor_out() {
         reader.set_mode(ctx, Mode::Interact)
     });
     assert_eq!(
-        reader(&mut harness, |reader, _| Ok(reader.shared.borrow().mode)),
+        reader(&mut harness, |reader, _| Ok(reader.shared.borrow().mode())),
         Mode::Scroll
     );
 }

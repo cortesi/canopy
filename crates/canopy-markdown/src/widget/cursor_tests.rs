@@ -297,13 +297,12 @@ fn tab_carries_the_cursor_to_an_object_and_j_drops_it() {
     press(&mut harness, "Tab");
     let (unit, object) = harness.with_root_widget(|reader: &mut Markdown| {
         let mut state = reader.shared.borrow_mut();
-        (state.marked_index(), state.overlays.active_object)
+        (state.marked_index(), state.object())
     });
     assert_eq!(unit, Some(1), "the link lies in the paragraph");
     assert!(object.is_some());
     press(&mut harness, "j");
-    let object = harness
-        .with_root_widget(|reader: &mut Markdown| reader.shared.borrow().overlays.active_object);
+    let object = harness.with_root_widget(|reader: &mut Markdown| reader.shared.borrow().object());
     assert_eq!(object, None, "a move to another unit drops the object");
     // Tab from the list goes on to the code card, the next object.
     press(&mut harness, "Tab");
@@ -324,7 +323,7 @@ fn object_step(harness: &mut Harness, delta: i32) -> (Option<usize>, Option<u64>
     service(harness);
     harness.with_root_widget(|reader: &mut Markdown| {
         let mut state = reader.shared.borrow_mut();
-        (state.marked_index(), state.overlays.active_object)
+        (state.marked_index(), state.object())
     })
 }
 
@@ -448,7 +447,7 @@ fn the_object_cursor_leaves_each_end_toward_its_own_side() {
                 })?;
                 ctx.set_focus(surface)?;
                 ctx.with_widget_mut(second, |reader: &mut Markdown, ctx| {
-                    reader.shared.borrow_mut().overlays.active_object = None;
+                    reader.shared.borrow_mut().set_object(None);
                     reader.next_object(ctx, delta)?;
                     reader.next_object(ctx, delta)
                 })?;
@@ -494,15 +493,121 @@ fn escape_clears_then_leaves_only_a_view_that_rests_in_scroll() {
         press(&mut harness, "Escape");
         let (mode, object) = harness.with_root_widget(|reader: &mut Markdown| {
             let state = reader.shared.borrow();
-            (state.mode, state.overlays.active_object)
+            (state.mode(), state.object())
         });
         assert_eq!((mode, object), (Mode::Interact, None), "{resting:?}");
         press(&mut harness, "Escape");
-        let mode = harness.with_root_widget(|reader: &mut Markdown| reader.shared.borrow().mode);
+        let mode = harness.with_root_widget(|reader: &mut Markdown| reader.shared.borrow().mode());
         assert_eq!(mode, resting);
         let bars = bar_rows(&mut harness);
         assert_eq!(bars.is_empty(), resting == Mode::Scroll, "{resting:?}");
     }
+}
+
+/// Whether the rendered view holds a text selection.
+fn selecting(harness: &mut Harness) -> bool {
+    harness.with_root_widget(|reader: &mut Markdown| reader.shared.borrow().selection().is_some())
+}
+
+/// Send a left-button `action` at `point` of the view.
+fn left(harness: &mut Harness, action: mouse::Action, point: Point) {
+    harness
+        .mouse(mouse::MouseEvent {
+            action,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: PointI32 {
+                x: point.x as i32,
+                y: point.y as i32,
+            },
+        })
+        .unwrap();
+    service(harness);
+}
+
+/// The first cell of row `row` of the view that holds reading text.
+fn text_cell(harness: &mut Harness, row: u32) -> Point {
+    harness.with_root_widget(|reader: &mut Markdown| {
+        let state = reader.shared.borrow();
+        let presentation = state.presentation.as_ref().unwrap();
+        (0..presentation.width())
+            .map(|x| Point::new(x, row))
+            .find(|&point| {
+                presentation
+                    .hit(point)
+                    .is_some_and(|hit| hit.reading.is_some() && hit.object.is_none())
+            })
+            .expect("a row of text")
+    })
+}
+
+#[test]
+fn regression_scroll_after_a_selection_leaves_the_arrows_to_the_viewport() {
+    let (mut harness, manual) = reader(DOCUMENT, Mode::Scroll, 40, 7);
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.select_text(ctx))
+        .unwrap();
+    service(&mut harness);
+    assert!(selecting(&mut harness));
+    let claims = |harness: &mut Harness| {
+        harness.with_root_widget(|reader: &mut Markdown| reader.claims(NavIntent::Down))
+    };
+    assert!(claims(&mut harness), "the selection takes the arrows");
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.set_mode(ctx, Mode::Scroll))
+        .unwrap();
+    service(&mut harness);
+    assert!(!selecting(&mut harness), "Scroll holds no selection");
+    assert!(!claims(&mut harness), "the arrows scroll the view");
+}
+
+#[test]
+fn an_object_then_a_selection_then_escape_activates_the_object() {
+    let (mut harness, manual) = reader(DOCUMENT, Mode::Interact, 40, 40);
+    settle(&mut harness, &manual);
+    let (_, link) = object_step(&mut harness, 1);
+    let link = link.expect("the link");
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.select_text(ctx))
+        .unwrap();
+    service(&mut harness);
+    assert!(selecting(&mut harness));
+    press(&mut harness, "Escape");
+    assert!(!selecting(&mut harness));
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.activate(ctx))
+        .unwrap();
+    service(&mut harness);
+    let inspected = harness.with_root_widget(|reader: &mut Markdown| {
+        reader.inspector.as_ref().and_then(|open| open.object)
+    });
+    assert_eq!(inspected, Some(link));
+}
+
+#[test]
+fn regression_scroll_during_a_drag_ends_the_press() {
+    let (mut harness, manual) = reader(DOCUMENT, Mode::Scroll, 40, 40);
+    settle(&mut harness, &manual);
+    press(&mut harness, "i");
+    let row = extents(&mut harness)[5].start;
+    let start = text_cell(&mut harness, row);
+    left(&mut harness, mouse::Action::Down, start);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.set_mode(ctx, Mode::Scroll))
+        .unwrap();
+    service(&mut harness);
+    left(
+        &mut harness,
+        mouse::Action::Drag,
+        Point::new(start.x + 3, start.y),
+    );
+    assert!(
+        !selecting(&mut harness),
+        "a drag after Scroll selects nothing"
+    );
+    let mode = harness.with_root_widget(|reader: &mut Markdown| reader.shared.borrow().mode());
+    assert_eq!(mode, Mode::Scroll);
 }
 
 #[test]
@@ -910,6 +1015,11 @@ enum Action {
     Tab(bool),
     /// `Esc`.
     Escape,
+    /// A text selection, then Scroll, or else `Esc`.
+    Select(bool),
+    /// A press on a row of the view and a drag along it, with Scroll
+    /// between two drags, or not.
+    Drag(u32, bool),
 }
 
 /// Generate an action.
@@ -934,6 +1044,8 @@ fn action() -> impl Strategy<Value = Action> {
         1 => testing::document().prop_map(Action::Replace),
         1 => any::<bool>().prop_map(Action::Tab),
         1 => Just(Action::Escape),
+        1 => any::<bool>().prop_map(Action::Select),
+        1 => (0..12u32, any::<bool>()).prop_map(|(row, scroll)| Action::Drag(row, scroll)),
     ]
 }
 
@@ -943,7 +1055,7 @@ fn observed(harness: &mut Harness) -> model::State {
     harness.with_root_widget(|reader: &mut Markdown| {
         let mut state = reader.shared.borrow_mut();
         model::State {
-            mode: state.mode,
+            mode: state.mode(),
             marked: state.marked_index(),
             top,
         }
@@ -966,6 +1078,9 @@ fn sizes(harness: &mut Harness) -> (u32, u32) {
 /// or the cursor's ground without a margin, marks exactly its rows in view.
 fn check_screen(harness: &mut Harness, width: u32) -> StdResult<(), TestCaseError> {
     let state = observed(harness);
+    if state.mode == Mode::Scroll {
+        prop_assert!(!selecting(harness), "Scroll holds no selection");
+    }
     let extents = extents(harness);
     let (height, _) = sizes(harness);
     let interact = state.mode == Mode::Interact;
@@ -1119,7 +1234,7 @@ fn step(
             // footnote may jump, so only the screen checks hold then.
             let armed = before.mode == Mode::Interact
                 && harness.with_root_widget(|reader: &mut Markdown| {
-                    reader.shared.borrow().overlays.active_object.is_some()
+                    reader.shared.borrow().object().is_some()
                 });
             harness
                 .mouse(mouse::MouseEvent {
@@ -1160,7 +1275,7 @@ fn step(
             // A press on an object carries the cursor to the object's unit.
             let object = harness.with_root_widget(|reader: &mut Markdown| {
                 let mut state = reader.shared.borrow_mut();
-                let id = state.overlays.active_object?;
+                let id = state.object()?;
                 let unit = state
                     .presentation
                     .as_ref()?
@@ -1259,7 +1374,7 @@ fn step(
             press(harness, if *forward { "Tab" } else { "shift-Tab" });
             let object = harness.with_root_widget(|reader: &mut Markdown| {
                 let mut state = reader.shared.borrow_mut();
-                let id = state.overlays.active_object?;
+                let id = state.object()?;
                 let object = state
                     .presentation
                     .as_ref()?
@@ -1277,9 +1392,8 @@ fn step(
             }
         }
         Action::Escape => {
-            let object = harness.with_root_widget(|reader: &mut Markdown| {
-                reader.shared.borrow().overlays.active_object
-            });
+            let object =
+                harness.with_root_widget(|reader: &mut Markdown| reader.shared.borrow().object());
             press(harness, "Escape");
             let expected = if object.is_some() {
                 before
@@ -1288,8 +1402,67 @@ fn step(
             };
             prop_assert_eq!(observed(harness), expected);
         }
+        Action::Select(scroll) => {
+            harness
+                .with_root_widget_context(|reader: &mut Markdown, ctx| reader.select_text(ctx))
+                .unwrap();
+            service(harness);
+            if selecting(harness) {
+                prop_assert_eq!(observed(harness).mode, Mode::Interact);
+            }
+            leave_selection(harness, *scroll)?;
+        }
+        Action::Drag(row, scroll) => {
+            let row = *row % height.max(1);
+            let at = |x: u32| Point::new(x, row);
+            left(harness, mouse::Action::Down, at(1));
+            left(harness, mouse::Action::Drag, at(4));
+            if *scroll {
+                harness
+                    .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                        reader.set_mode(ctx, Mode::Scroll)
+                    })
+                    .unwrap();
+                service(harness);
+                left(harness, mouse::Action::Drag, at(6));
+                prop_assert!(!selecting(harness), "a drag after Scroll selects nothing");
+            }
+            left(harness, mouse::Action::Up, at(6));
+            harness
+                .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                    reader.dismiss_inspector(ctx)
+                })
+                .unwrap();
+            service(harness);
+            leave_selection(harness, *scroll)?;
+        }
     }
     check_screen(harness, *width)
+}
+
+/// End any selection, by Scroll if `scroll`, or else by `Esc`, and check
+/// what follows: Scroll takes the arrows from the selection, and `Esc`
+/// keeps the block cursor.
+fn leave_selection(harness: &mut Harness, scroll: bool) -> StdResult<(), TestCaseError> {
+    if scroll {
+        harness
+            .with_root_widget_context(|reader: &mut Markdown, ctx| {
+                reader.set_mode(ctx, Mode::Scroll)
+            })
+            .unwrap();
+        service(harness);
+        prop_assert_eq!(observed(harness).mode, Mode::Scroll);
+        let claims = harness.with_root_widget(|reader: &mut Markdown| {
+            reader.claims(NavIntent::Down) || reader.claims(NavIntent::Left)
+        });
+        prop_assert!(!claims, "the arrows scroll the view");
+    } else if selecting(harness) {
+        press(harness, "Escape");
+        prop_assert!(!selecting(harness));
+        prop_assert_eq!(observed(harness).mode, Mode::Interact);
+    }
+    prop_assert!(!selecting(harness));
+    Ok(())
 }
 
 proptest! {

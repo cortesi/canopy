@@ -40,10 +40,12 @@ pub struct SurfaceState {
     pub presentation: Option<Arc<PresentationSnapshot>>,
     /// Semantic identity survives eviction of inactive prepared geometry.
     pub document: Option<Arc<DocumentSnapshot>>,
-    /// Selection, search, and object decorations for the displayed revision.
+    /// Search and image decorations for the displayed revision. The
+    /// selection and the object cursor come from `interaction` as it paints.
     pub overlays: PaintOverlays,
-    /// Whether navigation scrolls the document or moves a reading cursor.
-    pub mode: Mode,
+    /// What reader input works on: the viewport, or the block cursor with
+    /// its object and selection.
+    interaction: Interaction,
     /// Whether publication follows the tail or preserves the reading anchor.
     pub follow: Follow,
     /// Reader-input generation used to supersede pending position restores.
@@ -54,8 +56,6 @@ pub struct SurfaceState {
     pub wake: Option<NodeWakeHandle>,
     /// Object requested for inspection by an explicit pointer activation.
     pub pending_open: Option<u64>,
-    /// Whether a captured left-button gesture is in progress.
-    pub dragging: bool,
     /// Prepared canvas rectangle for the next local reveal request.
     pub reveal: Option<Rect>,
     /// Whether a new query waits to reveal its first match once its matches
@@ -78,13 +78,116 @@ pub struct SurfaceState {
     /// How the view must scroll for the block cursor, which the controller
     /// does when it next polls.
     pub cursor_scroll: Option<CursorScroll>,
-    /// Fixed reading endpoint for the current pointer gesture.
-    drag_anchor: Option<ReadingPosition>,
+    /// Where the current left-button press started, while it lasts. A press
+    /// in Scroll starts a drag before it selects anything.
+    press: Option<ReadingPosition>,
     /// Retained display column for vertical selection movement.
     preferred_column: Option<u32>,
     /// The edit units of the shown document and their rows, built when the
     /// cursor first needs them.
     cursor: Option<CursorMap>,
+}
+
+/// What reader input works on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Interaction {
+    /// Navigation scrolls the view. A current search match may name an
+    /// object, which shows but takes no keys.
+    Scroll {
+        /// The object of the current search match.
+        search_object: Option<u64>,
+    },
+    /// The block cursor marks a unit.
+    Block {
+        /// What the block cursor holds within its unit.
+        focus: Focus,
+    },
+}
+
+/// What the block cursor holds within the unit it marks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Focus {
+    /// The unit alone.
+    Unit,
+    /// An object, which activation opens.
+    Object(u64),
+    /// A text selection, and the object it started from, which an Esc
+    /// returns to.
+    Selecting {
+        /// The selection, in reading coordinates.
+        range: ReadingRange,
+        /// The object cursor's object, if any.
+        object: Option<u64>,
+    },
+}
+
+impl Focus {
+    /// The object alone, or the unit.
+    fn on(object: Option<u64>) -> Self {
+        object.map_or(Self::Unit, Self::Object)
+    }
+}
+
+impl Default for Interaction {
+    fn default() -> Self {
+        Self::resting(Mode::default())
+    }
+}
+
+impl Interaction {
+    /// The interaction a view rests in.
+    fn resting(mode: Mode) -> Self {
+        match mode {
+            Mode::Scroll => Self::Scroll {
+                search_object: None,
+            },
+            Mode::Interact => Self::Block { focus: Focus::Unit },
+        }
+    }
+
+    /// Whether navigation scrolls the view or moves the block cursor.
+    pub fn mode(&self) -> Mode {
+        match self {
+            Self::Scroll { .. } => Mode::Scroll,
+            Self::Block { .. } => Mode::Interact,
+        }
+    }
+
+    /// The text selection.
+    pub fn selection(&self) -> Option<&ReadingRange> {
+        match self {
+            Self::Block {
+                focus: Focus::Selecting { range, .. },
+            } => Some(range),
+            _ => None,
+        }
+    }
+
+    /// The current object: the object cursor's, or the current search
+    /// match's while scrolling.
+    pub fn object(&self) -> Option<u64> {
+        match self {
+            Self::Scroll { search_object } => *search_object,
+            Self::Block {
+                focus: Focus::Object(object),
+            } => Some(*object),
+            Self::Block {
+                focus: Focus::Selecting { object, .. },
+            } => *object,
+            Self::Block { focus: Focus::Unit } => None,
+        }
+    }
+
+    /// Replace the current object, keeping any selection.
+    fn set_object(&mut self, id: Option<u64>) {
+        match self {
+            Self::Scroll { search_object } => *search_object = id,
+            Self::Block {
+                focus: Focus::Selecting { object, .. },
+            } => *object = id,
+            Self::Block { focus } => *focus = Focus::on(id),
+        }
+    }
 }
 
 /// A unit for the cursor to mark once a presentation of its epoch shows: as
@@ -157,12 +260,108 @@ impl SurfaceState {
         Ok(())
     }
 
-    /// Return to scrolling. The object cursor belongs to Interact, so it
-    /// goes too: nothing stays marked, and no action reads an object the
-    /// reader no longer shows.
-    pub fn leave_interact(&mut self) {
-        self.mode = Mode::Scroll;
-        self.overlays.active_object = None;
+    /// What reader input works on.
+    pub fn interaction(&self) -> &Interaction {
+        &self.interaction
+    }
+
+    /// Whether navigation scrolls the document or moves the block cursor.
+    pub fn mode(&self) -> Mode {
+        self.interaction.mode()
+    }
+
+    /// The text selection.
+    pub fn selection(&self) -> Option<&ReadingRange> {
+        self.interaction.selection()
+    }
+
+    /// The current object: the object cursor's, or the current search
+    /// match's while scrolling.
+    pub fn object(&self) -> Option<u64> {
+        self.interaction.object()
+    }
+
+    /// Whether a left-button press, and the drag it may start, lasts.
+    pub fn dragging(&self) -> bool {
+        self.press.is_some()
+    }
+
+    /// Rest in `mode`, as a new text does: no object, selection, or press.
+    pub fn rest(&mut self, mode: Mode) {
+        self.resting = mode;
+        self.interaction = Interaction::resting(mode);
+        self.press = None;
+    }
+
+    /// Enter the block cursor. The current search object becomes the
+    /// object cursor's.
+    pub fn enter(&mut self) {
+        if let Interaction::Scroll { search_object } = self.interaction {
+            self.interaction = Interaction::Block {
+                focus: Focus::on(search_object),
+            };
+        }
+    }
+
+    /// Return to scrolling. The object cursor and the selection belong to
+    /// the block cursor, so they go too, and so does a press that could
+    /// make a selection: nothing stays marked, and no action reads what the
+    /// reader no longer shows. Return whether a press ended, so the caller
+    /// releases its capture.
+    pub fn leave(&mut self) -> bool {
+        if !matches!(self.interaction, Interaction::Block { .. }) {
+            return false;
+        }
+        self.interaction = Interaction::resting(Mode::Scroll);
+        self.press.take().is_some()
+    }
+
+    /// Replace the current object, keeping any selection.
+    pub fn set_object(&mut self, id: Option<u64>) {
+        self.interaction.set_object(id);
+    }
+
+    /// Drop the selection and the current object, as an edit does.
+    pub fn clear_marks(&mut self) {
+        self.interaction = match self.interaction {
+            Interaction::Scroll { .. } => Interaction::resting(Mode::Scroll),
+            Interaction::Block { .. } => Interaction::resting(Mode::Interact),
+        };
+    }
+
+    /// Select `range` in the block cursor, from the current object.
+    fn select(&mut self, range: ReadingRange) {
+        let object = self.interaction.object();
+        self.interaction = Interaction::Block {
+            focus: Focus::Selecting { range, object },
+        };
+    }
+
+    /// Drop the selection, back to the object it started from. Return
+    /// whether there was one.
+    fn drop_selection(&mut self) -> bool {
+        let Interaction::Block {
+            focus: Focus::Selecting { object, .. },
+        } = self.interaction
+        else {
+            return false;
+        };
+        self.interaction = Interaction::Block {
+            focus: Focus::on(object),
+        };
+        true
+    }
+
+    /// Take mode `mode` once a pending mark shows, through the checks of
+    /// `set_mode`: the block cursor only if `may_enter`.
+    fn take_mode(&mut self, mode: Mode, may_enter: bool) {
+        match mode {
+            Mode::Interact if may_enter => self.enter(),
+            Mode::Interact => {}
+            Mode::Scroll => {
+                self.leave();
+            }
+        }
     }
 
     /// Return the edit units of the shown document and the rows of each,
@@ -203,7 +402,7 @@ impl SurfaceState {
     /// Return the unit that the block cursor marks, and its rows, while
     /// Interact lasts.
     pub fn marked_unit(&mut self) -> Option<(EditUnit, Range<u32>)> {
-        if self.mode != Mode::Interact {
+        if self.mode() != Mode::Interact {
             return None;
         }
         let index = self.marked_index()?;
@@ -223,7 +422,7 @@ impl SurfaceState {
         };
         let moved = self.marked_index() != Some(index);
         if moved && !keep_object {
-            self.overlays.active_object = None;
+            self.set_object(None);
         }
         self.marked = Some(start);
     }
@@ -254,7 +453,7 @@ impl SurfaceState {
     /// nearest unit, which the view must scroll to. Return that step, if the
     /// cursor moves.
     fn settle(&mut self, frame: Frame) -> Option<Step> {
-        if self.mode != Mode::Interact || frame.height == 0 {
+        if self.mode() != Mode::Interact || frame.height == 0 {
             return None;
         }
         let (_, rows) = self.cursor_map()?;
@@ -282,12 +481,16 @@ impl SurfaceState {
     /// Whether selection or object navigation, rather than the viewport,
     /// consumes a navigation intent.
     pub fn claims(&self, nav: NavIntent) -> bool {
-        self.overlays.selection.is_some() && !matches!(nav, NavIntent::PageUp | NavIntent::PageDown)
-            || self.mode == Mode::Interact
-                && matches!(
-                    nav,
-                    NavIntent::Up | NavIntent::Down | NavIntent::First | NavIntent::Last
-                )
+        match &self.interaction {
+            Interaction::Scroll { .. } => false,
+            Interaction::Block {
+                focus: Focus::Selecting { .. },
+            } => !matches!(nav, NavIntent::PageUp | NavIntent::PageDown),
+            Interaction::Block { .. } => matches!(
+                nav,
+                NavIntent::Up | NavIntent::Down | NavIntent::First | NavIntent::Last
+            ),
+        }
     }
 }
 
@@ -320,6 +523,7 @@ impl RenderedSurface {
         &mut self,
         ctx: &mut dyn Context,
         next: Arc<PresentationSnapshot>,
+        may_enter: bool,
     ) -> Result<bool> {
         let navigation = self.state.borrow().navigation;
         // The block cursor's unit holds its place on screen, so a resize or
@@ -341,48 +545,40 @@ impl RenderedSurface {
             .as_ref()
             .is_some_and(|old| old.source.epoch == next.document.source.epoch);
         if same_epoch {
-            if let Some(selection) = &state.overlays.selection {
+            if let Some(selection) = state.selection() {
                 let unchanged = old_document
                     .as_ref()
                     .is_some_and(|old| same_projection(old, &next.document, selection));
                 if !unchanged {
-                    state.overlays.selection = None;
+                    state.drop_selection();
                     cleared = true;
                 }
             }
-            if state
-                .overlays
-                .active_object
-                .is_some_and(|id| !next.document.objects.iter().any(|o| o.id == id))
-            {
+            let object = state.object();
+            if object.is_some_and(|id| !next.document.objects.iter().any(|o| o.id == id)) {
                 let source = old_document
                     .as_ref()
-                    .and_then(|document| {
-                        document
-                            .objects
-                            .iter()
-                            .find(|o| Some(o.id) == state.overlays.active_object)
-                    })
+                    .and_then(|document| document.objects.iter().find(|o| Some(o.id) == object))
                     .map_or(0, |o| o.source.start);
-                state.overlays.active_object = next
+                let next_object = next
                     .document
                     .objects
                     .iter()
                     .find(|o| o.source.start >= source)
                     .or_else(|| next.document.objects.last())
                     .map(|o| o.id);
+                state.set_object(next_object);
             }
             if state
-                .drag_anchor
+                .press
                 .is_some_and(|p| !valid_position(&next.document, p))
                 || cleared
             {
-                state.drag_anchor = None;
-                state.dragging = false;
+                state.press = None;
                 ctx.release_mouse()?;
             }
         } else {
-            cleared = state.overlays.selection.is_some();
+            cleared = state.selection().is_some();
             // The images that the host supplied outlive a new text, as the
             // reader's answers do: it does not ask for them again. A new
             // document drops both.
@@ -391,10 +587,9 @@ impl RenderedSurface {
                 images,
                 ..PaintOverlays::default()
             };
-            state.mode = state.resting;
+            let resting = state.resting;
+            state.rest(resting);
             state.marked = None;
-            state.drag_anchor = None;
-            state.dragging = false;
             state.preferred_column = None;
             state.pending_open = None;
             state.navigation = state.navigation.wrapping_add(1);
@@ -440,7 +635,7 @@ impl RenderedSurface {
         {
             state.pending_mark = None;
             state.marked = Some(pending.byte);
-            state.mode = pending.mode;
+            state.take_mode(pending.mode, may_enter);
             let rows = state
                 .cursor_map()
                 .and_then(|(units, rows)| rows.get(unit_at(&units, pending.byte)?).cloned());
@@ -463,7 +658,7 @@ impl RenderedSurface {
     /// the unit it marked before, if that unit still shows, or else the first
     /// unit with a row in view.
     pub fn enter_interact(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        self.state.borrow_mut().mode = Mode::Interact;
+        self.state.borrow_mut().enter();
         self.sync_cursor(ctx)?;
         self.state.borrow().notify()
     }
@@ -499,7 +694,7 @@ impl RenderedSurface {
         let view = ctx.view();
         let step = {
             let mut state = self.state.borrow_mut();
-            state.mode = Mode::Interact;
+            state.enter();
             let Some((units, rows)) = state.cursor_map() else {
                 return Ok(());
             };
@@ -600,18 +795,15 @@ impl RenderedSurface {
                 offset: 0,
             })
         });
-        state.mode = Mode::Interact;
-        if state.overlays.selection.is_none() {
+        state.enter();
+        if state.selection().is_none() {
+            let object = state.object();
             let object_position = state.presentation.as_ref().and_then(|p| {
-                let object = p
-                    .document
-                    .objects
-                    .iter()
-                    .find(|o| Some(o.id) == state.overlays.active_object)?;
+                let object = p.document.objects.iter().find(|o| Some(o.id) == object)?;
                 object_position(&p.document, object)
             });
             if let Some(position) = object_position.or(marked).or(reading) {
-                state.overlays.selection = Some(ReadingRange {
+                state.select(ReadingRange {
                     start: position,
                     end: position,
                 });
@@ -628,21 +820,21 @@ impl RenderedSurface {
     /// capture.
     pub fn escape(&self, ctx: &mut dyn Context) -> Result<bool> {
         let mut state = self.state.borrow_mut();
-        let handled = if state.overlays.selection.take().is_some()
-            || state.overlays.active_object.take().is_some()
-        {
+        let handled = if state.drop_selection() {
             true
-        } else if state.mode == Mode::Interact && state.resting == Mode::Scroll {
-            state.leave_interact();
+        } else if state.object().is_some() {
+            state.set_object(None);
+            true
+        } else if state.mode() == Mode::Interact && state.resting == Mode::Scroll {
+            state.leave();
             true
         } else {
-            state.drag_anchor.is_some()
+            state.press.is_some()
         };
         if !handled {
             return Ok(false);
         }
-        state.dragging = false;
-        state.drag_anchor = None;
+        state.press = None;
         state.preferred_column = None;
         ctx.release_mouse()?;
         state.notify()?;
@@ -653,7 +845,7 @@ impl RenderedSurface {
     pub fn navigate(&mut self, ctx: &mut dyn Context, intent: NavIntent) -> Result<()> {
         let (claimed, selection) = {
             let state = self.state.borrow();
-            (state.claims(intent), state.overlays.selection.is_some())
+            (state.claims(intent), state.selection().is_some())
         };
         if !claimed {
             return self.scroll(ctx, intent.scroll_op());
@@ -678,11 +870,9 @@ impl RenderedSurface {
         let Some(presentation) = state.presentation.clone() else {
             return Ok(());
         };
-        state.mode = Mode::Interact;
+        state.enter();
         let objects = &presentation.document.objects;
-        let current = objects
-            .iter()
-            .position(|o| Some(o.id) == state.overlays.active_object);
+        let current = objects.iter().position(|o| Some(o.id) == state.object());
         let marked = state.marked_unit().map(|(unit, _)| unit.range);
         let target = match (current, marked) {
             (Some(index), _) if delta < 0 => index.checked_sub(1),
@@ -696,7 +886,7 @@ impl RenderedSurface {
         };
         if let Some(index) = target {
             let object = &objects[index];
-            state.overlays.active_object = Some(object.id);
+            state.set_object(Some(object.id));
             if let Some(unit) = state.unit_of_reading(object.unit_id) {
                 state.mark(unit, true);
             }
@@ -722,12 +912,13 @@ impl RenderedSurface {
     /// Queue a local reveal of the selected object, including its card label.
     fn reveal_object(&self, ctx: &mut dyn Context) -> Result<()> {
         let mut state = self.state.borrow_mut();
+        let current = state.object();
         if let Some(presentation) = state.presentation.as_ref()
             && let Some(object) = presentation
                 .document
                 .objects
                 .iter()
-                .find(|o| Some(o.id) == state.overlays.active_object)
+                .find(|o| Some(o.id) == current)
         {
             state.reveal = Some(Rect::new(
                 0,
@@ -850,7 +1041,7 @@ impl RenderedSurface {
         let Some(presentation) = state.presentation.clone() else {
             return Ok(());
         };
-        let Some(selection) = state.overlays.selection.clone() else {
+        let Some(selection) = state.selection().cloned() else {
             return Ok(());
         };
         let current = selection.end;
@@ -944,7 +1135,7 @@ impl RenderedSurface {
             }
             NavIntent::PageUp | NavIntent::PageDown => unreachable!(),
         }
-        state.overlays.selection = Some(ReadingRange {
+        state.select(ReadingRange {
             start: selection.start,
             end: endpoint,
         });
@@ -976,8 +1167,7 @@ impl RenderedSurface {
         }
         if event.action == mouse::Action::Up {
             let mut state = self.state.borrow_mut();
-            let handled = state.drag_anchor.take().is_some();
-            state.dragging = false;
+            let handled = state.press.take().is_some();
             ctx.release_mouse()?;
             state.notify()?;
             return Ok(if handled {
@@ -992,25 +1182,24 @@ impl RenderedSurface {
         let Some(presentation) = self.painted.as_ref().and_then(Weak::upgrade) else {
             return Ok(EventOutcome::Ignore);
         };
-        let point =
-            if event.action == mouse::Action::Drag && self.state.borrow().drag_anchor.is_some() {
-                let mut point = ctx
-                    .view()
-                    .viewport_to_content(event.location)?
-                    .clamped_point();
-                point.x = point.x.min(presentation.width().saturating_sub(1));
-                point.y = point.y.min(presentation.height().saturating_sub(1));
-                Some(point)
-            } else {
-                ctx.view().content_point(event.location)
-            };
+        let point = if event.action == mouse::Action::Drag && self.state.borrow().press.is_some() {
+            let mut point = ctx
+                .view()
+                .viewport_to_content(event.location)?
+                .clamped_point();
+            point.x = point.x.min(presentation.width().saturating_sub(1));
+            point.y = point.y.min(presentation.height().saturating_sub(1));
+            Some(point)
+        } else {
+            ctx.view().content_point(event.location)
+        };
         // A press on a row of a unit moves the block cursor to that unit.
         let mut marked = false;
         if event.action == mouse::Action::Down
             && let Some(point) = point
         {
             let mut state = self.state.borrow_mut();
-            if state.mode == Mode::Interact
+            if state.mode() == Mode::Interact
                 && !state.awaiting
                 && let Some(unit) = state
                     .cursor_map()
@@ -1044,31 +1233,28 @@ impl RenderedSurface {
         }
         if event.action == mouse::Action::Down {
             ctx.set_focus(ctx.node_id())?;
-            state.drag_anchor = Some(position);
-            state.dragging = false;
+            state.press = Some(position);
             state.preferred_column = None;
             if let Some(object) = hit.object {
-                let activate =
-                    state.mode == Mode::Interact && state.overlays.active_object == Some(object);
-                state.mode = Mode::Interact;
-                state.overlays.active_object = Some(object);
+                let activate = state.mode() == Mode::Interact && state.object() == Some(object);
+                state.interaction = Interaction::Block {
+                    focus: Focus::Object(object),
+                };
                 if let Some(unit) = state.unit_of_reading(position.unit_id) {
                     state.mark(unit, true);
                 }
-                state.overlays.selection = None;
                 state.follow = Follow::Paused;
                 state.navigated();
                 if activate {
                     state.pending_open = Some(object);
-                    state.drag_anchor = None;
+                    state.press = None;
                     ctx.release_mouse()?;
                 }
             }
-            if state.drag_anchor.is_some() {
+            if state.press.is_some() {
                 ctx.capture_mouse()?;
-                state.dragging = true;
             }
-        } else if let Some(anchor) = state.drag_anchor {
+        } else if let Some(anchor) = state.press {
             let mut end = position;
             if let Some(unit) = presentation.document.unit(position.unit_id)
                 && unit.atomic
@@ -1083,9 +1269,7 @@ impl RenderedSurface {
                     end.offset = unit.text.len();
                 }
             }
-            state.overlays.selection = Some(ReadingRange { start: anchor, end });
-            state.dragging = true;
-            state.mode = Mode::Interact;
+            state.select(ReadingRange { start: anchor, end });
             state.follow = Follow::Paused;
             state.navigated();
             let (row, column) = display_position(&presentation, end);
@@ -1143,9 +1327,8 @@ impl Widget for RenderedSurface {
             state.notify()?;
         }
         self.observed_scroll = Some((view.scroll, view.content_size()));
-        if !ctx.has_mouse_capture() && state.drag_anchor.is_some() {
-            state.drag_anchor = None;
-            state.dragging = false;
+        if !ctx.has_mouse_capture() {
+            state.press = None;
         }
         // The block cursor keeps a unit in view. A resize or a new layout
         // keeps the marked unit, and the controller scrolls to it, unless the
@@ -1170,6 +1353,8 @@ impl Widget for RenderedSurface {
             state.notify()?;
         }
         state.overlays.block_rows = state.marked_unit().map(|(_, rows)| rows);
+        state.overlays.selection = state.selection().cloned();
+        state.overlays.active_object = state.object();
         if let Some(presentation) = state.presentation.as_ref() {
             presentation.paint(render, view.view_rect(), &state.overlays)?;
             self.painted = Some(Arc::downgrade(presentation));
@@ -1199,9 +1384,7 @@ impl Widget for RenderedSurface {
         match event {
             Event::Mouse(event) => self.pointer(event, ctx),
             Event::FocusLost => {
-                let mut state = self.state.borrow_mut();
-                state.dragging = false;
-                state.drag_anchor = None;
+                self.state.borrow_mut().press = None;
                 ctx.release_mouse()?;
                 Ok(EventOutcome::Ignore)
             }
@@ -1229,9 +1412,7 @@ impl Widget for RenderedSurface {
         )
     }
     fn on_unmount(&mut self, ctx: &mut dyn Context) {
-        let mut state = self.state.borrow_mut();
-        state.dragging = false;
-        state.drag_anchor = None;
+        self.state.borrow_mut().press = None;
         drop(ctx.release_mouse());
     }
 }
@@ -1413,13 +1594,13 @@ mod tests {
             assert!(!surface.accepts_intent(NavIntent::Up.name(), ctx));
             surface.enter_interact(ctx)?;
             assert!(surface.accepts_intent(NavIntent::Up.name(), ctx));
-            let object = state.borrow().overlays.active_object;
+            let object = state.borrow().object();
             surface.navigate(ctx, NavIntent::Up)?;
-            assert_eq!(state.borrow().overlays.active_object, object);
+            assert_eq!(state.borrow().object(), object);
             assert!(surface.escape(ctx)?);
-            assert_eq!(state.borrow().mode, Mode::Scroll);
+            assert_eq!(state.borrow().mode(), Mode::Scroll);
             assert_eq!(
-                state.borrow().overlays.active_object,
+                state.borrow().object(),
                 None,
                 "leaving Interact drops the object cursor, so nothing stays marked"
             );
@@ -1434,34 +1615,14 @@ mod tests {
         with(&mut h, |surface, ctx| {
             surface.start_selection(ctx)?;
             surface.navigate(ctx, NavIntent::Right)?;
-            assert_eq!(
-                state
-                    .borrow()
-                    .overlays
-                    .selection
-                    .as_ref()
-                    .unwrap()
-                    .end
-                    .offset,
-                "á".len()
-            );
+            assert_eq!(state.borrow().selection().unwrap().end.offset, "á".len());
             surface.navigate(ctx, NavIntent::Right)?;
-            assert_eq!(
-                state
-                    .borrow()
-                    .overlays
-                    .selection
-                    .as_ref()
-                    .unwrap()
-                    .end
-                    .offset,
-                "á🙂".len()
-            );
+            assert_eq!(state.borrow().selection().unwrap().end.offset, "á🙂".len());
             surface.escape(ctx)?;
-            assert!(state.borrow().overlays.selection.is_none());
-            assert_eq!(state.borrow().mode, Mode::Interact);
+            assert!(state.borrow().selection().is_none());
+            assert_eq!(state.borrow().mode(), Mode::Interact);
             surface.escape(ctx)?;
-            assert_eq!(state.borrow().mode, Mode::Scroll);
+            assert_eq!(state.borrow().mode(), Mode::Scroll);
             Ok(())
         })
     }
@@ -1486,7 +1647,7 @@ mod tests {
             .build()?;
         h.render()?;
         // The selection is changed after preparation began, before publication.
-        state.borrow_mut().overlays.selection = Some(ReadingRange {
+        state.borrow_mut().select(ReadingRange {
             start: ReadingPosition {
                 unit_id: id,
                 offset: 0,
@@ -1504,7 +1665,8 @@ mod tests {
                     old.geometry,
                     Some(&old),
                     &Supplied::default()
-                ))
+                )),
+                true
             )?);
             next_document.units[0].text = "other".into();
             assert!(surface.publish(
@@ -1514,9 +1676,10 @@ mod tests {
                     old.geometry,
                     None,
                     &Supplied::default()
-                ))
+                )),
+                true
             )?);
-            assert!(state.borrow().overlays.selection.is_none());
+            assert!(state.borrow().selection().is_none());
             Ok(())
         })
     }
@@ -1538,7 +1701,7 @@ mod tests {
                 .unwrap()
         };
         h.mouse(pointer(mouse::Action::Down, point.0 as i32, point.1 as i32))?;
-        assert_eq!(state.borrow().mode, Mode::Interact);
+        assert_eq!(state.borrow().mode(), Mode::Interact);
         assert!(state.borrow().pending_open.is_none());
         h.mouse(pointer(mouse::Action::Up, point.0 as i32, point.1 as i32))?;
         h.mouse(pointer(mouse::Action::Down, point.0 as i32, point.1 as i32))?;
@@ -1550,10 +1713,10 @@ mod tests {
         state.borrow_mut().pending_open = None;
         h.mouse(pointer(mouse::Action::Down, 2, 2))?;
         h.mouse(pointer(mouse::Action::Drag, 6, 2))?;
-        assert!(state.borrow().dragging);
-        assert!(state.borrow().overlays.selection.is_some());
+        assert!(state.borrow().dragging());
+        assert!(state.borrow().selection().is_some());
         h.mouse(pointer(mouse::Action::Up, 6, 2))?;
-        assert!(!state.borrow().dragging);
+        assert!(!state.borrow().dragging());
         with(&mut h, |_, ctx| {
             assert!(!ctx.has_mouse_capture());
             Ok(())
@@ -1612,7 +1775,7 @@ mod tests {
         let (mut h, state) = mounted("[one](https://one.test)\n\nalpha\n")?;
         let old = state.borrow().presentation.clone().unwrap();
         with(&mut h, |surface, ctx| {
-            surface.publish(ctx, old.clone())?;
+            surface.publish(ctx, old.clone(), true)?;
             surface.enter_interact(ctx)?;
             surface.start_selection(ctx)?;
             surface.navigate(ctx, NavIntent::Right)?;
@@ -1621,11 +1784,7 @@ mod tests {
         let (selection, object, navigation) = {
             let mut state = state.borrow_mut();
             state.presentation = None;
-            (
-                state.overlays.selection.clone(),
-                state.overlays.active_object,
-                state.navigation,
-            )
+            (state.selection().cloned(), state.object(), state.navigation)
         };
         let document = state.borrow().document.clone().unwrap();
         let next = Arc::new(PresentationSnapshot::prepare(
@@ -1638,11 +1797,11 @@ mod tests {
             &Supplied::default(),
         ));
         with(&mut h, |surface, ctx| {
-            assert!(!surface.publish(ctx, next)?);
+            assert!(!surface.publish(ctx, next, true)?);
             let state = state.borrow();
-            assert_eq!(state.mode, Mode::Interact);
-            assert_eq!(state.overlays.selection, selection);
-            assert_eq!(state.overlays.active_object, object);
+            assert_eq!(state.mode(), Mode::Interact);
+            assert_eq!(state.selection().cloned(), selection);
+            assert_eq!(state.object(), object);
             assert_eq!(state.navigation, navigation);
             assert!(Arc::ptr_eq(state.document.as_ref().unwrap(), &document));
             Ok(())

@@ -392,7 +392,7 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context, opening: Openin
     let snapshot = reader.store.snapshot();
     let (body, rendered, search) = (nodes.body, nodes.rendered, nodes.search);
     // The block cursor marks the unit to edit.
-    if reader.shared.borrow().mode != crate::Mode::Interact {
+    if reader.shared.borrow().mode() != crate::Mode::Interact {
         ctx.with_widget_mut(rendered, |surface: &mut RenderedSurface, ctx| {
             surface.enter_interact(ctx)
         })?;
@@ -774,7 +774,7 @@ pub(super) fn pending_mark(
         epoch,
         byte,
         row,
-        mode: state.mode,
+        mode: state.mode(),
     }
 }
 
