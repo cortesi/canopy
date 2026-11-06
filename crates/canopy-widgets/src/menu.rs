@@ -23,7 +23,7 @@ use canopy::{
     Widget,
     commands::CommandCall,
     derive_commands,
-    error::{Error, Result},
+    error::Result,
     geom::{Line, Rect, Size},
     input::{
         BindingAction, BindingOptions, BindingPhase, BindingTier, Event, FrameworkBindingGroup,
@@ -34,6 +34,7 @@ use canopy::{
     render::Render,
     style::{PartialStyle, StyleRules, roles, themes::Palette},
     text,
+    widget::Mount,
 };
 
 use crate::{
@@ -266,12 +267,16 @@ impl MenuItem {
 /// [`Menu::BINDINGS`] as its binding group, and closes it from the close call
 /// that the list posts.
 pub struct Menu {
-    /// The title the frame shows.
-    title: String,
-    /// The frame, once mounted.
-    frame: Option<TypedId<Frame>>,
-    /// The list, once mounted.
-    list: Option<TypedId<MenuList>>,
+    /// The title the frame shows, and the frame and the list once mounted.
+    parts: Mount<String, Parts>,
+}
+
+/// The children a menu builds when it mounts.
+struct Parts {
+    /// The frame.
+    frame: TypedId<Frame>,
+    /// The list.
+    list: TypedId<MenuList>,
 }
 
 #[derive_commands]
@@ -287,18 +292,14 @@ impl Menu {
     #[must_use]
     pub fn new(title: impl Into<String>) -> Self {
         Self {
-            title: title.into(),
-            frame: None,
-            list: None,
+            parts: Mount::new(title.into()),
         }
     }
 
     /// Return the list, which takes the keyboard while the menu is open, or
     /// an error before the menu mounts.
     pub fn list(&self) -> Result<NodeId> {
-        self.list
-            .map(Into::into)
-            .ok_or_else(|| Error::Invalid("the menu is not mounted".into()))
+        Ok(self.parts.mounted()?.list.into())
     }
 
     /// Show `items` under `title`, with the row at `selected` selected.
@@ -313,17 +314,13 @@ impl Menu {
         selected: usize,
         close: CommandCall,
     ) -> Result<()> {
-        self.title = title.into();
-        if let Some(frame) = self.frame {
-            let title = self.title.clone();
-            context.with_widget_mut(frame, |frame: &mut Frame, _| {
-                frame.set_title(title);
-                Ok(())
-            })?;
-        }
-        let list = self
-            .list
-            .ok_or_else(|| Error::Invalid("the menu is not mounted".into()))?;
+        let title = title.into();
+        self.parts.pending_mut().clone_from(&title);
+        let &Parts { frame, list } = self.parts.mounted()?;
+        context.with_widget_mut(frame, |frame: &mut Frame, _| {
+            frame.set_title(title);
+            Ok(())
+        })?;
         context.with_widget_mut(list, |list: &mut MenuList, _| {
             list.set_items(items, Some(selected));
             list.set_close(Some(close));
@@ -344,13 +341,18 @@ impl Widget for Menu {
 
     fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
         let me = context.node_id();
-        let (dialog, list) =
-            Dialog::new()
-                .with_title(self.title.clone())
-                .add(context, me, MenuList::new())?;
-        self.frame = Some(Dialog::frame(context, dialog.into())?);
-        self.list = Some(list);
-        Ok(())
+        self.parts.mount(|title| {
+            let (dialog, list) =
+                Dialog::new()
+                    .with_title(title.clone())
+                    .add(context, me, MenuList::new())?;
+            let frame = Dialog::frame(context, dialog.into())?;
+            Ok(Parts { frame, list })
+        })
+    }
+
+    fn on_unmount(&mut self, _context: &mut dyn Context) {
+        self.parts.unmount();
     }
 
     fn name(&self) -> NodeName {
@@ -633,7 +635,7 @@ impl Widget for MenuList {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, ContextExt, NodeId, Widget,
+        Context, ContextExt, NodeId, ViewContextExt, Widget,
         commands::CommandTarget,
         error::Result,
         input::{ModalBindings, ModalOptions, key::Key},
@@ -641,6 +643,7 @@ mod tests {
     };
 
     use super::{Menu, MenuItem, MenuList, MenuRow, RowLayout};
+    use crate::remount_test_support::attach_and_roll_back;
 
     /// Holds a menu, and records what its rows post.
     #[derive(Default)]
@@ -779,6 +782,26 @@ mod tests {
         harness.key(Key::parse_spec("q")?)?;
         assert_eq!(posted(&mut harness), ["q", "closed"], "the row's key wins");
         Ok(())
+    }
+
+    #[test]
+    fn regression_a_rolled_back_menu_reads_unmounted_and_mounts_again() -> Result<()> {
+        let (mut harness, _) = hosting()?;
+        harness.with_root_widget_context(|_: &mut MenuHost, ctx| {
+            let menu = ctx.create_detached(Menu::new("again"))?;
+            attach_and_roll_back(ctx, menu.into());
+            let unmounted = ctx.with_widget(menu, |menu: &Menu| Ok(menu.list().is_err()))?;
+            assert!(unmounted, "a rolled-back menu has no list");
+            ctx.attach(ctx.node_id(), menu.into())?;
+            let list = ctx.with_widget_mut(menu, |menu: &mut Menu, ctx| {
+                let item = MenuItem::note(MenuRow::new(None, "a note"));
+                menu.set_items(ctx, "Again", vec![item], 0, MenuHost::call_closed())?;
+                menu.list()
+            })?;
+            let rows = ctx.with_widget(list, |list: &MenuList| Ok(list.items.len()))?;
+            assert_eq!(rows, 1, "the second mount builds a list that takes items");
+            Ok(())
+        })
     }
 
     #[test]

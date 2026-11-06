@@ -16,9 +16,8 @@ impl Widget for MountFails {
 }
 
 /// Attach the detached `node` under the node of `ctx` in a tree edit that a
-/// failing sibling rolls back, so `node` mounts and unmounts, and then attach
-/// it again, so it mounts a second time.
-pub fn attach_after_rollback(ctx: &mut dyn Context, node: NodeId) -> Result<()> {
+/// failing sibling rolls back, so `node` mounts and then unmounts.
+pub fn attach_and_roll_back(ctx: &mut dyn Context, node: NodeId) {
     let parent = ctx.node_id();
     let failed = ctx.edit_structure(&mut |ctx| {
         ctx.attach(parent, node)?;
@@ -26,5 +25,12 @@ pub fn attach_after_rollback(ctx: &mut dyn Context, node: NodeId) -> Result<()> 
         Ok(())
     });
     assert!(failed.is_err(), "the sibling's mount fails the edit");
+}
+
+/// Attach the detached `node` as [`attach_and_roll_back`] does, and then
+/// attach it again, so it mounts a second time.
+pub fn attach_after_rollback(ctx: &mut dyn Context, node: NodeId) -> Result<()> {
+    attach_and_roll_back(ctx, node);
+    let parent = ctx.node_id();
     ctx.attach(parent, node)
 }
