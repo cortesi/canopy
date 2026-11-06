@@ -1,7 +1,8 @@
 use std::{cell::Cell, rc::Rc};
 
 use canopy::{
-    input::{BindingAction, BindingOptions, BindingTier, IntentName},
+    geom::PointI32,
+    input::{BindingAction, BindingOptions, BindingTier, IntentName, key},
     layout::ScrollAxis,
     runtime::{NoticeLevel, TurnInput},
     testing::harness::Harness,
@@ -3259,4 +3260,53 @@ mod search_model {
             }
         }
     }
+}
+
+#[test]
+fn regression_a_scrollbar_drag_that_a_modal_ends_holds_back_nothing() {
+    let text: String = (0..40).map(|i| format!("Paragraph {i}.\n\n")).collect();
+    let (mut harness, manual) = fixture(&text, ViewType::Rendered, true, false, false);
+    settle(&mut harness, &manual);
+    let track = harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| Ok(reader.tracks(ctx).0[0].1))
+        .unwrap();
+    // A press on the thumb, at the top of the track, holds it.
+    harness
+        .mouse(mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: PointI32 {
+                x: track.tl.x as i32,
+                y: track.tl.y as i32,
+            },
+        })
+        .unwrap();
+    service(&mut harness);
+    assert!(harness.with_root_widget(|reader: &mut Markdown| reader.vertical.is_dragging()));
+    // A modal opens over the drag, and takes the capture. The text grows,
+    // and its layout completes while the modal is open.
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.inspect_source(ctx)?;
+            assert!(!ctx.has_mouse_capture());
+            reader.append(ctx, "Paragraph more.\n\n").map(|_| ())
+        })
+        .unwrap();
+    for _ in 0..4 {
+        service(&mut harness);
+        manual.run_until_idle();
+    }
+    // The modal closes, with no pointer input since.
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| reader.dismiss_inspector(ctx))
+        .unwrap();
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            assert_eq!(reader.displayed_revision(), reader.accepted_revision());
+            assert!(reader.can_switch(ctx)?, "the view can switch");
+            Ok(())
+        })
+        .unwrap();
 }

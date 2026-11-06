@@ -212,8 +212,6 @@ pub struct Markdown {
     vertical: Scrollbar,
     /// Horizontal scrollbar interaction state owned by the reader.
     horizontal: Scrollbar,
-    /// Whether a reader scrollbar owns pointer capture.
-    bar_drag: bool,
     /// Per-view logical anchors tagged with the navigation generation.
     saved: [Option<(ReaderPosition, u64)>; 2],
     /// Accepted byte count last seen at the visible tail.
@@ -426,7 +424,6 @@ impl Markdown {
             chrome: Rc::new(RefCell::new(ChromeState::default())),
             vertical: Scrollbar::vertical("markdown/structure", '█'),
             horizontal: Scrollbar::horizontal("markdown/structure", '▄'),
-            bar_drag: false,
             saved: [None, None],
             acknowledged,
             return_position: None,
@@ -702,7 +699,7 @@ impl Markdown {
     /// Whether any Rendered, scrollbar, or mounted Source drag owns the
     /// pointer.
     fn drag_active(&self, ctx: &dyn ViewContext) -> Result<bool> {
-        if self.shared.borrow().dragging() || self.bar_drag {
+        if self.shared.borrow().dragging() || self.bar_dragging(ctx) {
             return Ok(true);
         }
         match self.nodes.as_ref().and_then(|n| n.source) {
@@ -711,6 +708,13 @@ impl Markdown {
             }),
             None => Ok(false),
         }
+    }
+    /// Whether a reader scrollbar drags its thumb. A drag lasts only while
+    /// the reader holds the capture: a modal that takes it, as help does,
+    /// ends the drag, though the scrollbar sees so only as it next draws or
+    /// handles an event.
+    fn bar_dragging(&self, ctx: &dyn ViewContext) -> bool {
+        (self.vertical.is_dragging() || self.horizontal.is_dragging()) && ctx.has_mouse_capture()
     }
     /// Whether the active Source surface holds or is dragging a selection.
     fn source_selecting(&self, ctx: &dyn ViewContext) -> Result<bool> {
@@ -1115,11 +1119,12 @@ impl Markdown {
             return Ok(true);
         }
         let mut ended = false;
-        if self.bar_drag {
+        if self.bar_dragging(ctx) {
             ctx.release_mouse()?;
-            self.bar_drag = false;
             ended = true;
         }
+        self.vertical.cancel_drag();
+        self.horizontal.cancel_drag();
         if let Some(nodes) = &self.nodes {
             if self.active == ViewType::Rendered {
                 ended |= ctx
@@ -3407,7 +3412,6 @@ impl Widget for Markdown {
                 == EventOutcome::Handle
                 || self.horizontal.handle_mouse(ctx, event, &horizontal)? == EventOutcome::Handle;
             if handled {
-                self.bar_drag = ctx.has_mouse_capture();
                 if before != self.view_offset(ctx) {
                     self.sync_cursor(ctx)?;
                     if self
