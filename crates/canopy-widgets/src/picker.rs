@@ -13,7 +13,7 @@
 //! owner: the list keeps its filter and selection under it, and takes the
 //! keyboard back when the overlay closes.
 
-use std::{iter, ops::Range};
+use std::{iter, mem, ops::Range};
 
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
@@ -343,6 +343,99 @@ enum Row {
     Item(usize),
 }
 
+/// The text of a filter, with the words it matches.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Query {
+    /// The text as typed, which the field shows.
+    text: String,
+    /// The words of the text, in lower case. No words is no filter.
+    words: Vec<String>,
+}
+
+impl Query {
+    /// Normalize `text` into its words.
+    fn new(text: String) -> Self {
+        let words = text.split_whitespace().map(str::to_lowercase).collect();
+        Self { text, words }
+    }
+
+    /// Return whether the query has no words, and so filters nothing.
+    fn is_blank(&self) -> bool {
+        self.words.is_empty()
+    }
+}
+
+/// The filter of a list.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Filter {
+    /// No filter: every item shows, and the field is hidden.
+    Off,
+    /// The field takes filter text.
+    Editing(Query),
+    /// A filter given with Enter, which the field shows. Its query has words.
+    Applied(Query),
+}
+
+impl Filter {
+    /// Return the filter that opens the field, keeping the query.
+    fn edit(self) -> Self {
+        match self {
+            Self::Off => Self::Editing(Query::default()),
+            Self::Editing(query) | Self::Applied(query) => Self::Editing(query),
+        }
+    }
+
+    /// Return the filter with `text` in place of its query. The field stays
+    /// open or closed; a closed field with no words has no filter.
+    fn with_text(self, text: String) -> Self {
+        let query = Query::new(text);
+        match self {
+            Self::Editing(_) => Self::Editing(query),
+            Self::Off | Self::Applied(_) => Self::apply(query),
+        }
+    }
+
+    /// Return the filter that closes the field and keeps its query.
+    fn give(self) -> Self {
+        match self {
+            Self::Off => Self::Off,
+            Self::Editing(query) | Self::Applied(query) => Self::apply(query),
+        }
+    }
+
+    /// Return the applied filter of `query`, or none for a blank query.
+    fn apply(query: Query) -> Self {
+        if query.is_blank() {
+            Self::Off
+        } else {
+            Self::Applied(query)
+        }
+    }
+
+    /// Return the query, if there is one.
+    fn query(&self) -> Option<&Query> {
+        match self {
+            Self::Off => None,
+            Self::Editing(query) | Self::Applied(query) => Some(query),
+        }
+    }
+
+    /// Return the text the field shows.
+    fn text(&self) -> &str {
+        self.query().map_or("", |query| query.text.as_str())
+    }
+
+    /// Return the words that each shown item contains.
+    fn words(&self) -> &[String] {
+        self.query().map_or(&[], |query| query.words.as_slice())
+    }
+
+    /// Return whether the field takes filter text.
+    fn editing(&self) -> bool {
+        matches!(self, Self::Editing(_))
+    }
+}
+
 /// A list of items, scrolled by its own view.
 ///
 /// The list shows the items its filter passes, one per row, trimmed to the
@@ -362,10 +455,8 @@ where
     rows: Vec<Row>,
     /// Cursor over `shown`, giving a position within it, not within `items`.
     cursor: RowCursor,
-    /// Words that each shown item contains, ignoring case.
-    filter: String,
-    /// Whether the field is taking filter text.
-    filtering: bool,
+    /// The filter, and whether the field takes its text.
+    filter: Filter,
     /// What the frame's title calls this list.
     label: String,
     /// Text shown in place of an empty list.
@@ -397,8 +488,7 @@ where
             shown: Vec::new(),
             rows: Vec::new(),
             cursor: RowCursor::new(0),
-            filter: String::new(),
-            filtering: false,
+            filter: Filter::Off,
             label: String::new(),
             placeholder: "",
             frame: None,
@@ -457,7 +547,7 @@ where
     /// match it.
     #[command]
     pub fn start_filter(&mut self, context: &mut dyn Context) -> Result<()> {
-        self.filtering = true;
+        self.filter = mem::replace(&mut self.filter, Filter::Off).edit();
         self.republish(context)
     }
 
@@ -467,7 +557,7 @@ where
     /// @param text Words an item must contain. Empty text shows every item.
     #[command]
     pub fn set_filter(&mut self, context: &mut dyn Context, text: String) -> Result<()> {
-        self.filter = text;
+        self.filter = mem::replace(&mut self.filter, Filter::Off).with_text(text);
         self.apply_filter();
         self.refresh(context)
     }
@@ -475,11 +565,13 @@ where
     /// Close the filter field and show every item again.
     #[command]
     pub fn clear_filter(&mut self, context: &mut dyn Context) -> Result<()> {
-        self.filtering = false;
-        if self.filter.is_empty() {
+        let words = !self.filter.words().is_empty();
+        self.filter = Filter::Off;
+        if !words {
             return self.republish(context);
         }
-        self.set_filter(context, String::new())
+        self.apply_filter();
+        self.refresh(context)
     }
 
     /// Return the selected item's label, for automation.
@@ -504,7 +596,7 @@ where
     #[command]
     #[must_use]
     pub fn filter(&self) -> String {
-        self.filter.clone()
+        self.filter.text().to_string()
     }
 
     /// Show `items` under `label`, dropping any filter.
@@ -518,8 +610,7 @@ where
         self.items = items;
         self.label = label;
         self.placeholder = placeholder;
-        self.filter.clear();
-        self.filtering = false;
+        self.filter = Filter::Off;
         self.apply_filter();
         // The list is new, so it opens at its first row rather than wherever
         // the last one was left.
@@ -602,16 +693,12 @@ where
     ///
     /// A group's text passes all its items, so a filter can name a group.
     fn apply_filter(&mut self) {
-        let words: Vec<String> = self
-            .filter
-            .split_whitespace()
-            .map(str::to_lowercase)
-            .collect();
+        let words = self.filter.words();
         self.shown = self
             .items
             .iter()
             .enumerate()
-            .filter(|(_, item)| matches_words(&words, *item))
+            .filter(|(_, item)| matches_words(words, *item))
             .map(|(index, _)| index)
             .collect();
         self.rows.clear();
@@ -674,13 +761,13 @@ where
     /// Write the current state into the frame's title and the filter field.
     fn republish(&self, context: &mut dyn Context) -> Result<()> {
         if let Some(field) = self.field {
-            let text = self.filter.clone();
-            let active = self.filtering;
+            let text = self.filter.text().to_string();
+            let active = self.filter.editing();
             // The field is part of the dialog only while there is a search to
             // show: one being typed, or one left standing after it was given.
             // Hidden, it leaves the layout entirely, so the frame gives the row
             // back to the list.
-            context.set_hidden(field, !active && text.is_empty())?;
+            context.set_hidden(field, self.filter == Filter::Off)?;
             context.with_widget_mut(field, |field: &mut Input, _| {
                 field.set_value(text);
                 field.set_active(Some(active));
@@ -706,7 +793,7 @@ where
         if self.counted {
             // The count leaves out the items that show only with a filter, or
             // only without one, whichever does not apply now.
-            let filtered = !self.filter.trim().is_empty();
+            let filtered = !self.filter.words().is_empty();
             let total = self
                 .items
                 .iter()
@@ -731,11 +818,13 @@ where
     /// Every character is filter text, `j` and `k` too, and the arrows, the
     /// page keys, Home, and End move the selection. Other keys pass on.
     fn filter_event(&mut self, event: &Event, context: &mut dyn Context) -> Result<EventOutcome> {
-        let mut text = self.filter.clone();
+        let mut text = self.filter.text().to_string();
         match event {
             Event::Key(key) => match self.filter_command(*key) {
                 Some(FilterCommand::Accept) => {
-                    self.filtering = false;
+                    // A blank query matches as no filter does, so the shown
+                    // items stay as they are.
+                    self.filter = mem::replace(&mut self.filter, Filter::Off).give();
                     self.republish(context)?;
                     return Ok(EventOutcome::Handle);
                 }
@@ -770,7 +859,7 @@ where
         match key.key {
             KeyCode::Enter => Some(FilterCommand::Accept),
             KeyCode::Esc => Some(FilterCommand::Clear),
-            KeyCode::Backspace if self.filter.is_empty() => Some(FilterCommand::Clear),
+            KeyCode::Backspace if self.filter.text().is_empty() => Some(FilterCommand::Clear),
             KeyCode::Backspace => Some(FilterCommand::Backspace),
             KeyCode::Char(_) => key.text_char().map(FilterCommand::Push),
             KeyCode::Up => Some(FilterCommand::Move(CursorMove::By(-1))),
@@ -978,7 +1067,7 @@ where
             // A filter taking keys leaves the list holding its place rather
             // than driving it, so the selection dims until the keys come back.
             let style = if self.cursor.index() == Some(position) {
-                roles::selection(context.is_focused() && !self.filtering)
+                roles::selection(context.is_focused() && !self.filter.editing())
             } else if item.muted() {
                 "muted"
             } else {
@@ -1039,14 +1128,14 @@ where
     }
 
     fn on_event(&mut self, event: &Event, context: &mut dyn Context) -> Result<EventOutcome> {
-        if self.filtering {
+        if self.filter.editing() {
             return self.filter_event(event, context);
         }
         Ok(EventOutcome::Ignore)
     }
 
     fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> EventOutcome {
-        if self.filtering && self.filter_command(key).is_some() {
+        if self.filter.editing() && self.filter_command(key).is_some() {
             EventOutcome::Handle
         } else {
             EventOutcome::Ignore
@@ -1057,7 +1146,7 @@ where
         // While the filter is open, a navigation intent could come from a
         // letter such as `j`, which is filter text. The filter moves the
         // selection for the navigation keys itself.
-        if self.filtering {
+        if self.filter.editing() {
             intent == crate::CLEAR_INTENT
         } else {
             !self.shown.is_empty() && CursorMove::of(intent).is_some()
@@ -1069,7 +1158,7 @@ where
             self.apply_move(context, movement)?;
             return Ok(EventOutcome::Handle);
         }
-        if !self.filtering || intent != crate::CLEAR_INTENT {
+        if !self.filter.editing() || intent != crate::CLEAR_INTENT {
             return Ok(EventOutcome::Ignore);
         }
         // The filter stays open, so the next key narrows the list again.
@@ -1569,6 +1658,68 @@ mod tests {
             closed,
             "dropping the search gives the row back to the list"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn filter_transitions() {
+        use super::{Filter, Query};
+        let query = |text: &str| Query::new(text.to_string());
+        let editing = |text: &str| Filter::Editing(query(text));
+        let applied = |text: &str| Filter::Applied(query(text));
+        // Start the filter.
+        for (filter, next) in [
+            (Filter::Off, editing("")),
+            (editing("al"), editing("al")),
+            (applied("al"), editing("al")),
+        ] {
+            assert_eq!(filter.clone().edit(), next, "start from {filter:?}");
+        }
+        // Set the filter's text.
+        for (filter, text, next) in [
+            (Filter::Off, "al", applied("al")),
+            (Filter::Off, " ", Filter::Off),
+            (editing("a"), " ", editing(" ")),
+            (editing("a"), "al", editing("al")),
+            (applied("a"), "al", applied("al")),
+            (applied("a"), "", Filter::Off),
+        ] {
+            assert_eq!(
+                filter.clone().with_text(text.into()),
+                next,
+                "{text:?} into {filter:?}"
+            );
+        }
+        // Enter gives the filter; clear_filter and Esc drop it to Off.
+        for (filter, next) in [
+            (Filter::Off, Filter::Off),
+            (editing(" "), Filter::Off),
+            (editing("al "), applied("al ")),
+            (applied("al"), applied("al")),
+        ] {
+            assert_eq!(filter.clone().give(), next, "Enter in {filter:?}");
+        }
+        assert_eq!(applied("Al Be").words(), ["al", "be"]);
+        assert_eq!(editing(" ").text(), " ");
+        assert!(editing(" ").words().is_empty());
+    }
+
+    #[test]
+    fn regression_a_blank_filter_given_with_enter_closes_the_field() -> Result<()> {
+        let mut harness = picker(&["/tmp/alpha", "/tmp/beta"], 40, 12)?;
+        let closed = framed(&harness);
+        on_list(&mut harness, PickerList::start_filter)?;
+        harness.key(' ')?;
+        harness.render()?;
+        assert_eq!(from_list(&mut harness, PickerList::filter), " ");
+        commit(&mut harness)?;
+        assert_eq!(
+            framed(&harness),
+            closed,
+            "a blank search is no search, so the field leaves"
+        );
+        assert_eq!(from_list(&mut harness, PickerList::filter), "");
+        assert_eq!(from_list(&mut harness, PickerList::shown_count), 2);
         Ok(())
     }
 
