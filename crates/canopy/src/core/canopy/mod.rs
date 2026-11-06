@@ -615,6 +615,8 @@ impl Canopy {
     }
 
     /// Run the mode, binding, and notice hooks once for the current state.
+    ///
+    /// Every due hook runs, and the first failure is the result.
     pub(super) fn run_state_hooks(&mut self) -> Result<()> {
         let mut hooks = self
             .mode_hooks
@@ -624,10 +626,17 @@ impl Canopy {
                 .take_due(self.core.input_map.input_generation()),
         );
         hooks.extend(self.notice_hooks.take_due(self.core.notices.generation()));
+        // Each due hook runs once for its generation, even after another
+        // fails; the first failure is the result, and none runs again until
+        // its state changes.
+        let mut result = Ok(());
         for hook in hooks {
-            self.with_root_context(hook)?;
+            let ran = self.with_root_context(hook);
+            if result.is_ok() {
+                result = ran;
+            }
         }
-        Ok(())
+        result
     }
 
     /// Return the notice log's entries, oldest first.

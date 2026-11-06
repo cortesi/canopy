@@ -1199,6 +1199,57 @@ fn notice_hooks_run_once_per_observed_generation() -> Result<()> {
     Ok(())
 }
 
+thread_local! {
+    /// Runs of the failing and the counting hook on this test thread.
+    static FAILING_HOOK_RUNS: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
+}
+
+/// Count a run, and fail.
+fn failing_notice_hook(_ctx: &mut dyn Context) -> Result<()> {
+    FAILING_HOOK_RUNS.with(|runs| runs.set((runs.get().0 + 1, runs.get().1)));
+    Err(Error::Invalid("hook failed".into()))
+}
+
+/// Count a run.
+fn later_notice_hook(_ctx: &mut dyn Context) -> Result<()> {
+    FAILING_HOOK_RUNS.with(|runs| runs.set((runs.get().0, runs.get().1 + 1)));
+    Ok(())
+}
+
+#[test]
+fn regression_a_failing_state_hook_does_not_skip_the_rest() -> Result<()> {
+    FAILING_HOOK_RUNS.with(|runs| runs.set((0, 0)));
+    let mut canopy = CanopyBuilder::new()
+        .configure(|setup| {
+            setup.register_notice_hook("a.fail", failing_notice_hook);
+            setup.register_notice_hook("b.count", later_notice_hook);
+            Ok(())
+        })
+        .build()?;
+    canopy.set_screen_size(Size::new(10, 2))?;
+    let root = canopy.root_id();
+    canopy.with_context(root, |ctx| ctx.notify(NoticePost::info("one")))?;
+    let error = canopy
+        .render(&mut NopBackend::new())
+        .expect_err("the failing hook fails the frame");
+    assert!(error.to_string().contains("hook failed"), "{error}");
+    assert_eq!(
+        FAILING_HOOK_RUNS.with(Cell::get),
+        (1, 1),
+        "the later hook runs after the failure"
+    );
+    canopy.render(&mut NopBackend::new())?;
+    assert_eq!(
+        FAILING_HOOK_RUNS.with(Cell::get),
+        (1, 1),
+        "a failure does not retry the generation"
+    );
+    canopy.with_context(root, |ctx| ctx.notify(NoticePost::info("two")))?;
+    assert!(canopy.render(&mut NopBackend::new()).is_err());
+    assert_eq!(FAILING_HOOK_RUNS.with(Cell::get), (2, 2));
+    Ok(())
+}
+
 #[test]
 fn notify_reads_its_level_and_duration_and_scripts_read_the_log() -> Result<()> {
     let mut canopy = CanopyBuilder::new().build()?;
