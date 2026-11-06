@@ -803,11 +803,17 @@ pub struct Alert {
     pub depth: usize,
 }
 
+/// The bullet of an item `list_depth` lists deep, counting from one: the
+/// three glyphs cycle as lists nest. Quotes do not count.
+pub(crate) fn bullet(list_depth: usize) -> &'static str {
+    ["•", "◦", "▪"][list_depth.saturating_sub(1) % 3]
+}
+
 #[derive(Clone, Default)]
 /// Container metadata inherited by semantic leaves.
 struct Context {
-    /// List and quote nesting depth.
-    depth: usize,
+    /// List nesting depth.
+    list_depth: usize,
     /// Number of quote rails.
     quote_depth: usize,
     /// Optional first-leaf alert label.
@@ -856,17 +862,10 @@ fn collect<N: Borrow<Node>>(nodes: &[N], context: &Context, out: &mut Vec<Leaf>)
                 });
                 for (index, item) in node.children.iter().enumerate() {
                     let mut c = context.clone();
-                    c.depth += 1;
+                    c.list_depth += 1;
                     c.loose = loose;
                     c.marker = Some(number.map_or_else(
-                        || {
-                            match c.depth {
-                                1 => "•",
-                                2 => "◦",
-                                _ => "▪",
-                            }
-                            .into()
-                        },
+                        || bullet(c.list_depth).into(),
                         |n| format!("{}.", n.saturating_add(index as u64)),
                     ));
                     c.enclosing = node.range.start;
@@ -892,14 +891,11 @@ fn collect<N: Borrow<Node>>(nodes: &[N], context: &Context, out: &mut Vec<Leaf>)
                 }
                 flush_inline(&mut inline, &c, out);
                 // Only the first leaf of this item owns its marker. Nested
-                // lists retain their own markers; quotes retain this item's
-                // list depth even though they add container depth.
-                let list_depth = c.depth.saturating_sub(c.quote_depth);
+                // lists retain their own markers; quotes keep this item's
+                // list depth.
                 for leaf in out[start..]
                     .iter_mut()
-                    .filter(|leaf| {
-                        leaf.context.depth.saturating_sub(leaf.context.quote_depth) == list_depth
-                    })
+                    .filter(|leaf| leaf.context.list_depth == c.list_depth)
                     .skip(1)
                 {
                     leaf.context.marker = None;
@@ -909,7 +905,6 @@ fn collect<N: Borrow<Node>>(nodes: &[N], context: &Context, out: &mut Vec<Leaf>)
                 let start = out.len();
                 let mut c = context.clone();
                 c.quote_depth += 1;
-                c.depth += 1;
                 c.enclosing = node.range.start;
                 c.quotes.push(node.range.start);
                 collect(&node.children, &c, out);
@@ -1323,7 +1318,7 @@ impl Builder<'_> {
             source: range.clone(),
             kind,
             unit_id,
-            depth: context.depth,
+            depth: context.list_depth + context.quote_depth,
             quote_depth: context.quote_depth,
             quote_kind: context.quote_kind.clone(),
             quote_join: 0,
@@ -2011,7 +2006,6 @@ pub fn parse_document(
                 names: None,
                 title: false,
                 context: Context {
-                    depth: quote_depth,
                     quote_depth,
                     enclosing: line_start,
                     ..Context::default()
@@ -3077,6 +3071,23 @@ mod tests {
         assert_eq!(doc.blocks[3].depth, doc.blocks[2].depth);
         assert_eq!(doc.blocks[4].quote_depth, 1);
         assert_eq!(doc.blocks[5].quote_depth, 1);
+    }
+    #[test]
+    fn regression_a_bullet_counts_lists_and_not_quotes() {
+        for (text, markers) in [
+            ("> - a\n", &["•"][..]),
+            ("- > - a\n", &["◦"]),
+            ("> > - a\n", &["•"]),
+            ("- a\n  - b\n    - c\n      - d\n", &["•", "◦", "▪", "•"]),
+        ] {
+            let doc = complete(text);
+            let found: Vec<_> = doc
+                .blocks
+                .iter()
+                .filter_map(|block| block.list_marker.as_deref())
+                .collect();
+            assert_eq!(found, markers, "{text:?}");
+        }
     }
     #[test]
     fn explicit_html_and_nested_quote_fences_close_before_finish() {

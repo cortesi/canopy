@@ -40,7 +40,7 @@ use image::RgbaImage;
 
 use crate::document::{
     AlertTone, Alignment, Block, BlockKind, CellSpan, CodeBlock, DocumentSnapshot, EmbedBlock,
-    InlineRole, ObjectKind, ReadingPosition, ReadingRange, ReadingUnit, cell_spans,
+    InlineRole, ObjectKind, ReadingPosition, ReadingRange, ReadingUnit, bullet, cell_spans,
 };
 
 /// Bounded row count for one derived presentation.
@@ -2330,14 +2330,10 @@ fn block_prefix(block: &Block, glyphs: GlyphPreset) -> Prefix {
     }
     if let Some(marker) = &block.list_marker {
         let marker = match marker.as_str() {
-            "-" | "+" | "*" | "•" | "◦" | "▪" => {
-                match (glyphs, list_depth.saturating_sub(1) % 3) {
-                    (GlyphPreset::Ascii, _) => "-",
-                    (_, 0) => "•",
-                    (_, 1) => "◦",
-                    _ => "▪",
-                }
-            }
+            "-" | "+" | "*" | "•" | "◦" | "▪" => match glyphs {
+                GlyphPreset::Ascii => "-",
+                GlyphPreset::Unicode => bullet(list_depth),
+            },
             _ => marker,
         };
         prefix.push(format!("{marker} "), "markdown/structure");

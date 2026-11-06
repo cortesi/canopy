@@ -110,6 +110,31 @@ fn word_wrap_hanging_lists_and_quote_rails_survive_continuations() {
 }
 
 #[test]
+fn regression_the_drawn_bullet_is_the_block_marker() {
+    for text in [
+        "> - a\n",
+        "- > - a\n",
+        "> > - a\n",
+        "- a\n  - b\n    - c\n      - d\n",
+    ] {
+        let doc = document(text);
+        for block in doc
+            .blocks
+            .iter()
+            .filter(|block| block.list_marker.is_some())
+        {
+            let prefix = block_prefix(block, GlyphPreset::Unicode);
+            let (drawn, _) = prefix.parts.last().expect("a list item has a marker");
+            assert_eq!(
+                drawn.trim_end(),
+                block.list_marker.as_deref().unwrap(),
+                "{text:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn soft_breaks_wrap_as_prose_while_hard_breaks_keep_logical_rows() {
     let p = prepared("soft\nline\n\nhard  \nbreak\n", 40);
     assert_eq!(row_text(&p, 0), "soft line");
