@@ -23,7 +23,7 @@ use super::{
         LayoutCache, LineLayout, Wrap, WrapSegment, layout_line, metrics, point_for_position,
     },
     search::{PromptState, SearchDirection, SearchState},
-    vi::{ViMode, ViState},
+    vi::{Entry, InsertKey, Target, ViMode, ViState},
 };
 use crate::{
     CLEAR_INTENT,
@@ -352,10 +352,28 @@ impl Editor {
     }
 
     /// Replace the editor configuration.
+    ///
+    /// A change of edit mode ends the entry of the old mode: text mode
+    /// commits its typing, and a vi editor leaves for normal mode.
     pub fn set_config(&mut self, config: EditorConfig) {
+        if config.mode != self.config.mode {
+            match self.config.mode {
+                EditMode::Text => self.buffer.commit_transaction(),
+                EditMode::Vi => self.leave_vi(),
+            }
+        }
         self.prepared_width = None;
         self.config = config;
         self.update_preferred_column();
+    }
+
+    /// Leave any vi mode for normal mode, as a switch to text mode does.
+    fn leave_vi(&mut self) {
+        if self.visual_mode().is_some() {
+            self.exit_visual();
+        } else {
+            self.transition(Target::Normal);
+        }
     }
 
     /// Return the buffer contents.
@@ -364,7 +382,10 @@ impl Editor {
     }
 
     /// Replace the buffer contents.
+    ///
+    /// The mode stays, and the typing of an insert ends.
     pub fn set_text(&mut self, text: impl Into<String>) {
+        self.end_entry();
         self.prepared_width = None;
         self.buffer = TextBuffer::new(text);
         self.buffer.set_cursor(TextPosition::new(0, 0));
@@ -401,6 +422,7 @@ impl Editor {
     /// must preserve the selected prefix or remap the selection afterwards.
     /// Undo history belongs to the replaced buffer and is discarded.
     pub fn publish_view(&mut self, prepared: PreparedEditorView, preserve: bool) {
+        self.end_entry();
         let selection = self.buffer.selection();
         self.buffer = prepared.buffer;
         self.layout = prepared.layout;
@@ -448,6 +470,7 @@ impl Editor {
     /// character at an empty range. A line selection holds the lines of the
     /// range, and its ends keep their columns.
     pub fn set_selection(&mut self, selection: Selection) {
+        self.end_entry();
         match self.visual_mode() {
             Some(mode) => self.set_visual_selection(mode, selection),
             None => self.buffer.set_selection(selection),
@@ -511,18 +534,17 @@ impl Editor {
         if self.clear_prompt() {
             return true;
         }
-        self.commit_text_entry_transaction();
         if let Some(ViMode::Visual(_)) = self.vi_mode() {
             self.exit_visual();
         }
+        // The clear stands alone in the history, and the typing after it
+        // starts a new step.
+        self.buffer.commit_transaction();
+        self.end_entry();
         let last = self.buffer.line_count().saturating_sub(1);
         let end = TextPosition::new(last, self.buffer.line_char_len(last));
         if end != TextPosition::new(0, 0) {
             self.replace_range(TextRange::new(TextPosition::new(0, 0), end), "");
-        }
-        // Insert mode groups its typing into one edit from its start.
-        if self.vi_mode() == Some(ViMode::Insert) {
-            self.begin_text_entry_transaction();
         }
         self.update_preferred_column();
         self.ensure_cursor_visible(ctx);
@@ -567,22 +589,43 @@ impl Editor {
         true
     }
 
-    /// Undo the last edit unless the editor is read-only.
+    /// Undo the last edit unless the editor is read-only. An open undo
+    /// group commits first, so its edits are the ones that go, and an
+    /// insert session stays open with a new group from its next key.
     pub(super) fn undo_edit(&mut self) -> bool {
         let Some(buffer) = self.editable() else {
             return false;
         };
         buffer.undo();
+        self.history_moved();
         true
     }
 
-    /// Redo the last undone edit unless the editor is read-only.
+    /// Redo the last undone edit unless the editor is read-only, as
+    /// [`Self::undo_edit`] undoes.
     pub(super) fn redo_edit(&mut self) -> bool {
         let Some(buffer) = self.editable() else {
             return false;
         };
         buffer.redo();
+        self.history_moved();
         true
+    }
+
+    /// Follow an undo or a redo: an insert session repeats only the typing
+    /// after it.
+    fn history_moved(&mut self) {
+        self.vi.restart_segment();
+    }
+
+    /// End the text entry at a relocation of the cursor or a change of the
+    /// text from outside: text mode commits its typing, and a vi insert
+    /// session repeats only the typing after it.
+    pub(super) fn end_entry(&mut self) {
+        match self.config.mode {
+            EditMode::Text => self.buffer.commit_transaction(),
+            EditMode::Vi => self.vi.end_segment(),
+        }
     }
 
     /// Compute the line-number gutter width.
@@ -816,16 +859,6 @@ impl Editor {
         true
     }
 
-    /// Begin a grouped text-entry transaction if needed.
-    pub(super) fn begin_text_entry_transaction(&mut self) {
-        self.buffer.begin_transaction();
-    }
-
-    /// Commit the active text-entry transaction if present.
-    pub(super) fn commit_text_entry_transaction(&mut self) {
-        self.buffer.commit_transaction();
-    }
-
     /// Return whether `key` edits text in text-entry mode.
     fn is_text_edit_key(key: key::Key) -> bool {
         matches!(
@@ -878,27 +911,27 @@ impl Editor {
         match event {
             Event::Key(key) => match self.text_command(*key, ctx.view().view_rect().w) {
                 Some(TextCommand::Insert(character)) => {
-                    self.begin_text_entry_transaction();
+                    self.buffer.begin_transaction();
                     self.handle_insert_text(character.encode_utf8(&mut [0; 4]));
                     self.ensure_cursor_visible(ctx);
                     EventOutcome::Handle
                 }
                 Some(TextCommand::Backspace) => {
-                    self.commit_text_entry_transaction();
+                    self.end_entry();
                     if self.handle_delete_backward() {
                         self.ensure_cursor_visible(ctx);
                     }
                     EventOutcome::Handle
                 }
                 Some(TextCommand::Delete) => {
-                    self.commit_text_entry_transaction();
+                    self.end_entry();
                     if self.handle_delete_forward() {
                         self.ensure_cursor_visible(ctx);
                     }
                     EventOutcome::Handle
                 }
                 Some(TextCommand::Move(TextMove::Left)) => {
-                    self.commit_text_entry_transaction();
+                    self.end_entry();
                     let moved = self.buffer.move_left(self.config.multiline);
                     if moved {
                         self.update_preferred_column();
@@ -907,7 +940,7 @@ impl Editor {
                     EventOutcome::Handle
                 }
                 Some(TextCommand::Move(TextMove::Right)) => {
-                    self.commit_text_entry_transaction();
+                    self.end_entry();
                     let moved = self.buffer.move_right(self.config.multiline);
                     if moved {
                         self.update_preferred_column();
@@ -916,33 +949,33 @@ impl Editor {
                     EventOutcome::Handle
                 }
                 Some(TextCommand::Move(TextMove::Up)) => {
-                    self.commit_text_entry_transaction();
+                    self.end_entry();
                     self.move_row(-1, ctx);
                     self.ensure_cursor_visible(ctx);
                     EventOutcome::Handle
                 }
                 Some(TextCommand::Move(TextMove::Down)) => {
-                    self.commit_text_entry_transaction();
+                    self.end_entry();
                     self.move_row(1, ctx);
                     self.ensure_cursor_visible(ctx);
                     EventOutcome::Handle
                 }
                 Some(TextCommand::Move(TextMove::Home)) => {
-                    self.commit_text_entry_transaction();
+                    self.end_entry();
                     self.buffer.move_line_start();
                     self.update_preferred_column();
                     self.ensure_cursor_visible(ctx);
                     EventOutcome::Handle
                 }
                 Some(TextCommand::Move(TextMove::End)) => {
-                    self.commit_text_entry_transaction();
+                    self.end_entry();
                     self.buffer.move_line_end();
                     self.update_preferred_column();
                     self.ensure_cursor_visible(ctx);
                     EventOutcome::Handle
                 }
                 Some(TextCommand::Newline) => {
-                    self.commit_text_entry_transaction();
+                    self.end_entry();
                     self.handle_insert_text("\n");
                     self.ensure_cursor_visible(ctx);
                     EventOutcome::Handle
@@ -952,20 +985,20 @@ impl Editor {
                     // bubbles, including Esc. A read-only edit key returns
                     // before the commit.
                     if !(self.config.interaction.read_only() && Self::is_text_edit_key(*key)) {
-                        self.commit_text_entry_transaction();
+                        self.end_entry();
                     }
                     EventOutcome::Ignore
                 }
             },
             Event::Paste(_) if self.config.interaction.read_only() => EventOutcome::Ignore,
             Event::Paste(content) => {
-                self.begin_text_entry_transaction();
+                self.buffer.begin_transaction();
                 self.handle_insert_text(content);
                 self.ensure_cursor_visible(ctx);
                 EventOutcome::Handle
             }
             _ => {
-                self.commit_text_entry_transaction();
+                self.end_entry();
                 EventOutcome::Ignore
             }
         }
@@ -995,29 +1028,23 @@ impl Editor {
                 // A click ends visual mode, so the pointer selects plain
                 // ranges.
                 if self.visual_mode().is_some() {
-                    self.vi.set_mode(ViMode::Normal);
+                    self.transition(Target::Normal);
                 }
-                match self.mouse.click_state.count(content_point) {
+                self.end_entry();
+                let (anchor, head) = match self.mouse.click_state.count(content_point) {
                     2 => {
                         let range = word_range(&self.buffer, pos);
-                        self.mouse.selecting = true;
-                        self.mouse.anchor = Some(range.start);
-                        self.buffer
-                            .set_selection(Selection::new(range.start, range.end));
+                        (range.start, range.end)
                     }
-                    3 => {
-                        let start = TextPosition::new(pos.line, 0);
-                        let end = self.buffer.line_end_position(pos.line, true);
-                        self.mouse.selecting = true;
-                        self.mouse.anchor = Some(start);
-                        self.buffer.set_selection(Selection::new(start, end));
-                    }
-                    _ => {
-                        self.mouse.selecting = true;
-                        self.mouse.anchor = Some(pos);
-                        self.buffer.set_selection(Selection::new(pos, pos));
-                    }
-                }
+                    3 => (
+                        TextPosition::new(pos.line, 0),
+                        self.buffer.line_end_position(pos.line, true),
+                    ),
+                    _ => (pos, pos),
+                };
+                self.mouse.selecting = true;
+                self.mouse.anchor = Some(anchor);
+                self.buffer.set_selection(Selection::new(anchor, head));
                 self.update_preferred_column();
                 true
             }
@@ -1211,6 +1238,7 @@ impl Editor {
     /// @param dir The direction to move the cursor.
     #[command]
     pub fn move_cursor(&mut self, ctx: &mut dyn Context, dir: FocusDirection) {
+        self.end_entry();
         match dir {
             FocusDirection::Left | FocusDirection::Prev => {
                 let _ = self.buffer.move_left(self.config.multiline);
@@ -1241,15 +1269,14 @@ impl Editor {
     pub fn insert(&mut self, ctx: &mut dyn Context, text: String) {
         match self.config.mode {
             EditMode::Text => {
-                self.begin_text_entry_transaction();
+                self.buffer.begin_transaction();
                 self.handle_insert_text(&text);
             }
             EditMode::Vi => {
                 if self.vi.mode() != ViMode::Insert || self.prompt.is_some() {
                     return;
                 }
-                let inserted = self.handle_insert_text(&text);
-                self.vi.push_inserted(&inserted);
+                self.insert_key(InsertKey::Text(text));
             }
         }
         self.ensure_cursor_visible(ctx);
@@ -1267,14 +1294,9 @@ impl Editor {
         if self.config.interaction.read_only() {
             return;
         }
-        self.commit_text_entry_transaction();
-        let inserting = self.vi_mode() == Some(ViMode::Insert);
-        if self.replace_range(range, &text) {
-            self.commit_text_entry_transaction();
-        }
-        if inserting {
-            self.begin_text_entry_transaction();
-        }
+        self.buffer.commit_transaction();
+        self.end_entry();
+        self.replace_range(range, &text);
         self.update_preferred_column();
         self.ensure_cursor_visible(ctx);
     }
@@ -1300,6 +1322,7 @@ impl Editor {
     /// Move the cursor to `position`, and scroll it into view. A position
     /// past the end of its line or of the text clamps to that end.
     pub fn set_cursor(&mut self, ctx: &mut dyn Context, position: TextPosition) {
+        self.end_entry();
         self.buffer.set_cursor(position);
         self.update_preferred_column();
         self.ensure_cursor_visible(ctx);
@@ -1320,24 +1343,16 @@ impl Editor {
             return;
         }
         if let (ViMode::Visual(_), ViMode::Visual(visual)) = (self.vi.mode(), mode) {
-            self.vi.set_mode(ViMode::Visual(visual));
+            self.transition(Target::Visual(visual));
             return;
         }
-        match self.vi.mode() {
-            ViMode::Insert => {
-                self.commit_text_entry_transaction();
-                self.vi.end_insert();
-            }
-            ViMode::Visual(_) => self.exit_visual(),
-            ViMode::Normal => {}
+        if self.visual_mode().is_some() {
+            self.exit_visual();
         }
         match mode {
-            ViMode::Insert => {
-                self.begin_text_entry_transaction();
-                self.vi.begin_insert();
-            }
+            ViMode::Insert => self.enter_insert(Entry::Insert),
             ViMode::Visual(visual) => self.enter_visual(visual),
-            ViMode::Normal => {}
+            ViMode::Normal => self.transition(Target::Normal),
         }
     }
 
@@ -1551,6 +1566,7 @@ impl Editor {
         let Some(range) = self.search.current_match() else {
             return;
         };
+        self.end_entry();
         self.buffer.set_cursor(range.start);
         self.update_preferred_column();
         ctx.reveal_anchor(view_search::REVEAL);

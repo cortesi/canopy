@@ -3,7 +3,8 @@
 //! After each key, the cursor and the selection must lie in the text, on
 //! char boundaries, and in visual mode on grapheme boundaries. The editor
 //! must predict how it takes each key, and a read-only editor must keep its
-//! text. At the end, undo back to the start must restore the text.
+//! text. At the end, undo back to the start, from whatever mode the keys
+//! left, must restore the text.
 //!
 //! An input is a flags byte, the text, a zero byte, and the keys, so seeds
 //! are easy to write by hand. The text and the keys decode as lossy UTF-8.
@@ -170,9 +171,8 @@ fuzz_target!(|data: &[u8]| {
                         assert_eq!(editor.text(), text, "a read-only editor keeps its text");
                     }
                 }
-                editor.set_vi_mode(ViMode::Normal);
-                check(&editor);
-                // Each key adds at most one undo step.
+                // Each key adds at most one undo step. Undo works in every
+                // mode: in insert mode it takes the open group first.
                 for _ in 0..=taken {
                     editor.undo(ctx);
                 }

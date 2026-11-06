@@ -232,8 +232,10 @@ impl TextBuffer {
         TextTransaction { buffer: self }
     }
 
-    /// Undo the most recent transaction.
+    /// Undo the most recent transaction. An open transaction commits first,
+    /// so its edits are the ones that go.
     pub fn undo(&mut self) -> bool {
+        self.commit_transaction();
         let Some(transaction) = self.undo.pop() else {
             return false;
         };
@@ -245,8 +247,11 @@ impl TextBuffer {
         true
     }
 
-    /// Redo the most recently undone transaction.
+    /// Redo the most recently undone transaction. An open transaction
+    /// commits first: one with edits starts a new history, which has
+    /// nothing to redo.
     pub fn redo(&mut self) -> bool {
+        self.commit_transaction();
         let Some(transaction) = self.redo.pop() else {
             return false;
         };
@@ -646,6 +651,28 @@ mod tests {
         assert!(buf.undo());
         assert_eq!(buf.text(), "abc");
         assert!(buf.redo());
+        assert_eq!(buf.text(), "abcd");
+    }
+
+    #[test]
+    fn undo_commits_an_open_transaction_first() {
+        // Regression: undo popped an older step while newer edits stayed
+        // open, and replayed it by char offset on the wrong text.
+        let mut buf = TextBuffer::new("");
+        buf.insert_text("abc");
+        buf.begin_transaction();
+        for _ in 0..3 {
+            buf.delete_backward(true);
+        }
+        assert!(buf.undo());
+        assert_eq!(buf.text(), "abc");
+        assert!(buf.undo());
+        assert_eq!(buf.text(), "");
+        assert!(buf.redo());
+        assert_eq!(buf.text(), "abc");
+        buf.begin_transaction();
+        buf.insert_text("d");
+        assert!(!buf.redo(), "new edits start a new history");
         assert_eq!(buf.text(), "abcd");
     }
 

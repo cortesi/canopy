@@ -31,6 +31,8 @@ use crate::{
     view_search,
 };
 
+/// Insert sessions and text entry.
+mod session;
 /// Visual mode.
 mod visual;
 
@@ -2425,7 +2427,7 @@ fn replace_stands_apart_from_later_typing_in_text_mode() {
     assert_eq!(editor_text(&mut harness), "said more end");
 
     with_editor(&mut harness, |editor| {
-        editor.commit_text_entry_transaction();
+        editor.end_entry();
         editor.undo_edit()
     });
     assert_eq!(editor_text(&mut harness), "said end");

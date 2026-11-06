@@ -11,7 +11,6 @@ use canopy::{
     Context, EventOutcome,
     input::{Event, key},
 };
-use unicode_segmentation::UnicodeSegmentation;
 pub(super) use visual::VisualCommand;
 
 use super::{
@@ -57,13 +56,15 @@ pub enum PendingKey {
     Object(bool),
 }
 
-/// Repeatable edit actions.
+/// An edit that `.` repeats.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RepeatableEdit {
-    /// Repeat the last insert.
+pub(super) enum RepeatableEdit {
+    /// An insert session: its entry, then the keys typed after it.
     Insert {
-        /// Inserted text.
-        text: String,
+        /// What started the session.
+        entry: Entry,
+        /// The keys of the session, after its last relocation.
+        keys: Vec<InsertKey>,
     },
     /// Put the yank buffer contents.
     Put {
@@ -76,18 +77,149 @@ pub enum RepeatableEdit {
     },
     /// Delete the current line.
     DeleteLine,
-    /// Change the current line.
-    ChangeLine,
     /// Delete the character under the cursor.
     DeleteChar,
     /// Delete to the end of the line.
     DeleteToEnd,
-    /// Change to the end of the line.
-    ChangeToEnd,
-    /// Open a line below and enter insert.
+    /// Delete a visual selection of the extent, from the cursor.
+    VisualDelete(Extent),
+}
+
+/// What starts an insert session, which `.` replays before the keys of
+/// the session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Entry {
+    /// `i`: insert before the cursor. A session also starts a new segment
+    /// with this entry after the cursor moves.
+    Insert,
+    /// `a`: insert after the cursor.
+    Append,
+    /// `I`: insert at the line start.
+    InsertLineStart,
+    /// `A`: insert at the line end.
+    AppendLineEnd,
+    /// `o`: open a line below.
     OpenBelow,
-    /// Open a line above and enter insert.
+    /// `O`: open a line above.
     OpenAbove,
+    /// `cc`: change the line.
+    ChangeLine,
+    /// `C`: change to the line end.
+    ChangeToEnd,
+    /// `c` in visual mode: change a selection of the extent, from the
+    /// cursor.
+    VisualChange(Extent),
+}
+
+impl Entry {
+    /// Whether the entry edits the text itself, so that `.` repeats it
+    /// even when the session typed nothing.
+    fn edits(self) -> bool {
+        !matches!(
+            self,
+            Self::Insert | Self::Append | Self::InsertLineStart | Self::AppendLineEnd
+        )
+    }
+}
+
+/// The extent of a visual selection, which `.` selects again from the
+/// cursor, as Vim does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Extent {
+    /// A count of whole lines.
+    Lines(usize),
+    /// Characters of one line: the display columns from the first
+    /// character to the start of the last.
+    Span(usize),
+    /// Characters across lines: the count of lines, and the display column
+    /// of the last character.
+    Rows {
+        /// The count of lines.
+        lines: usize,
+        /// The display column of the last character.
+        column: usize,
+    },
+}
+
+impl Extent {
+    /// Return the kind of visual selection of the extent.
+    pub(super) fn mode(self) -> VisualMode {
+        match self {
+            Self::Lines(_) => VisualMode::Line,
+            Self::Span(_) | Self::Rows { .. } => VisualMode::Character,
+        }
+    }
+}
+
+/// One key of an insert session that `.` replays.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum InsertKey {
+    /// Typed or pasted text, line breaks included.
+    Text(String),
+    /// Delete backward.
+    Backspace,
+    /// Delete forward.
+    Delete,
+}
+
+/// The segment of an insert session that `.` repeats: its entry and the
+/// keys after it. A relocation of the cursor ends a segment, as in Vim.
+#[derive(Debug, Clone)]
+struct InsertSession {
+    /// What started the segment.
+    entry: Entry,
+    /// The keys of the segment, in order.
+    keys: Vec<InsertKey>,
+}
+
+impl InsertSession {
+    /// Start a segment at `entry`.
+    fn new(entry: Entry) -> Self {
+        Self {
+            entry,
+            keys: Vec::new(),
+        }
+    }
+
+    /// Record one key, joining text to the text before it.
+    fn push(&mut self, key: InsertKey) {
+        match (self.keys.last_mut(), key) {
+            (_, InsertKey::Text(text)) if text.is_empty() => {}
+            (Some(InsertKey::Text(last)), InsertKey::Text(text)) => last.push_str(&text),
+            (_, key) => self.keys.push(key),
+        }
+    }
+
+    /// Return what `.` repeats of the segment: nothing for a segment that
+    /// neither typed nor edited.
+    fn record(self) -> Option<RepeatableEdit> {
+        (self.entry.edits() || !self.keys.is_empty()).then_some(RepeatableEdit::Insert {
+            entry: self.entry,
+            keys: self.keys,
+        })
+    }
+}
+
+/// The vi mode, with the session of insert mode.
+#[derive(Debug, Clone)]
+enum State {
+    /// Normal mode.
+    Normal,
+    /// Insert mode, and the segment that `.` would repeat.
+    Insert(InsertSession),
+    /// Visual mode.
+    Visual(VisualMode),
+}
+
+/// A vi mode to move to, with the entry of an insert.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Target {
+    /// Normal mode.
+    Normal,
+    /// Insert mode, started by the entry.
+    Insert(Entry),
+    /// Visual mode.
+    Visual(VisualMode),
 }
 
 /// One insert-mode vi action.
@@ -261,14 +393,14 @@ pub(super) enum ViCommand {
 }
 
 /// Vi state tracking for command parsing and inserts.
+///
+/// [`Editor::transition`] is the one writer of the mode.
 #[derive(Debug, Clone)]
 pub struct ViState {
-    /// Current vi mode.
-    mode: ViMode,
+    /// The mode, with the session of insert mode.
+    state: State,
     /// Pending multi-key command state.
     pending: Option<PendingKey>,
-    /// Inserted text during the current insert session.
-    insert_text: String,
     /// Last repeatable edit.
     last_edit: Option<RepeatableEdit>,
 }
@@ -277,22 +409,19 @@ impl ViState {
     /// Construct a new vi state in normal mode.
     pub fn new() -> Self {
         Self {
-            mode: ViMode::Normal,
+            state: State::Normal,
             pending: None,
-            insert_text: String::new(),
             last_edit: None,
         }
     }
 
     /// Return the current vi mode.
     pub fn mode(&self) -> ViMode {
-        self.mode
-    }
-
-    /// Set the vi mode.
-    pub fn set_mode(&mut self, mode: ViMode) {
-        self.mode = mode;
-        self.pending = None;
+        match self.state {
+            State::Normal => ViMode::Normal,
+            State::Insert(_) => ViMode::Insert,
+            State::Visual(mode) => ViMode::Visual(mode),
+        }
     }
 
     /// Return the pending key state.
@@ -305,49 +434,39 @@ impl ViState {
         self.pending = pending;
     }
 
-    /// Begin an insert session.
-    pub fn begin_insert(&mut self) {
-        self.mode = ViMode::Insert;
-        self.insert_text.clear();
-        self.pending = None;
-    }
-
-    /// Record inserted text during insert mode.
-    pub fn push_inserted(&mut self, text: &str) {
-        self.insert_text.push_str(text);
-    }
-
-    /// Remove the last inserted grapheme during insert mode.
-    pub fn pop_inserted_grapheme(&mut self) {
-        if self.insert_text.is_empty() {
-            return;
-        }
-        let new_len = self
-            .insert_text
-            .grapheme_indices(true)
-            .next_back()
-            .map(|(idx, _)| idx)
-            .unwrap_or(0);
-        self.insert_text.truncate(new_len);
-    }
-
-    /// Finish the insert session and return a repeatable edit.
-    pub fn end_insert(&mut self) {
-        self.mode = ViMode::Normal;
-        self.pending = None;
-        let text = mem::take(&mut self.insert_text);
-        if !text.is_empty() {
-            self.last_edit = Some(RepeatableEdit::Insert { text });
+    /// Record `edit`, when there is one, as the last repeatable edit.
+    fn record(&mut self, edit: Option<RepeatableEdit>) {
+        if let Some(edit) = edit {
+            self.last_edit = Some(edit);
         }
     }
 
-    /// Set the last repeatable edit.
-    pub fn set_last_edit(&mut self, edit: RepeatableEdit) {
-        self.last_edit = Some(edit);
+    /// Record one key of the insert session, if one is open.
+    fn push_key(&mut self, key: InsertKey) {
+        if let State::Insert(session) = &mut self.state {
+            session.push(key);
+        }
+    }
+
+    /// End the segment of an open insert session at a relocation of the
+    /// cursor: record it, and start a new one at the cursor.
+    pub(super) fn end_segment(&mut self) {
+        if let State::Insert(session) = &mut self.state {
+            let ended = mem::replace(session, InsertSession::new(Entry::Insert));
+            self.record(ended.record());
+        }
+    }
+
+    /// Drop the segment of an open insert session whose text an undo or a
+    /// redo replaced, and start a new one at the cursor.
+    pub(super) fn restart_segment(&mut self) {
+        if let State::Insert(session) = &mut self.state {
+            *session = InsertSession::new(Entry::Insert);
+        }
     }
 
     /// Return the last repeatable edit.
-    pub fn last_edit(&self) -> Option<RepeatableEdit> {
+    fn last_edit(&self) -> Option<RepeatableEdit> {
         self.last_edit.clone()
     }
 }
@@ -494,8 +613,7 @@ impl Editor {
                 && self.vi.mode() == ViMode::Insert
                 && let Event::Paste(content) = event
             {
-                let inserted = self.handle_insert_text(content);
-                self.vi.push_inserted(&inserted);
+                self.insert_key(InsertKey::Text(content.clone()));
                 self.ensure_cursor_visible(ctx);
                 return EventOutcome::Handle;
             }
@@ -543,34 +661,12 @@ impl Editor {
         };
         self.vi.set_pending(None);
         match plain {
-            PlainCommand::BeginInsert => {
-                self.begin_text_entry_transaction();
-                self.vi.begin_insert();
-            }
-            PlainCommand::AppendAfter => {
-                let _ = self.buffer.move_right(self.config.multiline);
-                self.update_preferred_column();
-                self.begin_text_entry_transaction();
-                self.vi.begin_insert();
-            }
-            PlainCommand::InsertLineStart => {
-                self.buffer.move_line_start();
-                self.update_preferred_column();
-                self.begin_text_entry_transaction();
-                self.vi.begin_insert();
-            }
-            PlainCommand::AppendLineEnd => {
-                self.buffer.move_line_end();
-                self.update_preferred_column();
-                self.begin_text_entry_transaction();
-                self.vi.begin_insert();
-            }
-            PlainCommand::OpenBelow => {
-                self.record_and_apply(RepeatableEdit::OpenBelow);
-            }
-            PlainCommand::OpenAbove => {
-                self.record_and_apply(RepeatableEdit::OpenAbove);
-            }
+            PlainCommand::BeginInsert => self.enter_insert(Entry::Insert),
+            PlainCommand::AppendAfter => self.enter_insert(Entry::Append),
+            PlainCommand::InsertLineStart => self.enter_insert(Entry::InsertLineStart),
+            PlainCommand::AppendLineEnd => self.enter_insert(Entry::AppendLineEnd),
+            PlainCommand::OpenBelow => self.enter_insert(Entry::OpenBelow),
+            PlainCommand::OpenAbove => self.enter_insert(Entry::OpenAbove),
             PlainCommand::BeginVisual(mode) => {
                 self.enter_visual(mode);
             }
@@ -630,7 +726,7 @@ impl Editor {
                 self.ensure_cursor_visible(ctx);
             }
             PlainCommand::ChangeToEnd => {
-                self.record_and_apply(RepeatableEdit::ChangeToEnd);
+                self.enter_insert(Entry::ChangeToEnd);
                 self.ensure_cursor_visible(ctx);
             }
         }
@@ -645,7 +741,7 @@ impl Editor {
                 self.ensure_cursor_visible(ctx);
             }
             PendingCommand::ChangeLine => {
-                self.record_and_apply(RepeatableEdit::ChangeLine);
+                self.enter_insert(Entry::ChangeLine);
                 self.ensure_cursor_visible(ctx);
             }
             PendingCommand::YankLine => {
@@ -657,57 +753,118 @@ impl Editor {
 
     /// Run one insert-mode command.
     fn execute_insert(&mut self, command: InsertCommand, ctx: &mut dyn Context) {
-        match command {
+        let key = match command {
             InsertCommand::EndInsert => {
-                self.commit_text_entry_transaction();
-                self.vi.end_insert();
+                self.transition(Target::Normal);
                 self.ensure_cursor_visible(ctx);
+                return;
+            }
+            InsertCommand::Move(direction) => {
+                let cursor = self.buffer.cursor();
+                match direction {
+                    MoveCommand::Left | MoveCommand::Right => {
+                        let multiline = self.config.multiline;
+                        let moved = if direction == MoveCommand::Left {
+                            self.buffer.move_left(multiline)
+                        } else {
+                            self.buffer.move_right(multiline)
+                        };
+                        if moved {
+                            self.update_preferred_column();
+                        }
+                    }
+                    MoveCommand::Up => self.move_vertical(-1),
+                    MoveCommand::Down => self.move_vertical(1),
+                }
+                if self.buffer.cursor() != cursor {
+                    // Text typed after a move goes elsewhere, so `.` repeats
+                    // only the typing after it.
+                    self.vi.end_segment();
+                    self.ensure_cursor_visible(ctx);
+                }
+                return;
             }
             InsertCommand::Insert(character) => {
-                let text = character.encode_utf8(&mut [0; 4]).to_string();
-                self.handle_insert_text(&text);
-                self.vi.push_inserted(&text);
-                self.ensure_cursor_visible(ctx);
+                InsertKey::Text(character.encode_utf8(&mut [0; 4]).to_string())
             }
-            InsertCommand::Backspace => {
-                if self.handle_delete_backward() {
-                    self.vi.pop_inserted_grapheme();
-                    self.ensure_cursor_visible(ctx);
-                }
-            }
-            InsertCommand::Delete => {
-                if self.handle_delete_forward() {
-                    self.ensure_cursor_visible(ctx);
-                }
-            }
-            InsertCommand::Newline => {
-                self.handle_insert_text("\n");
-                self.vi.push_inserted("\n");
-                self.ensure_cursor_visible(ctx);
-            }
-            InsertCommand::Move(MoveCommand::Left) => {
-                let moved = self.buffer.move_left(self.config.multiline);
-                if moved {
-                    self.update_preferred_column();
-                    self.ensure_cursor_visible(ctx);
-                }
-            }
-            InsertCommand::Move(MoveCommand::Right) => {
-                let moved = self.buffer.move_right(self.config.multiline);
-                if moved {
-                    self.update_preferred_column();
-                    self.ensure_cursor_visible(ctx);
-                }
-            }
-            InsertCommand::Move(MoveCommand::Up) => {
-                self.move_vertical(-1);
-                self.ensure_cursor_visible(ctx);
-            }
-            InsertCommand::Move(MoveCommand::Down) => {
-                self.move_vertical(1);
-                self.ensure_cursor_visible(ctx);
-            }
+            InsertCommand::Newline => InsertKey::Text("\n".to_string()),
+            InsertCommand::Backspace => InsertKey::Backspace,
+            InsertCommand::Delete => InsertKey::Delete,
+        };
+        if self.insert_key(key) {
+            self.ensure_cursor_visible(ctx);
         }
+    }
+
+    /// Run one key of insert mode, and record it for `.`. The first edit
+    /// after an undo or a relocation opens the undo group again. Returns
+    /// whether the key changed the text.
+    pub(super) fn insert_key(&mut self, key: InsertKey) -> bool {
+        self.buffer.begin_transaction();
+        let (changed, key) = match key {
+            InsertKey::Text(text) => {
+                let inserted = self.handle_insert_text(&text);
+                (!inserted.is_empty(), InsertKey::Text(inserted))
+            }
+            InsertKey::Backspace => (self.handle_delete_backward(), key),
+            InsertKey::Delete => (self.handle_delete_forward(), key),
+        };
+        self.vi.push_key(key);
+        changed
+    }
+
+    /// Move the vi mode to `to`: the one writer of the mode. Leaving insert
+    /// mode commits the undo group of the session and records the session
+    /// for `.`. Entering it opens an undo group, which the edits of the
+    /// entry join.
+    pub(super) fn transition(&mut self, to: Target) {
+        let state = match to {
+            Target::Normal => State::Normal,
+            Target::Visual(mode) => State::Visual(mode),
+            Target::Insert(entry) => State::Insert(InsertSession::new(entry)),
+        };
+        self.vi.pending = None;
+        if let State::Insert(ended) = mem::replace(&mut self.vi.state, state) {
+            self.buffer.commit_transaction();
+            self.vi.record(ended.record());
+        }
+        if let Target::Insert(_) = to {
+            self.buffer.begin_transaction();
+        }
+    }
+
+    /// Enter insert mode at `entry`, and run the edits of the entry in the
+    /// session's undo group. A visual change deletes its selection itself.
+    pub(super) fn enter_insert(&mut self, entry: Entry) {
+        self.transition(Target::Insert(entry));
+        match entry {
+            Entry::Insert | Entry::VisualChange(_) => return,
+            Entry::Append => {
+                let _ = self.buffer.move_right(self.config.multiline);
+            }
+            Entry::InsertLineStart => self.buffer.move_line_start(),
+            Entry::AppendLineEnd => self.buffer.move_line_end(),
+            Entry::OpenBelow => {
+                if self.config.multiline {
+                    let cursor = self.buffer.cursor();
+                    let end = self.buffer.line_end_position(cursor.line, false);
+                    self.buffer.set_cursor(end);
+                    self.handle_insert_text("\n");
+                }
+            }
+            Entry::OpenAbove => {
+                if self.config.multiline {
+                    let cursor = self.buffer.cursor();
+                    let start = TextPosition::new(cursor.line, 0);
+                    self.buffer.set_cursor(start);
+                    self.handle_insert_text("\n");
+                    let _ = self.buffer.move_left(true);
+                }
+            }
+            Entry::ChangeLine => self.clear_line(),
+            Entry::ChangeToEnd => self.delete_to_line_end(),
+        }
+        self.update_preferred_column();
     }
 
     /// Expand a range to full line boundaries, including trailing newline.
@@ -743,6 +900,22 @@ impl Editor {
             let prev_line = cursor.line.saturating_sub(1);
             self.buffer.set_cursor(TextPosition::new(prev_line, 0));
         }
+        self.update_preferred_column();
+    }
+
+    /// Yank the current line, and delete its text but not the line.
+    fn clear_line(&mut self) {
+        if self.config.interaction.read_only() {
+            return;
+        }
+        let line = self.buffer.cursor().line;
+        let start = TextPosition::new(line, 0);
+        self.set_yank(
+            TextRange::new(start, self.buffer.line_end_position(line, true)),
+            true,
+        );
+        let end = self.buffer.line_end_position(line, false);
+        self.replace_range(TextRange::new(start, end), "");
         self.update_preferred_column();
     }
 
@@ -818,8 +991,22 @@ impl Editor {
     /// recorded as the last edit.
     fn apply_edit(&mut self, edit: &RepeatableEdit) -> bool {
         match edit {
-            RepeatableEdit::Insert { text } => {
-                self.handle_insert_text(text);
+            RepeatableEdit::Insert { entry, keys } => {
+                match *entry {
+                    Entry::VisualChange(extent) => {
+                        self.select_extent(extent);
+                        self.visual_change(extent.mode());
+                    }
+                    entry => self.enter_insert(entry),
+                }
+                // An entry that typed nothing stays in insert mode, as its
+                // key did.
+                if !keys.is_empty() {
+                    for key in keys {
+                        self.insert_key(key.clone());
+                    }
+                    self.transition(Target::Normal);
+                }
                 true
             }
             RepeatableEdit::Put {
@@ -837,44 +1024,14 @@ impl Editor {
                 self.delete_line();
                 true
             }
-            RepeatableEdit::ChangeLine => {
-                self.begin_text_entry_transaction();
-                self.delete_line();
-                self.vi.begin_insert();
-                true
-            }
             RepeatableEdit::DeleteChar => self.delete_char_forward(),
             RepeatableEdit::DeleteToEnd => {
                 self.delete_to_line_end();
                 true
             }
-            RepeatableEdit::ChangeToEnd => {
-                self.begin_text_entry_transaction();
-                self.delete_to_line_end();
-                self.vi.begin_insert();
-                true
-            }
-            RepeatableEdit::OpenBelow => {
-                self.begin_text_entry_transaction();
-                if self.config.multiline {
-                    let cursor = self.buffer.cursor();
-                    let end = self.buffer.line_end_position(cursor.line, false);
-                    self.buffer.set_cursor(end);
-                    self.handle_insert_text("\n");
-                }
-                self.vi.begin_insert();
-                true
-            }
-            RepeatableEdit::OpenAbove => {
-                self.begin_text_entry_transaction();
-                if self.config.multiline {
-                    let cursor = self.buffer.cursor();
-                    let start = TextPosition::new(cursor.line, 0);
-                    self.buffer.set_cursor(start);
-                    self.handle_insert_text("\n");
-                    let _ = self.buffer.move_left(true);
-                }
-                self.vi.begin_insert();
+            RepeatableEdit::VisualDelete(extent) => {
+                self.select_extent(*extent);
+                self.visual_delete(extent.mode());
                 true
             }
         }
@@ -886,7 +1043,7 @@ impl Editor {
     fn record_and_apply(&mut self, edit: RepeatableEdit) -> bool {
         let applied = self.apply_edit(&edit);
         if applied {
-            self.vi.set_last_edit(edit);
+            self.vi.last_edit = Some(edit);
         }
         applied
     }

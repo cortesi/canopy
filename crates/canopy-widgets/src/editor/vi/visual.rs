@@ -9,7 +9,7 @@
 use canopy::{Context, input::key};
 
 use super::{
-    Motion, PendingKey, RepeatableEdit, ViMode, VisualMode,
+    Entry, Extent, Motion, PendingKey, RepeatableEdit, Target, ViMode, VisualMode,
     motion::{self, Vim, VisualArea},
 };
 use crate::{
@@ -199,8 +199,54 @@ impl Editor {
     pub(in crate::editor) fn enter_visual(&mut self, mode: VisualMode) {
         let cursor = motion::clamp_to_char(&self.buffer, self.buffer.cursor());
         let cursor = motion::grapheme_start(&self.buffer, cursor);
-        self.vi.set_mode(ViMode::Visual(mode));
+        self.transition(Target::Visual(mode));
         self.buffer.set_cursor(cursor);
+    }
+
+    /// Return the extent of the visual selection of kind `mode`, which `.`
+    /// selects again.
+    fn visual_extent(&self, mode: VisualMode) -> Extent {
+        let (first, last) = self.visual_ends();
+        let lines = last.line - first.line + 1;
+        let tab_stop = self.config.tab_stop;
+        let column = self.buffer.column_for_position(last, tab_stop);
+        match mode {
+            VisualMode::Line => Extent::Lines(lines),
+            VisualMode::Character if lines == 1 => Extent::Span(
+                column.saturating_sub(self.buffer.column_for_position(first, tab_stop)),
+            ),
+            VisualMode::Character => Extent::Rows { lines, column },
+        }
+    }
+
+    /// Enter visual mode with a selection of `extent` from the cursor, as
+    /// `.` selects again what a visual operator took.
+    pub(in crate::editor) fn select_extent(&mut self, extent: Extent) {
+        self.enter_visual(extent.mode());
+        let first = self.buffer.cursor();
+        let tab_stop = self.config.tab_stop;
+        let line_of = |lines: usize| {
+            first
+                .line
+                .saturating_add(lines.saturating_sub(1))
+                .min(self.buffer.line_count().saturating_sub(1))
+        };
+        let last = match extent {
+            Extent::Lines(lines) => TextPosition::new(line_of(lines), first.column),
+            Extent::Span(span) => self.buffer.position_for_column(
+                first.line,
+                self.buffer
+                    .column_for_position(first, tab_stop)
+                    .saturating_add(span),
+                tab_stop,
+            ),
+            Extent::Rows { lines, column } => {
+                self.buffer
+                    .position_for_column(line_of(lines), column, tab_stop)
+            }
+        };
+        self.buffer.set_selection(Selection::new(first, last));
+        self.snap_visual_ends();
     }
 
     /// Move each end of a visual selection inside a grapheme to the start
@@ -226,7 +272,7 @@ impl Editor {
     /// character of its line when `position` is on the end of a line.
     fn leave_visual_at(&mut self, position: TextPosition) {
         let position = motion::clamp_to_char(&self.buffer, position);
-        self.vi.set_mode(ViMode::Normal);
+        self.transition(Target::Normal);
         self.buffer.set_cursor(position);
     }
 
@@ -457,7 +503,7 @@ impl Editor {
         self.vi.set_pending(None);
         match command {
             VisualCommand::Exit => self.exit_visual(),
-            VisualCommand::Switch(mode) => self.vi.set_mode(ViMode::Visual(mode)),
+            VisualCommand::Switch(mode) => self.transition(Target::Visual(mode)),
             VisualCommand::ClearPending => {}
             VisualCommand::Pending(pending) => self.vi.set_pending(Some(pending)),
             VisualCommand::Motion(motion) => self.apply_motion(motion, ctx),
@@ -517,7 +563,7 @@ impl Editor {
         } else {
             VisualMode::Character
         };
-        self.vi.set_mode(ViMode::Visual(mode));
+        self.transition(Target::Visual(mode));
         self.update_preferred_column();
     }
 
@@ -554,17 +600,18 @@ impl Editor {
     /// selection deletes whole lines with their line breaks, and leaves the
     /// cursor on the line after them at the column that vertical moves
     /// keep.
-    fn visual_delete(&mut self, mode: VisualMode) {
+    pub(in crate::editor) fn visual_delete(&mut self, mode: VisualMode) {
         if self.config.interaction.read_only() {
             self.exit_visual();
             return;
         }
         let range = self.visual_range(mode);
+        let extent = self.visual_extent(mode);
         match mode {
             VisualMode::Character => {
                 self.set_yank(range, false);
                 // A caret at the start is what undo restores.
-                self.vi.set_mode(ViMode::Normal);
+                self.transition(Target::Normal);
                 self.buffer.set_cursor(range.start);
                 if !range.is_empty() {
                     self.replace_range(range, "");
@@ -584,7 +631,7 @@ impl Editor {
                 } else {
                     range
                 };
-                self.vi.set_mode(ViMode::Normal);
+                self.transition(Target::Normal);
                 self.buffer.set_cursor(range.start);
                 self.replace_range(delete, "");
                 let line = first.min(self.buffer.line_count().saturating_sub(1));
@@ -594,12 +641,12 @@ impl Editor {
                 self.row_goal = None;
             }
         }
-        self.vi.set_last_edit(RepeatableEdit::DeleteChar);
+        self.vi.last_edit = Some(RepeatableEdit::VisualDelete(extent));
     }
 
     /// Delete the selection into the yank register and enter insert mode.
     /// A line selection keeps one empty line for the new text.
-    fn visual_change(&mut self, mode: VisualMode) {
+    pub(in crate::editor) fn visual_change(&mut self, mode: VisualMode) {
         if self.config.interaction.read_only() {
             self.exit_visual();
             return;
@@ -610,14 +657,13 @@ impl Editor {
             VisualMode::Line => self.linewise_range(range),
         };
         self.set_yank(yanked, mode == VisualMode::Line);
-        self.vi.set_mode(ViMode::Normal);
+        let extent = self.visual_extent(mode);
+        // A caret at the start is what undo restores.
         self.buffer.set_cursor(range.start);
-        self.begin_text_entry_transaction();
+        self.enter_insert(Entry::VisualChange(extent));
         if !range.is_empty() {
             self.replace_range(range, "");
         }
-        self.vi.begin_insert();
-        self.vi.set_last_edit(RepeatableEdit::ChangeLine);
         self.update_preferred_column();
     }
 

@@ -35,7 +35,7 @@ fn token_key(token: &str) -> key::Key {
 }
 
 /// Split `keys` into tokens: each char, or a name in angle brackets.
-fn tokens(keys: &str) -> Vec<String> {
+pub(super) fn tokens(keys: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut chars = keys.chars().peekable();
     while let Some(c) = chars.next() {
