@@ -1,8 +1,14 @@
 //! Private modal readers. Host actions leave through an owned bounded mailbox.
 
 use std::{
-    cell::RefCell, collections::VecDeque, io::Error as IoError, mem::size_of, ops::Range, rc::Rc,
-    sync::Arc, time::Duration,
+    cell::RefCell,
+    collections::VecDeque,
+    io::Error as IoError,
+    mem::{self, size_of},
+    ops::Range,
+    rc::Rc,
+    sync::Arc,
+    time::Duration,
 };
 
 use canopy::{
@@ -159,10 +165,7 @@ impl InspectorHandle {
     /// The visible reader has prepared content and no pending search or detail.
     pub fn ready(&self, ctx: &dyn ViewContext) -> Result<bool> {
         ctx.with_widget(self.node, |inspector: &Inspector| {
-            Ok(inspector.pending_source.is_none()
-                && !inspector.detail_loading
-                && inspector.work_search.is_none()
-                && matches!(inspector.reader, Some(Reader::Source(_) | Reader::Table(_))))
+            Ok(inspector.stage.ready() && !matches!(inspector.search, Search::Running(_)))
         })
     }
     /// Conservative retained storage, including shared snapshots. This does not
@@ -171,23 +174,11 @@ impl InspectorHandle {
         ctx.with_widget(self.node, |inspector: &Inspector| {
             let mut bytes = size_of::<Inspector>()
                 .saturating_add(inspector.mailbox.borrow().bytes)
-                .saturating_add(inspector.pending_copy.as_ref().map_or(0, String::capacity))
-                .saturating_add(
-                    inspector
-                        .pending_source
-                        .as_ref()
-                        .map_or(0, SourceSnapshot::len),
-                )
-                .saturating_add(
-                    inspector
-                        .display_source
-                        .as_ref()
-                        .map_or(0, SourceSnapshot::len),
-                );
-            if inspector.pending_source.is_none() && inspector.display_source.is_none() {
-                bytes =
-                    bytes.saturating_add(inspector.full_copy.as_ref().map_or(0, |text| text.len()));
-            }
+                .saturating_add(inspector.pending_copy.as_ref().map_or(0, String::capacity));
+            bytes = bytes.saturating_add(match inspector.stage.snapshot() {
+                Some(snapshot) => snapshot.len(),
+                None => inspector.full_copy.as_ref().map_or(0, |text| text.len()),
+            });
             bytes = bytes
                 .saturating_add(inspector.open_url.as_ref().map_or(0, String::capacity))
                 .saturating_add(
@@ -196,22 +187,15 @@ impl InspectorHandle {
                         .as_ref()
                         .map_or(0, |prompt| prompt.value.capacity()),
                 );
-            if let Some(reader) = inspector.reader {
-                bytes = bytes.saturating_add(match reader {
-                    Reader::Source(source) => {
-                        ctx.with_widget(source, |source: &MarkdownSource| {
-                            Ok(source.derived_bytes())
-                        })?
-                    }
-                    Reader::Table(table) => ctx.with_widget(table, |table: &TableView| {
-                        Ok(table.table().derived_bytes())
-                    })?,
-                    Reader::Text(_) => 0,
-                });
-            }
-            if let Some(detail) = inspector.detail {
+            if let Some(table) = inspector.stage.table() {
                 bytes =
-                    bytes.saturating_add(ctx.with_widget(detail, |source: &MarkdownSource| {
+                    bytes.saturating_add(ctx.with_widget(table, |table: &TableView| {
+                        Ok(table.table().derived_bytes())
+                    })?);
+            }
+            if let Some(source) = inspector.stage.source_reader() {
+                bytes =
+                    bytes.saturating_add(ctx.with_widget(source, |source: &MarkdownSource| {
                         Ok(source.derived_bytes())
                     })?);
             }
@@ -236,7 +220,7 @@ impl InspectorHandle {
             if let Some(text) = inspector.pending_copy.take() {
                 events.push(InspectorEvent::CopyText(text));
             }
-            if let Some(Reader::Table(table)) = inspector.reader {
+            if let Some(table) = inspector.stage.table() {
                 let pending = ctx.with_widget_mut(table, |table: &mut TableView, _| {
                     Ok(table.take_events(EVENT_COUNT))
                 })?;
@@ -267,7 +251,7 @@ impl InspectorHandle {
         copy_limit: usize,
     ) -> Result<()> {
         ctx.with_widget_mut(self.node, |inspector: &mut Inspector, ctx| {
-            if let Some(Reader::Table(table)) = inspector.reader {
+            if let Some(table) = inspector.stage.table() {
                 ctx.with_widget_mut(table, |table: &mut TableView, _| {
                     table.set_copy_enabled(allow_copy);
                     table.set_copy_limit(copy_limit.min(EVENT_BYTES));
@@ -296,7 +280,7 @@ impl InspectorHandle {
     /// Select and reveal a keyed cell in the mounted table reader.
     pub fn reveal_cell(&self, ctx: &mut dyn Context, cell: &CellKey) -> Result<()> {
         ctx.with_widget_mut(self.node, |inspector: &mut Inspector, ctx| {
-            if let Some(Reader::Table(table)) = inspector.reader {
+            if let Some(table) = inspector.stage.table() {
                 ctx.with_widget_mut(table, |table: &mut TableView, ctx| {
                     table.set_cursor(ctx, cell)
                 })?;
@@ -307,7 +291,7 @@ impl InspectorHandle {
     /// Paint `overlay` over the table the inspector shows, if it shows one.
     pub fn set_table_overlay(&self, ctx: &mut dyn Context, overlay: TableOverlay) -> Result<()> {
         ctx.with_widget_mut(self.node, |inspector: &mut Inspector, ctx| {
-            if let Some(Reader::Table(table)) = inspector.reader {
+            if let Some(table) = inspector.stage.table() {
                 ctx.with_widget_mut(table, |table: &mut TableView, _| {
                     table.set_overlay(overlay);
                     Ok(())
@@ -348,15 +332,124 @@ impl InspectorHandle {
     }
 }
 
-/// The mounted content subtree beneath the inspector chrome.
-#[derive(Clone, Copy)]
-enum Reader {
-    /// The exact accepted Markdown source revision.
-    Source(TypedId<MarkdownSource>),
-    /// A keyed table that may receive newer prepared cell publications.
-    Table(TypedId<TableView>),
-    /// A mounted loading message while source preparation is pending.
-    Text(NodeId),
+/// What the inspector shows beneath its chrome, and what it waits for.
+enum Stage {
+    /// Not yet mounted.
+    Unmounted,
+    /// A loading message shows while a worker prepares this source.
+    Preparing {
+        /// The immutable source the worker prepares.
+        source: SourceSnapshot,
+        /// The mounted loading message.
+        text: TypedId<Text>,
+    },
+    /// A prepared source reader.
+    Source {
+        /// The mounted reader.
+        reader: TypedId<MarkdownSource>,
+        /// The immutable source it shows.
+        display: SourceSnapshot,
+    },
+    /// A keyed table that may receive newer prepared cell publications,
+    /// and the detail of a cell it opened.
+    Table {
+        /// The mounted table.
+        table: TypedId<TableView>,
+        /// The cell detail over it.
+        detail: Detail,
+    },
+    /// The first preparation failed: its message shows in place of the
+    /// loading message.
+    Failed {
+        /// The mounted message.
+        text: TypedId<Text>,
+    },
+}
+
+/// What a newly prepared reader does to the node it takes the place of.
+enum Replaced {
+    /// Nothing.
+    None,
+    /// Hides it, as a cell detail hides its table.
+    Hide(NodeId),
+    /// Removes it, as a reader replaces its loading message.
+    Remove(NodeId),
+}
+
+/// The detail of a table cell.
+enum Detail {
+    /// No detail: the table shows.
+    None,
+    /// A worker prepares the cell's value; the table still shows.
+    Loading(SourceSnapshot),
+    /// A source reader of the cell's value hides the table.
+    Shown {
+        /// The mounted reader.
+        reader: TypedId<MarkdownSource>,
+        /// The immutable source it shows.
+        display: SourceSnapshot,
+    },
+}
+
+/// A search of the shown source.
+enum Search {
+    /// No query waits for its matches, and no fresh matches wait for a
+    /// step.
+    Idle,
+    /// The query waits for a worker to match it over the fixed source.
+    Running(WorkSearch),
+    /// The matches published, and the first forward match is not yet
+    /// revealed.
+    Fresh,
+}
+
+impl Stage {
+    /// Whether the inspector shows its content, or its failure, and waits
+    /// for no preparation.
+    fn ready(&self) -> bool {
+        match self {
+            Self::Source { .. } | Self::Failed { .. } => true,
+            Self::Table { detail, .. } => !matches!(detail, Detail::Loading(_)),
+            Self::Unmounted | Self::Preparing { .. } => false,
+        }
+    }
+
+    /// The mounted table.
+    fn table(&self) -> Option<TypedId<TableView>> {
+        match self {
+            Self::Table { table, .. } => Some(*table),
+            _ => None,
+        }
+    }
+
+    /// The source reader that shows, the cell detail over a table included.
+    fn source_reader(&self) -> Option<TypedId<MarkdownSource>> {
+        match self {
+            Self::Source { reader, .. }
+            | Self::Table {
+                detail: Detail::Shown { reader, .. },
+                ..
+            } => Some(*reader),
+            _ => None,
+        }
+    }
+
+    /// The immutable source the inspector prepares or shows.
+    fn snapshot(&self) -> Option<&SourceSnapshot> {
+        match self {
+            Self::Preparing { source, .. }
+            | Self::Table {
+                detail: Detail::Loading(source),
+                ..
+            } => Some(source),
+            Self::Source { display, .. }
+            | Self::Table {
+                detail: Detail::Shown { display, .. },
+                ..
+            } => Some(display),
+            _ => None,
+        }
+    }
 }
 /// The operation requested by the temporary input prompt.
 #[derive(Clone, Copy)]
@@ -397,36 +490,26 @@ pub struct MarkdownInspector {
     mailbox: Rc<RefCell<Mailbox>>,
     /// An incarnation-aware wake for this inspector overlay.
     wake: Option<NodeWakeHandle>,
-    /// Mounted primary content subtree.
-    reader: Option<Reader>,
+    /// What the inspector shows, and what it waits for.
+    stage: Stage,
     /// Content container that also hosts nested cell details.
     reader_parent: Option<NodeId>,
     /// The fixed status and key-hint row.
     status: Option<TypedId<Text>>,
     /// Bounded source preparation lane owned by this overlay.
     lane: Option<WorkHandle>,
-    /// Immutable source awaiting worker preparation and publication.
-    pending_source: Option<SourceSnapshot>,
     /// Geometry, language, and syntax bounds for source preparation.
     source_options: SourceOptions,
     /// Temporary search or line-jump input, when active.
     prompt: Option<Prompt>,
-    /// Pinned source reader for the activated table cell.
-    detail: Option<TypedId<MarkdownSource>>,
     /// Original complete code payload or pinned URL for whole-content copying.
     full_copy: Option<Arc<str>>,
     /// Pinned destination admitted for an explicit host Open action.
     open_url: Option<String>,
     /// Latest preparation generation used to reject superseded results.
     generation: u64,
-    /// Immutable source retained by the currently displayed source reader.
-    display_source: Option<SourceSnapshot>,
-    /// The query awaiting worker matching over the fixed source.
-    work_search: Option<WorkSearch>,
-    /// The current query's first forward match has not yet been revealed.
-    search_fresh: bool,
-    /// Whether an explicitly activated cell is awaiting preparation.
-    detail_loading: bool,
+    /// The search of the shown source.
+    search: Search,
     /// Whether the host admits clipboard actions from this inspector.
     allow_copy: bool,
     /// Maximum bytes in one accepted complete copy payload.
@@ -554,21 +637,16 @@ impl MarkdownInspector {
             owner,
             mailbox,
             wake: None,
-            reader: None,
+            stage: Stage::Unmounted,
             reader_parent: None,
             status: None,
             lane: None,
-            pending_source: None,
             source_options: SourceOptions::default(),
             prompt: None,
-            detail: None,
             full_copy: None,
             open_url: None,
             generation: 0,
-            display_source: None,
-            work_search: None,
-            search_fresh: false,
-            detail_loading: false,
+            search: Search::Idle,
             allow_copy: true,
             copy_limit: DEFAULT_COPY_BYTES,
             pending_copy: None,
@@ -602,24 +680,22 @@ impl MarkdownInspector {
     }
     /// Return the active source reader, preferring nested table cell detail.
     fn source_reader(&self) -> Option<TypedId<MarkdownSource>> {
-        match self.reader {
-            Some(Reader::Source(id)) => self.detail.or(Some(id)),
-            _ => self.detail,
-        }
+        self.stage.source_reader()
     }
     /// Return the content node that receives reader focus, preferring nested
     /// cell detail and the table's own focus target.
     fn focus_target(&self, ctx: &dyn ViewContext) -> Result<Option<NodeId>> {
-        if let Some(detail) = self.detail {
-            return Ok(Some(detail.into()));
-        }
-        Ok(match self.reader {
-            Some(Reader::Table(table)) => {
-                ctx.with_widget(table, |table: &TableView| Ok(table.initial_focus()))?
+        Ok(match &self.stage {
+            Stage::Source { reader, .. }
+            | Stage::Table {
+                detail: Detail::Shown { reader, .. },
+                ..
+            } => Some((*reader).into()),
+            Stage::Table { table, .. } => {
+                ctx.with_widget(*table, |table: &TableView| Ok(table.initial_focus()))?
             }
-            Some(Reader::Source(id)) => Some(id.into()),
-            Some(Reader::Text(id)) => Some(id),
-            None => None,
+            Stage::Preparing { text, .. } | Stage::Failed { text } => Some((*text).into()),
+            Stage::Unmounted => None,
         })
     }
     /// Queue an immutable action and wake its owning controller.
@@ -679,7 +755,7 @@ impl MarkdownInspector {
     /// Show or hide a table's row-number gutter.
     fn set_row_numbers(&mut self, ctx: &mut dyn Context, show: bool) -> Result<()> {
         self.row_numbers = show;
-        if let Some(Reader::Table(table)) = self.reader {
+        if let Some(table) = self.stage.table() {
             ctx.with_widget_mut(table, |table: &mut TableView, _| {
                 table.set_row_numbers(show);
                 Ok(())
@@ -713,30 +789,29 @@ impl MarkdownInspector {
                     source.clear_search(ctx);
                     Ok(())
                 })?;
-                self.work_search = None;
-                self.search_fresh = false;
+                self.search = Search::Idle;
                 self.generation += 1;
                 self.report(ctx, NoticePost::info("Search cleared"))?;
                 return Ok(());
             }
         }
-        if self.detail_loading {
-            self.detail_loading = false;
-            self.pending_source = None;
-            self.generation += 1;
-            self.report(ctx, NoticePost::info("Cell detail canceled"))?;
-            return self.restore_focus(ctx);
-        }
-        if let Some(detail) = self.detail.take() {
-            self.generation += 1;
-            self.work_search = None;
-            self.search_fresh = false;
-            self.display_source = None;
-            ctx.remove_after_dispatch(detail.into())?;
-            if let Some(Reader::Table(table)) = self.reader {
-                ctx.set_hidden(table.into(), false)?;
+        if let Stage::Table { table, detail } = &mut self.stage {
+            match mem::replace(detail, Detail::None) {
+                Detail::Loading(_) => {
+                    self.generation += 1;
+                    self.report(ctx, NoticePost::info("Cell detail canceled"))?;
+                    return self.restore_focus(ctx);
+                }
+                Detail::Shown { reader, .. } => {
+                    let table = *table;
+                    self.generation += 1;
+                    self.search = Search::Idle;
+                    ctx.remove_after_dispatch(reader.into())?;
+                    ctx.set_hidden(table.into(), false)?;
+                    return self.restore_focus(ctx);
+                }
+                Detail::None => {}
             }
-            return self.restore_focus(ctx);
         }
         self.emit(InspectorEvent::Close)
     }
@@ -763,9 +838,10 @@ impl MarkdownInspector {
     fn copy_status(&self, _ctx: &dyn ViewContext) -> Result<CommandStatus> {
         Ok(
             if self.allow_copy
+                && !matches!(self.stage, Stage::Failed { .. })
                 && (self.full_copy.is_some()
                     || self.source_reader().is_some()
-                    || matches!(self.reader, Some(Reader::Table(_))))
+                    || self.stage.table().is_some())
             {
                 CommandStatus::Enabled
             } else {
@@ -814,7 +890,7 @@ impl MarkdownInspector {
             })?;
             return self.request_source_copy(input.0, input.1);
         }
-        if let Some(Reader::Table(table)) = self.reader {
+        if let Some(table) = self.stage.table() {
             ctx.with_widget_mut(table, |table: &mut TableView, ctx| {
                 if table.selection().is_empty() {
                     table.copy_cell(ctx)
@@ -839,7 +915,7 @@ impl MarkdownInspector {
             let range = 0..text.len();
             return self.request_source_copy(text, range);
         }
-        if let Some(Reader::Table(id)) = self.reader {
+        if let Some(id) = self.stage.table() {
             ctx.with_widget_mut(id, |table: &mut TableView, ctx| table.copy_all(ctx))?;
             return self.drain_table(ctx);
         }
@@ -879,7 +955,7 @@ impl MarkdownInspector {
     pub fn next_match(&mut self, ctx: &mut dyn Context, delta: i32) -> Result<()> {
         let source = self.source_reader();
         if let Some(source) = source {
-            let delta = if self.search_fresh && delta > 0 {
+            let delta = if matches!(self.search, Search::Fresh) && delta > 0 {
                 delta - 1
             } else {
                 delta
@@ -888,14 +964,16 @@ impl MarkdownInspector {
                 source.search_next(ctx, delta);
                 Ok(())
             })?;
-            self.search_fresh = false;
+            if matches!(self.search, Search::Fresh) {
+                self.search = Search::Idle;
+            }
         }
         Ok(())
     }
     /// Republish a matching table identity while retaining the modal and keyed
     /// selection.
     pub fn publish_table(&self, ctx: &mut dyn Context, prepared: Arc<PreparedTable>) -> Result<()> {
-        if let Some(Reader::Table(table)) = self.reader {
+        if let Some(table) = self.stage.table() {
             ctx.with_widget_mut(table, |table: &mut TableView, ctx| {
                 if table.table().data().dataset() != prepared.data().dataset() {
                     return Err(Error::Invalid("table inspector identity changed".into()));
@@ -911,7 +989,7 @@ impl MarkdownInspector {
         if self.pending_copy.is_some() {
             return Ok(());
         }
-        let Some(Reader::Table(table)) = self.reader else {
+        let Some(table) = self.stage.table() else {
             return Ok(());
         };
         for _ in 0..EVENT_COUNT {
@@ -946,8 +1024,10 @@ impl MarkdownInspector {
         // Preparation is submitted through the same lane. The table remains
         // mounted.
         let store = SourceStore::static_text(text).map_err(|e| Error::Invalid(e.to_string()))?;
-        self.pending_source = Some(store.snapshot());
-        self.detail_loading = true;
+        let Stage::Table { detail, .. } = &mut self.stage else {
+            return Ok(());
+        };
+        *detail = Detail::Loading(store.snapshot());
         self.source_options.language = None;
         self.submit(ctx)?;
         self.show_status(ctx, "Preparing cell detail…")
@@ -955,11 +1035,7 @@ impl MarkdownInspector {
     /// Submit the latest fixed source and optional query through the inspector
     /// lane.
     fn submit(&mut self, ctx: &dyn ViewContext) -> Result<()> {
-        let Some(source) = self
-            .pending_source
-            .clone()
-            .or_else(|| self.display_source.clone())
-        else {
+        let Some(source) = self.stage.snapshot().cloned() else {
             return Ok(());
         };
         let Some(lane) = &self.lane else {
@@ -980,7 +1056,10 @@ impl MarkdownInspector {
             previous_source: None,
             limits: ParseLimits::default(),
             generation: self.generation,
-            search: self.work_search.clone(),
+            search: match &self.search {
+                Search::Running(search) => Some(search.clone()),
+                Search::Idle | Search::Fresh => None,
+            },
             supplied: Arc::default(),
         })
         .map_err(|e| Error::App(Box::new(e)))
@@ -1116,21 +1195,17 @@ impl Widget for Inspector {
         self.sync_centered(ctx)?;
         self.source_options.wrap = WrapMode::None;
         self.source_options.line_numbers = LineNumbers::Absolute;
-        let ready = match content {
+        let pending = match content {
             InspectorContent::Code { info, text } => {
                 self.full_copy = Some(text.clone());
                 self.source_options.language = Some(Arc::from(info));
-                self.pending_source = Some(
+                Some(
                     SourceStore::static_text(text)
                         .map_err(|e| Error::Invalid(e.to_string()))?
                         .snapshot(),
-                );
-                false
+                )
             }
-            InspectorContent::Source { snapshot } => {
-                self.pending_source = Some(snapshot);
-                false
-            }
+            InspectorContent::Source { snapshot } => Some(snapshot),
             InspectorContent::Table { table } => {
                 let table = ctx.add_child(
                     reader_parent,
@@ -1151,8 +1226,11 @@ impl Widget for Inspector {
                     table.set_row_numbers(self.row_numbers);
                     Ok(())
                 })?;
-                self.reader = Some(Reader::Table(table));
-                true
+                self.stage = Stage::Table {
+                    table,
+                    detail: Detail::None,
+                };
+                None
             }
             InspectorContent::Link {
                 label,
@@ -1168,20 +1246,18 @@ impl Widget for Inspector {
                     "Label:\n{label}\n\nOriginal URL:\n{original}\n\nResolved URL:\n{}",
                     resolved.as_deref().unwrap_or("Unresolved")
                 );
-                self.pending_source = Some(
+                self.source_options.language = None;
+                Some(
                     SourceStore::static_text(text)
                         .map_err(|e| Error::Invalid(e.to_string()))?
                         .snapshot(),
-                );
-                self.source_options.language = None;
-                false
+                )
             }
         };
-        if !ready {
-            self.reader = Some(Reader::Text(
-                ctx.add_child(reader_parent, Text::new("Preparing…").with_focusable(true))?
-                    .into(),
-            ));
+        if let Some(source) = pending {
+            let text =
+                ctx.add_child(reader_parent, Text::new("Preparing…").with_focusable(true))?;
+            self.stage = Stage::Preparing { source, text };
             self.submit(ctx)?;
         }
         // The status row shows a prompt or the outcome of an action, and
@@ -1215,7 +1291,8 @@ impl Widget for Inspector {
                 return Ok(None);
             }
             let search_result = result.search;
-            if self.work_search.is_some() {
+            if matches!(self.search, Search::Running(_)) {
+                self.search = Search::Idle;
                 if let (Some(source), Some(matches)) = (self.source_reader(), search_result) {
                     match matches {
                         Ok(SearchOutput::Source(matches)) => {
@@ -1226,7 +1303,7 @@ impl Widget for Inspector {
                                     .publish_matches(matches)
                                     .map_err(|e| Error::Invalid(e.to_string()))
                             })?;
-                            self.search_fresh = true;
+                            self.search = Search::Fresh;
                             self.show_status(
                                 ctx,
                                 format!(
@@ -1241,35 +1318,59 @@ impl Widget for Inspector {
                 } else if let Err(error) = &result.result {
                     self.report(ctx, NoticePost::error(format!("Search failed: {error}")))?;
                 }
-                self.work_search = None;
                 return Ok(None);
             }
             match result.result {
                 Ok(PreparedView::Source(prepared)) => {
+                    // Only a preparation waits for a reader.
+                    if !matches!(
+                        self.stage,
+                        Stage::Preparing { .. }
+                            | Stage::Table {
+                                detail: Detail::Loading(_),
+                                ..
+                            }
+                    ) {
+                        return Ok(None);
+                    }
                     let was_focused = self
                         .focus_target(ctx)?
                         .is_some_and(|node| ctx.is_on_focus_path(node));
                     let source = MarkdownSource::from_prepared(*prepared);
                     let limited = source.syntax_limited();
                     let parent = self.reader_parent.expect("mounted reader parent");
-                    let id = ctx.add_child(parent, source)?;
-                    match self.reader {
-                        Some(Reader::Table(table)) => {
-                            ctx.set_hidden(table.into(), true)?;
-                            self.detail = Some(id);
+                    let reader = ctx.add_child(parent, source)?;
+                    let (stage, replaced) = match mem::replace(&mut self.stage, Stage::Unmounted) {
+                        Stage::Table {
+                            table,
+                            detail: Detail::Loading(display),
+                        } => (
+                            Stage::Table {
+                                table,
+                                detail: Detail::Shown { reader, display },
+                            },
+                            Replaced::Hide(table.into()),
+                        ),
+                        Stage::Preparing { source, text } => (
+                            Stage::Source {
+                                reader,
+                                display: source,
+                            },
+                            Replaced::Remove(text.into()),
+                        ),
+                        stage => (stage, Replaced::None),
+                    };
+                    self.stage = stage;
+                    match replaced {
+                        Replaced::Hide(node) => {
+                            ctx.set_hidden(node, true)?;
                         }
-                        reader => {
-                            if let Some(Reader::Text(old)) = reader {
-                                ctx.remove_subtree(old)?;
-                            }
-                            self.reader = Some(Reader::Source(id));
-                        }
+                        Replaced::Remove(node) => ctx.remove_subtree(node)?,
+                        Replaced::None => {}
                     }
                     if was_focused {
-                        ctx.set_focus(id.into())?;
+                        ctx.set_focus(reader.into())?;
                     }
-                    self.display_source = self.pending_source.take();
-                    self.detail_loading = false;
                     self.apply_reveal(ctx)?;
                     self.show_status(
                         ctx,
@@ -1282,10 +1383,20 @@ impl Widget for Inspector {
                 }
                 Ok(PreparedView::Rendered(_)) => {}
                 Err(error) => {
-                    self.report(
-                        ctx,
-                        NoticePost::error(format!("Preparation failed: {error}")),
-                    )?;
+                    let message = format!("Preparation failed: {error}");
+                    match &mut self.stage {
+                        Stage::Preparing { text, .. } => {
+                            let text = *text;
+                            ctx.with_widget_mut(text, |text: &mut Text, _| {
+                                text.set_text(message.clone());
+                                Ok(())
+                            })?;
+                            self.stage = Stage::Failed { text };
+                        }
+                        Stage::Table { detail, .. } => *detail = Detail::None,
+                        _ => {}
+                    }
+                    self.report(ctx, NoticePost::error(message))?;
                 }
             }
         }
@@ -1352,8 +1463,8 @@ impl Widget for Inspector {
                         format!("Line {line}")
                     }
                     PromptKind::Search => {
-                        if self.display_source.is_some() {
-                            self.work_search = Some(WorkSearch {
+                        if self.source_reader().is_some() {
+                            self.search = Search::Running(WorkSearch {
                                 query: SearchQuery {
                                     text: prompt.value.clone(),
                                     ..SearchQuery::default()
@@ -1986,6 +2097,34 @@ mod interaction_tests {
     }
 
     #[test]
+    fn regression_a_failed_first_preparation_shows_its_error_and_is_ready() -> Result<()> {
+        let (mut harness, _, handle, manual) = fixture(InspectorContent::Code {
+            info: "rust".into(),
+            text: Arc::from("let x = 1;\n"),
+        })?;
+        manual
+            .start_next()
+            .expect("the first preparation")
+            .fail("boom");
+        harness.canopy.turn(TurnInput::Prepare)?;
+        harness.render()?;
+        assert!(harness.canopy.with_root_context(|ctx| handle.ready(ctx))?);
+        assert!(!harness.tbuf().contains_text("Preparing"));
+        assert!(harness.tbuf().contains_text("boom"));
+        harness.canopy.with_context(handle.node, |ctx| {
+            for call in [Inspector::call_copy_all(), Inspector::call_search()] {
+                let status = ctx
+                    .command_status(&call.with_target(CommandTarget::Exact(handle.node.into())))?;
+                assert_ne!(status, CommandStatus::Enabled);
+            }
+            Ok(())
+        })?;
+        harness.key(KeyCode::Esc)?;
+        assert_eq!(handle.take_events(4), vec![InspectorEvent::Close]);
+        Ok(())
+    }
+
+    #[test]
     fn link_open_requires_explicit_action_and_uses_pinned_url() -> Result<()> {
         let (mut harness, _, handle, manual) = fixture(InspectorContent::Link {
             label: "A full label".into(),
@@ -2056,8 +2195,8 @@ mod table_tests {
         harness.render()?;
         harness.canopy.with_root_context(|ctx| {
             let table = ctx.with_widget(handle.node, |inspector: &Inspector| {
-                match inspector.reader {
-                    Some(Reader::Table(table)) => Ok(NodeId::from(table)),
+                match inspector.stage.table() {
+                    Some(table) => Ok(NodeId::from(table)),
                     _ => Err(Error::Invalid("the inspector shows a table".into())),
                 }
             })?;
@@ -2190,7 +2329,7 @@ mod table_tests {
                 for _ in 0..EVENT_COUNT {
                     inspector.mailbox.borrow_mut().push(InspectorEvent::Close)?;
                 }
-                let Some(Reader::Table(table)) = inspector.reader else {
+                let Some(table) = inspector.stage.table() else {
                     panic!("table reader")
                 };
                 ctx.with_widget_mut(table, |table: &mut TableView, ctx| {
@@ -2257,6 +2396,32 @@ mod table_tests {
         manual.run_until_idle();
         harness.canopy.turn(TurnInput::Prepare)?;
         assert!(harness.find_nodes("**/markdown_source/")?.is_empty());
+        harness.key(KeyCode::Esc)?;
+        assert_eq!(handle.take_events(4), vec![InspectorEvent::Close]);
+        Ok(())
+    }
+    #[test]
+    fn regression_a_failed_cell_detail_leaves_a_table_that_takes_keys() -> Result<()> {
+        let (mut harness, _, handle, manual) = fixture(InspectorContent::Table {
+            table: prepared("table", 1, "cell"),
+        })?;
+        harness.key(KeyCode::Enter)?;
+        harness.canopy.turn(TurnInput::Prepare)?;
+        manual
+            .start_next()
+            .expect("the detail preparation")
+            .fail("boom");
+        harness.canopy.turn(TurnInput::Prepare)?;
+        harness.render()?;
+        assert!(harness.canopy.with_root_context(|ctx| handle.ready(ctx))?);
+        assert!(!harness.tbuf().contains_text("Preparing"));
+        let notice = harness.canopy.notices().last().cloned().expect("a notice");
+        assert!(notice.message.contains("boom"), "{}", notice.message);
+        harness.key('y')?;
+        assert_eq!(
+            handle.take_events(4),
+            vec![InspectorEvent::CopyText("cell".into())]
+        );
         harness.key(KeyCode::Esc)?;
         assert_eq!(handle.take_events(4), vec![InspectorEvent::Close]);
         Ok(())

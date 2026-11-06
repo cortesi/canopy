@@ -109,6 +109,7 @@ struct Nodes {
     _chrome: NodeId,
 }
 /// Pinned inspector provenance, independent of subsequent publications.
+#[derive(Clone)]
 struct OpenInspector {
     /// Modal handle used for events, readiness, and dismissal.
     handle: InspectorHandle,
@@ -118,6 +119,8 @@ struct OpenInspector {
     epoch: u64,
     /// Displayed revision captured when this inspector opened.
     revision: u64,
+    /// Destination of the link the inspector shows, which its Open follows.
+    link: Option<ResolvedLink>,
 }
 /// One logical switch; the outgoing displayed revision is pinned until it
 /// commits.
@@ -195,8 +198,6 @@ pub struct Markdown {
     query_error: Option<String>,
     /// At most one lazily mounted modal inspector.
     inspector: Option<OpenInspector>,
-    /// Destination of the link the inspector shows, which its Open follows.
-    inspected_link: Option<ResolvedLink>,
     /// What the reader has done about each resource, by kind and
     /// destination: asked for it, or settled it.
     resource_states: HashMap<(ResourceKind, String), ResourceState>,
@@ -436,7 +437,6 @@ impl Markdown {
             source_results: None,
             query_error: None,
             inspector: None,
-            inspected_link: None,
             resource_states: HashMap::new(),
             resource_requests: HashMap::new(),
             resource_id: 0,
@@ -1670,8 +1670,13 @@ impl Markdown {
                 content
             }
         };
-        self.open_inspector(ctx, content, Some(object.id), p.document.source.revision)?;
-        self.inspected_link = inspected;
+        self.open_inspector(
+            ctx,
+            content,
+            Some(object.id),
+            p.document.source.revision,
+            inspected,
+        )?;
         self.sync_inspector_marks(ctx)?;
         if let Some(found) = self
             .search_index
@@ -1713,7 +1718,13 @@ impl Markdown {
             return Ok(());
         };
         let revision = snapshot.revision;
-        self.open_inspector(ctx, InspectorContent::Source { snapshot }, None, revision)
+        self.open_inspector(
+            ctx,
+            InspectorContent::Source { snapshot },
+            None,
+            revision,
+            None,
+        )
     }
     /// Lazily mount one pinned modal and pause following on explicit
     /// inspection.
@@ -1723,6 +1734,7 @@ impl Markdown {
         content: InspectorContent,
         object: Option<u64>,
         revision: u64,
+        link: Option<ResolvedLink>,
     ) -> Result<()> {
         if self.inspector.is_some() {
             return Err(invalid("Close the current inspector first"));
@@ -1752,6 +1764,7 @@ impl Markdown {
             object,
             epoch: self.epoch(),
             revision,
+            link,
         });
         self.update_chrome(ctx)
     }
@@ -1761,9 +1774,7 @@ impl Markdown {
         if let Some(open) = self.inspector.take() {
             let mut failure = None;
             for event in open.handle.take_closing_events(ctx)? {
-                if let Err(error) =
-                    self.apply_inspector_event(ctx, event, open.epoch, open.revision)
-                {
+                if let Err(error) = self.apply_inspector_event(ctx, event, &open) {
                     failure = Some(error.to_string());
                 }
             }
@@ -1772,8 +1783,6 @@ impl Markdown {
                 self.fail_action(ctx, &failure)?;
             }
         }
-        // Events still queued in the inspector have followed its link.
-        self.inspected_link = None;
         self.update_chrome(ctx)
     }
     /// Admit explicit inspector effects on the document's ordered action lane.
@@ -1781,10 +1790,10 @@ impl Markdown {
         &mut self,
         ctx: &mut dyn Context,
         event: InspectorEvent,
-        epoch: u64,
-        revision: u64,
+        open: &OpenInspector,
     ) -> Result<()> {
-        if epoch != self.epoch() {
+        let revision = open.revision;
+        if open.epoch != self.epoch() {
             return Ok(());
         }
         match event {
@@ -1796,8 +1805,8 @@ impl Markdown {
                 self.queue_copy(ctx, CopyInput::Source { text, range }, None, revision)?;
             }
             InspectorEvent::Open => {
-                if let Some(link) = self.inspected_link.clone() {
-                    self.follow_link(&link, revision, None)?;
+                if let Some(link) = &open.link {
+                    self.follow_link(link, revision, None)?;
                 }
             }
         }
@@ -3373,11 +3382,15 @@ impl Widget for Markdown {
         let mut action_failure = None;
         if let Some(open) = &self.inspector {
             let events = open.handle.take_events(32);
-            let epoch = open.epoch;
-            let revision = open.revision;
+            let mut open = open.clone();
             for event in events {
-                if let Err(error) = self.apply_inspector_event(ctx, event, epoch, revision) {
+                if let Err(error) = self.apply_inspector_event(ctx, event, &open) {
                     action_failure = Some(error.to_string());
+                }
+                // Once the inspector closes, an Open after its Close follows
+                // nothing.
+                if self.inspector.is_none() {
+                    open.link = None;
                 }
             }
         }
