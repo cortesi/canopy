@@ -324,6 +324,16 @@ struct Mosaic {
     cells: Vec<Cell<[u8; 3]>>,
 }
 
+/// How an image view sizes its image.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Zoom {
+    /// Fit the whole image to the view, whatever its size.
+    Fit,
+    /// Hold a zoom factor in display subpixels per image pixel. A display
+    /// subpixel is one column by half a row.
+    Manual(f32),
+}
+
 /// Widget that renders an image into terminal cells.
 ///
 /// Each cell is an 8×8 matrix of the image, matched to the block mosaic
@@ -333,11 +343,8 @@ pub struct ImageView {
     /// The image, RGBA8 with unassociated alpha, shared with the preview it
     /// came from.
     image: Arc<RgbaImage>,
-    /// Zoom factor in display subpixels per image pixel. A display subpixel
-    /// is one column by half a row.
-    zoom: f32,
-    /// Whether the view should auto-fit the image to the terminal.
-    auto_fit: bool,
+    /// Whether the view fits the image or holds a zoom.
+    zoom: Zoom,
     /// Whether the view takes focus, which its zoom and pan keys need.
     focusable: bool,
     /// The view's own mosaic tier, or none to follow the terminal's glyphs.
@@ -394,34 +401,29 @@ impl ImageView {
 
     /// Determine the zoom value to use for the provided view.
     fn effective_zoom(&self, view_size: Size) -> f32 {
-        if self.auto_fit {
-            self.fit_zoom(view_size)
-        } else {
-            self.zoom
+        match self.zoom {
+            Zoom::Fit => self.fit_zoom(view_size),
+            Zoom::Manual(zoom) => zoom,
         }
     }
 
-    /// Apply automatic fit if enabled.
-    fn apply_auto_fit(&mut self, view_size: Size) {
-        if !self.auto_fit {
-            return;
-        }
-        if view_size.w == 0 || view_size.h == 0 {
-            return;
-        }
-
-        self.zoom = self.fit_zoom(view_size);
+    /// Leave fit for a held zoom, starting from the zoom that fits `view`,
+    /// and return the held zoom. Every manual operation starts here.
+    fn take_manual(&mut self, view: Size) -> f32 {
+        let zoom = self.effective_zoom(view);
+        self.zoom = Zoom::Manual(zoom);
+        zoom
     }
 
     /// Zoom around the center of the current view.
     fn zoom_by(&mut self, view_size: Size, scroll: Point, factor: f32) -> Point {
+        let zoom_before = self.take_manual(view_size);
         let view_width = Self::view_subpixel_width(view_size);
         let view_height = Self::view_subpixel_height(view_size);
         if view_width == 0.0 || view_height == 0.0 {
             return scroll;
         }
 
-        let zoom_before = self.zoom;
         let (offset_x, offset_y) = self.center_offset(view_size, zoom_before);
         let center_sub_x = scroll.x as f32 - offset_x + view_width / 2.0;
         let center_sub_y = scroll.y as f32 * 2.0 - offset_y + view_height / 2.0;
@@ -429,10 +431,11 @@ impl ImageView {
         let center_image_y = center_sub_y / zoom_before;
 
         let min_zoom = MIN_ZOOM.min(self.fit_zoom(view_size));
-        self.zoom = (self.zoom * factor).clamp(min_zoom, MAX_ZOOM);
-        let (new_offset_x, new_offset_y) = self.center_offset(view_size, self.zoom);
-        let new_center_sub_x = center_image_x * self.zoom;
-        let new_center_sub_y = center_image_y * self.zoom;
+        let zoom = (zoom_before * factor).clamp(min_zoom, MAX_ZOOM);
+        self.zoom = Zoom::Manual(zoom);
+        let (new_offset_x, new_offset_y) = self.center_offset(view_size, zoom);
+        let new_center_sub_x = center_image_x * zoom;
+        let new_center_sub_y = center_image_y * zoom;
         let new_scroll_x = new_center_sub_x + new_offset_x - view_width / 2.0;
         let new_scroll_y = (new_center_sub_y + new_offset_y - view_height / 2.0) / 2.0;
         Point {
@@ -576,8 +579,7 @@ impl ImageView {
     fn shared(image: Arc<RgbaImage>) -> Self {
         Self {
             image,
-            zoom: 1.0,
-            auto_fit: true,
+            zoom: Zoom::Fit,
             focusable: true,
             tier: None,
             mosaic: None,
@@ -707,8 +709,6 @@ impl ImageView {
     pub fn zoom(&mut self, ctx: &mut dyn Context, dir: ZoomDirection) -> Result<()> {
         let view = ctx.view();
         let view_size = view.content_size();
-        self.zoom = self.effective_zoom(view_size);
-        self.auto_fit = false;
         let factor = match dir {
             ZoomDirection::In => ZOOM_STEP,
             ZoomDirection::Out => 1.0 / ZOOM_STEP,
@@ -721,8 +721,7 @@ impl ImageView {
     /// Fit the entire image to the view and clear its pan offset.
     #[command]
     pub fn fit(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        self.auto_fit = true;
-        self.apply_auto_fit(ctx.view().content_size());
+        self.zoom = Zoom::Fit;
         ctx.scroll(ScrollOp::To(Point::default()));
         Ok(())
     }
@@ -731,7 +730,7 @@ impl ImageView {
     /// @param dir The pan direction.
     #[command]
     pub fn pan(&mut self, ctx: &mut dyn Context, dir: ScrollDirection) -> Result<()> {
-        self.auto_fit = false;
+        self.take_manual(ctx.view().content_size());
         let step = match dir {
             ScrollDirection::Left | ScrollDirection::Right => PAN_STEP_COLUMNS,
             ScrollDirection::Up | ScrollDirection::Down => PAN_STEP_ROWS,
@@ -773,10 +772,9 @@ impl Widget for ImageView {
         }
 
         let view_size = view.content_size();
-        self.apply_auto_fit(view_size);
-
-        let offset = self.center_offset(view_size, self.zoom);
-        self.render_cells(render, view_rect, view.content_origin(), offset, self.zoom)
+        let zoom = self.effective_zoom(view_size);
+        let offset = self.center_offset(view_size, zoom);
+        self.render_cells(render, view_rect, view.content_origin(), offset, zoom)
     }
 
     /// Accept focus so key bindings apply to this widget, unless the view
@@ -1097,8 +1095,7 @@ mod tests {
         let invalid = directory.path().join("invalid.png");
         fs::write(&invalid, b"not an image").unwrap();
         let mut view = ImageView::new(&RgbaImage::from_pixel(3, 2, image::Rgba([255, 0, 0, 255])));
-        view.auto_fit = false;
-        view.zoom = 3.0;
+        view.zoom = Zoom::Manual(3.0);
         for (path, bounds) in [
             (invalid, Size::new(16, 16)),
             (directory.path().join("missing.png"), Size::new(16, 16)),
@@ -1108,12 +1105,10 @@ mod tests {
             assert!(view.set_preview_path(path, bounds).is_err());
             assert_eq!(view.image_size(), Size::new(3, 2));
             assert_eq!(view.image.get_pixel(0, 0), &image::Rgba([255, 0, 0, 255]));
-            assert!(!view.auto_fit);
-            assert_eq!(view.zoom, 3.0);
+            assert_eq!(view.zoom, Zoom::Manual(3.0));
         }
         view.set_preview_path(valid, Size::new(16, 16))?;
-        assert!(view.auto_fit);
-        assert_eq!(view.zoom, 1.0);
+        assert_eq!(view.zoom, Zoom::Fit);
         Ok(())
     }
 
@@ -1135,10 +1130,10 @@ mod tests {
         assert!(DecodedImage::read(&path)?.scale(Size::new(0, 8)).is_err());
 
         let mut view = ImageView::empty().with_focus(false).with_tier(Tier::Halves);
-        view.auto_fit = false;
+        view.zoom = Zoom::Manual(2.0);
         view.set_preview(preview.clone());
         assert!(Arc::ptr_eq(&view.image, &preview.image), "no copy");
-        assert!(view.auto_fit, "a new preview fits again");
+        assert_eq!(view.zoom, Zoom::Fit, "a new preview fits again");
         assert_eq!(view.image_size(), Size::new(64, 32));
         view.clear();
         assert_eq!(view.image_size(), Size::new(1, 1));
@@ -1284,7 +1279,32 @@ mod tests {
         let view_size = make_view(100, 25);
         let _ = view.zoom_by(view_size, Point::default(), 0.01);
         let fit_zoom = view.fit_zoom(view_size);
-        assert!((view.zoom - fit_zoom).abs() < 0.0001);
+        assert!((view.effective_zoom(view_size) - fit_zoom).abs() < 0.0001);
+    }
+
+    #[test]
+    fn regression_a_pan_after_a_new_image_keeps_the_fitted_zoom() -> Result<()> {
+        let canopy = app(
+            ImageView::new(&RgbaImage::new(40, 40)),
+            Color::Black,
+            vec![],
+        )?;
+        let mut harness = Harness::from_canopy(canopy, Size::new(20, 10))?;
+        harness.render()?;
+        harness.with_unique::<ImageView, _>(|view, ctx| {
+            let size = ctx.view().content_size();
+            assert!((view.effective_zoom(size) - 0.5).abs() < 0.0001);
+            // No render runs between the new image and the pan.
+            view.set_image(&RgbaImage::new(80, 80));
+            view.pan(ctx, ScrollDirection::Down)?;
+            let zoom = view.effective_zoom(size);
+            assert!(
+                (zoom - 0.25).abs() < 0.0001,
+                "the pan holds the new image's fitted zoom, not {zoom}"
+            );
+            Ok(())
+        })?;
+        Ok(())
     }
 
     #[test]
