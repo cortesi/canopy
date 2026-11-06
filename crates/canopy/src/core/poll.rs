@@ -17,6 +17,10 @@ use crate::{
 /// Minimum timer delay. Explicit node wakes can still poll immediately.
 const MIN_POLL_INTERVAL: Duration = Duration::from_millis(1);
 
+/// Delay of a poll whose requested delay overflows the clock: about thirty
+/// years, as Tokio's far future.
+const FAR_POLL_DELAY: Duration = Duration::from_secs(86_400 * 365 * 30);
+
 /// Monotonic time source shared by driver scheduling and deterministic tests.
 pub trait Clock: Debug + Send + Sync {
     /// Return the current monotonic time.
@@ -179,13 +183,18 @@ impl Poller {
 
     /// Replace the pending callback, allowing the adapter to sleep between
     /// polls.
-    pub(crate) fn schedule(&mut self, stamp: PollOwner, duration: Duration) -> Result<()> {
-        let deadline = self
-            .now()
+    ///
+    /// A delay past the clock's range saturates to a far deadline, which
+    /// never falls due in practice.
+    pub(crate) fn schedule(&mut self, stamp: PollOwner, duration: Duration) {
+        let now = self.now();
+        let Some(deadline) = now
             .checked_add(duration.max(MIN_POLL_INTERVAL))
-            .ok_or_else(|| Error::Driver("poll deadline overflow".into()))?;
+            .or_else(|| now.checked_add(FAR_POLL_DELAY))
+        else {
+            return;
+        };
         self.pending.schedule(stamp, deadline);
-        Ok(())
     }
 
     /// Remember the delay a successful poll requested, or forget it when the
@@ -262,12 +271,12 @@ mod tests {
         let clock = Arc::new(ManualClock::new());
         let mut poller = Poller::with_clock(clock.clone());
         let old = stamp();
-        poller.schedule(old, Duration::from_secs(10))?;
+        poller.schedule(old, Duration::from_secs(10));
         let current = PollOwner {
             incarnation: 2,
             ..old
         };
-        poller.schedule(current, Duration::from_secs(20))?;
+        poller.schedule(current, Duration::from_secs(20));
         poller.cancel_owner(old.node, old.incarnation);
         clock.advance(Duration::from_secs(15))?;
         assert!(poller.collect_due().is_empty());
@@ -282,7 +291,7 @@ mod tests {
         let mut poller = Poller::with_clock(Arc::new(SystemClock::default()));
         let owner = stamp();
         for delay in 0..10_000 {
-            poller.schedule(owner, Duration::from_secs(delay))?;
+            poller.schedule(owner, Duration::from_secs(delay));
             assert!(poller.pending.nodes.len() <= 2);
         }
         poller.cancel_owner(owner.node, owner.incarnation);
@@ -299,11 +308,24 @@ mod tests {
             attachment: Some(4),
             ..stamp()
         };
-        poller.schedule(owner, Duration::ZERO)?;
+        poller.schedule(owner, Duration::ZERO);
         clock.advance(MIN_POLL_INTERVAL)?;
         poller.retain(|stamp| stamp.attachment.is_none());
         assert!(poller.collect_due().is_empty());
         assert_eq!(poller.next_deadline(), None);
+        Ok(())
+    }
+
+    #[test]
+    fn an_overflowing_delay_saturates_to_a_deadline_that_never_falls_due() -> Result<()> {
+        let clock = Arc::new(ManualClock::new());
+        let mut poller = Poller::with_clock(clock.clone());
+        let owner = stamp();
+        poller.schedule(owner, Duration::MAX);
+        let deadline = poller.next_deadline().expect("the owner keeps a deadline");
+        assert!(deadline >= clock.now() + Duration::from_secs(86_400 * 365));
+        clock.advance(Duration::from_secs(86_400))?;
+        assert!(poller.collect_due().is_empty());
         Ok(())
     }
 }

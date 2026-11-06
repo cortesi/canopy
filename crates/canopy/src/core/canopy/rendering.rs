@@ -82,7 +82,7 @@ impl Canopy {
         if self.core.work_stamp_valid(stamp)
             && let Some(next) = next
         {
-            self.poller.schedule(stamp, next)?;
+            self.poller.schedule(stamp, next);
         }
         Ok(())
     }
