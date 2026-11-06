@@ -250,7 +250,11 @@ skips: terminal key parsing, input timing, and interactive services.
 script tools to it; `keys` and `screen` drive and read its terminal; and
 `disconnect` stops it. An idle server stops its app after the `[mcp]`
 `idle_shutdown_after_secs` setting, 1200 seconds by default, and keeps
-serving. The global `-C DIR` option runs canopyctl as if started in `DIR`, so
+serving. A tool call that runs, such as a `launch` that builds, counts as
+activity until it ends. After an idle release, the next call starts a
+headless app again, connects again to the socket of a live app, or fails
+for a launched app until `launch` starts it again. An explicit `disconnect`
+leaves nothing to follow, so the next call starts a headless app. The global `-C DIR` option runs canopyctl as if started in `DIR`, so
 an MCP configuration can select an app by its `.canopyctl.toml`. This
 repository's `.mcp.json` registers a server for each example.
 

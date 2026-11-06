@@ -26,4 +26,4 @@ workspace = true
 canopy = { workspace = true, features = ["testing"] }
 futures.workspace = true
 tempfile.workspace = true
-tokio = { workspace = true, features = ["io-util"] }
+tokio = { workspace = true, features = ["io-util", "test-util"] }

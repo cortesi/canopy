@@ -35,7 +35,6 @@ use canopy_term::{ReadySignal, TermHost};
 use clap::{Args, Parser, Subcommand};
 use ruau_script_api::{ScriptApiQuery, ScriptApiResponse};
 use tmcp::{ToolError, ToolResult, mcp_server, schema::CallToolResult, tool_params};
-use tokio::time::sleep;
 
 use crate::{
     config::LoadedConfig,
@@ -334,6 +333,7 @@ impl CanopyctlMcpServer {
     #[tool]
     /// Connect to a live canopy UDS socket.
     async fn connect(&self, params: ConnectRequest) -> ToolResult<CallToolResult> {
+        let _busy = self.sessions.busy();
         self.sessions
             .connect_live(Path::new(&params.socket))
             .await
@@ -347,6 +347,7 @@ impl CanopyctlMcpServer {
     /// interactive app; `keys` and `screen` drive and read its terminal.
     /// Returns the screen.
     async fn launch(&self, params: LaunchRequest) -> ToolResult<CallToolResult> {
+        let _busy = self.sessions.busy();
         let config = self.sessions.config();
         let socket = temp_socket_path(&config.config_dir).map_err(tool_error)?;
         let command = config
@@ -371,6 +372,7 @@ impl CanopyctlMcpServer {
     /// Press keys in the launched app's terminal, as a person types them, and
     /// return the screen once the app has drawn them.
     async fn keys(&self, params: KeysRequest) -> ToolResult<CallToolResult> {
+        let _busy = self.sessions.busy();
         terminal_tool(&self.sessions, &params.keys, screen_read(params.until)).await
     }
 
@@ -378,6 +380,7 @@ impl CanopyctlMcpServer {
     /// Return the launched app's screen as its terminal shows it, once the
     /// terminal has read the app's latest frame.
     async fn screen(&self, params: ScreenRequest) -> ToolResult<CallToolResult> {
+        let _busy = self.sessions.busy();
         terminal_tool(&self.sessions, &[], screen_read(params.until)).await
     }
 
@@ -385,6 +388,7 @@ impl CanopyctlMcpServer {
     /// Disconnect the current session and shut down any managed child process,
     /// including an app started with `launch`.
     async fn disconnect(&self) -> ToolResult<CallToolResult> {
+        let _busy = self.sessions.busy();
         self.sessions.disconnect().await.map_err(tool_error)?;
         Ok(CallToolResult::new().with_text_content("disconnected"))
     }
@@ -392,6 +396,7 @@ impl CanopyctlMcpServer {
     #[tool]
     /// Evaluate a script on the active session.
     async fn script_eval(&self, params: ScriptEvalRequest) -> ToolResult<CallToolResult> {
+        let _busy = self.sessions.busy();
         let session = self.sessions.session().await.map_err(tool_error)?;
         let outcome = session.eval(params).await.map_err(tool_error)?;
         Ok(outcome.to_tool_result())
@@ -400,6 +405,7 @@ impl CanopyctlMcpServer {
     #[tool]
     /// Return bootstrap information for the active session.
     async fn bootstrap(&self, request: BootstrapRequest) -> ToolResult<CallToolResult> {
+        let _busy = self.sessions.busy();
         let session = self.sessions.session().await.map_err(tool_error)?;
         let bootstrap = session.bootstrap(request).await.map_err(tool_error)?;
         to_tool_result(bootstrap)
@@ -408,6 +414,7 @@ impl CanopyctlMcpServer {
     #[tool]
     /// Apply a fixture to the active session.
     async fn apply_fixture(&self, params: ApplyFixtureRequest) -> ToolResult<CallToolResult> {
+        let _busy = self.sessions.busy();
         let mut session = self.sessions.session().await.map_err(tool_error)?;
         session
             .apply_fixture(params.name.clone())
@@ -421,6 +428,7 @@ impl CanopyctlMcpServer {
     #[tool(read_only, output_schema = ScriptApiResponse)]
     /// Return shared API discovery for the active session.
     async fn script_api(&self, params: ScriptApiQuery) -> ToolResult<CallToolResult> {
+        let _busy = self.sessions.busy();
         let session = self.sessions.session().await.map_err(tool_error)?;
         session.api(&params).await.map_err(tool_error)
     }
@@ -922,16 +930,8 @@ async fn api_command(config: LoadedConfig, args: ApiArgs) -> Result<()> {
 async fn mcp_command(config: LoadedConfig) -> Result<()> {
     let sessions = Arc::new(SessionManager::new(config.clone()));
     let idle_timeout = config.idle_shutdown_after();
-    let watchdog_sessions = sessions.clone();
     // An idle server releases its app but keeps serving its client.
-    tokio::spawn(async move {
-        loop {
-            sleep(Duration::from_secs(1)).await;
-            if watchdog_sessions.last_activity.lock().await.elapsed() >= idle_timeout {
-                drop(watchdog_sessions.disconnect().await);
-            }
-        }
-    });
+    tokio::spawn(sessions.clone().watch_idle(idle_timeout));
 
     let server_sessions = sessions.clone();
     let served = tmcp::Server::new(move || CanopyctlMcpServer {

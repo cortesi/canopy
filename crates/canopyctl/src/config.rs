@@ -2,7 +2,7 @@
 
 use std::{
     collections::HashMap,
-    env, fs,
+    env, fmt, fs,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -277,6 +277,12 @@ pub struct ResolvedCommand {
     cwd: PathBuf,
     /// Spawned-process environment variables.
     env: HashMap<String, String>,
+}
+
+impl fmt::Display for ResolvedCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.argv.join(" "))
+    }
 }
 
 impl ResolvedCommand {

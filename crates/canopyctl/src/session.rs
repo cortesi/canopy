@@ -1,9 +1,10 @@
 //! MCP client sessions and the manager shared by the CLI and the proxy server.
 
 use std::{
+    num::NonZeroUsize,
     path::{Path, PathBuf},
-    sync::Arc,
-    time::{Duration, Instant},
+    sync::{Arc, Mutex as StdMutex, MutexGuard as StdMutexGuard, PoisonError},
+    time::Duration,
 };
 
 use anyhow::{Context, Result, bail};
@@ -20,7 +21,8 @@ use tmcp::{
 use tokio::{
     net::UnixStream,
     process::Child,
-    sync::{MappedMutexGuard, Mutex, MutexGuard},
+    sync::{MappedMutexGuard, Mutex, MutexGuard, Notify},
+    time::{Instant, sleep_until},
 };
 
 use crate::{
@@ -179,13 +181,140 @@ impl Session {
     }
 }
 
-/// The connection a session manager holds.
+/// The connection a session manager holds, with where it came from.
 enum Current {
-    /// A headless app, or a live app that canopyctl did not start.
-    Session(Session),
+    /// A headless app that the manager started.
+    Headless(Session),
+    /// A live app that canopyctl did not start.
+    Live {
+        /// The session on the app's socket.
+        session: Session,
+        /// The socket it connected to.
+        socket: PathBuf,
+    },
     /// An app canopyctl hosts in a terminal, and a session that shares the
     /// host's live client.
-    Hosted(TermHost, Session),
+    Hosted {
+        /// The terminal hosting the app.
+        host: TermHost,
+        /// The session that shares the host's client.
+        session: Session,
+        /// The command that started the app.
+        command: ResolvedCommand,
+    },
+    /// The manager released its connection after it sat idle.
+    Released {
+        /// What it released.
+        was: Released,
+    },
+}
+
+/// What an idle release ended, so the next call can follow it.
+enum Released {
+    /// A headless app: the next call starts another.
+    Headless,
+    /// A live app's session: the next call connects to its socket again.
+    Live(PathBuf),
+    /// An app hosted in a terminal, stopped with its host: the next call
+    /// fails until `launch` starts it again.
+    Hosted {
+        /// The command that started the app.
+        command: ResolvedCommand,
+    },
+}
+
+impl Released {
+    /// The error of a call that needs a hosted app that an idle release
+    /// stopped.
+    fn hosted_error(command: &ResolvedCommand) -> anyhow::Error {
+        anyhow::anyhow!(
+            "the app `{command}` that `launch` started was stopped after it sat idle; \
+             call `launch` to start it again, or `disconnect` to use a headless app"
+        )
+    }
+}
+
+/// How busy the tools are, for the idle watchdog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Activity {
+    /// This many tool calls are running.
+    Busy(NonZeroUsize),
+    /// No tool call has run since this instant.
+    Idle(Instant),
+}
+
+/// The tools' activity, and a signal for the watchdog when they go idle.
+struct ActivityState {
+    /// The current activity.
+    activity: StdMutex<Activity>,
+    /// Notified when the last running call ends.
+    idle: Notify,
+}
+
+impl ActivityState {
+    /// Activity that is idle from now.
+    fn new() -> Self {
+        Self {
+            activity: StdMutex::new(Activity::Idle(Instant::now())),
+            idle: Notify::new(),
+        }
+    }
+
+    /// Lock the activity. Its transitions cannot panic, so a poisoned lock
+    /// still holds a valid value.
+    fn lock(&self) -> StdMutexGuard<'_, Activity> {
+        self.activity.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Return the current activity.
+    fn get(&self) -> Activity {
+        *self.lock()
+    }
+
+    /// Return whether no call has run for `limit`.
+    fn idle_for(&self, limit: Duration) -> bool {
+        matches!(self.get(), Activity::Idle(since) if since.elapsed() >= limit)
+    }
+
+    /// Record that a call started.
+    fn start(&self) {
+        let mut activity = self.lock();
+        *activity = Activity::Busy(match *activity {
+            Activity::Busy(running) => running.saturating_add(1),
+            Activity::Idle(_) => NonZeroUsize::MIN,
+        });
+    }
+
+    /// Record that a call ended, and signal the watchdog if it was the last.
+    fn end(&self) {
+        let mut activity = self.lock();
+        let Activity::Busy(running) = *activity else {
+            return;
+        };
+        match NonZeroUsize::new(running.get() - 1) {
+            Some(running) => *activity = Activity::Busy(running),
+            None => {
+                *activity = Activity::Idle(Instant::now());
+                drop(activity);
+                // One watchdog waits, so a stored permit is never lost.
+                self.idle.notify_one();
+            }
+        }
+    }
+}
+
+/// Marks a tool call as running while it is held, from the start of the
+/// call to its result. Dropping it, as when the call is cancelled, ends the
+/// call.
+pub struct BusyGuard<'a> {
+    /// The activity that the call counts in.
+    activity: &'a ActivityState,
+}
+
+impl Drop for BusyGuard<'_> {
+    fn drop(&mut self) {
+        self.activity.end();
+    }
 }
 
 /// Shared session manager used by the CLI and proxy MCP server.
@@ -194,8 +323,8 @@ pub struct SessionManager {
     config: LoadedConfig,
     /// Current connection, if any.
     state: Mutex<Option<Current>>,
-    /// Last observed tool activity time.
-    pub(crate) last_activity: Mutex<Instant>,
+    /// Whether tool calls are running, for the idle watchdog.
+    activity: ActivityState,
 }
 
 impl SessionManager {
@@ -204,7 +333,7 @@ impl SessionManager {
         Self {
             config,
             state: Mutex::new(None),
-            last_activity: Mutex::new(Instant::now()),
+            activity: ActivityState::new(),
         }
     }
 
@@ -213,12 +342,25 @@ impl SessionManager {
         &self.config
     }
 
+    /// Mark a tool call as running until the guard drops. Each MCP tool
+    /// holds one for its whole length, so the watchdog does not release an
+    /// app that a call still uses.
+    pub fn busy(&self) -> BusyGuard<'_> {
+        self.activity.start();
+        BusyGuard {
+            activity: &self.activity,
+        }
+    }
+
     /// Connect to a live UDS session, replacing any existing session.
     pub async fn connect_live(&self, socket: &Path) -> Result<()> {
-        *self.last_activity.lock().await = Instant::now();
         let mut state = self.state.lock().await;
         self.release(&mut state).await?;
-        *state = Some(Current::Session(Session::connect_live(socket).await?));
+        let session = Session::connect_live(socket).await?;
+        *state = Some(Current::Live {
+            session,
+            socket: socket.to_owned(),
+        });
         Ok(())
     }
 
@@ -231,68 +373,155 @@ impl SessionManager {
         size: ScreenSize,
         ready: Duration,
     ) -> Result<()> {
-        *self.last_activity.lock().await = Instant::now();
         let mut state = self.state.lock().await;
         self.release(&mut state).await?;
         let host = TermHost::launch(command.to_term_command(), socket, size, ready).await?;
         let session = Session::share_live(host.client());
-        *state = Some(Current::Hosted(host, session));
+        *state = Some(Current::Hosted {
+            host,
+            session,
+            command: command.clone(),
+        });
         Ok(())
     }
 
     /// Press `keys` in the terminal hosting the current app, then return the
     /// screen if `read` asks for it.
     pub async fn terminal(&self, keys: &[String], read: &Read) -> Result<Option<Vec<String>>> {
-        *self.last_activity.lock().await = Instant::now();
         // The host acknowledges input through the app's session, which the
         // state lock also guards from script tools.
         let mut state = self.state.lock().await;
-        let Some(Current::Hosted(host, _)) = state.as_mut() else {
-            bail!("no app is hosted in a terminal; launch one first");
-        };
-        term::drive(host, keys, read).await
+        match state.as_mut() {
+            Some(Current::Hosted { host, .. }) => term::drive(host, keys, read).await,
+            Some(Current::Released {
+                was: Released::Hosted { command },
+            }) => Err(Released::hosted_error(command)),
+            _ => bail!("no app is hosted in a terminal; launch one first"),
+        }
     }
 
     /// Drop and shut down the current session and any app canopyctl hosts.
+    /// The next call starts a headless app.
     pub async fn disconnect(&self) -> Result<()> {
-        *self.last_activity.lock().await = Instant::now();
         let mut state = self.state.lock().await;
         self.release(&mut state).await
     }
 
+    /// Release the app whenever no tool has run for `limit`, and keep
+    /// watching. The server keeps serving its client.
+    pub async fn watch_idle(self: Arc<Self>, limit: Duration) {
+        loop {
+            match self.activity.get() {
+                Activity::Busy(_) => self.activity.idle.notified().await,
+                Activity::Idle(since) => {
+                    sleep_until(since + limit).await;
+                    if self.release_if_idle(limit).await {
+                        // Nothing changes until a call ends.
+                        self.activity.idle.notified().await;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Release the connection, remembering what it was, if no tool has run
+    /// for `limit`. Return whether the tools were idle that long.
+    async fn release_if_idle(&self, limit: Duration) -> bool {
+        if !self.activity.idle_for(limit) {
+            return false;
+        }
+        let mut state = self.state.lock().await;
+        // A call that started while this waited for the lock keeps its
+        // session.
+        if !self.activity.idle_for(limit) {
+            return false;
+        }
+        let was = match state.take() {
+            None => None,
+            Some(Current::Released { was }) => Some(was),
+            Some(Current::Headless(session)) => {
+                session.shutdown().await;
+                Some(Released::Headless)
+            }
+            Some(Current::Live { session, socket }) => {
+                session.shutdown().await;
+                Some(Released::Live(socket))
+            }
+            Some(Current::Hosted { host, command, .. }) => {
+                if let Err(error) = host.stop().await {
+                    eprintln!("stop the idle app `{command}`: {error:#}");
+                }
+                Some(Released::Hosted { command })
+            }
+        };
+        *state = was.map(|was| Current::Released { was });
+        true
+    }
+
     /// Shut down the connection in `state`, and the app if canopyctl hosts
-    /// it. The caller holds the state lock, so no operation sees a
-    /// half-released connection.
+    /// it, and leave nothing to follow. The caller holds the state lock, so
+    /// no operation sees a half-released connection.
     async fn release(&self, state: &mut Option<Current>) -> Result<()> {
         match state.take() {
-            Some(Current::Session(session)) => session.shutdown().await,
-            Some(Current::Hosted(host, _)) => host.stop().await?,
-            None => {}
+            Some(Current::Headless(session) | Current::Live { session, .. }) => {
+                session.shutdown().await;
+            }
+            Some(Current::Hosted { host, .. }) => host.stop().await?,
+            Some(Current::Released { .. }) | None => {}
         }
         Ok(())
     }
 
-    /// Lock the active session, spawning a headless one when none is connected.
+    /// Lock the active session. With none connected, start a headless one,
+    /// or follow what an idle release ended: connect to a released live app
+    /// again, or fail for a released hosted app.
     pub async fn session(&self) -> Result<MappedMutexGuard<'_, Session>> {
-        *self.last_activity.lock().await = Instant::now();
         let mut state = self.state.lock().await;
-        if state.is_none() {
-            let command = self.config.headless_command(&[])?;
-            *state = Some(Current::Session(Session::spawn_headless(&command).await?));
-        }
-        Ok(MutexGuard::map(state, |state| {
-            match state.as_mut().expect("session installed above") {
-                Current::Session(session) | Current::Hosted(_, session) => session,
+        match state.as_ref() {
+            None
+            | Some(Current::Released {
+                was: Released::Headless,
+            }) => {
+                let command = self.config.headless_command(&[])?;
+                *state = Some(Current::Headless(Session::spawn_headless(&command).await?));
             }
-        }))
+            Some(Current::Released {
+                was: Released::Live(socket),
+            }) => {
+                let session = Session::connect_live(socket).await.with_context(|| {
+                    format!(
+                        "reconnect to the live app at {}, released after it sat idle",
+                        socket.display()
+                    )
+                })?;
+                let socket = socket.clone();
+                *state = Some(Current::Live { session, socket });
+            }
+            Some(Current::Released {
+                was: Released::Hosted { command },
+            }) => return Err(Released::hosted_error(command)),
+            Some(Current::Headless(_) | Current::Live { .. } | Current::Hosted { .. }) => {}
+        }
+        MutexGuard::try_map(state, |state| match state.as_mut() {
+            Some(
+                Current::Headless(session)
+                | Current::Live { session, .. }
+                | Current::Hosted { session, .. },
+            ) => Some(session),
+            Some(Current::Released { .. }) | None => None,
+        })
+        .map_err(|_| anyhow::anyhow!("no session is connected"))
     }
 }
 
 #[cfg(test)]
 pub mod tests {
-    use std::sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
+    use std::{
+        fs, future,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
     };
 
     use canopy::testing::contracts;
@@ -306,7 +535,8 @@ pub mod tests {
         io::{duplex, split},
         net::UnixListener,
         sync::oneshot,
-        task::{JoinHandle, block_in_place},
+        task::{self, JoinHandle, block_in_place},
+        time::sleep,
     };
 
     use super::*;
@@ -467,9 +697,226 @@ pub mod tests {
         ScriptEvalRequest::new(script.to_owned())
     }
 
+    /// Return whether the manager holds a live session.
+    async fn is_live(manager: &SessionManager) -> bool {
+        matches!(*manager.state.lock().await, Some(Current::Live { .. }))
+    }
+
+    /// Return whether the manager released a live session at `at`.
+    async fn released_live(manager: &SessionManager, at: &Path) -> bool {
+        matches!(
+            &*manager.state.lock().await,
+            Some(Current::Released { was: Released::Live(socket) }) if socket == at
+        )
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn regression_a_call_longer_than_the_idle_limit_keeps_its_session() -> Result<()> {
+        let limit = Duration::from_secs(10);
+        let (session, _, peer) = peer_session().await?;
+        let manager = manager_with_session(session).await?;
+        let watchdog = tokio::spawn(manager.clone().watch_idle(limit));
+        {
+            let _busy = manager.busy();
+            let session = manager.session().await?;
+            sleep(limit * 3).await;
+            drop(session);
+        }
+        // The next call follows at once.
+        task::yield_now().await;
+        assert!(is_live(&manager).await);
+        // The release comes one limit after the call ends.
+        sleep(limit - Duration::from_secs(1)).await;
+        assert!(is_live(&manager).await);
+        sleep(Duration::from_secs(2)).await;
+        assert!(matches!(
+            *manager.state.lock().await,
+            Some(Current::Released { .. })
+        ));
+        watchdog.abort();
+        peer.abort();
+        Ok(())
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_call_that_starts_while_the_watchdog_waits_for_the_lock_keeps_its_session()
+    -> Result<()> {
+        let limit = Duration::from_secs(10);
+        let (session, _, peer) = peer_session().await?;
+        let manager = manager_with_session(session).await?;
+        let watchdog = tokio::spawn(manager.clone().watch_idle(limit));
+        // Holding the lock stops the watchdog between its check and its lock.
+        let state = manager.state.lock().await;
+        sleep(limit * 2).await;
+        let busy = manager.busy();
+        drop(state);
+        task::yield_now().await;
+        assert!(is_live(&manager).await);
+        drop(busy);
+        sleep(limit + Duration::from_secs(1)).await;
+        assert!(!is_live(&manager).await);
+        watchdog.abort();
+        peer.abort();
+        Ok(())
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_cancelled_call_ends_its_busy_guard() -> Result<()> {
+        let manager = Arc::new(SessionManager::new(LoadedConfig::load()?));
+        let calling = manager.clone();
+        let (started_tx, started_rx) = oneshot::channel();
+        let call = tokio::spawn(async move {
+            let _busy = calling.busy();
+            started_tx.send(()).expect("the test waits");
+            future::pending::<()>().await;
+        });
+        started_rx.await?;
+        assert!(matches!(manager.activity.get(), Activity::Busy(n) if n.get() == 1));
+        call.abort();
+        assert!(call.await.unwrap_err().is_cancelled());
+        assert!(matches!(manager.activity.get(), Activity::Idle(_)));
+        Ok(())
+    }
+
+    #[test]
+    fn activity_counts_overlapping_calls() {
+        let activity = ActivityState::new();
+        activity.start();
+        activity.start();
+        activity.end();
+        assert!(matches!(activity.get(), Activity::Busy(n) if n.get() == 1));
+        activity.end();
+        assert!(matches!(activity.get(), Activity::Idle(_)));
+        // An unmatched end leaves the tools idle.
+        activity.end();
+        assert!(matches!(activity.get(), Activity::Idle(_)));
+    }
+
+    /// Serve a stateful peer on `socket`, one connection after another.
+    fn serve_peer(listener: UnixListener, peer: Peer) -> JoinHandle<()> {
+        tokio::spawn(async move {
+            while let Ok((stream, _)) = listener.accept().await {
+                let peer = peer.clone();
+                tokio::spawn(async move {
+                    let (reader, writer) = stream.into_split();
+                    drop(
+                        Server::new(move || peer.clone())
+                            .serve_stream(reader, writer)
+                            .await,
+                    );
+                });
+            }
+        })
+    }
+
+    #[tokio::test]
+    async fn regression_an_idle_release_of_a_live_app_reconnects_to_it() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let socket = directory.path().join("live.sock");
+        let peer = Peer::default();
+        let calls = peer.calls.clone();
+        let server = serve_peer(UnixListener::bind(&socket)?, peer);
+        let manager = Arc::new(SessionManager::new(LoadedConfig::load()?));
+        manager.connect_live(&socket).await?;
+        manager.session().await?.eval(request("first")).await?;
+        assert!(manager.release_if_idle(Duration::ZERO).await);
+        assert!(released_live(&manager, &socket).await);
+        let session = manager.session().await?;
+        assert_eq!(session.kind(), SessionKind::Live);
+        session.eval(request("second")).await?;
+        drop(session);
+        assert_eq!(*calls.lock().await, ["first", "second"]);
+        assert!(is_live(&manager).await);
+        manager.disconnect().await?;
+        server.abort();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_released_live_app_that_is_gone_fails_and_keeps_its_socket() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let socket = directory.path().join("live.sock");
+        let peer = Peer::default();
+        let calls = peer.calls.clone();
+        let server = serve_peer(UnixListener::bind(&socket)?, peer.clone());
+        let manager = Arc::new(SessionManager::new(LoadedConfig::load()?));
+        manager.connect_live(&socket).await?;
+        assert!(manager.release_if_idle(Duration::ZERO).await);
+        server.abort();
+        drop(server.await);
+        fs::remove_file(&socket)?;
+        let error = manager.session().await.err().context("a gone app fails")?;
+        assert!(format!("{error:#}").contains("released after it sat idle"));
+        assert!(released_live(&manager, &socket).await);
+        // The app comes back at the same socket, and a retry reaches it.
+        let server = serve_peer(UnixListener::bind(&socket)?, peer);
+        manager.session().await?.eval(request("again")).await?;
+        assert_eq!(*calls.lock().await, ["again"]);
+        manager.disconnect().await?;
+        server.abort();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_released_hosted_app_fails_until_it_is_launched_again() -> Result<()> {
+        let manager = Arc::new(SessionManager::new(LoadedConfig::load()?));
+        let command = ResolvedCommand::new(
+            vec!["todo".into(), "--live".into()],
+            PathBuf::from("."),
+            Default::default(),
+        )?;
+        *manager.state.lock().await = Some(Current::Released {
+            was: Released::Hosted { command },
+        });
+        for error in [
+            manager.session().await.err(),
+            manager.terminal(&[], &Read::Now).await.err(),
+        ] {
+            let error = error.context("a released hosted app fails")?.to_string();
+            assert!(error.contains("`todo --live`"), "{error}");
+            assert!(error.contains("`launch`"), "{error}");
+        }
+        assert!(matches!(
+            *manager.state.lock().await,
+            Some(Current::Released {
+                was: Released::Hosted { .. }
+            })
+        ));
+        // An explicit disconnect leaves nothing, so the next call starts
+        // headless.
+        manager.disconnect().await?;
+        assert!(manager.state.lock().await.is_none());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn an_explicit_disconnect_forgets_a_live_app() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let socket = directory.path().join("live.sock");
+        let server = serve_peer(UnixListener::bind(&socket)?, Peer::default());
+        let manager = Arc::new(SessionManager::new(LoadedConfig::load()?));
+        manager.connect_live(&socket).await?;
+        manager.disconnect().await?;
+        assert!(manager.state.lock().await.is_none());
+        manager.connect_live(&socket).await?;
+        assert!(manager.release_if_idle(Duration::ZERO).await);
+        manager.disconnect().await?;
+        assert!(manager.state.lock().await.is_none());
+        server.abort();
+        Ok(())
+    }
+
     pub async fn manager_with_session(session: Session) -> Result<Arc<SessionManager>> {
         let manager = Arc::new(SessionManager::new(LoadedConfig::load()?));
-        *manager.state.lock().await = Some(Current::Session(session));
+        let current = match session.kind() {
+            SessionKind::Headless => Current::Headless(session),
+            // A test peer has no socket to reconnect to.
+            SessionKind::Live => Current::Live {
+                session,
+                socket: PathBuf::from("/nonexistent/peer.sock"),
+            },
+        };
+        *manager.state.lock().await = Some(current);
         Ok(manager)
     }
 
