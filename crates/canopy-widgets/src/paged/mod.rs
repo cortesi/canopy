@@ -13,6 +13,7 @@
 
 use std::{
     collections::VecDeque,
+    mem,
     sync::atomic::{AtomicU64, Ordering},
 };
 
@@ -161,8 +162,41 @@ struct Active<K, C> {
     token: Token,
     /// Work retained for validation, publication, and explicit retry.
     work: Work<K, C>,
-    /// Whether the external executor has already taken this request.
-    dispatched: bool,
+}
+
+/// The one provider request of a controller.
+enum RequestState<K, C> {
+    /// No request is outstanding, and no work waits for a retry.
+    Idle,
+    /// A request waits for the executor to take it.
+    Queued(Active<K, C>),
+    /// The executor took the request, and its reply can publish.
+    InFlight(Active<K, C>),
+    /// The request failed. Its work waits for an explicit retry.
+    Failed(Work<K, C>),
+    /// An empty page had a continuation. Its work waits for an explicit
+    /// retry.
+    Stalled(Work<K, C>),
+}
+
+impl<K, C> RequestState<K, C> {
+    /// Return the status this request reports.
+    fn status(&self) -> Status {
+        match self {
+            Self::Idle => Status::Idle,
+            Self::Queued(_) | Self::InFlight(_) => Status::Loading,
+            Self::Failed(_) => Status::Failed,
+            Self::Stalled(_) => Status::Stalled,
+        }
+    }
+
+    /// Return the request that can publish, queued or in flight.
+    fn active(&self) -> Option<&Active<K, C>> {
+        match self {
+            Self::Queued(active) | Self::InFlight(active) => Some(active),
+            Self::Idle | Self::Failed(_) | Self::Stalled(_) => None,
+        }
+    }
 }
 
 /// Exact cursors for one nonempty resident page, retained through eviction.
@@ -217,12 +251,9 @@ pub struct Paged<T, K, C> {
     viewport_index: usize,
     /// Unfulfilled signed keyboard movement across page edges.
     pending_steps: i64,
-    /// Single request allowed to publish, whether queued or dispatched.
-    active: Option<Active<K, C>>,
-    /// Failed work or an empty-page continuation awaiting explicit retry.
-    retry: Option<Work<K, C>>,
-    /// Current loading, idle, failure, or empty-continuation state.
-    status: Status,
+    /// The single request allowed to publish, or the work awaiting an
+    /// explicit retry.
+    request: RequestState<K, C>,
     /// Whether the latest navigation still takes priority over viewport
     /// anchoring.
     reveal: bool,
@@ -274,9 +305,7 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
             viewport: None,
             viewport_index: 0,
             pending_steps: 0,
-            active: None,
-            retry: None,
-            status: Status::Idle,
+            request: RequestState::Idle,
             reveal: false,
             revealed_key: None,
             scroll: None,
@@ -322,7 +351,7 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
 
     /// Current request state. Taking a request does not end `Loading`.
     pub fn status(&self) -> Status {
-        self.status
+        self.request.status()
     }
 
     /// Signed keyboard movement waiting for pages.
@@ -337,16 +366,19 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
 
     /// Take queued work once. Replies remain valid until canceled or reset.
     pub fn take_request(&mut self) -> Option<Request<K, C>> {
-        let active = self.active.as_mut()?;
-        if active.dispatched {
-            return None;
-        }
-        active.dispatched = true;
-        Some(Request {
-            token: active.token,
-            seek: active.work.seek.clone(),
-            limit: self.page_size,
-        })
+        let (request, next) = match mem::replace(&mut self.request, RequestState::Idle) {
+            RequestState::Queued(active) => (
+                Some(Request {
+                    token: active.token,
+                    seek: active.work.seek.clone(),
+                    limit: self.page_size,
+                }),
+                RequestState::InFlight(active),
+            ),
+            request => (None, request),
+        };
+        self.request = next;
+        request
     }
 
     /// Take the latest scroll effect, if its item remains resident.
@@ -429,7 +461,7 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
     /// Returns false when a request is active or key seeking is required but
     /// unsupported.
     pub fn refresh(&mut self) -> bool {
-        if self.active.is_some() {
+        if self.request.active().is_some() {
             return false;
         }
         let seek = if self.before.is_none() {
@@ -476,8 +508,8 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
         self.pending_steps = 0;
         self.anchor(index);
         if self
-            .active
-            .as_ref()
+            .request
+            .active()
             .is_some_and(|active| !matches!(active.work.selection, Selection::Preserve))
         {
             self.cancel();
@@ -499,7 +531,7 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
         if self.pending_steps.signum() != 0 && self.pending_steps.signum() != delta.signum() {
             self.pending_steps = 0;
         }
-        if self.active.as_ref().is_some_and(|active| {
+        if self.request.active().is_some_and(|active| {
             (self.selected_index().is_some()
                 && !matches!(active.work.selection, Selection::Preserve))
                 || match active.work.seek {
@@ -510,9 +542,11 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
         }) {
             self.cancel();
         }
-        self.retry = None;
-        if self.active.is_none() {
-            self.status = Status::Idle;
+        if matches!(
+            self.request,
+            RequestState::Failed(_) | RequestState::Stalled(_)
+        ) {
+            self.request = RequestState::Idle;
         }
         self.pending_steps = self.pending_steps.saturating_add(delta);
         self.advance();
@@ -524,7 +558,7 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
     /// cancels the old adjacent request. Call `set_viewport` for actual user
     /// scrolling.
     pub fn load(&mut self, direction: Direction) -> bool {
-        if self.active.as_ref().is_some_and(|active| {
+        if self.request.active().is_some_and(|active| {
             matches!(
                 (&active.work.seek, direction),
                 (Seek::After(_), Direction::Before) | (Seek::Before(_), Direction::After)
@@ -532,7 +566,7 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
         }) {
             self.cancel();
         }
-        if self.active.is_some() {
+        if self.request.active().is_some() {
             return false;
         }
         let Some(seek) = self.adjacent(direction) else {
@@ -547,24 +581,25 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
 
     /// Explicitly retry a failed request or continue past an empty page.
     pub fn retry(&mut self) -> bool {
-        let Some(work) = self.retry.take() else {
-            return false;
-        };
-        if self.active.is_some() {
-            return false;
+        match mem::replace(&mut self.request, RequestState::Idle) {
+            RequestState::Failed(work) | RequestState::Stalled(work) => {
+                self.issue(work);
+                true
+            }
+            request => {
+                self.request = request;
+                false
+            }
         }
-        self.issue(work);
-        true
     }
 
     /// Record a provider failure without changing visible items or selection.
     /// The caller owns the error message. Stale failures return false.
     pub fn fail(&mut self, token: Token) -> bool {
-        if !self.matches(token) {
+        let Some(active) = self.take_active(token) else {
             return false;
-        }
-        self.retry = self.active.take().map(|active| active.work);
-        self.status = Status::Failed;
+        };
+        self.request = RequestState::Failed(active.work);
         true
     }
 
@@ -582,9 +617,9 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
                 return Err(error);
             }
         };
-        let active = self.active.take().expect("matching request");
-        self.retry = None;
-        self.status = Status::Idle;
+        let Some(active) = self.take_active(token) else {
+            return Ok(false);
+        };
         let empty = page.items.is_empty();
         self.total = page.total;
         self.install(page, keys, &active.work);
@@ -602,8 +637,7 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
             _ => Direction::After,
         };
         if empty && let Some(seek) = self.adjacent(direction) {
-            self.status = Status::Stalled;
-            self.retry = Some(Work {
+            self.request = RequestState::Stalled(Work {
                 seek,
                 selection: Selection::Preserve,
             });
@@ -635,9 +669,7 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
 
     /// Invalidate active work and retries without dropping visible rows.
     fn cancel(&mut self) {
-        self.active = None;
-        self.retry = None;
-        self.status = Status::Idle;
+        self.request = RequestState::Idle;
     }
 
     /// Supersede navigation with a page replacement and selection policy.
@@ -659,20 +691,29 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
             generation: self.generation,
             serial: self.serial,
         };
-        self.active = Some(Active {
-            token,
-            work,
-            dispatched: false,
-        });
-        self.retry = None;
-        self.status = Status::Loading;
+        self.request = RequestState::Queued(Active { token, work });
     }
 
     /// Check whether a reply still belongs to the active request.
     fn matches(&self, token: Token) -> bool {
-        self.active
-            .as_ref()
+        self.request
+            .active()
             .is_some_and(|active| active.token == token)
+    }
+
+    /// Take the active request that `token` names, leaving the controller
+    /// idle, or return `None` and change nothing for another token.
+    fn take_active(&mut self, token: Token) -> Option<Active<K, C>> {
+        if !self.matches(token) {
+            return None;
+        }
+        match mem::replace(&mut self.request, RequestState::Idle) {
+            RequestState::Queued(active) | RequestState::InFlight(active) => Some(active),
+            request => {
+                self.request = request;
+                None
+            }
+        }
     }
 
     /// Build an adjacent operation from the resident boundary's opaque cursor.
@@ -718,7 +759,7 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
             return;
         }
         if self.items.is_empty() {
-            if self.active.is_none() {
+            if self.request.active().is_none() {
                 let direction = if self.pending_steps < 0 {
                     Direction::Before
                 } else {
@@ -736,7 +777,7 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
             self.pin(Some(0));
         }
         if self.selected_index().is_none() {
-            if self.active.is_none()
+            if self.request.active().is_none()
                 && let Some(key) = self.selected_key()
             {
                 self.issue(Work {
@@ -747,7 +788,7 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
             return;
         }
         self.advance_resident();
-        if self.pending_steps != 0 && self.active.is_none() {
+        if self.pending_steps != 0 && self.request.active().is_none() {
             let direction = if self.pending_steps < 0 {
                 Direction::Before
             } else {
@@ -770,8 +811,8 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
             return Err(PageError::TooLarge);
         }
         let adjacent = self
-            .active
-            .as_ref()
+            .request
+            .active()
             .is_some_and(|active| matches!(active.work.seek, Seek::Before(_) | Seek::After(_)));
         let keys: Vec<K> = page.items.iter().map(self.key).collect();
         for (index, key) in keys.iter().enumerate() {

@@ -590,3 +590,136 @@ fn partial_pages_are_evicted_whole_so_boundary_cursors_remain_valid() {
     assert_eq!(positions(&model), vec![0, 1, 2, 3]);
     assert_window(&model, 6);
 }
+
+/// One event of the request machine, for the model test.
+#[derive(Clone, Debug)]
+enum Event {
+    /// Request the first page.
+    First,
+    /// Move the selection.
+    Navigate(i64),
+    /// Take queued work.
+    Take,
+    /// Reply to a taken request with its page.
+    Apply(usize),
+    /// Reply to a taken request with an empty page that continues.
+    ApplyEmpty(usize),
+    /// Fail a taken request.
+    Fail(usize),
+    /// Select a resident item, which cancels the request.
+    Select(usize),
+    /// Forget the query, which cancels the request.
+    Reset,
+    /// Retry failed or stalled work.
+    Retry,
+}
+
+/// Return the status that `request` reports.
+fn status_of(request: &RequestState<Key, Cursor>) -> Status {
+    match request {
+        RequestState::Idle => Status::Idle,
+        RequestState::Queued(_) | RequestState::InFlight(_) => Status::Loading,
+        RequestState::Failed(_) => Status::Failed,
+        RequestState::Stalled(_) => Status::Stalled,
+    }
+}
+
+fn event() -> impl proptest::strategy::Strategy<Value = Event> {
+    use proptest::prelude::*;
+    prop_oneof![
+        Just(Event::First),
+        (-6i64..=6).prop_map(Event::Navigate),
+        Just(Event::Take),
+        (0usize..4).prop_map(Event::Apply),
+        (0usize..4).prop_map(Event::ApplyEmpty),
+        (0usize..4).prop_map(Event::Fail),
+        (0usize..12).prop_map(Event::Select),
+        Just(Event::Reset),
+        Just(Event::Retry),
+    ]
+}
+
+proptest::proptest! {
+    #[test]
+    fn the_status_agrees_with_the_request_through_any_events(
+        events in proptest::collection::vec(event(), 1..60),
+    ) {
+        let mut provider = Provider::new(30);
+        let mut model = model(8, 4);
+        // Requests taken so far, newest first.
+        let mut taken: Vec<Request<Key, Cursor>> = Vec::new();
+        for event in events {
+            let before = model.status();
+            let pick = |index: usize| taken.get(index).cloned();
+            match event {
+                Event::First => {
+                    model.first();
+                    assert_eq!(model.status(), Status::Loading);
+                }
+                Event::Navigate(delta) => {
+                    model.navigate(delta);
+                }
+                Event::Take => {
+                    let queued = matches!(model.request, RequestState::Queued(_));
+                    let request = model.take_request();
+                    assert_eq!(request.is_some(), queued);
+                    if let Some(request) = request {
+                        assert!(matches!(model.request, RequestState::InFlight(_)));
+                        assert_eq!(model.take_request(), None, "work is taken once");
+                        taken.insert(0, request);
+                    }
+                    assert_eq!(model.status(), before);
+                }
+                Event::Apply(index) | Event::ApplyEmpty(index) => {
+                    let Some(request) = pick(index) else { continue };
+                    let live = model.matches(request.token);
+                    let page = if matches!(event, Event::ApplyEmpty(_)) {
+                        Page {
+                            items: Vec::new(),
+                            before: None,
+                            after: Some(Cursor(0)),
+                            total: None,
+                        }
+                    } else {
+                        provider.reply(&request)
+                    };
+                    match model.apply(request.token, page) {
+                        Ok(applied) => assert_eq!(applied, live),
+                        Err(_) => assert_eq!(model.status(), Status::Failed),
+                    }
+                    if !live {
+                        assert_eq!(model.status(), before, "a stale reply changes nothing");
+                    }
+                    assert!(!model.matches(request.token), "a reply publishes once");
+                }
+                Event::Fail(index) => {
+                    let Some(request) = pick(index) else { continue };
+                    let live = model.matches(request.token);
+                    assert_eq!(model.fail(request.token), live);
+                    let expected = if live { Status::Failed } else { before };
+                    assert_eq!(model.status(), expected);
+                }
+                Event::Select(index) => {
+                    if model.select(index) {
+                        assert_eq!(model.status(), Status::Idle);
+                    } else {
+                        assert_eq!(model.status(), before);
+                    }
+                }
+                Event::Reset => {
+                    model.reset();
+                    assert_eq!(model.status(), Status::Idle);
+                }
+                Event::Retry => {
+                    let waiting = matches!(before, Status::Failed | Status::Stalled);
+                    assert_eq!(model.retry(), waiting);
+                    let expected = if waiting { Status::Loading } else { before };
+                    assert_eq!(model.status(), expected);
+                }
+            }
+            assert_eq!(model.status(), status_of(&model.request));
+            assert!(model.items().len() <= 8);
+            assert_eq!(model.items.len(), model.keys.len());
+        }
+    }
+}
