@@ -653,12 +653,12 @@ async fn smoke_scripts(session: &Session, suite: &SuiteConfig) -> Result<()> {
         let started = Instant::now();
         let outcome = session.eval(script.request).await?;
         let elapsed = started.elapsed().as_millis();
-        if outcome.success {
+        if outcome.success() {
             println!("PASS fixture={fixture} test={test_name} ({elapsed}ms)");
         } else {
             failed += 1;
             println!("FAIL fixture={fixture} test={test_name} ({elapsed}ms)");
-            if let Some(error) = outcome.error {
+            if let Some(error) = outcome.error() {
                 println!("  {}", error.message);
             }
             if suite.fail_fast {
@@ -794,7 +794,7 @@ async fn replay_entries(
                 ..ScriptEvalRequest::new(step.source)
             })
             .await?;
-        if outcome.success == step.expect.success {
+        if outcome.success() == step.expect.success {
             println!(
                 "PASS replay#{replay_id} expected_success={}",
                 step.expect.success
@@ -803,9 +803,10 @@ async fn replay_entries(
             failed += 1;
             println!(
                 "FAIL replay#{replay_id} expected_success={} actual_success={}",
-                step.expect.success, outcome.success
+                step.expect.success,
+                outcome.success()
             );
-            if let Some(error) = outcome.error {
+            if let Some(error) = outcome.error() {
                 println!("  {}", error.message);
             }
             if args.fail_fast {
@@ -876,7 +877,7 @@ async fn eval_command(config: LoadedConfig, args: EvalArgs) -> Result<()> {
         args.fixture,
         &mut io::stdout().lock(),
     )?;
-    if !outcome.success {
+    if !outcome.success() {
         exit(1);
     }
     Ok(())
@@ -1098,10 +1099,10 @@ mod tests {
         });
         let response = proxy.script_eval(request).await?;
         let outcome = response.extract_as::<EvalReport>(ToolResultMode::Structured)?;
-        assert!(outcome.success, "{:?}", outcome.error);
+        assert!(outcome.success(), "{:?}", outcome.error());
         assert_eq!(
-            outcome.value,
-            Some(contracts::expected().to_external_json_value()?)
+            outcome.value(),
+            Some(&contracts::expected().to_external_json_value()?)
         );
         let envelope = ReplayEnvelope::record(contracts::SCRIPT.to_owned(), None, &outcome)?;
         let encoded = serde_json::to_string(&envelope)?;
@@ -1306,7 +1307,7 @@ mod tests {
             &mut output,
         )?;
         let decoded: EvalReport = serde_json::from_slice(&output)?;
-        assert!(!decoded.success);
+        assert!(!decoded.success());
         assert_eq!(decoded, outcome);
         let envelope = load_replay(&journal)?;
         assert_eq!(envelope.steps.len(), 1);

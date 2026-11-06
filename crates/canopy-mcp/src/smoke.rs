@@ -56,7 +56,7 @@ pub struct SuiteOutcome {
 impl SuiteOutcome {
     /// Return true when all smoke scripts passed.
     pub fn success(&self) -> bool {
-        self.scripts.iter().all(|script| script.outcome.success)
+        self.scripts.iter().all(|script| script.outcome.success())
     }
 }
 
@@ -102,7 +102,7 @@ pub fn run_suite(factory: &AppFactory, config: &SuiteConfig) -> Result<SuiteOutc
             fixture: script.request.fixture,
             outcome,
         });
-        if config.fail_fast && !results.last().expect("just pushed").outcome.success {
+        if config.fail_fast && !results.last().expect("just pushed").outcome.success() {
             break;
         }
     }
@@ -271,7 +271,7 @@ mod tests {
 
         assert_eq!(outcome.scripts.len(), 1);
         assert_eq!(
-            outcome.scripts[0].outcome.state,
+            outcome.scripts[0].outcome.state(),
             crate::ScriptTaskState::TimedOut
         );
         Ok(())

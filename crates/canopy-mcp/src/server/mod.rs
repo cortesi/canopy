@@ -628,10 +628,10 @@ mod tests {
         let outcome: crate::EvalReport =
             serde_json::from_value(response.structured_content.expect("structured result"))
                 .expect("typed eval outcome");
-        assert!(outcome.success, "{outcome:?}");
+        assert!(outcome.success(), "{outcome:?}");
         assert_eq!(
-            outcome.value,
-            Some(contracts::expected().to_external_json_value()?)
+            outcome.value(),
+            Some(&contracts::expected().to_external_json_value()?)
         );
         assert_eq!(outcome.metadata.app, "contract");
         Ok(())
@@ -704,8 +704,8 @@ mod tests {
                 ScriptEvalRequest::new("return echo_node.get()"),
             )
             .await?;
-        assert!(outcome.success);
-        assert_eq!(outcome.value, Some(serde_json::Value::from(7)));
+        assert!(outcome.success());
+        assert_eq!(outcome.value(), Some(&serde_json::Value::from(7)));
         assert_eq!(
             outcome.metadata,
             crate::ExecutionMetadata {

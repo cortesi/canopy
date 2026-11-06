@@ -526,8 +526,8 @@ pub mod tests {
 
     use canopy::testing::contracts;
     use canopy_mcp::{
-        AppFactory, AppMetadata, ExecutionMetadata, ExecutionMode, ResetPolicy, ScreenSize,
-        ScriptErrorInfo, ScriptErrorType, ScriptTaskState, ScriptTiming,
+        AppFactory, AppMetadata, EvalOutcomeKind, ExecutionMetadata, ExecutionMode, ResetPolicy,
+        ScreenSize, ScriptErrorInfo, ScriptErrorType, ScriptTaskState, ScriptTiming,
     };
     use serde_json::{Value, json};
     use tmcp::{Server, ToolError, ToolResult, mcp_server};
@@ -628,25 +628,11 @@ pub mod tests {
                 "timeout" => ScriptTaskState::TimedOut,
                 _ => ScriptTaskState::Completed,
             };
-            let success = state == ScriptTaskState::Completed;
-            let outcome = EvalReport {
-                metadata: ExecutionMetadata {
-                    app: "test".into(),
-                    execution: ExecutionMode::LiveSession,
-                    instance_id: "test-session".into(),
-                    screen: Some(ScreenSize::default()),
-                    reset: ResetPolicy::External,
-                    fixture: None,
-                    api_digest: Some("test-digest".into()),
-                },
-                success,
-                state,
-                value: Some(request.fixture.map_or(Value::Null, Value::String)),
-                logs: Vec::new(),
-                assertions: Vec::new(),
-                diagnostics: Vec::new(),
-                timing: ScriptTiming::default(),
-                error: (!success).then(|| ScriptErrorInfo {
+            let outcome = match state {
+                ScriptTaskState::Completed => EvalOutcomeKind::Completed(Some(
+                    request.fixture.map_or(Value::Null, Value::String),
+                )),
+                _ => EvalOutcomeKind::Failed(ScriptErrorInfo {
                     error_type: if state == ScriptTaskState::TimedOut {
                         ScriptErrorType::Timeout
                     } else {
@@ -657,6 +643,22 @@ pub mod tests {
                     owner: None,
                     message: "script rejected".to_owned(),
                 }),
+            };
+            let outcome = EvalReport {
+                metadata: ExecutionMetadata {
+                    app: "test".into(),
+                    execution: ExecutionMode::LiveSession,
+                    instance_id: "test-session".into(),
+                    screen: Some(ScreenSize::default()),
+                    reset: ResetPolicy::External,
+                    fixture: None,
+                    api_digest: Some("test-digest".into()),
+                },
+                outcome,
+                logs: Vec::new(),
+                assertions: Vec::new(),
+                diagnostics: Vec::new(),
+                timing: ScriptTiming::default(),
             };
             Ok(outcome.to_tool_result())
         }
@@ -929,8 +931,8 @@ pub mod tests {
             ("timeout", ScriptTaskState::TimedOut),
         ] {
             let outcome = session.eval(request(script)).await?;
-            assert_eq!(outcome.state, state);
-            assert_eq!(outcome.success, state == ScriptTaskState::Completed);
+            assert_eq!(outcome.state(), state);
+            assert_eq!(outcome.success(), state == ScriptTaskState::Completed);
         }
         for script in ["missing", "malformed"] {
             let error = session.eval(request(script)).await.unwrap_err();
@@ -962,12 +964,15 @@ pub mod tests {
         };
         session.apply_fixture("default".to_owned()).await?;
         assert_eq!(
-            session.eval(request("success")).await?.value,
-            Some(json!("default"))
+            session.eval(request("success")).await?.value(),
+            Some(&json!("default"))
         );
         let mut explicit = request("success");
         explicit.fixture = Some("explicit".to_owned());
-        assert_eq!(session.eval(explicit).await?.value, Some(json!("explicit")));
+        assert_eq!(
+            session.eval(explicit).await?.value(),
+            Some(&json!("explicit"))
+        );
         peer.abort();
         Ok(())
     }
@@ -1030,7 +1035,7 @@ pub mod tests {
                             .await?
                             .eval(request("success"))
                             .await?
-                            .success
+                            .success()
                     );
                 }
                 operation_finished.store(true, Ordering::SeqCst);

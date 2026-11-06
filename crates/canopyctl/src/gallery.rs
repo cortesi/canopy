@@ -19,7 +19,7 @@ use std::{
 
 use anyhow::{Context, Result, anyhow, bail};
 use canopy::render::ScreenCapture;
-use canopy_mcp::{ScreenSize, SuiteConfig, plan_suite};
+use canopy_mcp::{EvalOutcomeKind, ScreenSize, SuiteConfig, plan_suite};
 use canopy_widgets::screenshot::{Screenshot, ScreenshotOptions};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -233,12 +233,11 @@ pub async fn run(
             let started = Instant::now();
             let report = session.eval(request).await?;
             let elapsed = started.elapsed().as_millis();
-            let shots = if report.success {
-                shots(report.value).map_err(|error| format!("{error:#}"))
-            } else {
-                Err(report
-                    .error
-                    .map_or_else(|| "the script failed".to_owned(), |error| error.message))
+            let shots = match report.outcome {
+                EvalOutcomeKind::Completed(value) => {
+                    shots(value).map_err(|error| format!("{error:#}"))
+                }
+                EvalOutcomeKind::Failed(error) => Err(error.message),
             };
             let shots = match shots {
                 Ok(shots) => shots,

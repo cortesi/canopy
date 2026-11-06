@@ -265,37 +265,59 @@ impl From<std::io::Error> for Error {}
 
 impl From<tmcp::Error> for Error {}
 
+/// How a script evaluation ended.
+#[derive(Clone, Debug, PartialEq)]
+pub enum EvalOutcomeKind {
+    /// The script completed, with its JSON-serializable return value, if it
+    /// reported one.
+    Completed(Option<Value>),
+    /// The script failed, timed out, or was cancelled.
+    Failed(ScriptErrorInfo),
+}
+
 /// Structured response for the `script_eval` tool and smoke runner.
+///
+/// The JSON form states the outcome as `success`, `state`, `value`, and
+/// `error`, which serde maps to and from [`EvalOutcomeKind`]. A report whose
+/// fields disagree does not parse.
 #[derive(Clone, Debug, Deserialize<'de>, PartialEq, Serialize)]
 pub struct EvalReport {
     /// Execution identity and domain reset behavior for this request.
     pub metadata: ExecutionMetadata,
-    /// Whether the script completed successfully.
-    pub success: bool,
-    /// Final task state for the evaluation.
-    pub state: ScriptTaskState,
-    /// Optional JSON-serializable script return value.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub value: Option<Value>,
+    /// How the evaluation ended.
+    pub outcome: EvalOutcomeKind,
     /// Log lines emitted during evaluation.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub logs: Vec<String>,
     /// Assertion outcomes recorded during evaluation.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assertions: Vec<ScriptAssertion>,
     /// Typecheck diagnostics captured before execution.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<ScriptCheckDiagnostic>,
     /// Timing information for the request.
     pub timing: ScriptTiming,
-    /// Error payload when evaluation fails.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<ScriptErrorInfo>,
 }
 
 impl EvalReport {
     /// Encode the outcome as an MCP tool result.
     pub fn to_tool_result(&self) -> CallToolResult;
+}
+
+impl EvalReport {
+    /// Return the error, if the evaluation failed.
+    pub fn error(&self) -> Option<&ScriptErrorInfo>;
+
+    /// Take the script's return value, or a JSON null when it completed
+    /// without one or failed.
+    pub fn into_value(self) -> Value;
+
+    /// Return the final task state, which a failure derives from its error
+    /// type.
+    pub fn state(&self) -> ScriptTaskState;
+
+    /// Return whether the script completed successfully.
+    pub fn success(&self) -> bool;
+
+    /// Return the script's return value, if it completed with one.
+    pub fn value(&self) -> Option<&Value>;
 }
 
 impl JsonSchema for EvalReport {}

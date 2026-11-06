@@ -127,7 +127,7 @@ impl ReplayEnvelope {
             steps: vec![ReplayStep {
                 source,
                 expect: ReplayExpectation {
-                    success: outcome.success,
+                    success: outcome.success(),
                 },
             }],
         };
