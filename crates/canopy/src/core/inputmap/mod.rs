@@ -460,7 +460,7 @@ impl fmt::Display for InputSpec {
 ///
 /// The menu is always the newest entry, above every mode.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct ModeStack {
+pub struct ModeStack {
     /// Active modes in push order.
     modes: Vec<String>,
     /// Menu that waits for its key.

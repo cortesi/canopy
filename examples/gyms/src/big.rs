@@ -1010,8 +1010,15 @@ mod tests {
         let focus = |harness: &Harness| {
             harness.canopy.with_root_view(|ctx| {
                 let focused = ctx.focused_node();
-                let input = ctx.unique_descendant::<Input>(ctx.root_id());
-                let settings = ctx.unique_descendant::<Settings>(ctx.root_id());
+                // Help holds a search field of its own, so the field is the
+                // gym's.
+                let gym = ctx
+                    .unique_descendant::<BigGym>(ctx.root_id())
+                    .ok()
+                    .flatten()
+                    .map_or(ctx.root_id(), Into::into);
+                let input = ctx.unique_descendant::<Input>(gym);
+                let settings = ctx.unique_descendant::<Settings>(gym);
                 match (input, settings) {
                     (Ok(Some(input)), _) if focused == Some(input.into()) => "text",
                     (_, Ok(Some(settings))) if focused == Some(settings.into()) => "settings",

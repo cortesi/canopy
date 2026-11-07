@@ -1,12 +1,12 @@
 //! Responsive rows and scrolling behavior for contextual binding help.
 
-use std::mem;
+use std::{mem, rc::Rc};
 
 use canopy::{
     NodeName, ViewContext, Widget,
     commands::CommandStatus,
     error::Result,
-    geom::{Line, Size},
+    geom::{Line, Point, Size},
     input::{
         AvailableBinding, BindingActionKind, BindingSnapshot,
         key::{Empty, Key, KeyCode},
@@ -17,6 +17,10 @@ use canopy::{
     render::Render,
     text,
 };
+use unicode_segmentation::UnicodeSegmentation;
+
+use super::index::{self, HelpEntry, HelpTree};
+use crate::fuzzy::{self, Case, Haystack, Pattern, Scorer};
 
 /// Widest row of keys for one action before further keys continue below.
 const KEY_ROW_WIDTH: usize = 20;
@@ -29,6 +33,32 @@ pub(super) struct DisplayLine {
     pub(super) text: String,
     /// Style path for the visible row text.
     pub(super) style: &'static str,
+    /// The match a search result row highlights in its text.
+    pub(super) matched: Option<Matched>,
+}
+
+/// How one line of a search result paints its text.
+pub(super) struct Matched {
+    /// Cells before the text, when the line has no key.
+    indent: u32,
+    /// Position in the haystack of the first grapheme of the line's text.
+    first: u32,
+    /// Graphemes of the haystack that the trail covers.
+    trail: u32,
+    /// Sorted haystack positions the query matched.
+    positions: Rc<[u32]>,
+}
+
+/// One search result, ready to lay out.
+struct ResultRow {
+    /// The key chain, with a space between the keys.
+    chain: String,
+    /// The row text: the haystack, then the menu marker for a menu.
+    text: String,
+    /// Graphemes of the text that the trail covers.
+    trail: u32,
+    /// Sorted haystack positions the query matched.
+    positions: Rc<[u32]>,
 }
 
 /// Scrollable list of effective key bindings.
@@ -37,33 +67,136 @@ pub(super) struct DisplayLine {
 /// enclosing frame draws its scroll position.
 pub struct BindingList {
     /// Captured application context, absent while help is closed.
-    snapshot: Option<BindingSnapshot>,
+    tree: Option<HelpTree>,
+    /// Every entry of the tree, in tree order.
+    entries: Vec<HelpEntry>,
+    /// The ranked results of the query, absent without one.
+    results: Option<Vec<ResultRow>>,
+    /// Whether a search is open, even with a blank query.
+    searching: bool,
 }
 
 impl BindingList {
     /// Construct an empty list.
     pub(crate) const fn new() -> Self {
-        Self { snapshot: None }
+        Self {
+            tree: None,
+            entries: Vec::new(),
+            results: None,
+            searching: false,
+        }
     }
 
-    /// Replace the captured snapshot and return the prior value.
-    pub(crate) fn replace_snapshot(
-        &mut self,
-        snapshot: Option<BindingSnapshot>,
-    ) -> Option<BindingSnapshot> {
-        mem::replace(&mut self.snapshot, snapshot)
+    /// Replace the captured tree and return the prior value. The query
+    /// clears with it.
+    pub(crate) fn replace_tree(&mut self, tree: Option<HelpTree>) -> Option<HelpTree> {
+        self.entries = tree.as_ref().map_or_else(Vec::new, index::entries);
+        self.results = None;
+        self.searching = false;
+        mem::replace(&mut self.tree, tree)
     }
 
     /// Return the installed snapshot.
     #[cfg(test)]
     pub(crate) fn snapshot(&self) -> Option<&BindingSnapshot> {
-        self.snapshot.as_ref()
+        self.tree.as_ref().map(HelpTree::snapshot)
+    }
+
+    /// Rank the entries against `query`, and return how many match, or
+    /// `None` when the query is blank and the list shows every binding.
+    /// `None` for the query closes the search.
+    ///
+    /// Case never matters. Results order by score, then the shorter chain,
+    /// then the order of the tree.
+    pub(crate) fn set_query(&mut self, query: Option<&str>) -> Option<usize> {
+        self.searching = query.is_some();
+        let pattern = Pattern::new(query.unwrap_or_default(), Case::Ignore);
+        if pattern.is_empty() {
+            self.results = None;
+            return None;
+        }
+        let mut scorer = Scorer::new(Haystack::Text);
+        let mut scored = self
+            .entries
+            .iter()
+            .enumerate()
+            .filter_map(|(order, entry)| {
+                let haystack = entry.haystack();
+                scorer
+                    .score(&pattern, &haystack)
+                    .map(|score| (score, entry.chain.len(), order, haystack))
+            })
+            .collect::<Vec<_>>();
+        scored.sort_by(|left, right| {
+            right
+                .0
+                .cmp(&left.0)
+                .then(left.1.cmp(&right.1))
+                .then(left.2.cmp(&right.2))
+        });
+        let rows = scored
+            .into_iter()
+            .map(|(_, _, order, haystack)| {
+                let entry = &self.entries[order];
+                let positions = scorer.positions(&pattern, &haystack).into();
+                let trail =
+                    haystack.graphemes(true).count() - entry.description.graphemes(true).count();
+                let mut text = haystack;
+                if entry.opens_menu {
+                    text.push_str(MENU_MARKER);
+                }
+                ResultRow {
+                    chain: entry.chain_label(),
+                    text,
+                    trail: u32::try_from(trail).unwrap_or(u32::MAX),
+                    positions,
+                }
+            })
+            .collect::<Vec<_>>();
+        let count = rows.len();
+        self.results = Some(rows);
+        Some(count)
+    }
+
+    /// Return the rows of the bindings without a query.
+    fn rows(&self) -> Vec<BindingRow> {
+        self.tree
+            .as_ref()
+            .map_or_else(Vec::new, |tree| snapshot_rows(tree.snapshot()))
+    }
+
+    /// Return the width that shows every row on one line. While a search is
+    /// open, the width also fits every entry a query could show, so the
+    /// panel keeps its width as the query changes.
+    fn natural_width(&self) -> usize {
+        let rows = natural_width(&self.rows());
+        if !self.searching {
+            return rows;
+        }
+        let chains = self
+            .entries
+            .iter()
+            .map(|entry| text_width(&entry.chain_label()))
+            .max()
+            .unwrap_or(0);
+        let texts = self
+            .entries
+            .iter()
+            .map(|entry| {
+                let marker = if entry.opens_menu { MENU_MARKER } else { "" };
+                text_width(&entry.haystack()) + text_width(marker)
+            })
+            .max()
+            .unwrap_or(0);
+        rows.max(chains + 2 + texts)
     }
 
     /// Build the exact vertical canvas for one viewport width.
     pub(super) fn display_lines(&self, width: u32) -> Vec<DisplayLine> {
-        let rows = self.snapshot.as_ref().map_or_else(Vec::new, snapshot_rows);
-        display_lines(&rows, width)
+        match &self.results {
+            Some(results) => result_lines(results, width),
+            None => display_lines(&self.rows(), width),
+        }
     }
 }
 
@@ -81,14 +214,13 @@ impl Widget for BindingList {
     }
 
     fn measure(&self, constraints: MeasureConstraints) -> Measurement {
-        let rows = self.snapshot.as_ref().map_or_else(Vec::new, snapshot_rows);
-        let natural = u32::try_from(natural_width(&rows)).unwrap_or(u32::MAX);
+        let natural = u32::try_from(self.natural_width()).unwrap_or(u32::MAX);
         let width = match constraints.width {
             Constraint::Exact(width) => width,
             Constraint::AtMost(width) => natural.min(width),
             Constraint::Unbounded => natural,
         };
-        let lines = display_lines(&rows, width).len();
+        let lines = self.display_lines(width).len();
         constraints.clamp(Size::new(width, u32::try_from(lines).unwrap_or(u32::MAX)))
     }
 
@@ -186,6 +318,7 @@ pub(super) fn display_lines(rows: &[BindingRow], width: u32) -> Vec<DisplayLine>
             key: None,
             text: "No key bindings in this context".to_string(),
             style: "label",
+            matched: None,
         }];
     }
 
@@ -230,17 +363,152 @@ pub(super) fn render_line(
     y: u32,
     width: u32,
 ) -> Result<()> {
-    let Some(key) = &line.key else {
-        return render.text(line.style, Line::new(x, y, width), &line.text);
+    let start = match (&line.key, &line.matched) {
+        (Some(key), _) => {
+            render_keys(render, key, x, y, width)?;
+            text::width(key).saturating_add(2)
+        }
+        (None, Some(matched)) => matched.indent,
+        (None, None) => 0,
+    }
+    .min(width);
+    let Some(matched) = &line.matched else {
+        return render.text(
+            line.style,
+            Line::new(x + start, y, width - start),
+            &line.text,
+        );
     };
-    let key_width = text::width(key);
-    render_keys(render, key, x, y, width)?;
-    let start = key_width.saturating_add(2).min(width);
-    render.text(
+    // The trail reads quietly before the description. Each part paints the
+    // graphemes the query matched.
+    let trail = matched.trail.saturating_sub(matched.first);
+    let split = line
+        .text
+        .grapheme_indices(true)
+        .nth(trail as usize)
+        .map_or(line.text.len(), |(index, _)| index);
+    let (quiet, rest) = line.text.split_at(split);
+    let quiet_width = text::width(quiet).min(width - start);
+    let at = |offset: u32| Point {
+        x: x + start + offset,
+        y,
+    };
+    if !quiet.is_empty() {
+        fuzzy::paint_matched(
+            render,
+            at(0),
+            quiet_width,
+            quiet,
+            matched.first,
+            &matched.positions,
+            "trail",
+            "match",
+        )?;
+    }
+    let first = matched
+        .first
+        .saturating_add(u32::try_from(quiet.graphemes(true).count()).unwrap_or(u32::MAX));
+    fuzzy::paint_matched(
+        render,
+        at(quiet_width),
+        width - start - quiet_width,
+        rest,
+        first,
+        &matched.positions,
         line.style,
-        Line::new(x + start, y, width.saturating_sub(start)),
-        &line.text,
+        "match",
     )
+}
+
+/// Placeholder when no entry matches the query.
+const NO_MATCHES: &str = "No matching key bindings";
+
+/// Build the display lines of search results at `width`, stacking chains
+/// above their text on narrow screens as the list does.
+fn result_lines(rows: &[ResultRow], width: u32) -> Vec<DisplayLine> {
+    if rows.is_empty() {
+        return vec![DisplayLine {
+            key: None,
+            text: NO_MATCHES.to_string(),
+            style: "label",
+            matched: None,
+        }];
+    }
+    let width = width as usize;
+    let max_key_width = rows
+        .iter()
+        .map(|row| text_width(&row.chain))
+        .max()
+        .unwrap_or(0);
+    let natural = rows
+        .iter()
+        .map(|row| text_width(&row.text))
+        .max()
+        .unwrap_or(0)
+        .saturating_add(max_key_width + 2);
+    let narrow = width < natural && (width < max_key_width.saturating_add(12) || width < 28);
+    let mut lines = Vec::new();
+    for row in rows {
+        let (indent, wrap_width) = if narrow {
+            lines.extend(
+                textwrap::wrap(&row.chain, width.max(1))
+                    .into_iter()
+                    .map(|text| DisplayLine {
+                        key: None,
+                        text: text.into_owned(),
+                        style: "key",
+                        matched: None,
+                    }),
+            );
+            (2, width.saturating_sub(2).max(1))
+        } else {
+            (
+                max_key_width + 2,
+                width.saturating_sub(max_key_width + 2).max(1),
+            )
+        };
+        for (index, (first, piece)) in wrapped_pieces(&row.text, wrap_width)
+            .into_iter()
+            .enumerate()
+        {
+            let key = (!narrow && index == 0).then(|| {
+                format!(
+                    "{}{}",
+                    " ".repeat(max_key_width.saturating_sub(text_width(&row.chain))),
+                    row.chain
+                )
+            });
+            lines.push(DisplayLine {
+                key,
+                text: piece,
+                style: "label",
+                matched: Some(Matched {
+                    indent: u32::try_from(indent).unwrap_or(u32::MAX),
+                    first,
+                    trail: row.trail,
+                    positions: row.positions.clone(),
+                }),
+            });
+        }
+    }
+    lines
+}
+
+/// Wrap `text` to `width`, and return each line with the position of its
+/// first grapheme in `text`.
+fn wrapped_pieces(text: &str, width: usize) -> Vec<(u32, String)> {
+    let mut cursor = 0;
+    textwrap::wrap(text, width)
+        .into_iter()
+        .map(|piece| {
+            let start = text[cursor..]
+                .find(piece.as_ref())
+                .map_or(cursor, |offset| cursor + offset);
+            cursor = start + piece.len();
+            let first = text[..start].graphemes(true).count();
+            (u32::try_from(first).unwrap_or(u32::MAX), piece.into_owned())
+        })
+        .collect()
 }
 
 /// Render a packed key row, drawing the separators apart from the keys.
@@ -354,6 +622,7 @@ fn binding_lines(
                         key: None,
                         text: text.into_owned(),
                         style: "key",
+                        matched: None,
                     }
                 }));
             }
@@ -363,6 +632,7 @@ fn binding_lines(
                     key: None,
                     text: format!("  {text}"),
                     style: "label",
+                    matched: None,
                 });
             }
         } else {
@@ -380,11 +650,13 @@ fn binding_lines(
                         )),
                         text,
                         style: "label",
+                        matched: None,
                     },
                     None => DisplayLine {
                         key: None,
                         text: format!("{}  {text}", " ".repeat(max_key_width)),
                         style: "label",
+                        matched: None,
                     },
                 });
             }
@@ -401,7 +673,7 @@ const MENU_MARKER: &str = "...";
 /// Return whether `binding` acts now: it runs no command, such as a menu,
 /// a script, or an intent, or its command is enabled here. A disabled
 /// binding still takes its input, so it does nothing, and help leaves it out.
-fn acts<I>(binding: &AvailableBinding<I>) -> bool {
+pub(super) fn acts<I>(binding: &AvailableBinding<I>) -> bool {
     binding.command.as_ref().is_none_or(|command| {
         matches!(
             command
@@ -426,7 +698,7 @@ pub(super) fn binding_description<I>(binding: &AvailableBinding<I>) -> String {
 /// Sort category for every key with a modifier, after each plain key category.
 const MODIFIED_SORT_GROUP: u8 = 5;
 /// Sort category for every mouse input, after each key category.
-const MOUSE_SORT_GROUP: u8 = 6;
+pub(super) const MOUSE_SORT_GROUP: u8 = 6;
 
 /// Sort keys: plain keys first, by category, then keys with modifiers.
 ///
@@ -435,7 +707,7 @@ const MOUSE_SORT_GROUP: u8 = 6;
 /// set, keys order alphabetically by the name the list shows, ignoring case.
 /// A NUL ends the modifiers, so one set's keys never interleave with a longer
 /// set's.
-fn key_sort_key(key: Key) -> (u8, String) {
+pub(super) fn key_sort_key(key: Key) -> (u8, String) {
     let name = Key {
         mods: Empty,
         key: key.key,

@@ -43,6 +43,43 @@ canopy.assert(
 canopy.send_key("ctrl-g")
 canopy.assert(canopy.focused() == origin, "closing help must restore exact focus")
 
+-- Search reaches the keys inside a menu, and names the chain that reaches
+-- them. The chain then does what the result says.
+local marked = false
+canopy.bind("z", { description = "Smoke menu" }, canopy.menu("smoke_menu"))
+canopy.keymap({
+    mode = "smoke_menu",
+    {
+        key = "y",
+        description = "Mark the smoke run",
+        action = function()
+            marked = true
+        end,
+    },
+})
+canopy.send_key("ctrl-g")
+canopy.send_key("/")
+for _, key in { "m", "a", "r", "k" } do
+    canopy.send_key(key)
+end
+canopy.prepare()
+local results = canopy.screen_text()
+canopy.assert(results:find("z y", 1, true) ~= nil, "a result must name its chain")
+canopy.assert(
+    results:find("Smoke menu › Mark the smoke run", 1, true) ~= nil,
+    "a result must name the menu on its way"
+)
+canopy.send_key("Esc")
+canopy.assert(
+    canopy.available_bindings().framework_group == "root.help",
+    "escape in the search must leave help open"
+)
+canopy.send_key("Esc")
+canopy.assert(canopy.focused() == origin, "closing help must restore exact focus")
+canopy.send_key("z")
+canopy.send_key("y")
+canopy.assert(marked, "the chain must run the result's action")
+
 canopy.send_key("a")
 local input_focus = canopy.focused()
 canopy.assert(input_focus ~= nil, "typing must keep a focused node")

@@ -2765,6 +2765,9 @@ impl Root {
     pub fn call_focus_app() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
+    pub fn call_help_escape() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
     pub fn call_hide_help() -> CommandCall;
 
     /// Build a positional call with typed user arguments.
@@ -2799,6 +2802,9 @@ impl Root {
 
     /// Return the command spec for this command.
     pub fn spec_focus_app() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_help_escape() -> &'static CommandSpec;
 
     /// Return the command spec for this command.
     pub fn spec_hide_help() -> &'static CommandSpec;
@@ -2843,6 +2849,9 @@ impl Root {
     /// If we're currently focused in the inspector, shift focus into the app
     /// pane instead.
     pub fn focus_app(&mut self, c: &mut dyn Context) -> canopy::error::Result<()>;
+
+    /// Clear the help search, or close help when no search is open.
+    pub fn help_escape(&mut self, c: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Hide the help modal.
     pub fn hide_help(&mut self, c: &mut dyn Context) -> canopy::error::Result<()>;

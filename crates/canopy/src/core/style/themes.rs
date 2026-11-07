@@ -335,6 +335,19 @@ impl Palette {
                 &["/help/label"],
                 PartialStyle::new().fg(p.muted_fg).bg(p.panel_bg),
             )
+            // A search result names the menus on its way quietly, and marks
+            // the letters the query matched in the search hue.
+            .style(
+                "/help/trail",
+                PartialStyle::new().fg(p.faint_fg).bg(p.panel_bg),
+            )
+            .style(
+                "/help/match",
+                PartialStyle::new()
+                    .fg(p.yellow)
+                    .bg(p.panel_bg)
+                    .attrs(AttrSet::new(Attr::Bold).with(Attr::Underline)),
+            )
             // The notice log reads as the help panel does. A row's level
             // colors its message as the toast and the error row color it.
             .style_all(

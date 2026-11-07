@@ -19,7 +19,7 @@ use canopy::{
 };
 use nucleo_matcher::{
     Config, Matcher, Utf32Str,
-    pattern::{CaseMatching, Normalization},
+    pattern::{CaseMatching, Normalization, Pattern as NucleoPattern},
 };
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -48,7 +48,7 @@ pub enum Haystack {
 #[derive(Clone, Debug)]
 pub struct Pattern {
     /// The parsed fzf pattern.
-    inner: nucleo_matcher::pattern::Pattern,
+    inner: NucleoPattern,
 }
 
 impl Pattern {
@@ -59,7 +59,7 @@ impl Pattern {
             Case::Smart => CaseMatching::Smart,
         };
         Self {
-            inner: nucleo_matcher::pattern::Pattern::parse(query, case, Normalization::Smart),
+            inner: NucleoPattern::parse(query, case, Normalization::Smart),
         }
     }
 

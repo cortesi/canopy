@@ -243,6 +243,13 @@ canopy.bind("Ctrl+g", {
 `Ctrl+g` is Canopy's standard help key. A control chord reaches its binding
 even while a text field has focus, where `?` is a character to insert.
 
+In help, `/` opens a search over every key that the focus reaches, also the
+keys inside its menus and the menus that they open. Matching is fuzzy and
+ignores case. Each result shows the chain of keys that reaches it, such as
+`p h`, and the menus on that chain, such as `Go to › home`. Enter keeps the
+results and returns the keys to the list. Esc clears the search, and the next
+Esc closes help.
+
 ### Key scope
 
 Keys that belong to one pane follow focus. Put focus in the pane, and scope its
@@ -320,7 +327,12 @@ A menu binding's action kind is `menu`, so help and the mode panel mark it
 with `...` after its description: a key that leads to another choice reads
 apart from a key that acts, and a description never spells the marker itself.
 `canopy.bindings()` reports a menu with `action = "menu"` and the mode it opens
-in `menu`.
+in `menu`, and `canopy.available_bindings()` reports the same field.
+
+`canopy.menu_bindings(menu)` returns the keys that a menu would offer from the
+focus if it opened now, as its panel would list them. A menu that could not
+open now, because the open modal suspends menus or the name is an active mode,
+offers none. Help search reads each menu this way.
 
 Native Rust installs bindings during setup with `Setup::bind(input, options,
 target)`. The target is a `BindingAction`: a command call built by a generated

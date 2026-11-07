@@ -607,6 +607,8 @@ fn register_observation_info(builder: &mut module::Builder) {
             action_field(),
             declaration::Field::new("intent", declaration::Type::String.optional())
                 .doc("Intent name, present when the action is an intent."),
+            declaration::Field::new("menu", declaration::Type::String.optional())
+                .doc("Menu name, present when the action opens a menu."),
             phase_field(),
             declaration::Field::new("source", declaration::Type::String.optional())
                 .doc("Diagnostic source when available."),

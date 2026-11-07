@@ -677,6 +677,9 @@ fn available_binding_to_arg<I: ToString>(binding: input::AvailableBinding<I>) ->
     if let Some(intent) = binding.intent {
         record.insert("intent".to_string(), ArgValue::String(intent.to_string()));
     }
+    if let Some(menu) = binding.menu {
+        record.insert("menu".to_string(), ArgValue::String(menu));
+    }
     if let Some(command) = binding.command {
         let mut detail = BTreeMap::new();
         insert_command_call(&mut detail, &command.call);

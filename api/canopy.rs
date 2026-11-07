@@ -2646,6 +2646,8 @@ pub mod input {
         pub action: BindingActionKind,
         /// Intent name, present when the action is an intent.
         pub intent: Option<IntentName>,
+        /// Menu name, present when the action opens a menu.
+        pub menu: Option<String>,
         /// Phase relative to widget input handling.
         pub phase: BindingPhase,
         /// Declarative command details, absent for opaque script callbacks and

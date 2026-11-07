@@ -16,7 +16,7 @@ use canopy::{
     text,
 };
 
-use super::binding_list::BindingList;
+use super::{binding_list::BindingList, index::HelpTree};
 use crate::Frame;
 
 fn binding(
@@ -35,6 +35,7 @@ fn binding(
         route_path: Path::from("/root/editor"),
         action: BindingActionKind::Script,
         intent: None,
+        menu: None,
         phase,
         command: None,
         source: Some("test".to_string()),
@@ -65,6 +66,7 @@ fn mouse_binding(id: u64, spec: &str, description: &str) -> AvailableBinding<mou
         route_path: Path::from("/root/editor"),
         action: BindingActionKind::Script,
         intent: None,
+        menu: None,
         phase: BindingPhase::AfterWidget,
         command: None,
         source: Some("test".to_string()),
@@ -83,7 +85,7 @@ fn list_with_mice(
         .root_id();
     let mut captured = snapshot(focus, bindings);
     captured.mouse_bindings = mice;
-    drop(list.replace_snapshot(Some(captured)));
+    drop(list.replace_tree(Some(HelpTree::flat(captured))));
     list
 }
 
@@ -93,7 +95,7 @@ fn list_with(bindings: Vec<AvailableBinding<key::Key>>) -> BindingList {
         .build()
         .expect("an empty application builds")
         .root_id();
-    drop(list.replace_snapshot(Some(snapshot(focus, bindings))));
+    drop(list.replace_tree(Some(HelpTree::flat(snapshot(focus, bindings)))));
     list
 }
 
@@ -107,7 +109,7 @@ fn harness_with(
         .build()?;
     let focus = harness.root;
     harness.with_root_widget::<BindingList, _>(|list| {
-        drop(list.replace_snapshot(Some(snapshot(focus, bindings))));
+        drop(list.replace_tree(Some(HelpTree::flat(snapshot(focus, bindings)))));
     });
     harness.render()?;
     Ok(harness)
@@ -716,8 +718,296 @@ impl Widget for FramedList {
         let list = context.add_child(frame, BindingList::new())?;
         let bindings = mem::take(&mut self.0);
         context.with_widget_mut(list, |list: &mut BindingList, _| {
-            drop(list.replace_snapshot(Some(snapshot(root, bindings))));
+            drop(list.replace_tree(Some(HelpTree::flat(snapshot(root, bindings)))));
             Ok(())
         })
     }
+}
+
+/// Build a key binding that opens `menu`.
+fn menu_binding(
+    id: u64,
+    key: impl Into<key::Key>,
+    description: &str,
+    menu: &str,
+) -> AvailableBinding<key::Key> {
+    let mut binding = binding(id, key, description, BindingPhase::AfterWidget);
+    binding.action = BindingActionKind::Menu;
+    binding.menu = Some(menu.to_string());
+    binding
+}
+
+/// Build a tree of `top` and the bindings of each named menu.
+fn tree(
+    top: Vec<AvailableBinding<key::Key>>,
+    menus: Vec<(&str, Vec<AvailableBinding<key::Key>>)>,
+) -> HelpTree {
+    let focus = CanopyBuilder::new()
+        .build()
+        .expect("an empty application builds")
+        .root_id();
+    let mut tree = HelpTree::flat(snapshot(focus, top));
+    tree.menus = menus
+        .into_iter()
+        .map(|(name, bindings)| (name.to_string(), bindings))
+        .collect();
+    tree
+}
+
+/// Return each entry as its chain and its haystack.
+fn entry_rows(tree: &HelpTree) -> Vec<(String, String)> {
+    super::index::entries(tree)
+        .iter()
+        .map(|entry| (entry.chain_label(), entry.haystack()))
+        .collect()
+}
+
+/// Return the pairs as owned strings.
+fn owned(rows: &[(&str, &str)]) -> Vec<(String, String)> {
+    rows.iter()
+        .map(|(chain, text)| ((*chain).to_string(), (*text).to_string()))
+        .collect()
+}
+
+#[test]
+fn the_index_walks_nested_menus_and_stops_at_a_cycle() {
+    let tree = tree(
+        vec![
+            binding(1, 'q', "Quit", BindingPhase::AfterWidget),
+            menu_binding(2, 'p', "Go to", "go"),
+        ],
+        vec![
+            (
+                "go",
+                vec![
+                    binding(3, 'h', "home", BindingPhase::AfterWidget),
+                    menu_binding(4, 'o', "Order", "order"),
+                    // The menu opens itself again, which a chain never follows.
+                    menu_binding(5, 'x', "Again", "go"),
+                ],
+            ),
+            (
+                "order",
+                vec![binding(6, 'n', "by name", BindingPhase::AfterWidget)],
+            ),
+        ],
+    );
+    assert_eq!(
+        entry_rows(&tree),
+        owned(&[
+            ("p", "Go to"),
+            ("p h", "Go to › home"),
+            ("p o", "Go to › Order"),
+            ("p o n", "Go to › Order › by name"),
+            ("p x", "Go to › Again"),
+            ("q", "Quit"),
+        ])
+    );
+}
+
+#[test]
+fn each_key_that_reaches_an_entry_is_its_own_chain() {
+    let tree = tree(
+        vec![
+            menu_binding(1, 'p', "Go to", "go"),
+            menu_binding(2, 'P', "Go to", "go"),
+        ],
+        vec![(
+            "go",
+            vec![
+                binding(3, 'h', "home", BindingPhase::AfterWidget),
+                binding(4, 'H', "home", BindingPhase::AfterWidget),
+            ],
+        )],
+    );
+    assert_eq!(
+        entry_rows(&tree),
+        owned(&[
+            ("p", "Go to"),
+            ("p h", "Go to › home"),
+            ("p H", "Go to › home"),
+            ("P", "Go to"),
+            ("P h", "Go to › home"),
+            ("P H", "Go to › home"),
+        ])
+    );
+}
+
+#[test]
+fn the_index_leaves_out_what_the_list_leaves_out() {
+    use canopy::commands::{CommandArgs, CommandCall, CommandId};
+
+    let mut disabled = binding(2, 'd', "Delete", BindingPhase::AfterWidget);
+    disabled.command = Some(BindingCommand {
+        call: CommandCall {
+            id: CommandId("todo::delete_item"),
+            args: CommandArgs::default(),
+            target: None,
+        },
+        availability: Some(CommandAvailability {
+            spec: crate::Button::spec_press(),
+            resolution: None,
+            status: Some(CommandStatus::Disabled("no selection".into())),
+            missing_requirements: Vec::new(),
+        }),
+    });
+    let mut hidden = binding(3, 's', "Secret", BindingPhase::AfterWidget);
+    hidden.show_in_help = false;
+    let tree = tree(
+        vec![menu_binding(1, 'p', "Go to", "go")],
+        vec![(
+            "go",
+            vec![
+                disabled,
+                hidden,
+                binding(4, 'h', "home", BindingPhase::AfterWidget),
+            ],
+        )],
+    );
+    assert_eq!(
+        entry_rows(&tree),
+        owned(&[("p", "Go to"), ("p h", "Go to › home")])
+    );
+}
+
+/// The tree of a small application with one menu.
+fn go_tree() -> HelpTree {
+    tree(
+        vec![
+            binding(1, 'q', "Quit", BindingPhase::AfterWidget),
+            menu_binding(2, 'p', "Go to", "go"),
+        ],
+        vec![(
+            "go",
+            vec![
+                binding(3, 'h', "home", BindingPhase::AfterWidget),
+                binding(4, 'r', "root", BindingPhase::AfterWidget),
+            ],
+        )],
+    )
+}
+
+#[test]
+fn a_query_ranks_entries_and_shows_their_chains() {
+    let mut list = BindingList::new();
+    drop(list.replace_tree(Some(go_tree())));
+    assert_eq!(
+        list.set_query(Some("")),
+        None,
+        "a blank query filters nothing"
+    );
+    assert_eq!(list.display_lines(60).len(), 2, "the list without a query");
+
+    assert_eq!(list.set_query(Some("HOME")), Some(1), "case never matters");
+    let lines = list.display_lines(60);
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0].key.as_deref(), Some("p h"));
+    assert_eq!(lines[0].text, "Go to › home");
+
+    assert_eq!(list.set_query(Some("go")), Some(3));
+    let lines = list.display_lines(60);
+    assert_eq!(
+        lines
+            .iter()
+            .map(|line| (line.key.as_deref().map(str::trim), line.text.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            (Some("p"), "Go to..."),
+            (Some("p h"), "Go to › home"),
+            (Some("p r"), "Go to › root"),
+        ],
+        "equal scores keep the shorter chain, then the order of the tree"
+    );
+
+    assert_eq!(list.set_query(Some("zzz")), Some(0));
+    assert_eq!(list.display_lines(60)[0].text, "No matching key bindings");
+    assert_eq!(list.set_query(None), None);
+    assert_eq!(
+        list.display_lines(60).len(),
+        2,
+        "closing the search restores the list"
+    );
+}
+
+#[test]
+fn narrow_results_stack_the_chain_above_its_text() {
+    let mut list = BindingList::new();
+    drop(list.replace_tree(Some(go_tree())));
+    list.set_query(Some("home"));
+    let lines = list.display_lines(10);
+    assert_eq!(
+        lines
+            .iter()
+            .map(|line| line.text.as_str())
+            .collect::<Vec<_>>(),
+        ["p h", "Go to ›", "home"]
+    );
+}
+
+/// Build a harness of a binding list that shows `tree`, ranked against
+/// `query`.
+fn search_harness(width: u32, height: u32, tree: HelpTree, query: &str) -> Result<Harness> {
+    let mut harness = Harness::builder(BindingList::new())
+        .size(width, height)
+        .build()?;
+    harness.with_root_widget::<BindingList, _>(|list| {
+        drop(list.replace_tree(Some(tree)));
+        list.set_query(Some(query));
+    });
+    harness.render()?;
+    Ok(harness)
+}
+
+#[test]
+fn results_paint_the_trail_quietly_and_mark_the_matched_letters() -> Result<()> {
+    let harness = search_harness(30, 2, go_tree(), "gh")?;
+    harness.tbuf().assert_matches(buf![
+        " p h  Go to › home            "
+        "                              "
+    ]);
+    let cell = |x: u32| {
+        harness
+            .buf()
+            .get(Point { x, y: 0 })
+            .expect("the result row")
+            .style
+    };
+    // Column 0 is the margin, the chain takes 1 to 3, and the text starts at
+    // column 6.
+    let matched_g = cell(6);
+    let trail = cell(7);
+    let matched_h = cell(14);
+    let description = cell(15);
+    assert!(matched_g.attrs.underline && matched_h.attrs.underline);
+    assert!(!trail.attrs.underline && !description.attrs.underline);
+    assert_ne!(trail.fg, description.fg, "the trail reads apart");
+    assert_eq!(matched_g.bg, trail.bg, "a match keeps the row's ground");
+    Ok(())
+}
+
+#[test]
+fn wrapped_results_mark_the_letters_of_each_line() -> Result<()> {
+    let harness = search_harness(12, 4, go_tree(), "home")?;
+    harness.tbuf().assert_matches(buf![
+        " p h        "
+        "   Go to ›  "
+        "   home     "
+        "            "
+    ]);
+    let underline = |x: u32, y: u32| {
+        harness
+            .buf()
+            .get(Point { x, y })
+            .expect("a result row")
+            .style
+            .attrs
+            .underline
+    };
+    assert!(!underline(3, 1), "the trail did not match");
+    assert!(
+        (3..7).all(|x| underline(x, 2)),
+        "the wrapped line's word matched"
+    );
+    assert!(!underline(7, 2));
+    Ok(())
 }

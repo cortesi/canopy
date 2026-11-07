@@ -69,6 +69,8 @@ pub struct AvailableBinding<I> {
     pub action: BindingActionKind,
     /// Intent name, present when the action is an intent.
     pub intent: Option<IntentName>,
+    /// Menu name, present when the action opens a menu.
+    pub menu: Option<String>,
     /// Phase relative to widget input handling.
     pub phase: BindingPhase,
     /// Declarative command details, absent for opaque script callbacks and
@@ -295,6 +297,12 @@ impl Core {
             route_path,
             action: BindingActionKind::of(&record.action),
             intent: record.action.intent().cloned(),
+            menu: match &record.action {
+                BindingAction::Menu(menu) => Some(menu.clone()),
+                BindingAction::Script(_) | BindingAction::Command(_) | BindingAction::Intent(_) => {
+                    None
+                }
+            },
             phase: record.phase,
             command,
             source: record.source.clone(),
@@ -950,6 +958,8 @@ mod tests {
             "only the menu's own winners, and no default or global key"
         );
         assert_eq!(closed[1].action, BindingActionKind::Menu);
+        assert_eq!(closed[1].menu.as_deref(), Some("order"));
+        assert_eq!(closed[0].menu, None);
         assert_eq!(
             rows(&core.menu_bindings(None, "order")?),
             [("n".to_string(), "by name".to_string())],

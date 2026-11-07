@@ -16,7 +16,7 @@ use canopy::{
 use crate::inspector::Inspector;
 use crate::{
     Button, Container, KeyHint,
-    help::{BindingList, Help, ModeHelp, Shown},
+    help::{self, BindingList, Help, HelpTree, ModeHelp, Shown},
     menu,
     notice_log::{self, NoticeLog},
     toast::ToastLayer,
@@ -282,10 +282,14 @@ impl Root {
         let help = self.help_id(c)?;
         let list = Help::binding_list_id(c, help)?;
         let origin_focus = c.focused_node();
-        let snapshot = c.available_bindings(origin_focus)?;
+        // The tree is read before the modal opens: the help modal suspends
+        // menus, so what they offer could no longer be read.
+        let tree = HelpTree::capture(c, origin_focus)?;
+        // Every open starts without a search, as it starts at the top.
+        c.with_widget_mut(help, |help: &mut Help, context| help.close_search(context))?;
         let (previous_snapshot, previous_scroll) =
             c.with_widget_mut(list, |list: &mut BindingList, context| {
-                let previous = list.replace_snapshot(Some(snapshot));
+                let previous = list.replace_tree(Some(tree));
                 let scroll = context.view().scroll;
                 context.scroll(ScrollOp::To(Point { x: 0, y: 0 }));
                 Ok((previous, scroll))
@@ -305,7 +309,7 @@ impl Root {
             Ok(token) => self.help_token = Some(token),
             Err(error) => {
                 c.with_widget_mut(list, |list: &mut BindingList, context| {
-                    list.replace_snapshot(previous_snapshot);
+                    list.replace_tree(previous_snapshot);
                     context.scroll(ScrollOp::To(Point {
                         x: previous_scroll.x,
                         y: previous_scroll.y,
@@ -325,6 +329,16 @@ impl Root {
             return Ok(());
         };
         c.close_modal(token)
+    }
+
+    #[command]
+    /// Clear the help search, or close help when no search is open.
+    pub fn help_escape(&mut self, c: &mut dyn Context) -> Result<()> {
+        let help = self.help_id(c)?;
+        if !c.with_widget_mut(help, |help: &mut Help, context| help.clear_search(context))? {
+            self.hide_help(c)?;
+        }
+        Ok(())
     }
 
     #[command]
@@ -475,6 +489,7 @@ impl Register for Root {
         Button::register(setup)?;
         // A transient mode's menu takes the menu styles.
         setup.widget_styles(menu::styles);
+        setup.add_commands::<Help>()?;
         register_help_bindings(setup)?;
         register_notice_bindings(setup)?;
         setup.register_mode_hook("root.mode_help", sync_mode_help);
@@ -569,21 +584,83 @@ fn bind_panel_keys(
 }
 
 /// Register the Root-owned controls admitted by the help modal.
+///
+/// Esc and `/` act after the widget, so the search field takes them as text
+/// and as its own cancel. While the field has the keyboard, the scroll keys
+/// it does not use scroll the results instead.
 fn register_help_bindings(setup: &mut Setup) -> Result<()> {
     let mut keys = panel_scroll_keys("binding")?;
-    keys.push((
-        "Esc",
-        "Close help".into(),
-        BindingAction::Command(Root::call_hide_help()),
-        true,
-    ));
     keys.push((
         "Ctrl+g",
         "Close help".into(),
         BindingAction::Command(Root::call_toggle_help()),
         false,
     ));
-    bind_panel_keys(setup, HELP_BINDINGS, "/root/help/**/", keys)
+    bind_panel_keys(setup, HELP_BINDINGS, "/root/help/**/", keys)?;
+    let after = [
+        (
+            "Esc",
+            "Clear the search, or close help",
+            BindingAction::Command(Root::call_help_escape()),
+        ),
+        (
+            "/",
+            "Search key bindings",
+            BindingAction::Command(Help::call_start_search()),
+        ),
+    ];
+    for (key, description, action) in after {
+        bind_help_key(
+            setup,
+            key,
+            "/root/help/**/",
+            description,
+            action,
+            BindingPhase::AfterWidget,
+        )?;
+    }
+    let field = format!("/root/help/**/{}/**/", help::SEARCH_NAME);
+    let scroll = [
+        ("Up", "Scroll up", Help::call_scroll_results(-1)),
+        ("Down", "Scroll down", Help::call_scroll_results(1)),
+        ("PageUp", "Page up", Help::call_page_results(-1)),
+        ("PageDown", "Page down", Help::call_page_results(1)),
+    ];
+    for (key, description, call) in scroll {
+        bind_help_key(
+            setup,
+            key,
+            &field,
+            description,
+            BindingAction::Command(call),
+            BindingPhase::BeforeWidget,
+        )?;
+    }
+    Ok(())
+}
+
+/// Bind one key of the help modal's group under `path`.
+fn bind_help_key(
+    setup: &mut Setup,
+    key: &str,
+    path: &str,
+    description: &str,
+    action: BindingAction,
+    phase: BindingPhase,
+) -> Result<()> {
+    setup.bind(
+        Key::parse_spec(key)?,
+        BindingOptions {
+            show_in_help: true,
+            path: Some(path.parse()?),
+            tier: BindingTier::Framework(HELP_BINDINGS),
+            description: description.to_string(),
+            source: None,
+            phase: Some(phase),
+        },
+        action,
+    )?;
+    Ok(())
 }
 
 /// Register the Root-owned controls admitted by the notice log.
@@ -1366,6 +1443,93 @@ mod tests {
                 canopy.screen_text():find("Equal widths") == nil,
                 "contextual help should not show the panel"
             )
+            canopy.send_key("ctrl-g")
+            "#,
+        )
+    }
+
+    #[test]
+    fn help_search_finds_keys_inside_menus_and_names_their_chains() -> Result<()> {
+        let (mut canopy, _backend, _left, _right) = setup_root_tree()?;
+        install_help_trigger(&mut canopy)?;
+        run_script(
+            &mut canopy,
+            r#"
+            canopy.bind("o", { description = "Options" }, canopy.menu("options"))
+            canopy.bind("x", {
+                path = "/root/**/",
+                tier = "global",
+                description = "Global x",
+            }, function() end)
+            canopy.keymap({
+                mode = "options",
+                { key = "s", description = "sort", action = canopy.menu("sort") },
+                { key = "h", description = "hidden files", action = function() end },
+                { key = "x", description = "shadowed key", action = function() end },
+            })
+            canopy.keymap({
+                mode = "sort",
+                { key = "n", description = "by name", action = function() end },
+            })
+            canopy.assert(#canopy.menu_bindings("options") == 2, "the global key wins x")
+            canopy.assert(canopy.menu_bindings("options")[2].menu == "sort", "a menu names its mode")
+
+            local origin = canopy.focused()
+            canopy.send_key("ctrl-g")
+            canopy.send_key("/")
+            canopy.assert(
+                canopy.node_info(assert(canopy.focused())).name == "input",
+                "slash gives the search field the keyboard"
+            )
+            canopy.send_key("n")
+            canopy.send_key("a")
+            canopy.send_key("m")
+            canopy.prepare()
+            local screen = canopy.screen_text()
+            canopy.assert(screen:find("o s n", 1, true) ~= nil, "a result names its chain")
+            canopy.assert(
+                screen:find("Options › sort › by name", 1, true) ~= nil,
+                "a result names the menus on its way"
+            )
+            canopy.assert(screen:find("1 match", 1, true) ~= nil, "the bar counts the matches")
+
+            canopy.send_key("Backspace")
+            canopy.send_key("Backspace")
+            canopy.send_key("Backspace")
+            canopy.send_key("s")
+            canopy.send_key("h")
+            canopy.prepare()
+            canopy.assert(
+                canopy.screen_text():find("shadowed", 1, true) == nil,
+                "a key the global binding takes is not in the menu"
+            )
+
+            canopy.send_key("Enter")
+            canopy.assert(
+                canopy.node_info(assert(canopy.focused())).name == "binding_list",
+                "enter gives the list the keyboard and keeps the query"
+            )
+            canopy.prepare()
+            canopy.assert(canopy.screen_text():find("o h", 1, true) ~= nil, "the results stay")
+
+            canopy.send_key("Esc")
+            canopy.prepare()
+            canopy.assert(
+                canopy.available_bindings().framework_group == "root.help",
+                "the first escape clears the search"
+            )
+            canopy.assert(canopy.screen_text():find("Options...", 1, true) ~= nil, "the list returns")
+            canopy.send_key("Esc")
+            canopy.assert(canopy.available_bindings().framework_group == nil, "the next escape closes help")
+            canopy.assert(canopy.focused() == origin, "closing help restores focus")
+
+            canopy.send_key("ctrl-g")
+            canopy.send_key("/")
+            canopy.send_key("q")
+            canopy.send_key("ctrl-g")
+            canopy.send_key("ctrl-g")
+            canopy.prepare()
+            canopy.assert(canopy.screen_text():find(" / ", 1, true) == nil, "help opens without a search")
             canopy.send_key("ctrl-g")
             "#,
         )

@@ -59,7 +59,7 @@ Root-level smoke scripts run without a fixture:
 | --- | --- |
 | `bootstrap.luau` | Verify the app starts, renders, mounts the todo tree, and takes focus. |
 | `fixtures.luau` | Verify the fixture catalog is visible to Luau automation. |
-| `help_modal.luau` | Verify the global help binding isolates application bindings, focuses the binding list, pages, and restores exact focus on close. |
+| `help_modal.luau` | Verify the global help binding isolates application bindings, focuses the binding list, pages, searches into a menu and names the chain, and restores exact focus on close. |
 
 Fixture directories map directly to fixture names. For example,
 `examples/todo/smoke/with_items/navigation.luau` runs after applying the `with_items`
