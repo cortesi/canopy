@@ -2908,7 +2908,6 @@ pub mod input {
     #[derive(Clone, Debug, Default, Eq, PartialEq)]
     pub enum ModalSession<K> {
         /// No modal is open.
-        #[default]
         Closed,
         /// A modal is open.
         Open {
@@ -2935,20 +2934,14 @@ pub mod input {
             ctx: &mut (impl ?Sized + Context),
         ) -> crate::error::Result<Option<K>>;
 
-        /// Record that the modal's widget closed it, as a dialog does on an
-        /// answer. Return the modal's kind.
-        pub fn closed_by_widget(&mut self) -> Option<K>;
-
         /// Whether a modal is open, and not closing.
         pub fn is_open(&self) -> bool;
 
         /// The open modal's kind.
         pub fn kind(&self) -> Option<&K>;
 
-        /// The open modal's token and kind.
-        pub fn open(&self) -> Option<(ModalToken, &K)>;
-
-        /// Record a modal that opened.
+        /// Record a modal that opened. The owner checks [`Self::can_open`]
+        /// first.
         pub fn opened(&mut self, token: ModalToken, kind: K);
 
         /// Return to `Closed` when the modal's scope is gone.

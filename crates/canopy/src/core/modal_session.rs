@@ -4,7 +4,6 @@
 //! |---|---|---|
 //! | `Closed` | `opened(token, kind)` | `Open` |
 //! | `Open` | `close` succeeds | `Closing` |
-//! | `Open` | `closed_by_widget` | `Closing` |
 //! | `Open`, `Closing` | `reconcile`, scope gone | `Closed` |
 //!
 //! A close is queued, and Canopy reports the modal open until the scope is
@@ -23,10 +22,9 @@ use std::mem;
 use crate::{Context, ViewContext, error::Result, input::ModalToken};
 
 /// An owner's record of its modal, of kind `K`.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ModalSession<K> {
     /// No modal is open.
-    #[default]
     Closed,
     /// A modal is open.
     Open {
@@ -40,6 +38,13 @@ pub enum ModalSession<K> {
         /// The modal's scope.
         token: ModalToken,
     },
+}
+
+#[expect(clippy::derivable_impls, reason = "a derive would bound K: Default")]
+impl<K> Default for ModalSession<K> {
+    fn default() -> Self {
+        Self::Closed
+    }
 }
 
 impl<K> ModalSession<K> {
@@ -60,14 +65,15 @@ impl<K> ModalSession<K> {
         matches!(self, Self::Closed)
     }
 
-    /// Record a modal that opened.
+    /// Record a modal that opened. The owner checks [`Self::can_open`]
+    /// first.
     pub fn opened(&mut self, token: ModalToken, kind: K) {
+        debug_assert!(matches!(self, Self::Closed), "a modal opened over another");
         *self = Self::Open { token, kind };
     }
 
-    /// Record that the modal's widget closed it, as a dialog does on an
-    /// answer. Return the modal's kind.
-    pub fn closed_by_widget(&mut self) -> Option<K> {
+    /// Move an open session to `Closing`, and return its kind.
+    fn closing(&mut self) -> Option<K> {
         match mem::replace(self, Self::Closed) {
             Self::Open { token, kind } => {
                 *self = Self::Closing { token };
@@ -80,17 +86,12 @@ impl<K> ModalSession<K> {
         }
     }
 
-    /// The open modal's token and kind.
-    pub fn open(&self) -> Option<(ModalToken, &K)> {
-        match self {
-            Self::Open { token, kind } => Some((*token, kind)),
-            Self::Closed | Self::Closing { .. } => None,
-        }
-    }
-
     /// The open modal's kind.
     pub fn kind(&self) -> Option<&K> {
-        self.open().map(|(_, kind)| kind)
+        match self {
+            Self::Open { kind, .. } => Some(kind),
+            Self::Closed | Self::Closing { .. } => None,
+        }
     }
 
     /// The token of a modal that is open or closing.
@@ -114,6 +115,6 @@ impl<K> ModalSession<K> {
         };
         let token = *token;
         ctx.close_modal(token)?;
-        Ok(self.closed_by_widget())
+        Ok(self.closing())
     }
 }
