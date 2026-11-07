@@ -616,16 +616,6 @@ enum Event {
     Retry,
 }
 
-/// Return the status that `request` reports.
-fn status_of(request: &RequestState<Key, Cursor>) -> Status {
-    match request {
-        RequestState::Idle => Status::Idle,
-        RequestState::Queued(_) | RequestState::InFlight(_) => Status::Loading,
-        RequestState::Failed(_) => Status::Failed,
-        RequestState::Stalled(_) => Status::Stalled,
-    }
-}
-
 fn event() -> impl Strategy<Value = Event> {
     prop_oneof![
         Just(Event::First),
@@ -642,7 +632,7 @@ fn event() -> impl Strategy<Value = Event> {
 
 proptest! {
     #[test]
-    fn the_status_agrees_with_the_request_through_any_events(
+    fn each_event_moves_the_status_and_the_request_by_its_rule(
         events in collection::vec(event(), 1..60),
     ) {
         let mut provider = Provider::new(30);
@@ -718,7 +708,6 @@ proptest! {
                     assert_eq!(model.status(), expected);
                 }
             }
-            assert_eq!(model.status(), status_of(&model.request));
             assert!(model.items().len() <= 8);
             assert_eq!(model.items.len(), model.keys.len());
         }

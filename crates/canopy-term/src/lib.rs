@@ -298,10 +298,7 @@ impl TermHost {
             .await?
             .extract_as::<EvalReport>(ToolResultMode::Structured)
             .context("decode structured script_eval outcome")?;
-        if let Some(error) = report.error() {
-            bail!("{}", error.message);
-        }
-        Ok(report.into_value())
+        report.outcome.map_err(|error| anyhow!("{}", error.message))
     }
 
     /// Wait until the app exits.

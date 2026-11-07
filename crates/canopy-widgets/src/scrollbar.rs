@@ -7,6 +7,8 @@
 //! input on a track scrolls the node. A press on the track centers the thumb on
 //! the pointer, and a drag keeps the thumb under the pointer.
 
+use std::mem;
+
 use canopy::{
     Context, EventOutcome, NodeId, ViewContext,
     error::Result,
@@ -311,13 +313,18 @@ impl Scrollbar {
         matches!(self.drag, DragState::Held(_))
     }
 
-    /// End a drag at once, without releasing mouse capture.
+    /// End a drag at once, without releasing mouse capture. Return whether a
+    /// drag ended: one that holds the thumb, or one that rendering found
+    /// orphaned, whose capture is still held.
     ///
     /// An owner that ends its pointer gesture, as on Esc, calls this and
-    /// releases its capture itself, so that the scrollbar is idle before the
-    /// next render or event.
-    pub fn cancel_drag(&mut self) {
-        self.drag = DragState::Idle;
+    /// releases its capture itself when a drag ended, so that the scrollbar
+    /// is idle before the next render or event.
+    pub fn cancel_drag(&mut self) -> bool {
+        !matches!(
+            mem::replace(&mut self.drag, DragState::Idle),
+            DragState::Idle
+        )
     }
 
     /// Draw the thumb with `style` while a drag holds it.

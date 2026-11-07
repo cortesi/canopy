@@ -139,6 +139,9 @@ pub(super) enum Extent {
         /// The display column of the last character.
         column: usize,
     },
+    /// Characters to the end of the last of a count of lines, line break
+    /// included, as `v$` selects them.
+    ToLineEnd(usize),
 }
 
 impl Extent {
@@ -146,7 +149,7 @@ impl Extent {
     pub(super) fn mode(self) -> VisualMode {
         match self {
             Self::Lines(_) => VisualMode::Line,
-            Self::Span(_) | Self::Rows { .. } => VisualMode::Character,
+            Self::Span(_) | Self::Rows { .. } | Self::ToLineEnd(_) => VisualMode::Character,
         }
     }
 }
@@ -777,9 +780,10 @@ impl Editor {
                     MoveCommand::Down => self.move_vertical(1),
                 }
                 if self.buffer.cursor() != cursor {
-                    // Text typed after a move goes elsewhere, so `.` repeats
-                    // only the typing after it.
-                    self.vi.end_segment();
+                    // Text typed after a move goes elsewhere: it starts a
+                    // new undo step, and `.` repeats only the typing after
+                    // it.
+                    self.end_entry();
                     self.ensure_cursor_visible(ctx);
                 }
                 return;
@@ -809,7 +813,11 @@ impl Editor {
             InsertKey::Backspace => (self.handle_delete_backward(), key),
             InsertKey::Delete => (self.handle_delete_forward(), key),
         };
-        self.vi.push_key(key);
+        // As in Vim, `.` repeats no backspace that deleted nothing, but
+        // repeats a forward delete that deleted nothing.
+        if changed || key == InsertKey::Delete {
+            self.vi.push_key(key);
+        }
         changed
     }
 
@@ -1058,5 +1066,8 @@ impl Editor {
             return;
         };
         self.apply_edit(&edit);
+        // The replay records itself as it runs, with the extent clamped to
+        // this place; the next `.` repeats the original edit.
+        self.vi.last_edit = Some(edit);
     }
 }

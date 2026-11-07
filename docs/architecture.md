@@ -15,7 +15,7 @@ their module; it selects `canopy_widgets` types directly. Each item has one
 canonical location, and there is no prelude.
 
 The root holds the application, the widget, the contexts, and node handles:
-`Canopy`, `CanopyBuilder`, `Setup`, `Register`, `Widget`, `Context`,
+`Canopy`, `CanopyBuilder`, `Setup`, `Register`, `Widget`, `Mount`, `Context`,
 `ContextExt`, `ViewContext`, `ViewContextExt`, `NodeId`, `TypedId`, `NodeName`,
 `EventOutcome`, `ChangeOutcome`, the command derive macros, `slot!`, and
 `rgb!`. Everything else lives in the module that owns its concept:

@@ -190,9 +190,10 @@ impl Widget for Todo {
 - A widget that a host gives no store uses `Follower::standalone()`, which
   follows a store of its own.
 
-The follower also polls the widget as the options panel closes. The panel
-holds the focus while it is open, so a widget that moves the focus after a
-change does that in its poll.
+The follower also polls the widget as the options panel closes, also a
+widget that mounts while the panel is open. The panel holds the focus while
+it is open, so a widget that moves the focus after a change does that in its
+poll.
 
 ## The Options widget
 

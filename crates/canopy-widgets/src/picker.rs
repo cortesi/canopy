@@ -16,8 +16,8 @@
 use std::{iter, mem, ops::Range};
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
-    ViewContextExt, Widget,
+    Context, ContextExt, EventOutcome, Mount, NodeId, NodeName, Register, Setup, TypedId,
+    ViewContext, ViewContextExt, Widget,
     commands::CommandCall,
     derive_commands,
     error::Result,
@@ -34,7 +34,6 @@ use canopy::{
     render::Render,
     style::roles,
     text::{self, Truncate},
-    widget::Mount,
 };
 
 use crate::{
@@ -294,7 +293,8 @@ where
             )?;
             context.with_widget_mut(list, |list: &mut PickerList<T>, _| {
                 list.truncate = truncate;
-                list.chrome.mount(|()| Ok(Chrome { frame, field }))
+                list.chrome = Some(Chrome { frame, field });
+                Ok(())
             })?;
             Ok(Parts {
                 list,
@@ -472,7 +472,7 @@ where
     placeholder: &'static str,
     /// The frame this list titles and the field it writes, once the picker
     /// that holds the list gives them.
-    chrome: Mount<(), Chrome>,
+    chrome: Option<Chrome>,
     /// Which end a row drops when it does not fit.
     truncate: Truncate,
     /// Width that shows the widest label unclipped.
@@ -509,7 +509,7 @@ where
             filter: Filter::Off,
             label: String::new(),
             placeholder: "",
-            chrome: Mount::new(()),
+            chrome: None,
             truncate: Truncate::default(),
             fitted_width: 0,
             counted: true,
@@ -778,7 +778,7 @@ where
     /// Write the current state into the frame's title and the filter field.
     fn republish(&self, context: &mut dyn Context) -> Result<()> {
         // A list outside a picker has nothing to write.
-        let Ok(&Chrome { frame, field }) = self.chrome.mounted() else {
+        let Some(Chrome { frame, field }) = self.chrome else {
             return Ok(());
         };
         {
@@ -1185,7 +1185,7 @@ where
     }
 
     fn on_unmount(&mut self, _context: &mut dyn Context) {
-        self.chrome.unmount();
+        self.chrome = None;
     }
 
     fn name(&self) -> NodeName {
@@ -1359,7 +1359,7 @@ mod tests {
     }
 
     #[test]
-    fn regression_a_rolled_back_picker_reads_unmounted_and_mounts_again() -> Result<()> {
+    fn a_rolled_back_picker_reads_unmounted_and_mounts_again() -> Result<()> {
         let (mut harness, _) = hosting(false)?;
         harness.with_root_widget_context(|_: &mut PickerHost, ctx| {
             let picker =

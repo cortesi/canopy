@@ -20,10 +20,9 @@ use canopy::{
 };
 
 use crate::{
-    file::{self, FileLayer, Scope},
+    file::{self, FileLayer, Scope, display_path},
     layout::Layout,
     model::{OptionGroup, Schema, SetError, Value, join_path},
-    panel::display_path,
 };
 
 /// The root value as the handles see it.
@@ -127,6 +126,16 @@ pub enum Saved {
     Deferred,
 }
 
+impl Saved {
+    /// Return the file that the save wrote, or none for a save that waits.
+    pub fn written(self) -> Option<PathBuf> {
+        match self {
+            Self::Written(file) => Some(file),
+            Self::Deferred => None,
+        }
+    }
+}
+
 /// What a clear did.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Cleared {
@@ -135,6 +144,31 @@ pub enum Cleared {
     /// The clear waits for a notification round, and posts its outcome as a
     /// notice when it runs.
     Deferred,
+}
+
+impl Cleared {
+    /// Return the outcome of a clear that ran: the file it changed, if any.
+    /// A clear that waits has none.
+    pub fn done(self) -> Option<Option<PathBuf>> {
+        match self {
+            Self::Done(file) => Some(file),
+            Self::Deferred => None,
+        }
+    }
+}
+
+/// Return the notice of a save that wrote `file`.
+pub fn saved_notice(file: &Path) -> String {
+    format!("Saved to {}", display_path(file))
+}
+
+/// Return the notice of a clear of the leaf at `path`, which removed it from
+/// `file`, or found no file that sets it.
+pub fn cleared_notice(path: &str, file: Option<&Path>) -> String {
+    match file {
+        Some(file) => format!("Cleared {path} from {}", display_path(file)),
+        None => format!("No option file sets {path}"),
+    }
 }
 
 /// The layer that sets the effective value of a leaf.
@@ -199,6 +233,16 @@ struct Subscriber {
     prefix: String,
     /// The callback.
     callback: Rc<RefCell<RootCallback>>,
+    /// The wake of the widget that the subscriber serves, if any. The store
+    /// forgets the subscriber once the wake expires.
+    alive: Option<NodeWakeHandle>,
+}
+
+impl Subscriber {
+    /// Return whether the widget that the subscriber serves is gone.
+    fn is_expired(&self) -> bool {
+        self.alive.as_ref().is_some_and(NodeWakeHandle::is_expired)
+    }
 }
 
 /// The state of a store.
@@ -219,12 +263,17 @@ struct Inner<T> {
     saved: Arc<T>,
     /// The saved value with the live values.
     current: Arc<T>,
-    /// The subscribers.
+    /// The subscribers. The store prunes the subscribers of widgets that
+    /// are gone with the close wakes, and as a notification round opens.
     subscribers: Vec<Subscriber>,
     /// The widgets to poll as the options panel closes. The store prunes
     /// the wakes of widgets that are gone as it adds one and as the panel
     /// opens, so the list holds about one wake for each live follower.
     close_wakes: Vec<NodeWakeHandle>,
+    /// The close wakes added while the panel is open, or none while it is
+    /// closed. The panel's modal took the wakes as it opened, so the store
+    /// wakes these itself as the panel closes.
+    late_wakes: Option<Vec<NodeWakeHandle>>,
     /// How many times the panel closed.
     #[cfg(test)]
     panel_closes: usize,
@@ -232,6 +281,18 @@ struct Inner<T> {
     round: Round,
     /// Warnings that wait for a context to show them.
     warnings: Vec<String>,
+}
+
+impl<T> Inner<T> {
+    /// Forget the wakes and the subscribers of widgets that are gone.
+    fn prune(&mut self) {
+        self.close_wakes.retain(|wake| !wake.is_expired());
+        if let Some(late) = &mut self.late_wakes {
+            late.retain(|wake| !wake.is_expired());
+        }
+        self.subscribers
+            .retain(|subscriber| !subscriber.is_expired());
+    }
 }
 
 impl<T: OptionGroup> Inner<T> {
@@ -346,11 +407,15 @@ struct RoundGuard<'a, T> {
 }
 
 impl<'a, T> RoundGuard<'a, T> {
-    /// Open a round on `shared`.
+    /// Open a round on `shared`, and forget the subscribers of widgets that
+    /// are gone.
     fn open(shared: &'a Shared<T>) -> Self {
-        shared.inner.borrow_mut().round = Round::Notifying {
+        let mut inner = shared.inner.borrow_mut();
+        inner.prune();
+        inner.round = Round::Notifying {
             queue: VecDeque::new(),
         };
+        drop(inner);
         Self { shared }
     }
 }
@@ -428,6 +493,7 @@ impl<T: OptionGroup + Send + Sync> Store<T> {
             current: Arc::new(T::default()),
             subscribers: Vec::new(),
             close_wakes: Vec::new(),
+            late_wakes: None,
             #[cfg(test)]
             panel_closes: 0,
             round: Round::Idle,
@@ -488,24 +554,30 @@ pub trait Backend {
     /// Apply a typed write to the root, then notify the subscribers.
     fn update_root(&self, context: &mut dyn Context, write: RootWrite) -> CanopyResult<()>;
 
-    /// Register a subscriber for the paths at or below `prefix`.
-    fn subscribe_root(&self, prefix: String, callback: RootCallback);
+    /// Register a subscriber for the paths at or below `prefix`. A
+    /// subscriber with `alive` lasts until that wake expires.
+    fn subscribe_root(&self, prefix: String, alive: Option<NodeWakeHandle>, callback: RootCallback);
 
     /// Poll the widget of `wake` as the options panel closes.
     fn wake_on_close(&self, wake: NodeWakeHandle);
 
-    /// Return the wakes of the live widgets that asked to hear the panel
-    /// close, and forget those of widgets that are gone. The panel registers
-    /// them with its modal as it opens, so the runtime polls them as the
-    /// modal's end commits.
-    fn close_wakes(&self) -> Vec<NodeWakeHandle>;
+    /// Note that the panel opened, and return the wakes of the live widgets
+    /// that asked to hear it close. The panel registers them with its modal,
+    /// so the runtime polls them as the modal's end commits. A wake added
+    /// while the panel is open waits for [`Self::panel_closed`].
+    fn panel_opened(&self) -> Vec<NodeWakeHandle>;
 
     /// Return how many close wakes the store holds.
     #[cfg(test)]
     fn close_wake_count(&self) -> usize;
 
-    /// Note that the panel closed.
-    fn panel_closed(&self);
+    /// Return how many subscribers the store holds.
+    #[cfg(test)]
+    fn subscriber_count(&self) -> usize;
+
+    /// Note that the panel closed, and wake the widgets that asked to hear
+    /// the close while it was open.
+    fn panel_closed(&self) -> CanopyResult<()>;
 
     /// Return how many times the panel closed.
     #[cfg(test)]
@@ -538,14 +610,15 @@ pub trait Backend {
     fn revert(&self, context: &mut dyn Context, path: Option<&str>) -> CanopyResult<()>;
 
     /// Remove the leaf at `path` from the nearest file that sets it, and
-    /// return that file.
+    /// return what the clear did.
     fn clear(
         &self,
         context: &mut dyn Context,
         path: &str,
     ) -> CanopyResult<StdResult<Cleared, StoreError>>;
 
-    /// Save the live values to the file for `scope`, and return the file.
+    /// Save the live values to the file for `scope`, and return what the
+    /// save did.
     fn save(
         &self,
         context: &mut dyn Context,
@@ -566,15 +639,16 @@ pub trait Backend {
 }
 
 impl<T: OptionGroup + Send + Sync> Shared<T> {
-    /// Return whether a notification round is open.
-    fn in_round(&self) -> bool {
-        matches!(self.inner.borrow().round, Round::Notifying { .. })
-    }
-
-    /// Queue `change` until the open round ends.
-    fn defer(&self, change: Deferred) {
-        if let Round::Notifying { queue } = &mut self.inner.borrow_mut().round {
-            queue.push_back(change);
+    /// Queue the change that `change` makes of `value` until the open
+    /// notification round ends. With no round open, return `value`, so the
+    /// caller makes the change now.
+    fn defer<V>(&self, value: V, change: impl FnOnce(V) -> Deferred) -> Option<V> {
+        match &mut self.inner.borrow_mut().round {
+            Round::Notifying { queue } => {
+                queue.push_back(change(value));
+                None
+            }
+            Round::Idle => Some(value),
         }
     }
 
@@ -654,16 +728,12 @@ impl<T: OptionGroup + Send + Sync> Shared<T> {
             Deferred::Write(write) => self.write_now(write).map(|changes| (changes, None)),
             Deferred::SetDefault { path, value } => Ok((self.set_default_now(path, value), None)),
             Deferred::Revert(path) => Ok((self.revert_now(path.as_deref()), None)),
-            Deferred::Clear(path) => self.clear_now(&path).map(|(file, changes)| {
-                let notice = match file {
-                    Some(file) => format!("Cleared {path} from {}", display_path(&file)),
-                    None => format!("No option file sets {path}"),
-                };
-                (changes, Some(notice))
-            }),
-            Deferred::Save(scope) => self.save_now(scope).map(|(file, changes)| {
-                (changes, Some(format!("Saved to {}", display_path(&file))))
-            }),
+            Deferred::Clear(path) => self
+                .clear_now(&path)
+                .map(|(file, changes)| (changes, Some(cleared_notice(&path, file.as_deref())))),
+            Deferred::Save(scope) => self
+                .save_now(scope)
+                .map(|(file, changes)| (changes, Some(saved_notice(&file)))),
         }
     }
 
@@ -800,32 +870,41 @@ impl<T: OptionGroup + Send + Sync> Backend for Shared<T> {
     }
 
     fn update_root(&self, context: &mut dyn Context, write: RootWrite) -> CanopyResult<()> {
-        if self.in_round() {
-            self.defer(Deferred::Write(write));
+        let Some(write) = self.defer(write, Deferred::Write) else {
             return Ok(());
-        }
+        };
         match self.write_now(write) {
             Ok(changes) => self.notify(context, &changes),
             Err(error) => context.notify(NoticePost::error(format!("options: {error}"))),
         }
     }
 
-    fn subscribe_root(&self, prefix: String, callback: RootCallback) {
+    fn subscribe_root(
+        &self,
+        prefix: String,
+        alive: Option<NodeWakeHandle>,
+        callback: RootCallback,
+    ) {
         self.inner.borrow_mut().subscribers.push(Subscriber {
             prefix,
             callback: Rc::new(RefCell::new(callback)),
+            alive,
         });
     }
 
     fn wake_on_close(&self, wake: NodeWakeHandle) {
         let mut inner = self.inner.borrow_mut();
-        inner.close_wakes.retain(|known| !known.is_expired());
+        inner.prune();
+        if let Some(late) = &mut inner.late_wakes {
+            late.push(wake.clone());
+        }
         inner.close_wakes.push(wake);
     }
 
-    fn close_wakes(&self) -> Vec<NodeWakeHandle> {
+    fn panel_opened(&self) -> Vec<NodeWakeHandle> {
         let mut inner = self.inner.borrow_mut();
-        inner.close_wakes.retain(|known| !known.is_expired());
+        inner.prune();
+        inner.late_wakes = Some(Vec::new());
         inner.close_wakes.clone()
     }
 
@@ -834,11 +913,24 @@ impl<T: OptionGroup + Send + Sync> Backend for Shared<T> {
         self.inner.borrow().close_wakes.len()
     }
 
-    fn panel_closed(&self) {
-        #[cfg(test)]
-        {
-            self.inner.borrow_mut().panel_closes += 1;
+    #[cfg(test)]
+    fn subscriber_count(&self) -> usize {
+        self.inner.borrow().subscribers.len()
+    }
+
+    fn panel_closed(&self) -> CanopyResult<()> {
+        let late = {
+            let mut inner = self.inner.borrow_mut();
+            #[cfg(test)]
+            {
+                inner.panel_closes += 1;
+            }
+            inner.late_wakes.take().unwrap_or_default()
+        };
+        for wake in late {
+            wake.wake()?;
         }
+        Ok(())
     }
 
     #[cfg(test)]
@@ -893,19 +985,20 @@ impl<T: OptionGroup + Send + Sync> Backend for Shared<T> {
         if let Err(error) = probe.set(&path, &value) {
             return Ok(Err(StoreError::Set { path, error }));
         }
-        if self.in_round() {
-            self.defer(Deferred::SetDefault { path, value });
+        let Some((path, value)) = self.defer((path, value), |(path, value)| Deferred::SetDefault {
+            path,
+            value,
+        }) else {
             return Ok(Ok(()));
-        }
+        };
         let changes = self.set_default_now(path, value);
         self.notify(context, &changes).map(Ok)
     }
 
     fn revert(&self, context: &mut dyn Context, path: Option<&str>) -> CanopyResult<()> {
-        if self.in_round() {
-            self.defer(Deferred::Revert(path.map(str::to_string)));
+        let Some(path) = self.defer(path, |path| Deferred::Revert(path.map(str::to_string))) else {
             return Ok(());
-        }
+        };
         let changes = self.revert_now(path);
         self.notify(context, &changes)
     }
@@ -919,10 +1012,9 @@ impl<T: OptionGroup + Send + Sync> Backend for Shared<T> {
             Ok(path) => path,
             Err(error) => return Ok(Err(error)),
         };
-        if self.in_round() {
-            self.defer(Deferred::Clear(path));
+        let Some(path) = self.defer(path, Deferred::Clear) else {
             return Ok(Ok(Cleared::Deferred));
-        }
+        };
         match self.clear_now(&path) {
             Ok((file, changes)) => {
                 self.notify(context, &changes)?;
@@ -937,10 +1029,9 @@ impl<T: OptionGroup + Send + Sync> Backend for Shared<T> {
         context: &mut dyn Context,
         scope: Scope,
     ) -> CanopyResult<StdResult<Saved, StoreError>> {
-        if self.in_round() {
-            self.defer(Deferred::Save(scope));
+        let Some(scope) = self.defer(scope, Deferred::Save) else {
             return Ok(Ok(Saved::Deferred));
-        }
+        };
         match self.save_now(scope) {
             Ok((file, changes)) => {
                 self.notify(context, &changes)?;
@@ -1082,11 +1173,23 @@ impl<G: 'static> OptionsHandle<G> {
     pub fn subscribe(
         &self,
         path: &str,
+        callback: impl FnMut(&mut dyn Context, &G, &Changes) -> CanopyResult<()> + 'static,
+    ) {
+        self.subscribe_while(path, None, callback);
+    }
+
+    /// Subscribe as [`Self::subscribe`] does, until the wake `alive`
+    /// expires, if given.
+    pub(crate) fn subscribe_while(
+        &self,
+        path: &str,
+        alive: Option<NodeWakeHandle>,
         mut callback: impl FnMut(&mut dyn Context, &G, &Changes) -> CanopyResult<()> + 'static,
     ) {
         let view = Arc::clone(&self.view);
         self.backend.subscribe_root(
             join_path(&self.prefix, path),
+            alive,
             Box::new(move |context, root, changes| callback(context, view(root), changes)),
         );
     }

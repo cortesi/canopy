@@ -10,6 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use canopy::format::Home;
 use toml_edit::{Array, DocumentMut, Item as TomlItem, Table, TableLike};
 
 use crate::model::{Group, Item, Kind, OptionGroup, Schema, Value, Variant, join_path};
@@ -35,6 +36,11 @@ impl Scope {
             Self::Local => "local",
         }
     }
+}
+
+/// Return `path` for display, with the home directory as `~`.
+pub fn display_path(path: &Path) -> String {
+    Home::from_env().path(path)
 }
 
 /// The values that one file sets.

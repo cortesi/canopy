@@ -19,7 +19,7 @@ use std::{
 
 use anyhow::{Context, Result, anyhow, bail};
 use canopy::render::ScreenCapture;
-use canopy_mcp::{EvalOutcomeKind, ScreenSize, SuiteConfig, plan_suite};
+use canopy_mcp::{ScreenSize, SuiteConfig, plan_suite};
 use canopy_widgets::screenshot::{Screenshot, ScreenshotOptions};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -234,10 +234,8 @@ pub async fn run(
             let report = session.eval(request).await?;
             let elapsed = started.elapsed().as_millis();
             let shots = match report.outcome {
-                EvalOutcomeKind::Completed(value) => {
-                    shots(value).map_err(|error| format!("{error:#}"))
-                }
-                EvalOutcomeKind::Failed(error) => Err(error.message),
+                Ok(value) => shots(value).map_err(|error| format!("{error:#}")),
+                Err(error) => Err(error.message),
             };
             let shots = match shots {
                 Ok(shots) => shots,
@@ -439,10 +437,10 @@ fn leading_comment(source: &str) -> Option<String> {
 
 /// Read the shots of a script's return value. Luau returns an empty list as
 /// an empty table, which JSON shows as an object.
-fn shots(value: Option<Value>) -> Result<Vec<Shot>> {
+fn shots(value: Value) -> Result<Vec<Shot>> {
     match value {
-        Some(Value::Object(map)) if map.is_empty() => Ok(Vec::new()),
-        Some(value @ Value::Array(_)) => {
+        Value::Object(map) if map.is_empty() => Ok(Vec::new()),
+        value @ Value::Array(_) => {
             serde_json::from_value(value).context("the script returns malformed shots")
         }
         _ => bail!("the script returns no list of shots"),
@@ -526,13 +524,13 @@ mod tests {
 
     #[test]
     fn shots_read_lists_and_reject_other_values() {
-        assert!(shots(Some(json!({}))).expect("empty").is_empty());
+        assert!(shots(json!({})).expect("empty").is_empty());
         let capture = json!({ "width": 1, "height": 1, "styles": [], "rows": [[]] });
-        let read = shots(Some(json!([{ "id": "a", "capture": capture }]))).expect("one");
+        let read = shots(json!([{ "id": "a", "capture": capture }])).expect("one");
         assert_eq!(read[0].id, "a");
         assert!(read[0].title.is_none());
-        assert!(shots(None).is_err());
-        assert!(shots(Some(json!("text"))).is_err());
+        assert!(shots(Value::Null).is_err());
+        assert!(shots(json!("text")).is_err());
         assert!(check_id("landing-page_2").is_ok());
         assert!(check_id("../up").is_err());
         assert!(check_id("").is_err());

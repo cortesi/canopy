@@ -103,6 +103,28 @@ impl Session {
         })
     }
 
+    /// Take the default fixture of a headless session, which a later
+    /// headless session can carry on with.
+    fn take_default_fixture(&mut self) -> Option<String> {
+        match &mut self.transport {
+            Transport::Headless {
+                default_fixture, ..
+            } => default_fixture.take(),
+            Transport::Live => None,
+        }
+    }
+
+    /// Give a headless session the default fixture `fixture`.
+    fn with_default_fixture(mut self, fixture: Option<String>) -> Self {
+        if let Transport::Headless {
+            default_fixture, ..
+        } = &mut self.transport
+        {
+            *default_fixture = fixture;
+        }
+        self
+    }
+
     /// Shut down the session and any managed child process.
     pub async fn shutdown(self) {
         if let Transport::Headless {
@@ -211,8 +233,12 @@ enum Current {
 
 /// What an idle release ended, so the next call can follow it.
 enum Released {
-    /// A headless app: the next call starts another.
-    Headless,
+    /// A headless app: the next call starts another, with the same default
+    /// fixture.
+    Headless {
+        /// The default fixture of the released session.
+        default_fixture: Option<String>,
+    },
     /// A live app's session: the next call connects to its socket again.
     Live(PathBuf),
     /// An app hosted in a terminal, stopped with its host: the next call
@@ -325,6 +351,10 @@ pub struct SessionManager {
     state: Mutex<Option<Current>>,
     /// Whether tool calls are running, for the idle watchdog.
     activity: ActivityState,
+    /// A session that the next headless start takes instead of starting a
+    /// process.
+    #[cfg(test)]
+    next_headless: StdMutex<Option<Session>>,
 }
 
 impl SessionManager {
@@ -334,7 +364,31 @@ impl SessionManager {
             config,
             state: Mutex::new(None),
             activity: ActivityState::new(),
+            #[cfg(test)]
+            next_headless: StdMutex::new(None),
         }
+    }
+
+    /// Return whether a tool call is running.
+    #[cfg(test)]
+    pub fn is_busy(&self) -> bool {
+        matches!(self.activity.get(), Activity::Busy(_))
+    }
+
+    /// Start the configured headless app, with `default_fixture`.
+    async fn spawn_headless(&self, default_fixture: Option<String>) -> Result<Session> {
+        #[cfg(test)]
+        if let Some(session) = self
+            .next_headless
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+        {
+            return Ok(session.with_default_fixture(default_fixture));
+        }
+        let command = self.config.headless_command(&[])?;
+        let session = Session::spawn_headless(&command).await?;
+        Ok(session.with_default_fixture(default_fixture))
     }
 
     /// Return the loaded configuration.
@@ -439,9 +493,10 @@ impl SessionManager {
         let was = match state.take() {
             None => None,
             Some(Current::Released { was }) => Some(was),
-            Some(Current::Headless(session)) => {
+            Some(Current::Headless(mut session)) => {
+                let default_fixture = session.take_default_fixture();
                 session.shutdown().await;
-                Some(Released::Headless)
+                Some(Released::Headless { default_fixture })
             }
             Some(Current::Live { session, socket }) => {
                 session.shutdown().await;
@@ -478,12 +533,12 @@ impl SessionManager {
     pub async fn session(&self) -> Result<MappedMutexGuard<'_, Session>> {
         let mut state = self.state.lock().await;
         match state.as_ref() {
-            None
-            | Some(Current::Released {
-                was: Released::Headless,
+            None => *state = Some(Current::Headless(self.spawn_headless(None).await?)),
+            Some(Current::Released {
+                was: Released::Headless { default_fixture },
             }) => {
-                let command = self.config.headless_command(&[])?;
-                *state = Some(Current::Headless(Session::spawn_headless(&command).await?));
+                let session = self.spawn_headless(default_fixture.clone()).await?;
+                *state = Some(Current::Headless(session));
             }
             Some(Current::Released {
                 was: Released::Live(socket),
@@ -526,8 +581,8 @@ pub mod tests {
 
     use canopy::testing::contracts;
     use canopy_mcp::{
-        AppFactory, AppMetadata, EvalOutcomeKind, ExecutionMetadata, ExecutionMode, ResetPolicy,
-        ScreenSize, ScriptErrorInfo, ScriptErrorType, ScriptTaskState, ScriptTiming,
+        AppFactory, AppMetadata, ExecutionMetadata, ExecutionMode, ResetPolicy, ScreenSize,
+        ScriptErrorInfo, ScriptErrorType, ScriptTaskState, ScriptTiming,
     };
     use serde_json::{Value, json};
     use tmcp::{Server, ToolError, ToolResult, mcp_server};
@@ -623,16 +678,19 @@ pub mod tests {
                 }
                 _ => {}
             }
+            if request.source == "block" {
+                future::pending::<()>().await;
+            }
             let state = match request.source.as_str() {
                 "failure" => ScriptTaskState::Failed,
                 "timeout" => ScriptTaskState::TimedOut,
                 _ => ScriptTaskState::Completed,
             };
             let outcome = match state {
-                ScriptTaskState::Completed => EvalOutcomeKind::Completed(Some(
-                    request.fixture.map_or(Value::Null, Value::String),
-                )),
-                _ => EvalOutcomeKind::Failed(ScriptErrorInfo {
+                ScriptTaskState::Completed => {
+                    Ok(request.fixture.map_or(Value::Null, Value::String))
+                }
+                _ => Err(ScriptErrorInfo {
                     error_type: if state == ScriptTaskState::TimedOut {
                         ScriptErrorType::Timeout
                     } else {
@@ -695,6 +753,17 @@ pub mod tests {
         Ok((Session::share_live(Arc::new(client)), calls, task))
     }
 
+    /// Connect to a stateful peer as a headless session, which keeps a
+    /// default fixture.
+    async fn headless_peer_session() -> Result<(Session, JoinHandle<()>)> {
+        let (mut session, _, peer) = peer_session().await?;
+        session.transport = Transport::Headless {
+            child: None,
+            default_fixture: None,
+        };
+        Ok((session, peer))
+    }
+
     pub fn request(script: &str) -> ScriptEvalRequest {
         ScriptEvalRequest::new(script.to_owned())
     }
@@ -720,9 +789,11 @@ pub mod tests {
         let watchdog = tokio::spawn(manager.clone().watch_idle(limit));
         {
             let _busy = manager.busy();
-            let session = manager.session().await?;
+            drop(manager.session().await?);
+            // Only the busy guard holds the session: the watchdog can take
+            // the state lock throughout.
             sleep(limit * 3).await;
-            drop(session);
+            assert!(is_live(&manager).await);
         }
         // The next call follows at once.
         task::yield_now().await;
@@ -860,7 +931,31 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn a_released_hosted_app_fails_until_it_is_launched_again() -> Result<()> {
+    async fn regression_an_idle_release_of_a_headless_app_keeps_its_default_fixture() -> Result<()>
+    {
+        let (session, peer) = headless_peer_session().await?;
+        let manager = manager_with_session(session).await?;
+        manager
+            .session()
+            .await?
+            .apply_fixture("seed".to_owned())
+            .await?;
+        assert!(manager.release_if_idle(Duration::ZERO).await);
+        let (next, next_peer) = headless_peer_session().await?;
+        *manager
+            .next_headless
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(next);
+        let report = manager.session().await?.eval(request("success")).await?;
+        assert_eq!(report.value(), Some(&json!("seed")));
+        manager.disconnect().await?;
+        peer.abort();
+        next_peer.abort();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_released_hosted_app_fails_with_a_launch_hint_until_a_disconnect() -> Result<()> {
         let manager = Arc::new(SessionManager::new(LoadedConfig::load()?));
         let command = ResolvedCommand::new(
             vec!["todo".into(), "--live".into()],

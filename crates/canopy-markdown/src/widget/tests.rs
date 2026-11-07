@@ -545,6 +545,39 @@ fn a_kept_position_keeps_the_current_match_through_a_reload() {
 }
 
 #[test]
+fn a_kept_place_applies_at_once_to_published_rendered_matches() {
+    let text = format!("needle first\n\n{}needle second\n", "Filler.\n\n".repeat(4));
+    let (mut harness, manual) = fixture(&text, ViewType::Rendered, false, false, false);
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_search(ctx, "needle".into(), false)
+        })
+        .unwrap();
+    settle(&mut harness, &manual);
+    let second = harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.search_next(ctx, 1)?;
+            let place = reader.search_place();
+            reader.search_next(ctx, -1)?;
+            Ok(place)
+        })
+        .unwrap();
+    harness.with_root_widget(|reader: &mut Markdown| {
+        assert_eq!(reader.search_position(), 1);
+        reader.keep_search_position(second);
+        assert_eq!(reader.search_position(), 2, "the kept place is current");
+        reader.keep_search_position(None);
+        assert_eq!(
+            reader.search_position(),
+            0,
+            "no place leaves no match current"
+        );
+        assert_eq!(reader.shared.borrow().overlays.search_current, None);
+    });
+}
+
+#[test]
 fn a_kept_position_keeps_a_table_match_among_its_neighbours_through_an_edit() {
     let table = "| a | b |\n| - | - |\n| needle | needle |\n";
     let text = format!("Intro.\n\n{table}");
@@ -3260,6 +3293,46 @@ mod search_model {
             }
         }
     }
+}
+
+#[test]
+fn regression_escape_releases_the_capture_of_an_orphaned_scrollbar_drag() {
+    let text: String = (0..40).map(|i| format!("Paragraph {i}.\n\n")).collect();
+    let (mut harness, manual) = fixture(&text, ViewType::Rendered, true, false, false);
+    harness.canopy.set_screen_size(Size::new(60, 20)).unwrap();
+    settle(&mut harness, &manual);
+    let track = harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| Ok(reader.tracks(ctx).0[0].1))
+        .unwrap();
+    harness
+        .mouse(mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: PointI32 {
+                x: track.tl.x as i32,
+                y: track.tl.y as i32,
+            },
+        })
+        .unwrap();
+    service(&mut harness);
+    assert!(harness.with_root_widget(|reader: &mut Markdown| reader.vertical.is_dragging()));
+    // A resize changes the track, so the next render orphans the drag, which
+    // keeps the capture until an event releases it.
+    harness.canopy.set_screen_size(Size::new(60, 12)).unwrap();
+    service(&mut harness);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            assert!(!reader.vertical.is_dragging());
+            assert!(
+                ctx.has_mouse_capture(),
+                "the orphaned drag holds the capture"
+            );
+            assert!(reader.escape(ctx)?, "Esc ends the drag");
+            assert!(!ctx.has_mouse_capture());
+            Ok(())
+        })
+        .unwrap();
 }
 
 #[test]

@@ -7,6 +7,7 @@
 
 use std::{
     fs,
+    io::ErrorKind,
     path::{Path, PathBuf},
     result,
 };
@@ -67,6 +68,18 @@ pub enum Read {
     Until(String),
 }
 
+impl Read {
+    /// Read the screen once it shows `until`, if given, or else at once if
+    /// `screen` asks for it.
+    pub fn new(screen: bool, until: Option<String>) -> Self {
+        match until {
+            Some(text) => Self::Until(text),
+            None if screen => Self::Now,
+            None => Self::None,
+        }
+    }
+}
+
 /// The JSON form of a [`TermRequest`], as every host version reads it.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 struct WireRequest {
@@ -101,12 +114,10 @@ impl TryFrom<WireRequest> for TermRequest {
             }
             return Ok(Self::Stop);
         }
-        let read = match until {
-            Some(text) => Read::Until(text),
-            None if screen => Read::Now,
-            None => Read::None,
-        };
-        Ok(Self::Drive { keys, read })
+        Ok(Self::Drive {
+            keys,
+            read: Read::new(screen, until),
+        })
     }
 }
 
@@ -268,7 +279,16 @@ async fn run(host: &mut impl Host, listener: &UnixListener) -> Result<()> {
             None => {
                 tokio::select! {
                     accepted = listener.accept() => {
-                        connection = Some(Connection::new(accepted?.0));
+                        match accepted {
+                            Ok((stream, _)) => connection = Some(Connection::new(stream)),
+                            // A client that gave up before the accept ends
+                            // only its own connection.
+                            Err(error) if matches!(
+                                error.kind(),
+                                ErrorKind::ConnectionAborted | ErrorKind::Interrupted
+                            ) => eprintln!("control connection: accept: {error}"),
+                            Err(error) => return Err(error.into()),
+                        }
                         continue;
                     }
                     () = host.exited() => HostEvent::AppExited,

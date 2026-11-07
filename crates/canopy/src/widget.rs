@@ -294,6 +294,10 @@ where
 /// mounts again when it is next attached. Each widget's `on_unmount` calls
 /// [`Mount::unmount`], so the next mount starts from the pending value.
 ///
+/// A pending value that the mount consumes, such as an `Option` it takes,
+/// builds only once. Such a widget mounts once, and its next mount reports
+/// the missing value as an error.
+///
 /// The value is in one of two states: pending, with only `P`, or mounted,
 /// with `P` and `M`.
 #[derive(Debug, Clone)]

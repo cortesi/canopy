@@ -369,7 +369,33 @@ fn regression_fatal_poll_in_a_cancel_turn_settles_the_ticket() -> Result<()> {
     };
     assert!(error.to_string().contains("poll broke"), "{error}");
     probe.fail.set(false);
-    assert_settled(&mut canopy, ticket, source, "poll broke")
+    // The cancellation settles before the poll runs, so the ticket reports it.
+    assert_settled(&mut canopy, ticket, source, "cancelled")
+}
+
+#[test]
+fn regression_a_ticket_queued_with_a_cancel_is_admitted() -> Result<()> {
+    let source = "canopy.wait_for(function() return false end)";
+    let (mut canopy, _probe, cancelled) = parked_ticket(source)?;
+    let mut next = canopy
+        .automation_handle()
+        .submit_eval(EvalRequest::new("return 5"))?;
+    canopy.turn(TurnInput::CancelEval(cancelled.id))?;
+    let mut outcome = None;
+    for _ in 0..10 {
+        outcome = next.completion.try_recv().expect("the ticket is live");
+        if outcome.is_some() {
+            break;
+        }
+        canopy.turn(TurnInput::Wake)?;
+    }
+    let outcome = outcome.expect("the queued ticket settles");
+    assert!(
+        matches!(outcome.result, Ok(ArgValue::Int(5))),
+        "{:?}",
+        outcome.result
+    );
+    Ok(())
 }
 
 #[test]
@@ -377,12 +403,13 @@ fn regression_failed_abort_settles_the_ticket() -> Result<()> {
     let source = "canopy.wait_for(function() return false end)";
     let (mut canopy, _probe, ticket) = parked_ticket(source)?;
     let host = canopy.script.host.clone();
-    let held = host.hold_runtime_for_testing();
+    host.fail_next_abort_for_testing();
     let Err(error) = canopy.turn(TurnInput::CancelEval(ticket.id)) else {
         panic!("the abort fails the turn");
     };
-    drop(held);
     assert!(error.to_string().contains("abort"), "{error}");
+    // Settling drops the invocation, whose own abort releases the VM work.
+    assert_eq!(host.aborts_released_for_testing(), 1);
     assert_settled(&mut canopy, ticket, source, "abort")
 }
 

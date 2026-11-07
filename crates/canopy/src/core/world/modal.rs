@@ -274,8 +274,13 @@ impl Core {
 
     /// Whether normal input, focus, and capture may target this node.
     pub(crate) fn modal_admits(&self, node: NodeId) -> bool {
-        self.modal_region()
-            .is_none_or(|modal| self.is_ancestor_or_self(modal, node))
+        self.region_admits(self.modal_region(), node)
+    }
+
+    /// Whether the normal-input subtree `region` admits `node`; no region
+    /// admits every node.
+    fn region_admits(&self, region: Option<NodeId>, node: NodeId) -> bool {
+        region.is_none_or(|modal| self.is_ancestor_or_self(modal, node))
     }
 
     /// Return the transient mode that takes the next key.
@@ -371,8 +376,11 @@ impl Core {
             && !self.is_ancestor_or_self(options.owner, options.modal);
         let formed = (overlay || self.is_ancestor_or_self(options.owner, options.modal))
             && self.is_ancestor_or_self(options.modal, options.initial_focus);
-        let admitted =
-            (overlay || self.modal_admits(options.modal)) && self.modal_admits(options.owner);
+        let admitted_in = |region| {
+            (overlay || self.region_admits(region, options.modal))
+                && self.region_admits(region, options.owner)
+        };
+        let admitted = admitted_in(self.modal_region());
         let duplicate = self
             .modals
             .scopes
@@ -380,11 +388,19 @@ impl Core {
             .position(|scope| scope.options.modal == options.modal);
         if !formed || !admitted || duplicate.is_some() {
             // A scope whose close is queued still holds its subtree and its
-            // region until the close commits.
+            // region until the close commits. The open waits for that close
+            // only when the region the stack has after it admits the modal.
             let closing = self.closing_from();
+            let region_after = |closing: usize| {
+                closing
+                    .checked_sub(1)
+                    .map(|below| self.modals.scopes[below].options.modal)
+            };
             let held_by_closing = duplicate
                 .is_some_and(|index| closing.is_some_and(|closing| closing <= index))
-                || (duplicate.is_none() && !admitted && closing.is_some());
+                || (duplicate.is_none()
+                    && !admitted
+                    && closing.is_some_and(|closing| admitted_in(region_after(closing))));
             if formed && held_by_closing {
                 return Err(Error::ModalClosing);
             }
@@ -884,6 +900,29 @@ mod tests {
             let reopened = core.open_modal(modal_at(tree.root, tree.b, tree.b_a))?;
             assert!(core.modal_is_open(reopened));
             Ok(())
+        })
+    }
+
+    #[test]
+    fn regression_an_open_outside_the_region_left_by_a_close_is_invalid() -> Result<()> {
+        run_ttree(|canopy, _, tree| {
+            let core = &mut canopy.core;
+            core.set_focus(tree.a_a)?;
+            core.open_modal(modal_at(tree.root, tree.a, tree.a_a))?;
+            let inner = core.open_modal(modal_at(tree.a, tree.a_a, tree.a_a))?;
+            let mut scope = core.enter_dispatch();
+            scope.close_modal_after_dispatch(inner)?;
+            // After the close, A's region still refuses B.
+            assert!(matches!(
+                scope.open_modal(modal_at(tree.root, tree.b, tree.b_a)),
+                Err(Error::Invalid(_))
+            ));
+            // A modal inside A waits for the close.
+            assert!(matches!(
+                scope.open_modal(modal_at(tree.a, tree.a_b, tree.a_b)),
+                Err(Error::ModalClosing)
+            ));
+            scope.finish(true)
         })
     }
 

@@ -31,6 +31,8 @@ use crate::{
     view_search,
 };
 
+/// Keys in Vim notation, and the application that runs them.
+mod keys;
 /// Insert sessions and text entry.
 mod session;
 /// Visual mode.

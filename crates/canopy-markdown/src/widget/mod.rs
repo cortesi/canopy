@@ -1078,10 +1078,9 @@ impl Markdown {
         self.failure = None;
         self.generation += 1;
         self.submission.invalidate();
+        self.clear_search_overlay();
         {
             let mut state = self.shared.borrow_mut();
-            state.overlays.search.clear();
-            state.overlays.search_current = self.matches.rendered_current();
             state.clear_marks();
             let mark = slot::pending_mark(&state, epoch, first, row);
             state.await_edit(mark);
@@ -1118,13 +1117,14 @@ impl Markdown {
             slot::commit(self, ctx)?;
             return Ok(true);
         }
+        // A drag that rendering found orphaned still holds the capture, so
+        // both bars cancel, and either drag ending releases it.
+        let bar = self.vertical.cancel_drag() | self.horizontal.cancel_drag();
         let mut ended = false;
-        if self.bar_dragging(ctx) {
+        if bar && ctx.has_mouse_capture() {
             ctx.release_mouse()?;
             ended = true;
         }
-        self.vertical.cancel_drag();
-        self.horizontal.cancel_drag();
         if let Some(nodes) = &self.nodes {
             if self.active == ViewType::Rendered {
                 ended |= ctx
@@ -1466,14 +1466,22 @@ impl Markdown {
     /// when a host reloads the document and restores its own position. Call
     /// it after [`Self::set_search`], which drops a kept place.
     ///
-    /// The next Rendered matches make current the match at `place`, which
-    /// [`Self::search_place`] gave before the reload: the match of that rank
-    /// among those at its byte, or else the first after it, or the first
-    /// match when none follows. With no `place`, no match is current.
+    /// The match at `place`, which [`Self::search_place`] gave before the
+    /// reload, is the match of that rank among those at its byte, or else
+    /// the first after it, or the first match when none follows:
+    ///
+    /// - While the Rendered matches wait, the next matches make the match at
+    ///   `place` current, or none with no `place`.
+    /// - With Rendered matches published, the match at `place` becomes current
+    ///   at once, or none with no `place`.
+    /// - Source keeps no place, and a failed query has no matches, so the call
+    ///   leaves their current match as it is.
     pub fn keep_search_position(&mut self, place: Option<MatchPlace>) {
         self.shared.borrow_mut().search_reveal = false;
-        if let Some(place) = self.matches.keep(place) {
-            self.restore_kept_match(place);
+        match self.matches.keep(place) {
+            Some(place) => self.restore_kept_match(place),
+            None if self.matches.rendered().is_some() => self.show_current(),
+            None => {}
         }
     }
     /// Whether a query waits for its first matches in the active view.
@@ -2693,7 +2701,7 @@ impl Markdown {
         state.overlays.search.clear();
         state.overlays.search_current = None;
     }
-    /// Show the current Rendered match as the overlay's, its one writer.
+    /// Show the current Rendered match as the overlay's.
     fn show_current(&self) {
         self.shared.borrow_mut().overlays.search_current = self.matches.rendered_current();
     }

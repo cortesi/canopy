@@ -1,4 +1,11 @@
-use std::{collections::HashSet, mem, num::NonZeroU64, rc::Rc};
+use std::{
+    collections::HashSet,
+    mem,
+    num::NonZeroU64,
+    panic::{AssertUnwindSafe, catch_unwind},
+    rc::Rc,
+    thread,
+};
 
 use super::{
     focus::FocusRecoveryHint,
@@ -278,7 +285,9 @@ impl Core {
     ///
     /// Each unmount hook runs as a callback, sealed against new work and tree
     /// edits. A hook that unwinds stops the cleanup, and the tree still
-    /// returns to `before`.
+    /// returns to `before`. During a panic's unwind, as when a panicked edit
+    /// rolls back, a hook's own panic is ignored and the cleanup goes on: a
+    /// second panic escaping would abort the process.
     fn unwind_mounted_widgets(
         &mut self,
         before: TreeStateSnapshot,
@@ -300,7 +309,11 @@ impl Core {
             };
             let mut callback = rollback.enter_callback();
             let mut ctx = CoreContext::new(&mut callback, mounted.node_id);
-            widget.on_unmount(&mut ctx);
+            if thread::panicking() {
+                let _nested = catch_unwind(AssertUnwindSafe(|| widget.on_unmount(&mut ctx)));
+            } else {
+                widget.on_unmount(&mut ctx);
+            }
         }
     }
 

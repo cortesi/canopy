@@ -1312,7 +1312,8 @@ impl DiffView {
 
     /// Show a message in place of any diff, such as before one is chosen.
     ///
-    /// The view drops its model, as [`Self::set_message`] does.
+    /// The view drops its model, as [`Self::set_message`] does, but unlike
+    /// it keeps the highlighters installed so far.
     #[must_use]
     pub fn with_message(self, message: impl Into<String>) -> Self;
 
@@ -1324,8 +1325,8 @@ impl DiffView {
     #[must_use]
     pub fn with_old_highlighter(self, highlighter: Box<dyn Highlighter>) -> Self;
 
-    /// Set the amount of unchanged text the rows show. A view that shows
-    /// a message has no model to change.
+    /// Set the amount of unchanged text the rows show. On a view that shows
+    /// a message, which has no model, this does nothing.
     #[must_use]
     pub fn with_scope(self, scope: Scope) -> Self;
 
@@ -1333,8 +1334,8 @@ impl DiffView {
     #[must_use]
     pub fn with_strategy(self, strategy: Mode) -> Self;
 
-    /// Set the tab stop width in columns. A view that shows a message has no
-    /// model to change.
+    /// Set the tab stop width in columns. On a view that shows a message,
+    /// which has no model, this does nothing.
     #[must_use]
     pub fn with_tab_stop(self, tab_stop: usize) -> Self;
 }
@@ -4447,7 +4448,8 @@ pub mod editor {
         /// Return the ranges that the host marks, or none once the marks end.
         pub fn marks(&self) -> &[TextRange];
 
-        /// Move the cursor.
+        /// Move the cursor. The typing before the move commits as one undo
+        /// step, and a vi insert repeats only the typing after it.
         /// @param dir The direction to move the cursor.
         pub fn move_cursor(&mut self, ctx: &mut dyn Context, dir: FocusDirection);
 
@@ -4488,10 +4490,11 @@ pub mod editor {
         ///
         /// With `preserve`, selection and interaction state survive. The caller
         /// must preserve the selected prefix or remap the selection afterwards.
-        /// Undo history belongs to the replaced buffer and is discarded.
+        /// Undo history belongs to the replaced buffer and is discarded. An open
+        /// prompt closes either way.
         pub fn publish_view(&mut self, prepared: PreparedEditorView, preserve: bool);
 
-        /// Redo the last undone edit. Visual mode ends first.
+        /// Redo the last undone edit, as [`Self::undo`] undoes.
         pub fn redo(&mut self, _ctx: &mut dyn Context);
 
         /// Replace `range` with `text` as one undo step, and put the cursor after
@@ -4547,13 +4550,15 @@ pub mod editor {
 
         /// Replace the editor configuration.
         ///
-        /// An open prompt closes. A change of edit mode ends the entry of the
-        /// old mode: text mode commits its typing, and a vi editor leaves for
-        /// normal mode.
+        /// A change of edit mode ends the entry of the old mode: an open prompt
+        /// closes, text mode commits its typing, and a vi editor leaves for
+        /// normal mode. A configuration that keeps the mode keeps the prompt.
         pub fn set_config(&mut self, config: EditorConfig);
 
         /// Move the cursor to `position`, and scroll it into view. A position
-        /// past the end of its line or of the text clamps to that end.
+        /// past the end of its line or of the text clamps to that end. The
+        /// typing before the move commits as one undo step, and a vi insert
+        /// repeats only the typing after it.
         pub fn set_cursor(&mut self, ctx: &mut dyn Context, position: TextPosition);
 
         /// Install already prepared highlighting without a whole-source render
@@ -4593,6 +4598,9 @@ pub mod editor {
         /// character selection then holds the characters of the range, or the
         /// character at an empty range. A line selection holds the lines of the
         /// range, and its ends keep their columns.
+        ///
+        /// The typing before the call commits as one undo step, and a vi insert
+        /// repeats only the typing after it.
         pub fn set_selection(&mut self, selection: Selection);
 
         /// Replace the buffer contents.
@@ -4611,7 +4619,8 @@ pub mod editor {
         /// Return the buffer contents.
         pub fn text(&self) -> String;
 
-        /// Undo the last edit. Visual mode ends first.
+        /// Undo the last edit. Visual mode ends first. An undo that reverts an
+        /// edit closes an open prompt, and insert mode stays.
         pub fn undo(&mut self, _ctx: &mut dyn Context);
 
         /// Return the vi mode, or `None` for a text editor.
@@ -5554,12 +5563,14 @@ pub mod scrollbar {
     pub struct Scrollbar {/* private fields */}
 
     impl Scrollbar {
-        /// End a drag at once, without releasing mouse capture.
+        /// End a drag at once, without releasing mouse capture. Return whether a
+        /// drag ended: one that holds the thumb, or one that rendering found
+        /// orphaned, whose capture is still held.
         ///
         /// An owner that ends its pointer gesture, as on Esc, calls this and
-        /// releases its capture itself, so that the scrollbar is idle before the
-        /// next render or event.
-        pub fn cancel_drag(&mut self);
+        /// releases its capture itself when a drag ended, so that the scrollbar
+        /// is idle before the next render or event.
+        pub fn cancel_drag(&mut self) -> bool;
 
         /// Handle a mouse event for the scrollbars drawn in `tracks`.
         ///

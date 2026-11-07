@@ -4,87 +4,26 @@
 //! `tests/vim_diff.rs` compares many more cases with Neovim. These examples
 //! and properties run in the routine loop.
 
-use std::cell::RefCell;
-
-use canopy::{Canopy, text};
+use canopy::text;
 use proptest::{
     prelude::*,
     test_runner::{Config, RngSeed},
 };
 
-use super::*;
+use super::{
+    keys::{in_root, run_keys},
+    *,
+};
 use crate::{editor::VisualMode, text_buffer::TextBuffer};
-
-/// Return the key of one token: a char, or the name of a key in angle
-/// brackets.
-fn token_key(token: &str) -> key::Key {
-    match token {
-        "<Esc>" => key::KeyCode::Esc.into(),
-        "<CR>" => key::KeyCode::Enter.into(),
-        "<Left>" => key::KeyCode::Left.into(),
-        "<Right>" => key::KeyCode::Right.into(),
-        "<Up>" => key::KeyCode::Up.into(),
-        "<Down>" => key::KeyCode::Down.into(),
-        _ => {
-            let mut chars = token.chars();
-            let key = chars.next().expect("a token").into();
-            assert!(chars.next().is_none(), "unknown token {token}");
-            key
-        }
-    }
-}
-
-/// Split `keys` into tokens: each char, or a name in angle brackets.
-pub(super) fn tokens(keys: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut chars = keys.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '<' && chars.peek().is_some_and(char::is_ascii_uppercase) {
-            let mut name = String::from("<");
-            for next in chars.by_ref() {
-                name.push(next);
-                if next == '>' {
-                    break;
-                }
-            }
-            out.push(name);
-        } else {
-            out.push(c.to_string());
-        }
-    }
-    out
-}
-
-thread_local! {
-    /// One application gives the context of every run on a thread, since
-    /// building one costs more than the keys.
-    static APP: RefCell<Canopy> =
-        RefCell::new(CanopyBuilder::new().build().expect("an empty application builds"));
-}
 
 /// Run `keys` on a vi editor of `text` with its cursor at `line:column`,
 /// with no render, and return the editor.
 fn run_with(config: EditorConfig, text: &str, start: (usize, usize), keys: &str) -> Editor {
-    APP.with(|app| run_in(&mut app.borrow_mut(), config, text, start, keys))
-}
-
-/// Run `keys` as [`run_with`] does, in the context of `app`.
-fn run_in(
-    app: &mut Canopy,
-    config: EditorConfig,
-    text: &str,
-    start: (usize, usize),
-    keys: &str,
-) -> Editor {
     let mut editor = Editor::with_config(text, config);
-    app.with_root_context(|ctx| {
+    in_root(|ctx| {
         editor.set_cursor(ctx, TextPosition::new(start.0, start.1));
-        for token in tokens(keys) {
-            editor.on_event(&Event::Key(token_key(&token)), ctx)?;
-        }
-        Ok(())
-    })
-    .expect("the keys run");
+        run_keys(&mut editor, keys, ctx)
+    });
     editor
 }
 

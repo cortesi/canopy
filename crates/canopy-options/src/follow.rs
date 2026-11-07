@@ -75,8 +75,9 @@ impl<G: Clone + PartialEq + 'static> Follower<G> {
     ///
     /// The widget calls this as it mounts. `apply` takes the change with
     /// [`Self::take_change`]. A widget that is gone, or that another widget
-    /// replaced, hears no more changes. The widget also polls as the options
-    /// panel closes, so it can move the focus that the panel held.
+    /// replaced, hears no more changes, and the store forgets its
+    /// subscription. The widget also polls as the options panel closes, so
+    /// it can move the focus that the panel held.
     pub fn follow<W: Widget + 'static>(
         &self,
         context: &mut dyn Context,
@@ -84,32 +85,34 @@ impl<G: Clone + PartialEq + 'static> Follower<G> {
     ) -> Result<()> {
         let stamp = context.widget_stamp(context.node_id())?;
         let writing = Rc::clone(&self.writing);
+        let wake = context.wake_handle(PollLifetime::Node)?;
+        self.handle.wake_on_close(wake.clone());
         self.handle
-            .wake_on_close(context.wake_handle(PollLifetime::Node)?);
-        self.handle.subscribe("", move |context, _, _| {
-            if writing.get() {
-                return Ok(());
-            }
-            // The store joins the error of an apply that runs now with those
-            // of the other subscribers. An apply that waits runs after the
-            // subscriber returns, so it posts its own notice: an error would
-            // stop the completion drain, and drop the work of others.
-            let failure: Rc<RefCell<Option<Error>>> = Rc::default();
-            let waiting = Rc::downgrade(&failure);
-            context.with_widget_mut_or_post(stamp, move |widget: &mut W, context| {
-                let Err(error) = apply(widget, context) else {
+            .subscribe_while("", Some(wake), move |context, _, _| {
+                if writing.get() {
                     return Ok(());
-                };
-                match waiting.upgrade() {
-                    Some(failure) => {
-                        *failure.borrow_mut() = Some(error);
-                        Ok(())
-                    }
-                    None => context.notify(NoticePost::error(format!("options: {error}"))),
                 }
-            })?;
-            failure.take().map_or(Ok(()), Err)
-        });
+                // The store joins the error of an apply that runs now with
+                // those of the other subscribers. An apply that
+                // waits runs after the subscriber returns, so
+                // it posts its own notice: an error would
+                // stop the completion drain, and drop the work of others.
+                let failure: Rc<RefCell<Option<Error>>> = Rc::default();
+                let waiting = Rc::downgrade(&failure);
+                context.with_widget_mut_or_post(stamp, move |widget: &mut W, context| {
+                    let Err(error) = apply(widget, context) else {
+                        return Ok(());
+                    };
+                    match waiting.upgrade() {
+                        Some(failure) => {
+                            *failure.borrow_mut() = Some(error);
+                            Ok(())
+                        }
+                        None => context.notify(NoticePost::error(format!("options: {error}"))),
+                    }
+                })?;
+                failure.take().map_or(Ok(()), Err)
+            });
         Ok(())
     }
 
@@ -163,7 +166,8 @@ mod tests {
         Context, ContextExt, NodeId, NodeName, Register, Setup, ViewContextExt, Widget,
         derive_commands,
         error::{Error, Result},
-        runtime::{NoticeLevel, NoticePost},
+        input::key::KeyCode,
+        runtime::{NoticeLevel, NoticePost, TurnInput},
         testing::harness::Harness,
     };
 
@@ -354,12 +358,16 @@ mod tests {
                     context.remove_subtree(shower.into())
                 })
                 .unwrap();
-            // The newest follower's wake waits for the next prune.
+            // The newest follower's wake and subscriber wait for the next
+            // prune.
             assert!(backend.close_wake_count() <= 2);
+            assert!(backend.subscriber_count() <= 2);
         }
-        // Opening the panel prunes the wake of the removed follower.
+        // Opening the panel prunes the wake and the subscriber of the
+        // removed follower.
         harness.script("options.open()").unwrap();
         assert_eq!(backend.close_wake_count(), 1);
+        assert_eq!(backend.subscriber_count(), 1);
     }
 
     #[test]
@@ -369,11 +377,31 @@ mod tests {
         harness.render().unwrap();
         let polls = shower(&mut harness, |shower| shower.polls);
         harness.script("options.open()").unwrap();
-        harness.script("options.close()").unwrap();
-        harness
-            .wait_until(Duration::from_secs(5), |harness| {
-                Ok(shower(harness, |shower| shower.polls) > polls)
+        harness.key(KeyCode::Esc).unwrap();
+        assert!(
+            shower(&mut harness, |shower| shower.polls) > polls,
+            "the close polls the shower in its turn"
+        );
+    }
+
+    #[test]
+    fn regression_a_follower_that_mounts_while_the_panel_is_open_polls_as_it_closes() {
+        let store = Store::<Root>::default();
+        let mut harness = harness(&store);
+        harness.script("options.open()").unwrap();
+        let late = harness
+            .canopy
+            .with_root_context(|context| {
+                let root = context.root_id();
+                context.add_child(root, Shower::new(&store))
             })
-            .expect("the close polls the shower");
+            .unwrap();
+        harness.canopy.turn(TurnInput::Wake).unwrap();
+        let polls = harness.with_widget(late, |shower: &mut Shower| shower.polls);
+        harness.key(KeyCode::Esc).unwrap();
+        // The store wakes the late follower as the panel's poll notes the
+        // close, so it polls in that turn or the next.
+        harness.canopy.turn(TurnInput::Wake).unwrap();
+        assert!(harness.with_widget(late, |shower: &mut Shower| shower.polls) > polls);
     }
 }

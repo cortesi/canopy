@@ -44,7 +44,7 @@ MCP and smoke-test helpers for canopy applications.
 - Publish: crates.io
 - Workspace dependencies: canopy
 - Workspace dependents: canopy-term, canopyctl, gyms, hello, todo
-- Items: 60
+- Items: 58
 - Exposes: canopy, ruau-script-api, schemars, serde_core, serde_json, tmcp
 
 ## canopy-mosaic

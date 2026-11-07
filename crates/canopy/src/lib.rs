@@ -30,7 +30,7 @@ mod core;
 // `canopy::geom` is the app-facing path to the geometry crate.
 pub use canopy_geom as geom;
 pub mod layout;
-pub mod widget;
+pub(crate) mod widget;
 
 pub(crate) use core::backend;
 #[cfg(any(test, feature = "testing"))]
@@ -110,5 +110,5 @@ pub mod terminal {
 
 // Re-export derive macros
 pub use canopy_derive::{CommandArg, CommandEnum, command, derive_commands};
-// Re-export widget trait and event outcome
-pub use widget::{EventOutcome, Widget};
+// Re-export the widget trait, its event outcome, and its mount
+pub use widget::{EventOutcome, Mount, Widget};

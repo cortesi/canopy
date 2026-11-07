@@ -1,7 +1,7 @@
 //! A one-row search field, with what the search found beside it.
 
 use canopy::{
-    Context, ContextExt, NodeName, TypedId, ViewContext, ViewContextExt, Widget,
+    Context, ContextExt, Mount, NodeName, TypedId, ViewContext, ViewContextExt, Widget,
     commands::CommandCall,
     error::Result,
     geom::{Line, Size},
@@ -9,7 +9,6 @@ use canopy::{
     render::Render,
     style::WidgetState,
     text,
-    widget::Mount,
 };
 
 use crate::input::{Input, ValueExposure};

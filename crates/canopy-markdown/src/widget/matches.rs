@@ -117,15 +117,21 @@ impl Matches {
     }
 
     /// Keep `place` for the next matches, while they wait. Return the place
-    /// to restore now, among Rendered matches that have published already.
-    /// Source keeps no place, and an error has no matches.
+    /// to restore now, among Rendered matches that have published already;
+    /// with no `place`, no Rendered match stays current. Source keeps no
+    /// place, and an error has no matches.
     pub(super) fn keep(&mut self, place: Option<MatchPlace>) -> Option<MatchPlace> {
         match self {
             Self::Pending { kept } => {
                 *kept = place;
                 None
             }
-            Self::Rendered { .. } => place,
+            Self::Rendered { current, .. } => {
+                if place.is_none() {
+                    *current = None;
+                }
+                place
+            }
             Self::Source { .. } | Self::Failed(_) => None,
         }
     }

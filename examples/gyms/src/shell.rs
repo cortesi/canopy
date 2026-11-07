@@ -1,14 +1,13 @@
 //! Common viewport selector and footer for every gym.
 
 use canopy::{
-    Context, ContextExt, NodeName, Register, Setup, TypedId, Widget, derive_commands,
+    Context, ContextExt, Mount, NodeName, Register, Setup, TypedId, Widget, derive_commands,
     error::{Error, Result},
     input::{
         BindingAction, BindingOptions, BindingPhase, BindingTier, FrameworkBindingGroup,
         IntentName, ModalBindings, ModalOptions, ModalToken, NavIntent, key::Key,
     },
     layout::{Direction, Layout, LayoutOverride},
-    widget::Mount,
 };
 use canopy_widgets::{Container, Dialog, KeyHint, Root, Selector, StatusBar, Text};
 
@@ -24,6 +23,9 @@ const VIEW_LABELS: [&str; 3] = [
 ];
 
 /// A demo and its footer, constrained together by the chosen view preset.
+///
+/// The shell mounts once: its first mount takes the demo, so a later mount
+/// fails with an error that says so.
 pub struct DemoShell {
     /// The demo, until its first mount takes it, and the mounted nodes.
     mount: Mount<Option<Box<dyn Widget>>, Parts>,

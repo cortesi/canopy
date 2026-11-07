@@ -1381,6 +1381,45 @@ fn regression_escape_on_a_committed_slot_reaches_the_reader() {
 }
 
 #[test]
+fn regression_escape_on_a_committed_slot_leaves_for_the_resting_scroll() {
+    let (mut harness, manual) = editing_with(DOCUMENT, EditMode::Vi, 40, 20, |options| {
+        options.resting_mode = Mode::Scroll;
+    });
+    settle(&mut harness, &manual);
+    reader(&mut harness, |reader, ctx| {
+        reader.set_mode(ctx, Mode::Interact)
+    });
+    commit_held(&mut harness);
+    // The view rests in scrolling, so Esc leaves the block cursor.
+    assert!(reader(&mut harness, |reader, ctx| reader.escape(ctx)));
+    let mode =
+        |harness: &mut Harness| reader(harness, |reader, _| Ok(reader.shared.borrow().mode()));
+    assert_eq!(mode(&mut harness), Mode::Scroll);
+    // The commit's layout shows after the Esc, and keeps the mode it left.
+    settle(&mut harness, &manual);
+    assert_eq!(mode(&mut harness), Mode::Scroll);
+}
+
+#[test]
+fn escape_on_a_committed_slot_clears_a_selection() {
+    let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
+    settle(&mut harness, &manual);
+    commit_held(&mut harness);
+    reader(&mut harness, |reader, ctx| reader.select_text(ctx));
+    assert!(reader(&mut harness, |reader, _| Ok(reader
+        .shared
+        .borrow()
+        .selection()
+        .is_some())));
+    assert!(reader(&mut harness, |reader, ctx| reader.escape(ctx)));
+    assert!(reader(&mut harness, |reader, _| Ok(reader
+        .shared
+        .borrow()
+        .selection()
+        .is_none())));
+}
+
+#[test]
 fn repeated_direct_edits_while_a_layout_waits_land_in_order() {
     let (mut harness, manual) = editing(DOCUMENT, EditMode::Vi, 40, 20);
     settle(&mut harness, &manual);

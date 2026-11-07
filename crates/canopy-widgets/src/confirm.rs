@@ -3,8 +3,8 @@
 use std::time::Duration;
 
 use canopy::{
-    Context, ContextExt, NodeId, NodeName, Register, Setup, TypedId, ViewContext, ViewContextExt,
-    Widget,
+    Context, ContextExt, Mount, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
+    ViewContextExt, Widget,
     commands::{CommandCall, CommandStatus, CommandTarget},
     derive_commands,
     error::{Error, Result},
@@ -19,7 +19,6 @@ use canopy::{
     render::Render,
     text::{self, WrapOptions},
     tree::{FocusDirection, FocusScope},
-    widget::Mount,
 };
 
 use crate::{Answer, Answers, ButtonLook, Dialog, Text, answers, frame::Frame};
@@ -1342,16 +1341,20 @@ mod tests {
         Ok(())
     }
 
+    /// Return the question that a test asks while another closes.
+    fn other_request(target: CommandTarget) -> ConfirmRequest {
+        ConfirmRequest::new("Other", "/tmp/other")
+            .answer(labelled(target, "keep"))
+            .declining(labelled(target, "drop"))
+    }
+
     /// Ask another question in the callback that closes the open one, before
     /// the close commits, so the open fails. Return the error of the open.
     fn ask_while_closing(harness: &mut Harness) -> Result<Error> {
         harness.with_root_widget_context(|host: &mut Host, ctx| {
             host.close(ctx)?;
             let owner = ctx.node_id();
-            let target = CommandTarget::Exact(owner);
-            let request = ConfirmRequest::new("Other", "/tmp/other")
-                .answer(labelled(target, "keep"))
-                .declining(labelled(target, "drop"));
+            let request = other_request(CommandTarget::Exact(owner));
             match Confirm::open(ctx, host.dialog()?, owner, request) {
                 Ok(_) => Err(Error::Invalid("the open succeeded".into())),
                 Err(error) => Ok(error),
@@ -1392,10 +1395,7 @@ mod tests {
         let propagated = harness.with_root_widget_context(|host: &mut Host, ctx| {
             host.close(ctx)?;
             let owner = ctx.node_id();
-            let target = CommandTarget::Exact(owner);
-            let request = ConfirmRequest::new("Other", "/tmp/other")
-                .answer(labelled(target, "keep"))
-                .declining(labelled(target, "drop"));
+            let request = other_request(CommandTarget::Exact(owner));
             Confirm::open(ctx, host.dialog()?, owner, request).map(|_| ())
         });
         assert!(
@@ -1547,7 +1547,7 @@ mod tests {
     }
 
     #[test]
-    fn regression_a_rolled_back_dialog_reads_unmounted_and_asks_again() -> Result<()> {
+    fn a_rolled_back_dialog_reads_unmounted_and_asks_again() -> Result<()> {
         let mut harness = host(40, 12)?;
         harness.with_root_widget_context(|host: &mut Host, ctx| {
             let dialog = ctx.create_detached(Confirm::new())?;

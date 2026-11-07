@@ -1,17 +1,16 @@
 //! The `options` command owner, which wraps the application and opens the
 //! options panel.
 
-use std::{rc::Rc, result::Result as StdResult, time::Duration};
+use std::{mem, rc::Rc, result::Result as StdResult, time::Duration};
 
 use canopy::{
-    Context, ContextExt, NodeId, NodeName, Register, Setup, TypedId, ViewContext, Widget,
+    Context, ContextExt, Mount, NodeId, NodeName, Register, Setup, TypedId, ViewContext, Widget,
     commands::ArgValue,
     derive_commands,
     error::{Error, Result},
     input::{ModalBindings, ModalOptions, ModalToken},
     layout::Layout,
     runtime::{NoticePost, PollLifetime},
-    widget::Mount,
 };
 use canopy_widgets::menu;
 
@@ -34,6 +33,9 @@ type PendingApp = Box<dyn FnOnce(&mut dyn Context, NodeId) -> Result<NodeId>>;
 /// The widget wraps the application, so that a binding anywhere in the
 /// application finds the `options` commands. It also owns the options panel,
 /// which it opens as a modal over the application.
+///
+/// The widget mounts once: its first mount takes the application, so a
+/// later mount, also after a failed one, fails with an error that says so.
 pub struct Options {
     /// The store.
     backend: Rc<dyn Backend>,
@@ -83,14 +85,16 @@ impl Options {
 
     /// Note the end of the panel's modal, for any reason: a close, or
     /// retirement with another modal that it opened over. The panel then
-    /// reads closed, and the store hears of it once.
-    fn reconcile(&mut self, context: &dyn ViewContext) {
+    /// reads closed, and the store hears of it once, so it wakes the
+    /// followers that mounted while the panel was open.
+    fn reconcile(&mut self, context: &dyn ViewContext) -> Result<()> {
         if let PanelState::Open(token) = self.panel
             && context.modal_retired(token)
         {
             self.panel = PanelState::Closed;
-            self.backend.panel_closed();
+            self.backend.panel_closed()?;
         }
+        Ok(())
     }
 
     /// Return the leaf at `path`, or an error that names the path.
@@ -124,14 +128,15 @@ impl Options {
 
     /// Close the panel, if it is open. The panel reads closed at once, and
     /// the widget's poll notes the end of its modal once the close commits.
-    pub(crate) fn close_panel(&mut self, context: &mut dyn Context) {
-        self.reconcile(context);
+    pub(crate) fn close_panel(&mut self, context: &mut dyn Context) -> Result<()> {
+        self.reconcile(context)?;
         if let PanelState::Open(token) = self.panel
             && context.modal_is_open(token)
         {
             // A modal that closed with its owner has nothing left to close.
             context.close_modal(token).ok();
         }
+        Ok(())
     }
 
     /// Return the current value of an option.
@@ -273,7 +278,7 @@ impl Options {
         path: Option<String>,
         quick: Option<bool>,
     ) -> Result<()> {
-        self.reconcile(context);
+        self.reconcile(context)?;
         let &Parts { app, panel } = self.mount.mounted()?;
         let group = path.unwrap_or_default();
         if self.backend.schema().group(&group).is_none() {
@@ -313,9 +318,10 @@ impl Options {
         self.panel = PanelState::Open(token);
         // The poll notes the end of the modal, also when it ends with the
         // modal it opened over. The widgets that wait for the close poll in
-        // the same turn.
+        // the same turn, and the store wakes those that mount meanwhile as
+        // the poll notes the end.
         context.wake_on_modal_close(token, context.wake_handle(PollLifetime::Node)?)?;
-        for wake in self.backend.close_wakes() {
+        for wake in self.backend.panel_opened() {
             context.wake_on_modal_close(token, wake)?;
         }
         Ok(())
@@ -323,8 +329,8 @@ impl Options {
 
     /// Close the options panel.
     #[command]
-    pub fn close(&mut self, context: &mut dyn Context) {
-        self.close_panel(context);
+    pub fn close(&mut self, context: &mut dyn Context) -> Result<()> {
+        self.close_panel(context)
     }
 
     /// Return whether the options panel is open.
@@ -362,11 +368,15 @@ impl Widget for Options {
 
     fn on_unmount(&mut self, _context: &mut dyn Context) {
         self.mount.unmount();
-        self.panel = PanelState::Closed;
+        // The panel's modal retires with its owner, so the store hears the
+        // close here. Only a poisoned wake registry fails, after a panic.
+        if mem::replace(&mut self.panel, PanelState::Closed) != PanelState::Closed {
+            self.backend.panel_closed().ok();
+        }
     }
 
     fn poll(&mut self, context: &mut dyn Context) -> Result<Option<Duration>> {
-        self.reconcile(context);
+        self.reconcile(context)?;
         for warning in self.backend.take_warnings() {
             context.notify(NoticePost::warning(warning))?;
         }
@@ -621,7 +631,7 @@ mod tests {
         pub fn close_options_and_fail(&self, context: &mut dyn Context) -> Result<()> {
             let root = context.root_id();
             context.with_widget_mut(root, |options: &mut Options, context| {
-                options.close_panel(context);
+                options.close_panel(context)?;
                 assert!(!options.is_open(context), "a closing panel reads closed");
                 Ok(())
             })?;
@@ -782,7 +792,13 @@ mod tests {
                 assert!(!options.mount.is_mounted(), "the mount is pending");
                 assert_eq!(options.panel, PanelState::Closed);
                 Ok(())
-            })
+            })?;
+            // The failed mount took the application, so the widget mounts
+            // once only.
+            let again = context.attach(root, options.into());
+            let error = again.expect_err("a second mount fails").to_string();
+            assert!(error.contains("mounted once already"), "{error}");
+            Ok(())
         });
         result.expect("the detached widget stays");
     }

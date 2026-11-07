@@ -265,27 +265,18 @@ impl From<std::io::Error> for Error {}
 
 impl From<tmcp::Error> for Error {}
 
-/// How a script evaluation ended.
-#[derive(Clone, Debug, PartialEq)]
-pub enum EvalOutcomeKind {
-    /// The script completed, with its JSON-serializable return value, if it
-    /// reported one.
-    Completed(Option<Value>),
-    /// The script failed, timed out, or was cancelled.
-    Failed(ScriptErrorInfo),
-}
-
 /// Structured response for the `script_eval` tool and smoke runner.
 ///
 /// The JSON form states the outcome as `success`, `state`, `value`, and
-/// `error`, which serde maps to and from [`EvalOutcomeKind`]. A report whose
+/// `error`, which serde maps to and from [`Self::outcome`]. A report whose
 /// fields disagree does not parse.
 #[derive(Clone, Debug, Deserialize<'de>, PartialEq, Serialize)]
 pub struct EvalReport {
     /// Execution identity and domain reset behavior for this request.
     pub metadata: ExecutionMetadata,
-    /// How the evaluation ended.
-    pub outcome: EvalOutcomeKind,
+    /// How the evaluation ended: the script's return value, or the error of
+    /// a failure, a timeout, or a cancellation.
+    pub outcome: Result<Value, ScriptErrorInfo>,
     /// Log lines emitted during evaluation.
     pub logs: Vec<String>,
     /// Assertion outcomes recorded during evaluation.
@@ -305,10 +296,6 @@ impl EvalReport {
     /// Return the error, if the evaluation failed.
     pub fn error(&self) -> Option<&ScriptErrorInfo>;
 
-    /// Take the script's return value, or a JSON null when it completed
-    /// without one or failed.
-    pub fn into_value(self) -> Value;
-
     /// Return the final task state, which a failure derives from its error
     /// type.
     pub fn state(&self) -> ScriptTaskState;
@@ -316,7 +303,7 @@ impl EvalReport {
     /// Return whether the script completed successfully.
     pub fn success(&self) -> bool;
 
-    /// Return the script's return value, if it completed with one.
+    /// Return the script's return value, if it completed.
     pub fn value(&self) -> Option<&Value>;
 }
 

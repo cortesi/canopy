@@ -122,8 +122,14 @@ impl Canopy {
                 }
             }
 
-            let polled = self.core.nodes.get(id).is_some_and(Node::is_polled);
-            if !polled {
+            // Only a mounted node starts polling; a node the mount left
+            // unmounted waits for its next mount.
+            let unpolled = self
+                .core
+                .nodes
+                .get(id)
+                .is_some_and(|node| node.is_mounted() && !node.is_polled());
+            if unpolled {
                 layout_dirty = true;
                 self.poll_node(id)?;
                 if let Some(node) = self.core.nodes.get_mut(id) {

@@ -1,12 +1,12 @@
 //! The options panel: a modal dialog built from the schema, which shows each
 //! value with a control for its kind.
 
-use std::{path::Path, rc::Rc, result::Result as StdResult};
+use std::{rc::Rc, result::Result as StdResult};
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, Setup, TypedId, ViewContext, Widget,
+    Context, ContextExt, EventOutcome, Mount, NodeId, NodeName, Setup, TypedId, ViewContext,
+    Widget,
     error::Result,
-    format::Home,
     geom::{Line, Rect, Size},
     input::{
         BindingAction, BindingOptions, BindingTier, Event, FrameworkBindingGroup, IntentName,
@@ -17,7 +17,6 @@ use canopy::{
     render::Render,
     runtime::NoticePost,
     text,
-    widget::Mount,
 };
 use canopy_widgets::{
     Dialog, Frame,
@@ -25,9 +24,9 @@ use canopy_widgets::{
 };
 
 use crate::{
-    file::Scope,
+    file::{Scope, display_path},
     model::{Item, Kind, Leaf, Value, assign_keys, join_path, panel_items},
-    store::{Backend, Cleared, Saved, Source, StoreError},
+    store::{Backend, Cleared, Saved, Source, StoreError, cleared_notice, saved_notice},
     widget::{Options, display_value, source_mark, step_value},
 };
 
@@ -995,8 +994,7 @@ impl PanelBody {
             return Ok(());
         };
         context.with_widget_mut(host, |options: &mut Options, context| {
-            options.close_panel(context);
-            Ok(())
+            options.close_panel(context)
         })
     }
 
@@ -1289,16 +1287,11 @@ impl PanelBody {
             Intent::Clear => {
                 if let Some(path) = self.selected_leaf() {
                     // A deferred clear posts its own notice when it runs.
-                    match self.backend.clear(context, &path)? {
-                        Ok(Cleared::Deferred) => {}
-                        result => report(context, result, |cleared| match cleared {
-                            Cleared::Done(Some(file)) => {
-                                format!("Cleared from {}", display_path(&file))
-                            }
-                            Cleared::Done(None) | Cleared::Deferred => {
-                                "No option file sets this option".into()
-                            }
-                        })?,
+                    let result = self.backend.clear(context, &path)?;
+                    if let Some(result) = result.map(Cleared::done).transpose() {
+                        report(context, result, |file| {
+                            cleared_notice(&path, file.as_deref())
+                        })?;
                     }
                 }
             }
@@ -1397,11 +1390,8 @@ impl PanelBody {
         let result = self.backend.save(context, scope)?;
         let saved = result.is_ok();
         // A deferred save posts its own notice when it runs.
-        if result != Ok(Saved::Deferred) {
-            report(context, result, |saved| match saved {
-                Saved::Written(file) => format!("Saved to {}", display_path(&file)),
-                Saved::Deferred => String::new(),
-            })?;
+        if let Some(result) = result.map(Saved::written).transpose() {
+            report(context, result, |file| saved_notice(&file))?;
         }
         if saved {
             self.changed(context)?;
@@ -1490,11 +1480,6 @@ fn control(leaf: &Leaf, value: &Value) -> (String, bool) {
         }
         _ => (value.to_string(), false),
     }
-}
-
-/// Return `path` for display, with the home directory as `~`.
-pub fn display_path(path: &Path) -> String {
-    Home::from_env().path(path)
 }
 
 impl Widget for PanelBody {

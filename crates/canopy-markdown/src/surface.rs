@@ -240,6 +240,14 @@ impl Pending {
         };
     }
 
+    /// The view takes `mode` while a mark waits, so the mark brings the view
+    /// to `mode` when it shows rather than to the mode it was asked with.
+    fn set_mode(&mut self, mode: Mode) {
+        if let Self::Mark(mark) | Self::Edit(mark) = self {
+            mark.mode = mode;
+        }
+    }
+
     /// A presentation of `epoch` shows, of the shown epoch when
     /// `same_epoch`. Return the mark that waited for it. A new epoch ends
     /// the wait of an edit, whose mark waits on for its own epoch.
@@ -354,11 +362,12 @@ impl SurfaceState {
         self.pending = Pending::Edit(mark);
     }
 
-    /// The edit's text failed to lay out: nothing waits for it, and moves
-    /// work on the shown layout again.
+    /// The edit's text failed to lay out: moves work on the shown layout
+    /// again, and the edit's mark waits on, so the layout that a retry
+    /// shows marks the edited unit.
     pub fn edit_failed(&mut self) {
-        if self.pending.awaiting() {
-            self.pending = Pending::None;
+        if let Pending::Edit(mark) = self.pending {
+            self.pending = Pending::Mark(mark);
         }
     }
 
@@ -386,6 +395,7 @@ impl SurfaceState {
             self.interaction = Interaction::Block {
                 focus: Focus::on(search_object),
             };
+            self.pending.set_mode(Mode::Interact);
         }
     }
 
@@ -399,7 +409,19 @@ impl SurfaceState {
             return false;
         }
         self.interaction = Interaction::resting(Mode::Scroll);
+        self.pending.set_mode(Mode::Scroll);
         self.press.take().is_some()
+    }
+
+    /// Put the block cursor on object `id`, entering it from scrolling, and
+    /// drop any selection.
+    fn focus_object(&mut self, id: u64) {
+        if !matches!(self.interaction, Interaction::Block { .. }) {
+            self.pending.set_mode(Mode::Interact);
+        }
+        self.interaction = Interaction::Block {
+            focus: Focus::Object(id),
+        };
     }
 
     /// Replace the current object, keeping any selection.
@@ -439,14 +461,16 @@ impl SurfaceState {
     }
 
     /// Take mode `mode` once a pending mark shows, through the checks of
-    /// `set_mode`: the block cursor only if `may_enter`.
-    fn take_mode(&mut self, mode: Mode, may_enter: bool) {
+    /// `set_mode`: the block cursor only if `may_enter`. Return whether a
+    /// press ended, so the caller releases its capture.
+    fn take_mode(&mut self, mode: Mode, may_enter: bool) -> bool {
         match mode {
-            Mode::Interact if may_enter => self.enter(),
-            Mode::Interact => {}
-            Mode::Scroll => {
-                self.leave();
+            Mode::Interact if may_enter => {
+                self.enter();
+                false
             }
+            Mode::Interact => false,
+            Mode::Scroll => self.leave(),
         }
     }
 
@@ -715,7 +739,9 @@ impl RenderedSurface {
         // presentation showed. An edit keeps its unit on its screen row.
         if let Some(pending) = state.pending.shown(epoch, same_epoch) {
             state.marked = Some(pending.byte);
-            state.take_mode(pending.mode, may_enter);
+            if state.take_mode(pending.mode, may_enter) && ctx.has_mouse_capture() {
+                ctx.release_mouse()?;
+            }
             let rows = state
                 .cursor_map()
                 .and_then(|(units, rows)| rows.get(unit_at(&units, pending.byte)?).cloned());
@@ -1317,9 +1343,7 @@ impl RenderedSurface {
             state.preferred_column = None;
             if let Some(object) = hit.object {
                 let activate = state.mode() == Mode::Interact && state.object() == Some(object);
-                state.interaction = Interaction::Block {
-                    focus: Focus::Object(object),
-                };
+                state.focus_object(object);
                 if let Some(unit) = state.unit_of_reading(position.unit_id) {
                     state.mark(unit, true);
                 }
@@ -1735,10 +1759,11 @@ mod tests {
             pending.ask(mark(1, 5));
             assert_eq!(pending, next, "{state:?}");
         }
-        // A failed layout ends an edit's wait, and only an edit's.
+        // A failed layout ends an edit's wait, and only an edit's; its mark
+        // waits on.
         let mut state = SurfaceState::default();
         for (before, after) in [
-            (Pending::Edit(mark(1, 3)), Pending::None),
+            (Pending::Edit(mark(1, 3)), Pending::Mark(mark(1, 3))),
             (Pending::Mark(mark(1, 3)), Pending::Mark(mark(1, 3))),
         ] {
             state.pending = before;

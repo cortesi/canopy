@@ -266,7 +266,8 @@ impl DiffView {
 
     /// Show a message in place of any diff, such as before one is chosen.
     ///
-    /// The view drops its model, as [`Self::set_message`] does.
+    /// The view drops its model, as [`Self::set_message`] does, but unlike
+    /// it keeps the highlighters installed so far.
     #[must_use]
     pub fn with_message(mut self, message: impl Into<String>) -> Self {
         self.show(Content::Message(message.into()));
@@ -590,8 +591,8 @@ impl DiffView {
         self
     }
 
-    /// Set the amount of unchanged text the rows show. A view that shows
-    /// a message has no model to change.
+    /// Set the amount of unchanged text the rows show. On a view that shows
+    /// a message, which has no model, this does nothing.
     #[must_use]
     pub fn with_scope(mut self, scope: Scope) -> Self {
         if let Content::Diff(model) = &mut self.content {
@@ -601,8 +602,8 @@ impl DiffView {
         self
     }
 
-    /// Set the tab stop width in columns. A view that shows a message has no
-    /// model to change.
+    /// Set the tab stop width in columns. On a view that shows a message,
+    /// which has no model, this does nothing.
     #[must_use]
     pub fn with_tab_stop(mut self, tab_stop: usize) -> Self {
         if let Content::Diff(model) = &mut self.content {

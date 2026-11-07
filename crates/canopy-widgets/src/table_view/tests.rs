@@ -627,8 +627,10 @@ fn scrollbar_escape_releases_capture_without_moving_cursor() -> Result<()> {
         assert_eq!(v.cursor_index(), Some((0, 0)));
         Ok(())
     })?;
-    h.key(KeyCode::Esc)?;
+    // The key runs in the closure, so no render can idle the scrollbar
+    // before the checks.
     with(&mut h, |v, c| {
+        v.on_event(&Event::Key(KeyCode::Esc.into()), c)?;
         assert!(!c.has_mouse_capture());
         assert_eq!(v.gesture, Gesture::Idle);
         assert!(
@@ -679,8 +681,8 @@ fn a_press_on_a_full_track_starts_no_scrollbar_gesture() -> Result<()> {
         );
         Ok(())
     })?;
-    h.mouse(mouse(mouse::Action::Down, 14, 1))?;
     with(&mut h, |v, c| {
+        v.on_event(&Event::Mouse(mouse(mouse::Action::Down, 14, 1)), c)?;
         assert!(!c.has_mouse_capture());
         assert!(!v.vertical.is_dragging());
         assert_eq!(v.gesture, Gesture::Idle);
@@ -693,8 +695,8 @@ fn a_track_press_during_a_cell_drag_keeps_the_cell_gesture() -> Result<()> {
     let mut h = harness(50, 15, 6)?;
     h.render()?;
     h.mouse(mouse(mouse::Action::Down, 3, 1))?;
-    h.mouse(mouse(mouse::Action::Down, 14, 3))?;
     with(&mut h, |v, c| {
+        v.on_event(&Event::Mouse(mouse(mouse::Action::Down, 14, 3)), c)?;
         assert!(c.has_mouse_capture());
         assert!(!v.vertical.is_dragging());
         assert_eq!(v.gesture, Gesture::Cells);

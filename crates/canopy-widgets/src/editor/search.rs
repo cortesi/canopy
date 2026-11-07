@@ -654,6 +654,10 @@ impl Editor {
             return;
         };
         match prompt {
+            // An empty query clears the search, as `Editor::search` does.
+            PromptState::Search { query, .. } if query.is_empty() => {
+                self.search = SearchState::new();
+            }
             PromptState::Search { direction, query } => {
                 self.search.set_query(&self.buffer, query, direction);
                 self.jump_to_match(ctx, false);

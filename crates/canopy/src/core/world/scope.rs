@@ -11,7 +11,6 @@
 
 use std::{
     mem,
-    num::NonZeroU32,
     ops::{Deref, DerefMut},
     result::Result as StdResult,
 };
@@ -37,16 +36,21 @@ pub(crate) trait CoreOwner {
         Scope::new(self, Exit::Callback)
     }
 
-    /// Open a dispatch boundary. [`Scope::finish`] closes it and drains the
-    /// batch; a scope that ends without it discards the work it queued.
-    fn enter_dispatch(&mut self) -> Scope<'_, Self>
+    /// Open a dispatch boundary. [`DispatchScope::finish`] closes it and
+    /// drains the batch; a scope that ends without it discards the work it
+    /// queued.
+    fn enter_dispatch(&mut self) -> DispatchScope<'_, Self>
     where
         Self: Sized,
     {
         let core = self.core_mut();
         core.completion.depth += 1;
         let checkpoint = core.completion.requests.len();
-        Scope::new(self, Exit::Dispatch(checkpoint))
+        DispatchScope {
+            owner: self,
+            checkpoint,
+            closed: false,
+        }
     }
 
     /// Note that a handler of kind `source` runs until the scope ends. A call
@@ -92,15 +96,21 @@ impl<T: CoreOwner> CoreOwner for Scope<'_, T> {
     }
 }
 
+impl<T: CoreOwner> CoreOwner for DispatchScope<'_, T> {
+    fn core_mut(&mut self) -> &mut Core {
+        self.owner.core_mut()
+    }
+}
+
 /// The lifecycle cleanup that runs, which limits the work it may start.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) enum Cleanup {
     /// No cleanup runs.
     #[default]
     None,
-    /// Removal and unmount hooks run, nested this deep. They may edit the
-    /// tree, but not queue work.
-    Hooks(NonZeroU32),
+    /// Removal and unmount hooks run. They may edit the tree, but not queue
+    /// work.
+    Hooks,
     /// A failed tree edit rolls back. Its unmount hooks may neither edit the
     /// tree nor queue work.
     Rollback,
@@ -119,8 +129,8 @@ impl Cleanup {
     /// Return whether cleanup in this state admits `op`.
     pub(super) fn admits(self, op: CleanupOp) -> Result<()> {
         match (self, op) {
-            (Self::None, _) | (Self::Hooks(_), CleanupOp::TreeEdit(_)) => Ok(()),
-            (Self::Hooks(_) | Self::Rollback, CleanupOp::Queue(label)) => Err(Error::Invalid(
+            (Self::None, _) | (Self::Hooks, CleanupOp::TreeEdit(_)) => Ok(()),
+            (Self::Hooks | Self::Rollback, CleanupOp::Queue(label)) => Err(Error::Invalid(
                 format!("cannot queue {label} during lifecycle cleanup"),
             )),
             (Self::Rollback, CleanupOp::TreeEdit(operation)) => {
@@ -129,12 +139,11 @@ impl Cleanup {
         }
     }
 
-    /// Return the state inside one more level of hooks. A rollback stays a
-    /// rollback, which admits less.
+    /// Return the state inside hooks. A rollback stays a rollback, which
+    /// admits less.
     fn with_hooks(self) -> Self {
         match self {
-            Self::None => Self::Hooks(NonZeroU32::MIN),
-            Self::Hooks(depth) => Self::Hooks(depth.saturating_add(1)),
+            Self::None | Self::Hooks => Self::Hooks,
             Self::Rollback => Self::Rollback,
         }
     }
@@ -144,9 +153,6 @@ impl Cleanup {
 enum Exit {
     /// A mutable callback ends.
     Callback,
-    /// A dispatch boundary ends, with the batch length at its start. A
-    /// boundary that ends without [`Scope::finish`] fails.
-    Dispatch(usize),
     /// A handler kind leaves scope, with the depth to restore.
     Notice(usize),
     /// An event leaves scope, with the depth to restore.
@@ -170,7 +176,6 @@ impl Exit {
     fn restore(self, core: &mut Core) {
         match self {
             Self::Callback => core.callback_depth -= 1,
-            Self::Dispatch(checkpoint) => core.close_dispatch(checkpoint, false),
             Self::Notice(depth) => core.completion.notice_sources.truncate(depth),
             Self::Event(depth) => core.event_scope.truncate(depth),
             Self::Events(outer) => core.event_scope = outer,
@@ -213,26 +218,6 @@ impl<'a, T: CoreOwner> Scope<'a, T> {
             exit: Some(exit),
         }
     }
-
-    /// Close a dispatch boundary: a failure discards the work it queued, and
-    /// the success of the outermost boundary drains the batch.
-    pub(crate) fn finish(self, success: bool) -> Result<()> {
-        self.finish_drain(success).map_err(|error| error.source)
-    }
-
-    /// Close a dispatch boundary as [`Self::finish`] does, and report which
-    /// posted call stopped the drain.
-    pub(crate) fn finish_drain(mut self, success: bool) -> StdResult<(), DrainError> {
-        let Some(Exit::Dispatch(checkpoint)) = self.exit.take() else {
-            unreachable!("only a dispatch scope finishes");
-        };
-        let core = self.owner.core_mut();
-        core.close_dispatch(checkpoint, success);
-        if success && core.completion_ready() {
-            core.drain_completion()?;
-        }
-        Ok(())
-    }
 }
 
 impl<T: CoreOwner> Deref for Scope<'_, T> {
@@ -253,6 +238,62 @@ impl<T: CoreOwner> Drop for Scope<'_, T> {
     fn drop(&mut self) {
         if let Some(exit) = self.exit.take() {
             exit.restore(self.owner.core_mut());
+        }
+    }
+}
+
+/// An open dispatch boundary, which dereferences to its owner as a [`Scope`]
+/// does.
+///
+/// [`Self::finish`] closes the boundary. A boundary that ends without it, by
+/// return or by unwind, fails, and discards the work it queued.
+pub(crate) struct DispatchScope<'a, T: CoreOwner> {
+    /// Owner whose dispatch boundary the scope holds open.
+    owner: &'a mut T,
+    /// The batch length at the boundary's start.
+    checkpoint: usize,
+    /// Whether [`Self::finish_drain`] closed the boundary.
+    closed: bool,
+}
+
+impl<T: CoreOwner> DispatchScope<'_, T> {
+    /// Close the boundary: a failure discards the work it queued, and the
+    /// success of the outermost boundary drains the batch.
+    pub(crate) fn finish(self, success: bool) -> Result<()> {
+        self.finish_drain(success).map_err(|error| error.source)
+    }
+
+    /// Close the boundary as [`Self::finish`] does, and report which posted
+    /// call stopped the drain.
+    pub(crate) fn finish_drain(mut self, success: bool) -> StdResult<(), DrainError> {
+        self.closed = true;
+        let core = self.owner.core_mut();
+        core.close_dispatch(self.checkpoint, success);
+        if success && core.completion_ready() {
+            core.drain_completion()?;
+        }
+        Ok(())
+    }
+}
+
+impl<T: CoreOwner> Deref for DispatchScope<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        self.owner
+    }
+}
+
+impl<T: CoreOwner> DerefMut for DispatchScope<'_, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        self.owner
+    }
+}
+
+impl<T: CoreOwner> Drop for DispatchScope<'_, T> {
+    fn drop(&mut self) {
+        if !self.closed {
+            self.owner.core_mut().close_dispatch(self.checkpoint, false);
         }
     }
 }
@@ -334,10 +375,7 @@ mod tests {
                 operation: "attach"
             })
         ));
-        assert_eq!(
-            hooks.with_hooks(),
-            Cleanup::Hooks(NonZeroU32::new(2).unwrap())
-        );
+        assert_eq!(hooks.with_hooks(), Cleanup::Hooks);
         assert_eq!(Cleanup::Rollback.with_hooks(), Cleanup::Rollback);
     }
 

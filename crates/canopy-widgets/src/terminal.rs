@@ -201,13 +201,9 @@ enum Life {
     Unmounted,
     /// The process runs and takes the terminal's input.
     Running(Session),
-    /// The process exited. The session keeps its scrollback and selection.
-    Exited {
-        /// The session of the exited process.
-        session: Session,
-        /// Whether the terminal reported the exit.
-        reported: bool,
-    },
+    /// The process exited, and the terminal reported it. The session keeps
+    /// its scrollback and selection.
+    Exited(Session),
 }
 
 impl Life {
@@ -215,7 +211,7 @@ impl Life {
     fn session(&self) -> Option<&Session> {
         match self {
             Self::Unmounted => None,
-            Self::Running(session) | Self::Exited { session, .. } => Some(session),
+            Self::Running(session) | Self::Exited(session) => Some(session),
         }
     }
 
@@ -223,7 +219,7 @@ impl Life {
     fn session_mut(&mut self) -> Option<&mut Session> {
         match self {
             Self::Unmounted => None,
-            Self::Running(session) | Self::Exited { session, .. } => Some(session),
+            Self::Running(session) | Self::Exited(session) => Some(session),
         }
     }
 
@@ -236,26 +232,18 @@ impl Life {
         }
     }
 
-    /// Move a running session whose process has exited to `Exited`.
-    fn settle(&mut self) {
-        *self = match mem::replace(self, Self::Unmounted) {
-            Self::Running(session) if session.child_exited() => Self::Exited {
-                session,
-                reported: false,
-            },
-            life => life,
-        };
-    }
-
-    /// Mark the exit reported, and return whether this call reported it.
+    /// Move a running session whose process has exited to `Exited`, and
+    /// return whether this call reported the exit.
     fn report_exit(&mut self) -> bool {
-        self.settle();
-        match self {
-            Self::Exited { reported, .. } if !*reported => {
-                *reported = true;
+        match mem::replace(self, Self::Unmounted) {
+            Self::Running(session) if session.child_exited() => {
+                *self = Self::Exited(session);
                 true
             }
-            _ => false,
+            life => {
+                *self = life;
+                false
+            }
         }
     }
 }
@@ -793,7 +781,7 @@ impl Widget for Terminal {
         if let Some(call) = self.observe_exit() {
             ctx.post(&call.with_arg("node", ctx.node_id()))?;
         }
-        if matches!(self.life, Life::Exited { .. }) {
+        if matches!(self.life, Life::Exited(_)) {
             self.wake.update(|wake| wake.armed = true);
         }
         // An exited terminal's last output wakes it rather than a timer, and
@@ -1662,7 +1650,7 @@ mod tests {
 
         let mut terminal = Terminal::new(TerminalConfig::new().with_program(["sh", "-c", script]));
         terminal.mount_session()?;
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + Duration::from_secs(5);
         while !(terminal.exited() && ready(&terminal)) {
             assert!(Instant::now() < deadline, "the process should exit");
             thread::sleep(Duration::from_millis(10));
@@ -1810,10 +1798,7 @@ mod tests {
         // has parsed the process's last output.
         harness.with_widget(node, |terminal: &mut Terminal| {
             terminal.life = match mem::replace(&mut terminal.life, Life::Unmounted) {
-                Life::Running(session) => Life::Exited {
-                    session,
-                    reported: true,
-                },
+                Life::Running(session) => Life::Exited(session),
                 life => life,
             };
         });

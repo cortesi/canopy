@@ -352,29 +352,20 @@ impl Editor {
 
     /// Replace the editor configuration.
     ///
-    /// An open prompt closes. A change of edit mode ends the entry of the
-    /// old mode: text mode commits its typing, and a vi editor leaves for
-    /// normal mode.
+    /// A change of edit mode ends the entry of the old mode: an open prompt
+    /// closes, text mode commits its typing, and a vi editor leaves for
+    /// normal mode. A configuration that keeps the mode keeps the prompt.
     pub fn set_config(&mut self, config: EditorConfig) {
-        self.close_prompt();
         if config.mode != self.config.mode {
+            self.close_prompt();
             match self.config.mode {
                 EditMode::Text => self.buffer.commit_transaction(),
-                EditMode::Vi => self.leave_vi(),
+                EditMode::Vi => self.set_vi_mode(ViMode::Normal),
             }
         }
         self.prepared_width = None;
         self.config = config;
         self.update_preferred_column();
-    }
-
-    /// Leave any vi mode for normal mode, as a switch to text mode does.
-    fn leave_vi(&mut self) {
-        if self.visual_mode().is_some() {
-            self.exit_visual();
-        } else {
-            self.transition(Target::Normal);
-        }
     }
 
     /// Return the buffer contents.
@@ -424,7 +415,8 @@ impl Editor {
     ///
     /// With `preserve`, selection and interaction state survive. The caller
     /// must preserve the selected prefix or remap the selection afterwards.
-    /// Undo history belongs to the replaced buffer and is discarded.
+    /// Undo history belongs to the replaced buffer and is discarded. An open
+    /// prompt closes either way.
     pub fn publish_view(&mut self, prepared: PreparedEditorView, preserve: bool) {
         self.close_prompt();
         self.end_entry();
@@ -473,6 +465,9 @@ impl Editor {
     /// character selection then holds the characters of the range, or the
     /// character at an empty range. A line selection holds the lines of the
     /// range, and its ends keep their columns.
+    ///
+    /// The typing before the call commits as one undo step, and a vi insert
+    /// repeats only the typing after it.
     pub fn set_selection(&mut self, selection: Selection) {
         self.end_entry();
         match self.visual_mode() {
@@ -542,7 +537,6 @@ impl Editor {
         }
         // The clear stands alone in the history, and the typing after it
         // starts a new step.
-        self.buffer.commit_transaction();
         self.end_entry();
         let last = self.buffer.line_count().saturating_sub(1);
         let end = TextPosition::new(last, self.buffer.line_char_len(last));
@@ -592,31 +586,30 @@ impl Editor {
         true
     }
 
-    /// Undo the last edit unless the editor is read-only. An open undo
-    /// group commits first, so its edits are the ones that go, and an
-    /// insert session stays open with a new group from its next key.
+    /// Undo the last edit unless the editor is read-only, and return
+    /// whether an edit went. An open undo group commits first, so its edits
+    /// are the ones that go, and an insert session stays open with a new
+    /// group from its next key.
     pub(super) fn undo_edit(&mut self) -> bool {
-        let Some(buffer) = self.editable() else {
-            return false;
-        };
-        buffer.undo();
-        self.history_moved();
-        true
+        let undone = self.editable().is_some_and(TextBuffer::undo);
+        if undone {
+            self.history_moved();
+        }
+        undone
     }
 
     /// Redo the last undone edit unless the editor is read-only, as
     /// [`Self::undo_edit`] undoes.
     pub(super) fn redo_edit(&mut self) -> bool {
-        let Some(buffer) = self.editable() else {
-            return false;
-        };
-        buffer.redo();
-        self.history_moved();
-        true
+        let redone = self.editable().is_some_and(TextBuffer::redo);
+        if redone {
+            self.history_moved();
+        }
+        redone
     }
 
-    /// Follow an undo or a redo: an open prompt closes, and an insert
-    /// session repeats only the typing after it.
+    /// Follow an undo or a redo that moved the history: an open prompt
+    /// closes, and an insert session repeats only the typing after it.
     fn history_moved(&mut self) {
         self.close_prompt();
         self.vi.restart_segment();
@@ -629,12 +622,12 @@ impl Editor {
     }
 
     /// End the text entry at a relocation of the cursor or a change of the
-    /// text from outside: text mode commits its typing, and a vi insert
-    /// session repeats only the typing after it.
+    /// text from outside: the typing before it commits as one undo step, as
+    /// in Vim, and a vi insert session repeats only the typing after it.
     pub(super) fn end_entry(&mut self) {
-        match self.config.mode {
-            EditMode::Text => self.buffer.commit_transaction(),
-            EditMode::Vi => self.vi.end_segment(),
+        self.buffer.commit_transaction();
+        if self.config.mode == EditMode::Vi {
+            self.vi.end_segment();
         }
     }
 
@@ -1241,7 +1234,8 @@ impl Editor {
         Ok(())
     }
 
-    /// Move the cursor.
+    /// Move the cursor. The typing before the move commits as one undo
+    /// step, and a vi insert repeats only the typing after it.
     /// @param dir The direction to move the cursor.
     #[command]
     pub fn move_cursor(&mut self, ctx: &mut dyn Context, dir: FocusDirection) {
@@ -1302,7 +1296,6 @@ impl Editor {
             return;
         }
         self.close_prompt();
-        self.buffer.commit_transaction();
         self.end_entry();
         self.replace_range(range, &text);
         self.update_preferred_column();
@@ -1328,7 +1321,9 @@ impl Editor {
     }
 
     /// Move the cursor to `position`, and scroll it into view. A position
-    /// past the end of its line or of the text clamps to that end.
+    /// past the end of its line or of the text clamps to that end. The
+    /// typing before the move commits as one undo step, and a vi insert
+    /// repeats only the typing after it.
     pub fn set_cursor(&mut self, ctx: &mut dyn Context, position: TextPosition) {
         self.end_entry();
         self.buffer.set_cursor(position);
@@ -1364,7 +1359,8 @@ impl Editor {
         }
     }
 
-    /// Undo the last edit. Visual mode ends first.
+    /// Undo the last edit. Visual mode ends first. An undo that reverts an
+    /// edit closes an open prompt, and insert mode stays.
     #[command]
     pub fn undo(&mut self, _ctx: &mut dyn Context) {
         if self.visual_mode().is_some() {
@@ -1374,7 +1370,7 @@ impl Editor {
         self.update_preferred_column();
     }
 
-    /// Redo the last undone edit. Visual mode ends first.
+    /// Redo the last undone edit, as [`Self::undo`] undoes.
     #[command]
     pub fn redo(&mut self, _ctx: &mut dyn Context) {
         if self.visual_mode().is_some() {

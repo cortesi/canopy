@@ -31,6 +31,8 @@ use crate::{
 struct DefaultBindingsScript {
     /// Source text evaluated for this owner.
     source: String,
+    /// The compiled script, once `finalize_api()` has run.
+    compiled: Option<script::ScriptId>,
 }
 
 /// Registered app startup script metadata.
@@ -39,6 +41,8 @@ pub(super) struct StartupScript {
     name: String,
     /// Source text evaluated during startup.
     source: String,
+    /// The compiled script, once `finalize_api()` has run.
+    compiled: Option<script::ScriptId>,
 }
 
 /// What `finalize_api()` produced.
@@ -47,10 +51,6 @@ struct Finalized {
     api_text: String,
     /// Persistent Luau module source, if roots are configured.
     module_source: Option<Arc<script::ScriptModuleSource>>,
-    /// Compiled startup scripts, in registration order.
-    startup_ids: Vec<script::ScriptId>,
-    /// Compiled default binding scripts, by owner.
-    default_binding_ids: HashMap<String, script::ScriptId>,
 }
 
 /// Whether automatic startup has run.
@@ -143,6 +143,7 @@ impl ScriptState {
             owner.to_string(),
             DefaultBindingsScript {
                 source: script.to_string(),
+                compiled: None,
             },
         );
         Ok(())
@@ -170,6 +171,7 @@ impl ScriptState {
         self.startup_scripts.push(StartupScript {
             name: name.to_string(),
             source: source.to_string(),
+            compiled: None,
         });
         Ok(())
     }
@@ -334,14 +336,18 @@ impl Canopy {
     pub(super) fn run_startup_scripts(&mut self) -> Result<()> {
         self.driver.startup = Startup::Ran;
         let host = self.script.host.clone();
-        let finalized = self.script.finalized.as_ref().ok_or_else(not_finalized)?;
+        if self.script.finalized.is_none() {
+            return Err(not_finalized());
+        }
         let startup_scripts = self
             .script
             .startup_scripts
             .iter()
-            .zip(&finalized.startup_ids)
-            .map(|(script, id)| (script.name.clone(), script.source.clone(), *id))
-            .collect::<Vec<_>>();
+            .map(|script| {
+                let id = script.compiled.ok_or_else(not_finalized)?;
+                Ok((script.name.clone(), script.source.clone(), id))
+            })
+            .collect::<Result<Vec<_>>>()?;
         for (name, source, script_id) in startup_scripts {
             self.run_startup_attempt(ScriptOrigin::Startup(name), &source, script_id)?;
         }
@@ -551,14 +557,12 @@ impl Canopy {
             self.core.input_map.intents(),
         )?;
         self.validate_script_module_declarations(module_source.as_ref())?;
-        let default_binding_ids = self.compile_registered_default_bindings()?;
-        let startup_ids = self.compile_registered_startup_scripts()?;
+        self.compile_registered_default_bindings()?;
+        self.compile_registered_startup_scripts()?;
         self.script.host.publish_finalize()?;
         self.script.finalized = Some(Finalized {
             api_text: definitions,
             module_source,
-            startup_ids,
-            default_binding_ids,
         });
         Ok(())
     }
@@ -580,11 +584,9 @@ impl Canopy {
         let script = self.script.default_bindings.get(owner).ok_or_else(|| {
             error::Error::NotFound(format!("default bindings not registered for owner {owner}"))
         })?;
-        let script_id = self
-            .script
-            .finalized
-            .as_ref()
-            .and_then(|finalized| finalized.default_binding_ids.get(owner).copied())
+        let script_id = script
+            .compiled
+            .filter(|_| self.script.finalized.is_some())
             .ok_or_else(|| {
                 error::Error::NotFound(format!("default bindings not compiled for owner {owner}"))
             })?;
@@ -778,31 +780,28 @@ impl Canopy {
     }
 
     /// Compile the registered default binding scripts, in owner order, and
-    /// return their ids by owner.
-    fn compile_registered_default_bindings(&self) -> Result<HashMap<String, script::ScriptId>> {
-        let host = &self.script.host;
-        let mut scripts = self.script.default_bindings.iter().collect::<Vec<_>>();
+    /// keep each id with its registration.
+    fn compile_registered_default_bindings(&mut self) -> Result<()> {
+        let host = self.script.host.clone();
+        let mut scripts = self.script.default_bindings.iter_mut().collect::<Vec<_>>();
         scripts.sort_by_key(|(owner, _)| owner.as_str());
-        scripts
-            .into_iter()
-            .map(|(owner, script)| Ok((owner.clone(), host.compile(&script.source)?)))
-            .collect()
+        for (_, script) in scripts {
+            script.compiled = Some(host.compile(&script.source)?);
+        }
+        Ok(())
     }
 
-    /// Compile the registered startup scripts, and return their ids in
-    /// registration order.
-    fn compile_registered_startup_scripts(&self) -> Result<Vec<script::ScriptId>> {
-        let host = &self.script.host;
-        self.script
-            .startup_scripts
-            .iter()
-            .map(|script| {
-                host.compile_startup_named(
-                    &script.source,
-                    format!("startup/{}", script.name).as_bytes(),
-                )
-            })
-            .collect()
+    /// Compile the registered startup scripts, in registration order, and
+    /// keep each id with its registration.
+    fn compile_registered_startup_scripts(&mut self) -> Result<()> {
+        let host = self.script.host.clone();
+        for script in &mut self.script.startup_scripts {
+            script.compiled = Some(host.compile_startup_named(
+                &script.source,
+                format!("startup/{}", script.name).as_bytes(),
+            )?);
+        }
+        Ok(())
     }
 
     /// Execute and release all queued startup hooks.

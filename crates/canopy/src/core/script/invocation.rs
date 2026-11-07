@@ -1,7 +1,5 @@
 //! Owned detached script invocations, polled only at runtime turn boundaries.
 
-#[cfg(test)]
-use std::cell::Ref;
 use std::{
     fmt, mem,
     sync::{Arc, Mutex},
@@ -9,8 +7,6 @@ use std::{
     time::Duration,
 };
 
-#[cfg(test)]
-use ruau::session::Runtime;
 use ruau::{
     session::{InvocationError, InvocationHandle},
     vm::{CallOptions, Limits, ValueSnapshot},
@@ -211,11 +207,17 @@ impl LuauHost {
         Ok(())
     }
 
-    /// Hold the runtime borrowed, so that an abort fails as it would inside a
-    /// live VM scope.
+    /// Fail the next abort before it touches the VM, as an abort inside a live
+    /// VM scope fails.
     #[cfg(test)]
-    pub(crate) fn hold_runtime_for_testing(&self) -> Ref<'_, Option<Runtime>> {
-        self.runtime.borrow()
+    pub(crate) fn fail_next_abort_for_testing(&self) {
+        self.state.borrow_mut().aborts.fail_next = true;
+    }
+
+    /// Return the count of aborts that released an invocation's VM work.
+    #[cfg(test)]
+    pub(crate) fn aborts_released_for_testing(&self) -> usize {
+        self.state.borrow().aborts.released
     }
 
     /// Whether a top-level evaluation still owns admission.
@@ -379,12 +381,22 @@ impl LuauHost {
     /// unchanged.
     pub(crate) fn abort_invocation(&self, invocation: &mut ScriptInvocation) -> Result<()> {
         if let Some(handle) = invocation.state.handle() {
+            #[cfg(test)]
+            if mem::take(&mut self.state.borrow_mut().aborts.fail_next) {
+                return Err(error::Error::script(
+                    "cannot abort a script: injected test failure".to_string(),
+                ));
+            }
             let mut runtime = self.runtime_mut("cannot abort a script inside a live VM scope")?;
             invocation.state.complete();
             runtime.abort_invocation(handle).map_err(|error| {
                 retained_runtime_error_to_canopy(&error, &invocation.label, None)
             })?;
             self.synchronize_closures(&mut runtime, &invocation.label, None)?;
+            #[cfg(test)]
+            {
+                self.state.borrow_mut().aborts.released += 1;
+            }
         }
         self.push_pending_invocation_print(invocation);
         invocation.state = InvocationState::Released;

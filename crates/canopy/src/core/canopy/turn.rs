@@ -168,9 +168,11 @@ impl fmt::Display for TurnError {
     }
 }
 
+/// The display is the inner error's, so the chain continues from the inner
+/// error's source and prints each cause once.
 impl StdError for TurnError {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        Some(&self.error)
+        self.error.source()
     }
 }
 
@@ -436,13 +438,18 @@ impl Canopy {
         Ok(())
     }
 
-    /// Admit an evaluation before changing retained runtime state.
+    /// Start an admitted evaluation, which then answers `reply`, or the
+    /// outcome of the turn that settles it when `reply` is `None`.
     ///
-    /// A busy runtime is an error. Any other failure to start completes the
-    /// evaluation at once, and the returned outcome reports it with the
-    /// source's diagnostics.
-    fn start_eval(&mut self, id: EvalId, request: EvalRequest) -> Result<Option<EvalOutcome>> {
-        self.eval_admission()?;
+    /// The caller checks [`Self::eval_admission`] first. A failure to start
+    /// completes the evaluation at once, with the source's diagnostics: the
+    /// outcome goes to `reply`, or returns when there is none.
+    fn start_eval(
+        &mut self,
+        id: EvalId,
+        request: EvalRequest,
+        reply: Option<oneshot::Sender<EvalOutcome>>,
+    ) -> Option<EvalOutcome> {
         let started = self.now();
         let origin = self.core.root_id();
         let mut diagnostics = Vec::new();
@@ -477,13 +484,20 @@ impl Canopy {
             Err(error) => {
                 let result: Result<()> = Err(error);
                 self.record_eval_journal(&request.source, started, &result, &[], &[]);
-                return Ok(Some(EvalOutcome {
+                let outcome = EvalOutcome {
                     id,
                     result: result.map(|()| ArgValue::Null),
                     logs: Vec::new(),
                     assertions: Vec::new(),
                     diagnostics,
-                }));
+                };
+                return match reply {
+                    Some(sender) => {
+                        let _closed = sender.send(outcome);
+                        None
+                    }
+                    None => Some(outcome),
+                };
             }
         };
         self.driver.eval = EvalSlot::Parked(ActiveEval {
@@ -493,24 +507,20 @@ impl Canopy {
             gas: script::SCRIPT_GAS_LIMIT,
             invocation,
             started,
-            reply: None,
+            reply,
         });
         self.driver.wake.ready.store(true, Ordering::Release);
-        Ok(None)
+        None
     }
     /// Service one typed automation request without starting a nested turn.
     pub(super) fn service_message(&mut self, message: AutomationMessage) {
         match message {
             AutomationMessage::Callback(callback) => callback(self),
             AutomationMessage::Eval(_, _, sender) if sender.is_canceled() => {}
-            AutomationMessage::Eval(id, request, sender) => match self.start_eval(id, request) {
-                Ok(None) => {
-                    if let EvalSlot::Parked(active) = &mut self.driver.eval {
-                        active.reply = Some(sender);
-                    }
-                }
-                Ok(Some(outcome)) => {
-                    let _closed = sender.send(outcome);
+            AutomationMessage::Eval(id, request, sender) => match self.eval_admission() {
+                Ok(()) => {
+                    let answered = self.start_eval(id, request, Some(sender));
+                    debug_assert!(answered.is_none(), "a ticket's outcome goes to its reply");
                 }
                 Err(error) => {
                     let _closed = sender.send(EvalOutcome {
@@ -636,31 +646,33 @@ impl Canopy {
         let before = self.driver.publication.generation();
         let mut dispatch_error = None;
         self.driver.publication.advance(self.now());
-        let mut failure = None;
         match work {
             TurnInput::Events(events) => {
                 dispatch_error = self.dispatch_batch(&events).err();
                 self.driver.publication.took_input();
             }
             TurnInput::StartEval(request) => {
+                self.eval_admission()?;
                 let id = EvalId::next();
-                if let Some(failed) = self.start_eval(id, request)? {
+                if let Some(failed) = self.start_eval(id, request, None) {
                     outcome.completed.push(failed);
                 }
                 outcome.started = Some(id);
             }
             TurnInput::CancelEval(id) => {
                 if self.driver.eval.parked().is_some_and(|a| a.id == id)
-                    && let Some(active) = self.driver.eval.take_parked()
+                    && let Some(mut active) = self.driver.eval.take_parked()
                 {
-                    failure = self.end_eval(active, Err(Error::ScriptCancelled), true);
+                    // The cancelled evaluation settles now, so automation
+                    // that this turn services finds the slot idle.
+                    let aborted = self.abort_eval(&mut active);
+                    let cancelled = Err(Error::ScriptCancelled);
+                    self.settle(active, cancelled, aborted, Ok(()), &mut outcome)?;
                 }
             }
             TurnInput::Wake | TurnInput::Prepare => {}
         }
-        if failure.is_none() {
-            failure = self.service_turn().err();
-        }
+        let failure = self.service_turn().err();
         let prepared = match failure {
             Some(_) => Ok(()),
             None => self.prepare_frame(false).map(|_| ()),
@@ -741,15 +753,20 @@ impl Canopy {
         abort: bool,
     ) -> Option<Error> {
         let failure = if abort {
-            self.script
-                .host
-                .abort_invocation(&mut active.invocation)
-                .err()
+            self.abort_eval(&mut active)
         } else {
             None
         };
         self.driver.eval = EvalSlot::Finishing(active, result);
         failure
+    }
+
+    /// Abort an evaluation's VM work, and return the abort's failure.
+    fn abort_eval(&self, active: &mut ActiveEval) -> Option<Error> {
+        self.script
+            .host
+            .abort_invocation(&mut active.invocation)
+            .err()
     }
 
     /// Settle an evaluation that ended in this turn, and return the turn's
@@ -765,9 +782,22 @@ impl Canopy {
         prepared: Result<()>,
         outcome: &mut TurnOutcome,
     ) -> Result<()> {
-        let Some((mut active, result)) = self.driver.eval.take_finishing() else {
+        let Some((active, result)) = self.driver.eval.take_finishing() else {
             return failure.map_or(prepared, Err);
         };
+        self.settle(active, result, failure, prepared, outcome)
+    }
+
+    /// Settle an evaluation that has ended with `result`, as
+    /// [`Self::settle_eval`] describes.
+    fn settle(
+        &mut self,
+        mut active: ActiveEval,
+        result: Result<ArgValue>,
+        failure: Option<Error>,
+        prepared: Result<()>,
+        outcome: &mut TurnOutcome,
+    ) -> Result<()> {
         // The error is not `Clone`: the evaluation reports its text, and the
         // turn returns the error itself.
         let (result, turn) = match failure {
@@ -1069,6 +1099,19 @@ mod tests {
     use futures::executor::block_on;
 
     use super::*;
+
+    #[test]
+    fn regression_a_turn_error_prints_each_cause_once() {
+        let failure = TurnError {
+            error: Error::App("broke".into()),
+            exit_code: None,
+        };
+        assert_eq!(failure.to_string(), failure.error.to_string());
+        assert!(
+            failure.source().is_none(),
+            "the display already shows the inner error"
+        );
+    }
 
     #[test]
     fn selector_rotates_between_ready_input_wake_and_deadline() -> Result<()> {

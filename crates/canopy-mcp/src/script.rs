@@ -152,14 +152,15 @@ pub struct ScriptErrorInfo {
 /// Structured response for the `script_eval` tool and smoke runner.
 ///
 /// The JSON form states the outcome as `success`, `state`, `value`, and
-/// `error`, which serde maps to and from [`EvalOutcomeKind`]. A report whose
+/// `error`, which serde maps to and from [`Self::outcome`]. A report whose
 /// fields disagree does not parse.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EvalReport {
     /// Execution identity and domain reset behavior for this request.
     pub metadata: ExecutionMetadata,
-    /// How the evaluation ended.
-    pub outcome: EvalOutcomeKind,
+    /// How the evaluation ended: the script's return value, or the error of
+    /// a failure, a timeout, or a cancellation.
+    pub outcome: result::Result<JsonValue, ScriptErrorInfo>,
     /// Log lines emitted during evaluation.
     pub logs: Vec<String>,
     /// Assertion outcomes recorded during evaluation.
@@ -170,71 +171,35 @@ pub struct EvalReport {
     pub timing: ScriptTiming,
 }
 
-/// How a script evaluation ended.
-#[derive(Debug, Clone, PartialEq)]
-pub enum EvalOutcomeKind {
-    /// The script completed, with its JSON-serializable return value, if it
-    /// reported one.
-    Completed(Option<JsonValue>),
-    /// The script failed, timed out, or was cancelled.
-    Failed(ScriptErrorInfo),
-}
-
 impl EvalReport {
     /// Return whether the script completed successfully.
     pub fn success(&self) -> bool {
-        matches!(self.outcome, EvalOutcomeKind::Completed(_))
+        self.outcome.is_ok()
     }
 
     /// Return the final task state, which a failure derives from its error
     /// type.
     pub fn state(&self) -> ScriptTaskState {
         match &self.outcome {
-            EvalOutcomeKind::Completed(_) => ScriptTaskState::Completed,
-            EvalOutcomeKind::Failed(error) => error.error_type.into(),
+            Ok(_) => ScriptTaskState::Completed,
+            Err(error) => error.error_type.into(),
         }
     }
 
-    /// Return the script's return value, if it completed with one.
+    /// Return the script's return value, if it completed.
     pub fn value(&self) -> Option<&JsonValue> {
-        match &self.outcome {
-            EvalOutcomeKind::Completed(value) => value.as_ref(),
-            EvalOutcomeKind::Failed(_) => None,
-        }
+        self.outcome.as_ref().ok()
     }
 
     /// Return the error, if the evaluation failed.
     pub fn error(&self) -> Option<&ScriptErrorInfo> {
-        match &self.outcome {
-            EvalOutcomeKind::Completed(_) => None,
-            EvalOutcomeKind::Failed(error) => Some(error),
-        }
-    }
-
-    /// Take the script's return value, or a JSON null when it completed
-    /// without one or failed.
-    pub fn into_value(self) -> JsonValue {
-        match self.outcome {
-            EvalOutcomeKind::Completed(value) => value.unwrap_or(JsonValue::Null),
-            EvalOutcomeKind::Failed(_) => JsonValue::Null,
-        }
+        self.outcome.as_ref().err()
     }
 }
 
 impl Serialize for EvalReport {
     fn serialize<S: Serializer>(&self, serializer: S) -> result::Result<S::Ok, S::Error> {
-        EvalReportRef {
-            metadata: &self.metadata,
-            success: self.success(),
-            state: self.state(),
-            value: self.value(),
-            logs: &self.logs,
-            assertions: &self.assertions,
-            diagnostics: &self.diagnostics,
-            timing: &self.timing,
-            error: self.error(),
-        }
-        .serialize(serializer)
+        EvalReportWire::from_report(self.clone()).serialize(serializer)
     }
 }
 
@@ -256,12 +221,12 @@ impl JsonSchema for EvalReport {
     }
 }
 
-// The JSON form of an `EvalReport`, which it deserializes from and whose
-// schema it gives. Its doc comment is the schema's description, so it reads
-// as the report's, and its serialization attributes, which EvalReportRef
-// repeats, keep defaults out of the schema.
+// The JSON form of an `EvalReport`, which the report's serde and schema
+// impls delegate to. It stays private, so no public impl names it. Its doc
+// comment is the schema's description, and its serialization attributes
+// keep defaults out of the schema.
 /// Structured response for the `script_eval` tool and smoke runner.
-#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[schemars(rename = "EvalReport")]
 struct EvalReportWire {
     /// Execution identity and domain reset behavior for this request.
@@ -270,11 +235,7 @@ struct EvalReportWire {
     success: bool,
     /// Final task state for the evaluation.
     state: ScriptTaskState,
-    #[serde(
-        default,
-        deserialize_with = "present_value",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     /// Optional JSON-serializable script return value.
     value: Option<JsonValue>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -293,16 +254,9 @@ struct EvalReportWire {
     error: Option<ScriptErrorInfo>,
 }
 
-/// Read a value that is present, as `Some`, even when it is JSON null. An
-/// absent value is `None` through the field's default.
-fn present_value<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> result::Result<Option<JsonValue>, D::Error> {
-    JsonValue::deserialize(deserializer).map(Some)
-}
-
 impl EvalReportWire {
-    /// Read the report, failing when its fields disagree.
+    /// Read the report, failing when its fields disagree. A success without
+    /// a value returned null.
     fn into_report(self) -> result::Result<EvalReport, String> {
         let Self {
             metadata,
@@ -316,8 +270,8 @@ impl EvalReportWire {
             error,
         } = self;
         let outcome = match (success, error) {
-            (true, None) => EvalOutcomeKind::Completed(value),
-            (false, Some(error)) => EvalOutcomeKind::Failed(error),
+            (true, None) => Ok(value.unwrap_or(JsonValue::Null)),
+            (false, Some(error)) => Err(error),
             (true, Some(_)) => return Err("a successful eval report carries an error".into()),
             (false, None) => return Err("a failed eval report carries no error".into()),
         };
@@ -337,35 +291,35 @@ impl EvalReportWire {
         }
         Ok(report)
     }
-}
 
-/// The JSON form of an [`EvalReport`] for serialization, borrowed from it.
-/// Its fields are those of [`EvalReportWire`], in the same order.
-#[derive(Serialize)]
-struct EvalReportRef<'a> {
-    /// Execution identity and domain reset behavior.
-    metadata: &'a ExecutionMetadata,
-    /// Whether the script completed successfully.
-    success: bool,
-    /// Final task state.
-    state: ScriptTaskState,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    /// The script's return value.
-    value: Option<&'a JsonValue>,
-    #[serde(skip_serializing_if = "<[String]>::is_empty")]
-    /// Log lines.
-    logs: &'a [String],
-    #[serde(skip_serializing_if = "<[ScriptAssertion]>::is_empty")]
-    /// Assertion outcomes.
-    assertions: &'a [ScriptAssertion],
-    #[serde(skip_serializing_if = "<[ScriptCheckDiagnostic]>::is_empty")]
-    /// Typecheck diagnostics.
-    diagnostics: &'a [ScriptCheckDiagnostic],
-    /// Timing information.
-    timing: &'a ScriptTiming,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    /// Error payload.
-    error: Option<&'a ScriptErrorInfo>,
+    /// Write the report. A success always states its value, also a null.
+    fn from_report(report: EvalReport) -> Self {
+        let success = report.success();
+        let state = report.state();
+        let EvalReport {
+            metadata,
+            outcome,
+            logs,
+            assertions,
+            diagnostics,
+            timing,
+        } = report;
+        let (value, error) = match outcome {
+            Ok(value) => (Some(value), None),
+            Err(error) => (None, Some(error)),
+        };
+        Self {
+            metadata,
+            success,
+            state,
+            value,
+            logs,
+            assertions,
+            diagnostics,
+            timing,
+            error,
+        }
+    }
 }
 
 /// Compact command availability record returned by bootstrap.
@@ -457,7 +411,7 @@ impl EvalReport {
     ) -> Self {
         Self {
             metadata: ExecutionMetadata::default(),
-            outcome: EvalOutcomeKind::Failed(ScriptErrorInfo {
+            outcome: Err(ScriptErrorInfo {
                 error_type,
                 kind: None,
                 command: None,
@@ -833,7 +787,7 @@ fn outcome_from(completion: EvalOutcome, timing: ScriptTiming) -> EvalReport {
         Ok(value) => match value.to_external_json_value() {
             Ok(value) => EvalReport {
                 metadata: ExecutionMetadata::default(),
-                outcome: EvalOutcomeKind::Completed(Some(value)),
+                outcome: Ok(value),
                 logs,
                 assertions,
                 diagnostics,
@@ -919,7 +873,7 @@ fn failed_info(
 ) -> EvalReport {
     EvalReport {
         metadata: ExecutionMetadata::default(),
-        outcome: EvalOutcomeKind::Failed(info),
+        outcome: Err(info),
         logs,
         assertions,
         diagnostics,
@@ -1506,9 +1460,10 @@ mod report_tests {
     use serde_json::json;
 
     use super::*;
+    use crate::{ExecutionMode, ResetPolicy};
 
     /// A report that ends with `outcome`.
-    fn report(outcome: EvalOutcomeKind) -> EvalReport {
+    fn report(outcome: result::Result<JsonValue, ScriptErrorInfo>) -> EvalReport {
         EvalReport {
             metadata: ExecutionMetadata::default(),
             outcome,
@@ -1520,8 +1475,8 @@ mod report_tests {
     }
 
     /// A failure of `error_type`.
-    fn failed(error_type: ScriptErrorType) -> EvalOutcomeKind {
-        EvalOutcomeKind::Failed(ScriptErrorInfo {
+    fn failed(error_type: ScriptErrorType) -> result::Result<JsonValue, ScriptErrorInfo> {
+        Err(ScriptErrorInfo {
             error_type,
             kind: None,
             command: None,
@@ -1557,18 +1512,18 @@ mod report_tests {
             json!(["metadata", "success", "state", "timing"])
         );
         assert_eq!(schema["title"], "EvalReport");
+        assert_eq!(
+            schema["description"],
+            "Structured response for the `script_eval` tool and smoke runner."
+        );
         let cases = [
             (
-                EvalOutcomeKind::Completed(Some(json!(7))),
+                Ok(json!(7)),
                 json!({"success": true, "state": "completed", "value": 7}),
             ),
             (
-                EvalOutcomeKind::Completed(Some(JsonValue::Null)),
+                Ok(JsonValue::Null),
                 json!({"success": true, "state": "completed", "value": null}),
-            ),
-            (
-                EvalOutcomeKind::Completed(None),
-                json!({"success": true, "state": "completed"}),
             ),
             (
                 failed(ScriptErrorType::Runtime),
@@ -1607,6 +1562,89 @@ mod report_tests {
             assert_eq!(encoded.get("error").is_some(), !report.success());
             let decoded: EvalReport = serde_json::from_value(encoded)?;
             assert_eq!(decoded, report);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_success_without_a_value_reads_as_null() -> serde_json::Result<()> {
+        let mut encoded = serde_json::to_value(report(Ok(json!(7))))?;
+        encoded.as_object_mut().expect("an object").remove("value");
+        let decoded: EvalReport = serde_json::from_value(encoded)?;
+        assert_eq!(decoded.outcome, Ok(JsonValue::Null));
+        Ok(())
+    }
+
+    #[test]
+    fn the_wire_form_matches_its_golden_text() -> serde_json::Result<()> {
+        let metadata = ExecutionMetadata {
+            app: "app".into(),
+            execution: ExecutionMode::LiveSession,
+            instance_id: "session".into(),
+            screen: Some(ScreenSize {
+                width: 80,
+                height: 24,
+            }),
+            reset: ResetPolicy::External,
+            fixture: None,
+            api_digest: Some("digest".into()),
+        };
+        let timing = ScriptTiming {
+            build_ms: 1,
+            exec_ms: 2,
+            total_ms: 3,
+        };
+        let success = EvalReport {
+            metadata: metadata.clone(),
+            outcome: Ok(json!({"rows": 2})),
+            logs: Vec::new(),
+            assertions: Vec::new(),
+            diagnostics: Vec::new(),
+            timing: timing.clone(),
+        };
+        let failure = EvalReport {
+            metadata,
+            outcome: Err(ScriptErrorInfo {
+                error_type: ScriptErrorType::Runtime,
+                kind: Some(ScriptErrorKind::UnknownCommand),
+                command: Some("list.next".into()),
+                owner: Some("list".into()),
+                message: "no such command".into(),
+            }),
+            logs: vec!["before".into()],
+            assertions: Vec::new(),
+            diagnostics: Vec::new(),
+            timing,
+        };
+        let metadata_text = concat!(
+            r#""metadata":{"app":"app","execution":"live-session","#,
+            r#""instance_id":"session","screen":{"width":80,"height":24},"#,
+            r#""reset":"external","fixture":null,"api_digest":"digest"}"#,
+        );
+        let timing_text = r#""timing":{"build_ms":1,"exec_ms":2,"total_ms":3}"#;
+        let golden = [
+            (
+                success,
+                format!(
+                    r#"{{{metadata_text},"success":true,"state":"completed","value":{{"rows":2}},{timing_text}}}"#
+                ),
+            ),
+            (
+                failure,
+                format!(
+                    concat!(
+                        r#"{{{metadata_text},"success":false,"state":"failed","logs":["before"],"#,
+                        r#"{timing_text},"error":{{"type":"runtime","kind":"unknown_command","#,
+                        r#""command":"list.next","owner":"list","message":"no such command"}}}}"#,
+                    ),
+                    metadata_text = metadata_text,
+                    timing_text = timing_text,
+                ),
+            ),
+        ];
+        for (report, text) in golden {
+            assert_eq!(serde_json::to_string(&report)?, text);
+            assert_eq!(serde_json::from_str::<EvalReport>(&text)?, report);
         }
         Ok(())
     }

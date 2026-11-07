@@ -204,7 +204,8 @@ impl Editor {
     }
 
     /// Return the extent of the visual selection of kind `mode`, which `.`
-    /// selects again.
+    /// selects again. A selection whose cursor keeps to the ends of lines,
+    /// as after `$`, extends to the end of its last line wherever it repeats.
     fn visual_extent(&self, mode: VisualMode) -> Extent {
         let (first, last) = self.visual_ends();
         let lines = last.line - first.line + 1;
@@ -212,6 +213,9 @@ impl Editor {
         let column = self.buffer.column_for_position(last, tab_stop);
         match mode {
             VisualMode::Line => Extent::Lines(lines),
+            VisualMode::Character if self.preferred_column == usize::MAX => {
+                Extent::ToLineEnd(lines)
+            }
             VisualMode::Character if lines == 1 => Extent::Span(
                 column.saturating_sub(self.buffer.column_for_position(first, tab_stop)),
             ),
@@ -244,9 +248,13 @@ impl Editor {
                 self.buffer
                     .position_for_column(line_of(lines), column, tab_stop)
             }
+            Extent::ToLineEnd(lines) => self.buffer.line_end_position(line_of(lines), false),
         };
         self.buffer.set_selection(Selection::new(first, last));
         self.snap_visual_ends();
+        if let Extent::ToLineEnd(_) = extent {
+            self.preferred_column = usize::MAX;
+        }
     }
 
     /// Move each end of a visual selection inside a grapheme to the start

@@ -445,6 +445,19 @@ struct LuauState {
     active_eval: bool,
     /// Deferred hooks to execute after the first live render.
     on_start_hooks: Vec<LuauFunctionId>,
+    /// Injected abort failures, and a count of aborts that released VM work.
+    #[cfg(test)]
+    aborts: AbortProbe,
+}
+
+/// Test probe of invocation aborts.
+#[cfg(test)]
+#[derive(Default)]
+struct AbortProbe {
+    /// Whether the next abort fails before it touches the VM.
+    fail_next: bool,
+    /// Count of aborts that released an invocation's VM work.
+    released: usize,
 }
 
 impl LuauState {

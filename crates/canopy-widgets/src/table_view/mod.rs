@@ -620,9 +620,9 @@ impl TableView {
     }
     /// End either pointer gesture and release this shell's capture.
     fn end_drag(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        self.vertical.cancel_drag();
-        self.horizontal.cancel_drag();
-        if self.gesture != Gesture::Idle {
+        // Both bars cancel, whichever drags.
+        let bar = self.vertical.cancel_drag() | self.horizontal.cancel_drag();
+        if bar || self.gesture != Gesture::Idle {
             self.gesture = Gesture::Idle;
             if ctx.has_mouse_capture() {
                 ctx.release_mouse()?;

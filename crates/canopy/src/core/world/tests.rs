@@ -981,6 +981,29 @@ fn regression_an_unmount_panic_during_rollback_leaves_the_restored_tree() -> Res
 }
 
 #[test]
+fn regression_an_unmount_panic_during_a_panicked_edit_does_not_abort() -> Result<()> {
+    let mut core = Core::new();
+    let unmounts = Arc::new(Mutex::new(0));
+    let node = core.create_detached(PanicUnmount {
+        panics: Arc::new(AtomicBool::new(true)),
+        unmounts: Arc::clone(&unmounts),
+    })?;
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let _ignored: Result<()> = core.with_tree_edit("panicking edit", |core| {
+            core.attach(core.root, node)?;
+            panic!("edit panic");
+        });
+    }));
+    assert!(result.is_err());
+    assert_eq!(*unmounts.lock().unwrap(), 1, "the rollback ran the hook");
+    assert!(!core.is_attached_to_root(node), "the tree is restored");
+    core.validate_invariants()?;
+    core.attach(core.root, node)?;
+    assert!(core.is_attached_to_root(node));
+    core.validate_invariants()
+}
+
+#[test]
 fn callback_cannot_remove_current_node() -> Result<()> {
     let (mut core, nodes) = callback_mutation_tree()?;
     let path = core.path_of(core.root, nodes.current).to_string();

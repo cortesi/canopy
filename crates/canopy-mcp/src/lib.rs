@@ -28,8 +28,8 @@ pub use metadata::{
     AppFactory, AppMetadata, ExecutionMetadata, ExecutionMode, ResetPolicy, ScreenSize,
 };
 pub use script::{
-    BootstrapCommand, BootstrapJournalEntry, BootstrapRequest, BootstrapResponse, EvalOutcomeKind,
-    EvalReport, ScriptErrorInfo, ScriptErrorType, ScriptEvalRequest, ScriptTaskState, ScriptTiming,
+    BootstrapCommand, BootstrapJournalEntry, BootstrapRequest, BootstrapResponse, EvalReport,
+    ScriptErrorInfo, ScriptErrorType, ScriptEvalRequest, ScriptTaskState, ScriptTiming,
 };
 pub use server::{
     ApplyFixtureRequest, ApplyFixtureResponse, UdsServerHandle, serve_stdio, serve_uds,

@@ -19,8 +19,8 @@
 //! derives them from the palette.
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
-    Widget,
+    Context, ContextExt, EventOutcome, Mount, NodeId, NodeName, Register, Setup, TypedId,
+    ViewContext, Widget,
     commands::CommandCall,
     derive_commands,
     error::Result,
@@ -34,7 +34,6 @@ use canopy::{
     render::Render,
     style::{PartialStyle, StyleRules, roles, themes::Palette},
     text,
-    widget::Mount,
 };
 
 use crate::{
@@ -785,7 +784,7 @@ mod tests {
     }
 
     #[test]
-    fn regression_a_rolled_back_menu_reads_unmounted_and_mounts_again() -> Result<()> {
+    fn a_rolled_back_menu_reads_unmounted_and_mounts_again() -> Result<()> {
         let (mut harness, _) = hosting()?;
         harness.with_root_widget_context(|_: &mut MenuHost, ctx| {
             let menu = ctx.create_detached(Menu::new("again"))?;

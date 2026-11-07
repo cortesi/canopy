@@ -10,7 +10,7 @@ use std::{
 };
 
 use canopy::{
-    Context, Widget,
+    Context, ContextExt, Widget,
     commands::ArgValue,
     error::{Error, Result},
     geom::Point,
@@ -21,12 +21,12 @@ use proptest::{
     collection::vec,
     prelude::{ProptestConfig, prop_assert},
     sample::select,
-    test_runner::TestRunner,
+    test_runner::{RngAlgorithm, TestRng, TestRunner},
 };
 
 use crate::{
     Changes, Follower, Kind, Layout, OptionEnum, OptionGroup, Options, Set, SetError, Store, Value,
-    file::Scope,
+    file::{Scope, display_path},
     model,
     store::{Cleared, Saved, Source},
 };
@@ -973,7 +973,10 @@ fn the_panel_edits_lists_and_saves() {
     assert_eq!(last_notice(&harness), "Reverted unsaved options");
     keys(&mut harness, &["p", "X"]);
     let cleared = last_notice(&harness);
-    assert!(cleared.starts_with("Cleared from "), "{cleared}");
+    assert!(
+        cleared.starts_with("Cleared programs.editor from "),
+        "{cleared}"
+    );
     // No file sets the option now, so X has nothing to clear, and help
     // leaves it out.
     assert!(!bound(&harness, "X", "Clear the option from its file"));
@@ -1311,6 +1314,52 @@ fn a_deferred_clear_follows_a_queued_save() {
 }
 
 #[test]
+fn the_save_and_clear_commands_in_a_round_defer_and_post_their_notices() {
+    let directory = tempfile::tempdir().unwrap();
+    let global = options_file(directory.path(), "[diff]\ncontext = 2\n");
+    let store: Store<Root> = Store::load(&Layout {
+        global: Some(global.clone()),
+        ..Layout::default()
+    });
+    let mut harness = options_harness(&store);
+    let root = store.handle();
+    let returned: Rc<RefCell<Vec<Option<String>>>> = Rc::default();
+    let seen = Rc::clone(&returned);
+    root.subscribe("diff.tab_width", move |context, root, _| {
+        if root.diff.tab_width == 8 {
+            let host = context.root_id();
+            let results = context.with_widget_mut(host, |options: &mut Options, context| {
+                let saved = options.save(context, "global".into())?;
+                let cleared = options.clear(context, "diff.context".into())?;
+                Ok([Some(saved), cleared])
+            })?;
+            seen.borrow_mut().extend(results);
+        }
+        Ok(())
+    });
+    harness
+        .canopy
+        .with_root_context(|context| root.update(context, |root| root.diff.tab_width = 8))
+        .unwrap();
+    assert_eq!(
+        *returned.borrow(),
+        [Some("deferred".to_string()), Some("deferred".to_string())]
+    );
+    let text = fs::read_to_string(&global).unwrap();
+    assert!(text.contains("tab_width = 8"), "{text}");
+    assert!(!text.contains("context"), "{text}");
+    let notices = notices(&harness);
+    let shown = display_path(&global);
+    assert_eq!(
+        notices,
+        [
+            format!("Saved to {shown}"),
+            format!("Cleared diff.context from {shown}"),
+        ]
+    );
+}
+
+#[test]
 fn regression_two_subscribers_in_one_round_see_the_same_store() {
     let store: Store<Root> = Store::default();
     let root = store.handle();
@@ -1529,7 +1578,11 @@ fn quick_mode_closes_only_after_a_change_on_a_level_left() {
             .unwrap(),
     );
     let presses = vec(select(vec!["r", "m", "g", "J", "S", "Esc"]), 1..12);
-    let mut runner = TestRunner::new(ProptestConfig::with_cases(256));
+    // A fixed seed makes each run, and so each failure, the same.
+    let mut runner = TestRunner::new_with_rng(
+        ProptestConfig::with_cases(256),
+        TestRng::deterministic_rng(RngAlgorithm::ChaCha),
+    );
     let result = runner.run(&presses, |presses| {
         let mut harness = harness.borrow_mut();
         harness

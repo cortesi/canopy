@@ -278,10 +278,16 @@ impl Markdown {
     /// when a host reloads the document and restores its own position. Call
     /// it after [`Self::set_search`], which drops a kept place.
     ///
-    /// The next Rendered matches make current the match at `place`, which
-    /// [`Self::search_place`] gave before the reload: the match of that rank
-    /// among those at its byte, or else the first after it, or the first
-    /// match when none follows. With no `place`, no match is current.
+    /// The match at `place`, which [`Self::search_place`] gave before the
+    /// reload, is the match of that rank among those at its byte, or else
+    /// the first after it, or the first match when none follows:
+    ///
+    /// - While the Rendered matches wait, the next matches make the match at
+    ///   `place` current, or none with no `place`.
+    /// - With Rendered matches published, the match at `place` becomes current
+    ///   at once, or none with no `place`.
+    /// - Source keeps no place, and a failed query has no matches, so the call
+    ///   leaves their current match as it is.
     pub fn keep_search_position(&mut self, place: Option<MatchPlace>);
 
     /// Whether a local link to `destination` shows faint, because the host

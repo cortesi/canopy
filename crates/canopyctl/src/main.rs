@@ -110,7 +110,7 @@ struct RunArgs {
     #[arg(long, default_value_t = 600)]
     ready_timeout: u64,
     /// The socket a detached host serves at; set by `--detach` itself.
-    #[arg(long, hide = true, requires = "pty")]
+    #[arg(long, hide = true, requires = "pty", conflicts_with = "detach")]
     host_socket: Option<PathBuf>,
     /// Command override passed after `--`.
     #[arg(last = true)]
@@ -373,7 +373,7 @@ impl CanopyctlMcpServer {
     /// return the screen once the app has drawn them.
     async fn keys(&self, params: KeysRequest) -> ToolResult<CallToolResult> {
         let _busy = self.sessions.busy();
-        terminal_tool(&self.sessions, &params.keys, screen_read(params.until)).await
+        terminal_tool(&self.sessions, &params.keys, Read::new(true, params.until)).await
     }
 
     #[tool(read_only)]
@@ -381,7 +381,7 @@ impl CanopyctlMcpServer {
     /// terminal has read the app's latest frame.
     async fn screen(&self, params: ScreenRequest) -> ToolResult<CallToolResult> {
         let _busy = self.sessions.busy();
-        terminal_tool(&self.sessions, &[], screen_read(params.until)).await
+        terminal_tool(&self.sessions, &[], Read::new(true, params.until)).await
     }
 
     #[tool]
@@ -585,11 +585,7 @@ async fn keys_command(args: KeysArgs) -> Result<()> {
         &args.socket,
         &TermRequest::Drive {
             keys: args.keys,
-            read: match args.until {
-                Some(text) => Read::Until(text),
-                None if args.screen => Read::Now,
-                None => Read::None,
-            },
+            read: Read::new(args.screen, args.until),
         },
     )
     .await?;
@@ -605,7 +601,7 @@ async fn screen_command(args: ScreenArgs) -> Result<()> {
         &args.socket,
         &TermRequest::Drive {
             keys: Vec::new(),
-            read: screen_read(args.until),
+            read: Read::new(true, args.until),
         },
     )
     .await?;
@@ -971,11 +967,6 @@ fn tool_error(error: impl Display) -> ToolError {
     ToolError::internal(error.to_string())
 }
 
-/// Return the read of a screen, once it shows `until` if that is given.
-fn screen_read(until: Option<String>) -> Read {
-    until.map_or(Read::Now, Read::Until)
-}
-
 /// Press `keys` in the launched app's terminal, then return what `read`
 /// asks for.
 async fn terminal_tool(
@@ -1009,7 +1000,7 @@ mod tests {
     use canopy_mcp::{AppMetadata, ExecutionMode, ResetPolicy, serve_uds};
     use futures::{StreamExt, executor};
     use tmcp::schema::ToolResultMode;
-    use tokio::runtime::Builder;
+    use tokio::{runtime::Builder, task};
 
     use super::*;
     use crate::{
@@ -1031,6 +1022,40 @@ mod tests {
             ])
             .is_ok()
         );
+        // A detached launch picks its own host socket.
+        assert!(
+            Cli::try_parse_from([
+                "canopyctl",
+                "run",
+                "--pty",
+                "80x24",
+                "--detach",
+                "--host-socket",
+                "app.sock"
+            ])
+            .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_proxy_tool_call_holds_the_busy_guard() -> Result<()> {
+        let (session, calls, peer) = peer_session().await?;
+        let sessions = manager_with_session(session).await?;
+        let proxy = CanopyctlMcpServer {
+            sessions: sessions.clone(),
+        };
+        assert!(!sessions.is_busy());
+        let call = tokio::spawn(async move { proxy.script_eval(request("block")).await });
+        // The peer holds the call, so it stays in flight.
+        while !calls.lock().await.iter().any(|source| source == "block") {
+            task::yield_now().await;
+        }
+        assert!(sessions.is_busy());
+        call.abort();
+        assert!(call.await.unwrap_err().is_cancelled());
+        assert!(!sessions.is_busy());
+        peer.abort();
+        Ok(())
     }
 
     #[test]

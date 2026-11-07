@@ -4,82 +4,16 @@
 //! case moves the cursor with a motion before `.` where the editor's cursor
 //! after Esc differs from Vim's, which steps back one character.
 
-use std::cell::RefCell;
-
-use canopy::Canopy;
 use proptest::{
     prelude::*,
     test_runner::{Config, RngSeed},
 };
 
-use super::{visual::tokens, *};
-
-thread_local! {
-    /// One application gives the context of every run on a thread.
-    static APP: RefCell<Canopy> =
-        RefCell::new(CanopyBuilder::new().build().expect("an empty application builds"));
-}
-
-/// One step of a run: a key, or an undo or a redo that the host calls.
-#[derive(Debug, Clone, Copy)]
-enum Step {
-    /// A key.
-    Key(key::Key),
-    /// The host calls [`Editor::undo`].
-    Undo,
-    /// The host calls [`Editor::redo`].
-    Redo,
-}
-
-/// Return the step of one token: a char, the name of a key in angle
-/// brackets, or `<Undo>` and `<Redo>` for calls of the host.
-fn step(token: &str) -> Step {
-    Step::Key(match token {
-        "<Undo>" => return Step::Undo,
-        "<Redo>" => return Step::Redo,
-        "<Esc>" => key::KeyCode::Esc.into(),
-        "<CR>" => key::KeyCode::Enter.into(),
-        "<BS>" => key::KeyCode::Backspace.into(),
-        "<Del>" => key::KeyCode::Delete.into(),
-        "<Left>" => key::KeyCode::Left.into(),
-        "<Right>" => key::KeyCode::Right.into(),
-        "<Up>" => key::KeyCode::Up.into(),
-        "<Down>" => key::KeyCode::Down.into(),
-        "<C-r>" => key::Ctrl + 'r',
-        _ => {
-            let mut chars = token.chars();
-            let key = chars.next().expect("a token").into();
-            assert!(chars.next().is_none(), "unknown token {token}");
-            key
-        }
-    })
-}
-
-/// Run one step on `editor`.
-fn run_step(editor: &mut Editor, step: Step, ctx: &mut dyn Context) -> Result<()> {
-    match step {
-        Step::Key(key) => {
-            editor.on_event(&Event::Key(key), ctx)?;
-        }
-        Step::Undo => editor.undo(ctx),
-        Step::Redo => editor.redo(ctx),
-    }
-    Ok(())
-}
-
-/// Run `keys` on `editor`, with no render.
-fn drive(editor: &mut Editor, keys: &str) {
-    APP.with(|app| {
-        app.borrow_mut()
-            .with_root_context(|ctx| {
-                for token in tokens(keys) {
-                    run_step(editor, step(&token), ctx)?;
-                }
-                Ok(())
-            })
-            .expect("the keys run");
-    });
-}
+use super::{
+    super::search::Source,
+    keys::{Step, drive, in_root, run_step, step, tokens},
+    *,
+};
 
 /// Return a vi editor of `text` with its cursor at `line:column`.
 fn vi_at(text: &str, line: usize, column: usize) -> Editor {
@@ -92,6 +26,46 @@ fn vi_at(text: &str, line: usize, column: usize) -> Editor {
 /// Return a vi editor of `text` with its cursor at the start.
 fn vi(text: &str) -> Editor {
     vi_at(text, 0, 0)
+}
+
+#[test]
+fn an_undo_with_nothing_to_undo_keeps_the_prompt() {
+    // Regression: an undo that undid nothing still closed the prompt.
+    let mut editor = vi("abc");
+    drive(&mut editor, "/b<Undo><Redo>");
+    assert!(editor.prompt.is_some());
+    assert_eq!(editor.text(), "abc");
+}
+
+#[test]
+fn an_insert_move_ends_the_undo_step() {
+    // Regression: the move ended the step that `.` repeats, but one undo
+    // took all the typing of the insert, unlike Vim.
+    let mut editor = vi("");
+    drive(&mut editor, "Afoo<Left>bar<Esc>u");
+    assert_eq!(editor.text(), "foo");
+}
+
+#[test]
+fn a_config_that_keeps_the_mode_keeps_the_prompt() {
+    // Regression: a host that set the configuration for an unrelated change
+    // closed the prompt.
+    let mut editor = vi("abc");
+    drive(&mut editor, "/b");
+    editor.set_config(editor.config().clone().with_tab_stop(8));
+    assert!(editor.prompt.is_some(), "the same mode keeps the prompt");
+    editor.set_config(editor.config().clone().with_mode(EditMode::Text));
+    assert!(editor.prompt.is_none(), "a change of mode closes it");
+}
+
+#[test]
+fn enter_on_an_empty_search_prompt_clears_the_search() {
+    // Regression: the empty prompt became a query of no text.
+    let mut editor = vi("abc");
+    drive(&mut editor, "/b<CR>");
+    assert!(matches!(editor.search.source(), Source::Query { .. }));
+    drive(&mut editor, "/<CR>");
+    assert_eq!(editor.search.source(), &Source::None);
 }
 
 #[test]
@@ -253,7 +227,11 @@ const REPEATS: &[(&str, (usize, usize), &str, &str)] = &[
         "one X\nthree X",
     ),
     ("a\nb\nc\nd\ne", (0, 0), "Vjd.", "e"),
+    ("a\nb\nc\nd\ne\nf\ng\nh", (0, 0), "VjjdG.gg.", "g"),
     ("abcdef", (0, 0), "vld.", "ef"),
+    ("abcdef\nab\nxyz", (0, 1), "vlldj.", "aef\naxyz"),
+    ("abc\nxx\nabcdefgh", (0, 1), "v$dj.", "axx\na"),
+    ("ab\ncd\nef\nghi\njklmn", (0, 0), "vj$dj0.", "ef\n"),
     ("abcdef ghijkl", (0, 0), "vlcX<Esc>w.", "Xcdef Xijkl"),
     ("one\ntwo\nthree", (0, 0), "VcX<Esc>j.", "X\nX\nthree"),
     ("abc\ndef\nghi\njkl\nmno", (0, 1), "vjdj.", "af\ngl\nmno"),
@@ -265,6 +243,8 @@ const REPEATS: &[(&str, (usize, usize), &str, &str)] = &[
     ),
     ("abcdef", (0, 0), "ifoo<BS>x<Esc>0.", "foxfoxabcdef"),
     ("abcdef", (0, 0), "iX<Del>Y<Esc>0.", "XYYbcdef"),
+    ("abc", (0, 0), "i<BS>X<Esc>0ll.", "XaXbc"),
+    ("abc", (0, 2), "a<Del>X<Esc>0.", "aXcX"),
     ("ab", (0, 0), "iab<Left>X<Esc>0.", "XaXbab"),
     ("one\ntwo", (0, 0), "oX<Left><Esc>j.", "one\nX\ntwo\nX"),
     ("one two", (0, 0), "i<Esc>xw.", "ne wo"),
@@ -366,7 +346,7 @@ impl History {
     /// Follow one run of `step` on `editor`, and check an undo or a redo
     /// against the model.
     fn follow(&mut self, editor: &mut Editor, step: Step, ctx: &mut dyn Context) -> Result<()> {
-        let (text, revision) = (editor.text(), editor.buffer.revision());
+        let (text, revision, cursor) = (editor.text(), editor.buffer.revision(), editor.cursor());
         let inserting = editor.vi_mode() == Some(ViMode::Insert);
         let undoes = match step {
             Step::Undo => Some(true),
@@ -396,6 +376,14 @@ impl History {
         }
         let changed = editor.buffer.revision() != revision;
         let now_inserting = editor.vi_mode() == Some(ViMode::Insert);
+        // A move in insert mode closes the open group, as in Vim.
+        let arrow = matches!(step, Step::Key(key) if matches!(
+            key.key,
+            key::KeyCode::Left | key::KeyCode::Right | key::KeyCode::Up | key::KeyCode::Down
+        ));
+        if inserting && arrow && editor.cursor() != cursor {
+            self.close();
+        }
         if inserting || now_inserting {
             if changed && self.open.is_none() {
                 self.open = Some(text);
@@ -430,9 +418,7 @@ proptest! {
     ) {
         let mut editor = vi(text);
         let mut history = History::default();
-        APP.with(|app| {
-            app.borrow_mut()
-                .with_root_context(|ctx| {
+        in_root(|ctx| {
                     for token in tokens(&steps.concat()) {
                         history.follow(&mut editor, step(&token), ctx)?;
                     }
@@ -443,8 +429,6 @@ proptest! {
                     }
                     assert_eq!(editor.text(), text, "{steps:?}");
                     Ok(())
-                })
-                .expect("the keys run");
         });
     }
 }

@@ -10,13 +10,12 @@
 //! its row. Runs of one glyph should join into seamless bars.
 
 use canopy::{
-    CanopyBuilder, Context, ContextExt, NodeName, Register, Setup, TypedId, ViewContext, Widget,
-    derive_commands,
+    CanopyBuilder, Context, ContextExt, Mount, NodeName, Register, Setup, TypedId, ViewContext,
+    Widget, derive_commands,
     error::{Error, Result},
     geom::Line,
     layout::{Direction, Layout, LayoutOverride},
     render::Render,
-    widget::Mount,
 };
 use canopy_widgets::{
     ImageView, Text,
@@ -139,6 +138,9 @@ struct Nodes {
 }
 
 /// The image viewer gym.
+///
+/// The gym mounts once: its first mount takes the image view, so a later
+/// mount fails with an error that says so.
 pub struct ImgGym {
     /// The image view, until its first mount takes it, and the mounted
     /// nodes.

@@ -249,8 +249,9 @@ impl<G: 'static + Clone + PartialEq> Follower<G> {
     ///
     /// The widget calls this as it mounts. `apply` takes the change with
     /// [`Self::take_change`]. A widget that is gone, or that another widget
-    /// replaced, hears no more changes. The widget also polls as the options
-    /// panel closes, so it can move the focus that the panel held.
+    /// replaced, hears no more changes, and the store forgets its
+    /// subscription. The widget also polls as the options panel closes, so
+    /// it can move the focus that the panel held.
     pub fn follow<W: 'static + Widget>(
         &self,
         context: &mut dyn Context,
@@ -438,6 +439,9 @@ pub struct Limits {
 /// The widget wraps the application, so that a binding anywhere in the
 /// application finds the `options` commands. It also owns the options panel,
 /// which it opens as a modal over the application.
+///
+/// The widget mounts once: its first mount takes the application, so a
+/// later mount, also after a failed one, fails with an error that says so.
 pub struct Options {/* private fields */}
 
 impl Options {
@@ -528,7 +532,7 @@ impl Options {
     ) -> canopy::error::Result<Option<String>>;
 
     /// Close the options panel.
-    pub fn close(&mut self, context: &mut dyn Context);
+    pub fn close(&mut self, context: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Move a choice to a later or earlier variant, wrapping at the ends, or
     /// step an integer.
