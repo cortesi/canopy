@@ -60,7 +60,12 @@ impl Core {
     }
 
     /// Return whether a candidate bound at `node` can act now.
-    fn binding_eligible(&self, record: &BindingRecord, node: NodeId, focus: NodeId) -> bool {
+    pub(crate) fn binding_eligible(
+        &self,
+        record: &BindingRecord,
+        node: NodeId,
+        focus: NodeId,
+    ) -> bool {
         match &record.action {
             BindingAction::Intent(action) => self.node_accepts_intent(node, action.as_str(), focus),
             BindingAction::Command(call) => self.command_has_target(call, node),

@@ -8,7 +8,7 @@ use std::{
 
 use super::{
     commands,
-    help::BindingSnapshot,
+    help::{AvailableBinding, BindingSnapshot},
     id::{NodeId, TypedId, WidgetStamp},
     style::effects::Effect,
     view::View,
@@ -597,6 +597,18 @@ pub trait Context: ViewContext + sealed::Context {
 
     /// Return effective key bindings for a node or the current focus.
     fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot>;
+
+    /// Return the key bindings `menu` would offer from a node or the current
+    /// focus, if it opened now.
+    ///
+    /// The result is what the menu's panel would list. A menu that could not
+    /// open now offers nothing.
+    fn menu_bindings(&self, node: Option<NodeId>, menu: &str)
+    -> Result<Vec<AvailableBinding<Key>>>;
+
+    /// Return the menu that waits for its key, absent while an open modal
+    /// suspends menus.
+    fn transient_mode(&self) -> Option<String>;
 
     /// Open a modal that owns focus, input admission, and visual effects.
     fn open_modal(&mut self, options: ModalOptions) -> Result<ModalToken>;
@@ -1300,6 +1312,18 @@ impl Context for NodeCtx<&mut Core> {
 
     fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot> {
         self.core.available_bindings(node)
+    }
+
+    fn menu_bindings(
+        &self,
+        node: Option<NodeId>,
+        menu: &str,
+    ) -> Result<Vec<AvailableBinding<Key>>> {
+        self.core.menu_bindings(node, menu)
+    }
+
+    fn transient_mode(&self) -> Option<String> {
+        self.core.effective_transient_mode().map(str::to_string)
     }
 
     fn open_modal(&mut self, options: ModalOptions) -> Result<ModalToken> {

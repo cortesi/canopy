@@ -165,6 +165,17 @@ pub trait Context: ViewContext + Context {
     /// its key.
     fn leave_mode(&mut self, mode: &str) -> crate::error::Result<()>;
 
+    /// Return the key bindings `menu` would offer from a node or the current
+    /// focus, if it opened now.
+    ///
+    /// The result is what the menu's panel would list. A menu that could not
+    /// open now offers nothing.
+    fn menu_bindings(
+        &self,
+        node: Option<NodeId>,
+        menu: &str,
+    ) -> crate::error::Result<Vec<AvailableBinding<Key>>>;
+
     /// Post a notice to the notice log.
     ///
     /// The notice joins the completion queue beside posted calls and modal
@@ -349,6 +360,10 @@ pub trait Context: ViewContext + Context {
     /// Switch to the theme `palette` before the next render, reapplying every
     /// widget style rule set.
     fn set_theme(&mut self, palette: Palette);
+
+    /// Return the menu that waits for its key, absent while an open modal
+    /// suspends menus.
+    fn transient_mode(&self) -> Option<String>;
 
     /// Capture a thread-safe wake handle for this widget's work lifetime.
     /// Attachment handles require this node to be attached when acquired.
@@ -1013,6 +1028,14 @@ impl Canopy {
     /// Leaving a mode that is not active changes nothing. An empty name is an
     /// error, and so is the name of a menu that waits for its key.
     pub fn leave_mode(&mut self, mode: &str) -> crate::error::Result<()>;
+
+    /// Return the key bindings `menu` would offer from a node or the
+    /// current focus, if it opened now.
+    pub fn menu_bindings(
+        &self,
+        focus: Option<NodeId>,
+        menu: &str,
+    ) -> crate::error::Result<Vec<AvailableBinding<Key>>>;
 
     /// Return the newest active mode, or the empty string for the default
     /// mode.

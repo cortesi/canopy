@@ -195,6 +195,47 @@ impl Core {
         })
     }
 
+    /// Return the key bindings `menu` would offer from a node or the current
+    /// focus, if it opened now.
+    ///
+    /// These are the winners the menu's own tier supplies, as its mode panel
+    /// lists them: a global binding on the same key wins the key, so the
+    /// menu's binding for it is left out, as routing leaves it out. A menu
+    /// that could not open now, because the open modal suspends menus or the
+    /// name is an active mode, offers nothing. The keys a menu offers depend
+    /// on its name alone, never on the menus that led to it, because routing
+    /// closes one menu before the binding that opens the next runs.
+    pub(crate) fn menu_bindings(
+        &self,
+        requested: Option<NodeId>,
+        menu: &str,
+    ) -> Result<Vec<AvailableBinding<Key>>> {
+        let focus = requested.or(self.focus).unwrap_or(self.root);
+        self.validate_attached_node(focus)?;
+        let Some(stack) = self.input_map.menu_stack(menu) else {
+            return Ok(Vec::new());
+        };
+        let mut bindings = Vec::new();
+        for key in self.input_map.menu_keys(menu) {
+            // The walk matches `transient_winner`, under the probe's modes.
+            let winner = self.route(focus).find_map(|(node, path)| {
+                self.input_map
+                    .candidates_in(&stack, &path, InputSpec::Key(key))
+                    .into_iter()
+                    .map(|candidate| candidate.record)
+                    .find(|record| self.binding_eligible(record, node, focus))
+                    .map(|record| (node, path, record))
+            });
+            if let Some((node, path, record)) = winner
+                && record.tier.mode() == Some(menu)
+            {
+                let id = record.id;
+                bindings.push(self.available_binding(node, key, path, id)?);
+            }
+        }
+        Ok(bindings)
+    }
+
     /// Return the binding that wins `spec` along the route from `focus`.
     ///
     /// Mouse discovery has no widget prediction, so this walk selects at each
@@ -834,6 +875,133 @@ mod tests {
         let snapshot = core.available_bindings(None)?;
         assert_eq!(snapshot.bindings.len(), 1);
         assert_eq!(snapshot.bindings[0].input.to_string(), "Ctrl+a");
+        Ok(())
+    }
+
+    /// Bind `key` in mode `mode` to open `menu`.
+    fn bind_menu(
+        core: &mut Core,
+        mode: &str,
+        key: char,
+        description: &str,
+        menu: &str,
+    ) -> Result<()> {
+        core.input_map.bind(
+            InputSpec::Key(key.into()),
+            BindingOptions {
+                show_in_help: true,
+                tier: BindingTier::Mode(mode.to_string()),
+                path: Some("leaf/".parse()?),
+                description: description.into(),
+                source: None,
+                phase: Some(BindingPhase::AfterWidget),
+            },
+            BindingAction::Menu(menu.to_string()),
+        )?;
+        Ok(())
+    }
+
+    /// Return the input and description of each binding.
+    fn rows(bindings: &[AvailableBinding<Key>]) -> Vec<(String, String)> {
+        bindings
+            .iter()
+            .map(|binding| (binding.input.to_string(), binding.description.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn a_closed_menu_offers_what_it_offers_once_open() -> Result<()> {
+        let mut core = Core::new();
+        let leaf = core.create_detached(Leaf)?;
+        core.attach(core.root, leaf)?;
+        core.set_focus(leaf)?;
+        let go = BindingTier::Mode("go".to_string());
+        bind(&mut core, go.clone(), 'h', "leaf/", "home", 1)?;
+        bind(&mut core, go.clone(), 'r', "leaf/", "root", 2)?;
+        // A global binding takes the key from the menu, as routing does.
+        bind(
+            &mut core,
+            BindingTier::Global,
+            'x',
+            "/root/**/",
+            "Global",
+            3,
+        )?;
+        bind(&mut core, go, 'x', "leaf/", "shadowed", 4)?;
+        bind_menu(&mut core, "go", 'o', "Order", "order")?;
+        bind(
+            &mut core,
+            BindingTier::Mode("order".to_string()),
+            'n',
+            "leaf/",
+            "by name",
+            5,
+        )?;
+        bind(&mut core, BindingTier::Default, 'q', "leaf/", "Default", 6)?;
+
+        let closed = core.menu_bindings(None, "go")?;
+        assert_eq!(
+            rows(&closed),
+            [
+                ("h".to_string(), "home".to_string()),
+                ("o".to_string(), "Order".to_string()),
+                ("r".to_string(), "root".to_string()),
+            ],
+            "only the menu's own winners, and no default or global key"
+        );
+        assert_eq!(closed[1].action, BindingActionKind::Menu);
+        assert_eq!(
+            rows(&core.menu_bindings(None, "order")?),
+            [("n".to_string(), "by name".to_string())],
+            "a nested menu reads alone, whatever led to it"
+        );
+
+        core.input_map.open_menu("go")?;
+        let open = core
+            .available_bindings(None)?
+            .bindings
+            .into_iter()
+            .filter(|binding| binding.tier.mode() == Some("go"))
+            .collect::<Vec<_>>();
+        assert_eq!(rows(&open), rows(&closed), "the probe agrees with routing");
+        assert_eq!(rows(&core.menu_bindings(None, "go")?), rows(&closed));
+        Ok(())
+    }
+
+    #[test]
+    fn a_menu_that_could_not_open_offers_nothing() -> Result<()> {
+        const GROUP: FrameworkBindingGroup = FrameworkBindingGroup::new("root.help");
+        let mut core = Core::new();
+        let leaf = core.create_detached(Leaf)?;
+        core.attach(core.root, leaf)?;
+        core.set_focus(leaf)?;
+        bind(
+            &mut core,
+            BindingTier::Mode("go".to_string()),
+            'h',
+            "leaf/",
+            "home",
+            1,
+        )?;
+        assert_eq!(core.menu_bindings(None, "go")?.len(), 1);
+        assert!(core.menu_bindings(None, "")?.is_empty());
+
+        core.input_map.enter_mode("go")?;
+        assert!(
+            core.menu_bindings(None, "go")?.is_empty(),
+            "an active mode never opens as a menu"
+        );
+        core.input_map.leave_mode("go")?;
+
+        core.input_map
+            .set_modal_bindings(Some(ModalBindings::Framework {
+                groups: &[GROUP],
+                intents: &[],
+            }));
+        assert!(
+            core.menu_bindings(None, "go")?.is_empty(),
+            "a framework modal suspends menus"
+        );
         Ok(())
     }
 

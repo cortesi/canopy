@@ -460,7 +460,7 @@ impl fmt::Display for InputSpec {
 ///
 /// The menu is always the newest entry, above every mode.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct ModeStack {
+pub(crate) struct ModeStack {
     /// Active modes in push order.
     modes: Vec<String>,
     /// Menu that waits for its key.
@@ -791,35 +791,51 @@ impl InputMap {
     /// insertion order rank the candidates. A transient mode ends the walk,
     /// so nothing older follows it, unless a framework group suspends it.
     pub(crate) fn candidates(&self, path: &Path, input: InputSpec) -> Vec<BindingCandidate<'_>> {
-        let input = input.normalize();
+        self.candidates_in(&self.mode_stack, path, input)
+    }
+
+    /// Return ranked binding candidates at one route node, as
+    /// [`Self::candidates`] does, with `stack` in place of the active modes.
+    pub(crate) fn candidates_in(
+        &self,
+        stack: &ModeStack,
+        path: &Path,
+        input: InputSpec,
+    ) -> Vec<BindingCandidate<'_>> {
+        let lookup = Lookup {
+            stack,
+            path,
+            input: input.normalize(),
+        };
+        let lookup = &lookup;
         let mut out = Vec::new();
         match &self.modal_bindings {
             Some(ModalBindings::Framework { groups, intents }) => {
                 for group in *groups {
-                    self.extend_framework_group(&mut out, path, input, *group);
+                    self.extend_framework_group(&mut out, lookup, *group);
                 }
                 if intents.is_empty() {
-                    self.extend_tier(&mut out, path, input, |tier| *tier == BindingTier::Global);
+                    self.extend_tier(&mut out, lookup, |tier| *tier == BindingTier::Global);
                 } else {
-                    self.extend_application_tiers(&mut out, path, input, false);
+                    self.extend_application_tiers(&mut out, lookup, false);
                 }
             }
             Some(ModalBindings::Scoped { groups }) => {
                 // A menu opened inside the modal takes its keys first, since
                 // the user opened it to choose from it.
-                let menu = self.mode_stack.menu().is_some();
+                let menu = stack.menu().is_some();
                 if menu {
-                    self.extend_application_tiers(&mut out, path, input, true);
+                    self.extend_application_tiers(&mut out, lookup, true);
                 }
                 for group in *groups {
-                    self.extend_framework_group(&mut out, path, input, *group);
+                    self.extend_framework_group(&mut out, lookup, *group);
                 }
                 if !menu {
-                    self.extend_application_tiers(&mut out, path, input, true);
+                    self.extend_application_tiers(&mut out, lookup, true);
                 }
             }
             Some(ModalBindings::Application) | None => {
-                self.extend_application_tiers(&mut out, path, input, true);
+                self.extend_application_tiers(&mut out, lookup, true);
             }
         }
         out
@@ -832,36 +848,32 @@ impl InputMap {
     fn extend_application_tiers<'a>(
         &'a self,
         out: &mut Vec<BindingCandidate<'a>>,
-        path: &Path,
-        input: InputSpec,
+        lookup: &Lookup<'_>,
         transient_ends: bool,
     ) {
-        self.extend_tier(out, path, input, |tier| *tier == BindingTier::Global);
-        if let Some(menu) = self.mode_stack.menu() {
-            self.extend_tier(out, path, input, |tier| tier.mode() == Some(menu));
+        self.extend_tier(out, lookup, |tier| *tier == BindingTier::Global);
+        if let Some(menu) = lookup.stack.menu() {
+            self.extend_tier(out, lookup, |tier| tier.mode() == Some(menu));
             if transient_ends {
                 // A transient mode ends the walk, so older modes and the
                 // default tier stay out of reach.
                 return;
             }
         }
-        for mode in self.mode_stack.modes.iter().rev() {
-            self.extend_tier(out, path, input, |tier| tier.mode() == Some(mode.as_str()));
+        for mode in lookup.stack.modes.iter().rev() {
+            self.extend_tier(out, lookup, |tier| tier.mode() == Some(mode.as_str()));
         }
-        self.extend_tier(out, path, input, |tier| *tier == BindingTier::Default);
+        self.extend_tier(out, lookup, |tier| *tier == BindingTier::Default);
     }
 
     /// Append the candidates of one framework group, best first.
     fn extend_framework_group<'a>(
         &'a self,
         out: &mut Vec<BindingCandidate<'a>>,
-        path: &Path,
-        input: InputSpec,
+        lookup: &Lookup<'_>,
         group: FrameworkBindingGroup,
     ) {
-        self.extend_tier(out, path, input, |tier| {
-            tier.framework_group() == Some(group)
-        });
+        self.extend_tier(out, lookup, |tier| tier.framework_group() == Some(group));
     }
 
     /// Append the candidates of one tier, best first. `in_tier` selects the
@@ -872,20 +884,19 @@ impl InputMap {
     fn extend_tier<'a>(
         &'a self,
         out: &mut Vec<BindingCandidate<'a>>,
-        path: &Path,
-        input: InputSpec,
+        lookup: &Lookup<'_>,
         in_tier: impl Fn(&BindingTier) -> bool,
     ) {
         let start = out.len();
         out.extend(
             self.records
                 .iter()
-                .filter(|record| record.input == input && in_tier(&record.tier))
-                .filter(|record| self.admits_record(record))
+                .filter(|record| record.input == lookup.input && in_tier(&record.tier))
+                .filter(|record| self.admits_record_in(lookup.stack, record))
                 .filter_map(|record| {
                     record
                         .path_matcher
-                        .check_match(path)
+                        .check_match(lookup.path)
                         .map(|path_match| BindingCandidate { record, path_match })
                 }),
         );
@@ -903,6 +914,12 @@ impl InputMap {
     /// widget state. Route selection and
     /// `candidate_keys` share this predicate.
     pub(crate) fn admits_record(&self, record: &BindingRecord) -> bool {
+        self.admits_record_in(&self.mode_stack, record)
+    }
+
+    /// Return whether the active modal admission admits one record, with
+    /// `stack` in place of the active modes.
+    fn admits_record_in(&self, stack: &ModeStack, record: &BindingRecord) -> bool {
         match &self.modal_bindings {
             Some(ModalBindings::Framework { groups, intents }) => match &record.tier {
                 BindingTier::Framework(record_group) => groups.contains(record_group),
@@ -915,7 +932,7 @@ impl InputMap {
             Some(ModalBindings::Scoped { groups }) => match &record.tier {
                 BindingTier::Framework(record_group) => groups.contains(record_group),
                 BindingTier::Global => true,
-                BindingTier::Mode(mode) if self.mode_stack.menu() == Some(mode.as_str()) => true,
+                BindingTier::Mode(mode) if stack.menu() == Some(mode.as_str()) => true,
                 BindingTier::Mode(_) | BindingTier::Default => {
                     !record.path_matcher.as_str().is_empty()
                         && !self.modal_enclosing.as_ref().is_some_and(|enclosing| {
@@ -936,6 +953,40 @@ impl InputMap {
             InputSpec::Key(key) => Some(key),
             InputSpec::Mouse(_) => None,
         })
+    }
+
+    /// Return the mode stack that opening `menu` now would make, or `None`
+    /// when the menu could not open.
+    ///
+    /// The probe replaces any menu that waits, as key routing closes one menu
+    /// before a binding opens the next. A modal that suspends menus admits no
+    /// menu, and a name that is also an active mode never opens as a menu.
+    pub(crate) fn menu_stack(&self, menu: &str) -> Option<ModeStack> {
+        if menu.is_empty() || self.modal_suspends_menus() || self.mode_stack.has_mode(menu) {
+            return None;
+        }
+        let mut stack = self.mode_stack.clone();
+        stack.open_menu(menu);
+        Some(stack)
+    }
+
+    /// Return the distinct normalized keys that `menu`'s own records bind,
+    /// sorted by label.
+    ///
+    /// Only these keys can reach a binding of the menu, so menu discovery
+    /// probes them alone.
+    pub(crate) fn menu_keys(&self, menu: &str) -> Vec<Key> {
+        let mut keys = HashSet::new();
+        for record in &self.records {
+            if record.tier.mode() == Some(menu)
+                && let InputSpec::Key(key) = record.input.normalize()
+            {
+                keys.insert(key);
+            }
+        }
+        let mut keys = keys.into_iter().collect::<Vec<_>>();
+        keys.sort_by_key(ToString::to_string);
+        keys
     }
 
     /// Return normalized mouse inputs the active modal admission admits.
@@ -1242,6 +1293,17 @@ impl InputMap {
             .ok_or_else(|| Error::Invalid("binding insertion space exhausted".to_string()))?;
         Ok(id)
     }
+}
+
+/// What a candidate query asks: one normalized input at one route path,
+/// under one mode stack.
+struct Lookup<'q> {
+    /// Modes the query resolves under.
+    stack: &'q ModeStack,
+    /// Route path of the node.
+    path: &'q Path,
+    /// Normalized input.
+    input: InputSpec,
 }
 
 /// One ranked binding candidate at one route node.

@@ -699,6 +699,16 @@ impl Canopy {
         self.core.available_bindings(focus)
     }
 
+    /// Return the key bindings `menu` would offer from a node or the
+    /// current focus, if it opened now.
+    pub fn menu_bindings(
+        &self,
+        focus: Option<NodeId>,
+        menu: &str,
+    ) -> Result<Vec<super::help::AvailableBinding<Key>>> {
+        self.core.menu_bindings(focus, menu)
+    }
+
     /// Explain where `key` would go for a node or the current focus.
     ///
     /// The result is advisory: it predicts the route from the same resolver

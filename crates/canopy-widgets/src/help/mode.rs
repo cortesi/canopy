@@ -50,16 +50,15 @@ impl ModeHelp {
     ///
     /// Contextual help replaces the panel while it is open.
     pub(crate) fn sync(context: &mut dyn Context, overlay: NodeId) -> Result<Shown> {
-        let snapshot = context.available_bindings(context.focused_node())?;
-        let Some(mode) = snapshot.transient_mode else {
+        let Some(mode) = context.transient_mode() else {
             context.set_hidden(overlay, true)?;
             return Ok(Shown::Hidden);
         };
-        // A menu lists only what its keys can do now.
-        let bindings = snapshot
-            .bindings
+        // A menu lists only what its keys can do now. Help search reads the
+        // menu through the same query, so the two always agree.
+        let bindings = context
+            .menu_bindings(context.focused_node(), &mode)?
             .into_iter()
-            .filter(|binding| binding.tier.mode() == Some(mode.as_str()))
             .filter(|binding| {
                 !binding
                     .command

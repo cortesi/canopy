@@ -25,11 +25,11 @@ use super::{
     ScriptMenu, ViewContext, available_bindings_to_arg, base_api, binding_info_to_arg,
     command_call_from_value, command_call_type, command_info_to_arg, commands, defs,
     dispatch_command, dispatch_explicit, error, fixtures_to_arg, host_return, host_value, inputmap,
-    key, key_explanation_to_arg, luau_global_owner_name, menu_from_value, menu_type, mouse,
-    node_handle_type, node_id_from_value, node_info_to_arg, node_list_to_arg, notices_to_arg,
-    owned_truthy, ret_arg, ret_none, ret_one, route_trace_to_arg, screen_capture, screen_text,
-    screen_text_for_rect, script_callback_label, script_journal_to_arg, snapshot_to_arg,
-    validate_node_handle, values_to_args, with_current_canopy,
+    key, key_explanation_to_arg, luau_global_owner_name, menu_bindings_to_arg, menu_from_value,
+    menu_type, mouse, node_handle_type, node_id_from_value, node_info_to_arg, node_list_to_arg,
+    notices_to_arg, owned_truthy, ret_arg, ret_none, ret_one, route_trace_to_arg, screen_capture,
+    screen_text, screen_text_for_rect, script_callback_label, script_journal_to_arg,
+    snapshot_to_arg, validate_node_handle, values_to_args, with_current_canopy,
 };
 use crate::{
     core::{context::matching_nodes, inputmap::IntentCatalog},
@@ -468,6 +468,20 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
                 .ret(Type::named("BindingSnapshot"))
         },
         handler: Handler::Sync(host_available_bindings),
+    },
+    BaseFunction {
+        name: "menu_bindings",
+        docs: Some(
+            "Return the key bindings a menu would offer for a node or the current focus, \
+             if it opened now. A menu that could not open now offers none.",
+        ),
+        signature: || {
+            FunctionSignature::new()
+                .param(("menu", Type::String))
+                .param(("id", Type::named("NodeId").optional()))
+                .ret(Type::named("AvailableBinding").array())
+        },
+        handler: Handler::Sync(host_menu_bindings),
     },
     BaseFunction {
         name: "explain_key",
@@ -2285,6 +2299,19 @@ fn host_available_bindings<'s>(
     let requested = read_opt_node_id(scope, &mut args)?;
     host_value(scope, |canopy, _| {
         available_bindings_to_arg(canopy, requested)
+    })
+}
+
+/// `canopy.menu_bindings`: return the key bindings a menu would offer.
+fn host_menu_bindings<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = HostArgCursor::new(scope, args);
+    let menu = args.required::<String>("menu")?;
+    let requested = read_opt_node_id(scope, &mut args)?;
+    host_value(scope, |canopy, _| {
+        menu_bindings_to_arg(canopy, requested, &menu)
     })
 }
 

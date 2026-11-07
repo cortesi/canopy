@@ -689,6 +689,21 @@ fn available_binding_to_arg<I: ToString>(binding: input::AvailableBinding<I>) ->
     ArgValue::Map(record)
 }
 
+/// Convert the key bindings a menu would offer to scripting records.
+pub(super) fn menu_bindings_to_arg(
+    canopy: &Canopy,
+    requested: Option<NodeId>,
+    menu: &str,
+) -> Result<ArgValue> {
+    Ok(ArgValue::Array(
+        canopy
+            .menu_bindings(requested, menu)?
+            .into_iter()
+            .map(available_binding_to_arg)
+            .collect(),
+    ))
+}
+
 /// Convert a contextual binding snapshot to a scripting record.
 pub(super) fn available_bindings_to_arg(
     canopy: &Canopy,
