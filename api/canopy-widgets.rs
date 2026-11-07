@@ -4949,27 +4949,96 @@ pub mod font {
 
 pub mod fuzzy {
     //! Fuzzy label ranking for lists that jump or filter as the operator types.
-    //! Fuzzy ranking of labels against a typed query.
+    //! Fuzzy ranking of text against a typed query.
     //!
-    //! A query matches a label when its characters appear in the label in order,
-    //! ignoring case. Every alignment is scored, so the best label sorts first: a
-    //! match that starts the label or a word scores more, a run of consecutive
-    //! characters more again, and among equal alignments the shorter label wins. A
-    //! list that jumps to what the operator types, or a picker that narrows its
-    //! rows, ranks its labels with [`rank`].
+    //! Scoring is `nucleo-matcher`'s, which applies fzf's algorithm: a match that
+    //! starts a word, and runs of consecutive characters, rank highest. The query
+    //! follows fzf's syntax: spaces separate terms that must all match, and `^`,
+    //! `$`, `'`, and `!` anchor, quote, or negate a term. [`Case`] says how case
+    //! matches, and [`Haystack`] whether the text is a path.
+    //!
+    //! A [`Pattern`] is a compiled query, and a [`Scorer`] holds the scratch space
+    //! that scoring reuses. A list that jumps to what the operator types ranks its
+    //! labels with [`rank`]. [`paint_matched`] draws matched text with the
+    //! graphemes that the match used picked out.
+
+    /// How a query matches case.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub enum Case {
+        /// Case never matters.
+        #[default]
+        Ignore,
+        /// A term with an uppercase letter matches case, and other terms ignore
+        /// it.
+        Smart,
+    }
+
+    /// What a haystack holds.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub enum Haystack {
+        /// Plain text.
+        #[default]
+        Text,
+        /// Paths, which take bonuses for matches that start a path segment.
+        Paths,
+    }
+
+    /// A compiled query.
+    #[derive(Clone, Debug)]
+    pub struct Pattern {/* private fields */}
+
+    impl Pattern {
+        /// Return whether the query has no terms, so every text matches it.
+        pub fn is_empty(&self) -> bool;
+
+        /// Compile `query`, matching case as `case` says.
+        pub fn new(query: &str, case: Case) -> Self;
+    }
+
+    /// The matcher and the scratch space that scoring reuses.
+    pub struct Scorer {/* private fields */}
+
+    impl Scorer {
+        /// Construct a scorer for haystacks of `kind`.
+        pub fn new(kind: Haystack) -> Self;
+
+        /// Return the sorted, distinct grapheme positions in `text` that a match
+        /// of `pattern` used, or none when it does not match.
+        ///
+        /// Positions cost more than a score, so a caller asks for them only for
+        /// the rows it shows.
+        pub fn positions(&mut self, pattern: &Pattern, text: &str) -> Vec<u32>;
+
+        /// Score `text` against `pattern`, or return `None` when it does not
+        /// match. An empty pattern matches every text. The score's scale means
+        /// nothing on its own: a higher score is a better match.
+        pub fn score(&mut self, pattern: &Pattern, text: &str) -> Option<u32>;
+    }
+
+    /// Draw `text` in `style` from `at`, within `width` cells, with the graphemes
+    /// that a match used in the foreground and attributes of `match_style`.
+    ///
+    /// `first` is the position of the first grapheme of `text` in the haystack
+    /// the match ran over, so a caller that cuts or wraps the haystack draws each
+    /// run with its own offset. `positions` is sorted, as [`Scorer::positions`]
+    /// returns it. The matched graphemes keep the ground of `style`, so a row
+    /// that a selection paints stays one band.
+    pub fn paint_matched(
+        render: &mut Render<'_>,
+        at: Point,
+        width: u32,
+        text: &str,
+        first: u32,
+        positions: &[u32],
+        style: &str,
+        match_style: &str,
+    ) -> canopy::error::Result<()>;
 
     /// Return the indexes of the labels that match `query`, best first.
     ///
-    /// An empty query returns every index in order. Equally scoring labels sort
-    /// shortest first, then keep their original order.
+    /// Case never matters. An empty query returns every index in order. Equally
+    /// scoring labels sort shortest first, then keep their original order.
     pub fn rank<'a>(query: &str, labels: impl IntoIterator<Item = &'a str>) -> Vec<usize>;
-
-    /// Score `label` against `query`, ignoring case, or return `None` when the
-    /// query is no ordered subsequence of the label. An empty query scores zero.
-    ///
-    /// This is the alignment score. [`rank`] also prefers shorter labels when
-    /// alignments score equally. The score's scale means nothing on its own.
-    pub fn score(query: &str, label: &str) -> Option<i32>;
 }
 
 pub mod highlight {
