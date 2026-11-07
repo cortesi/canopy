@@ -4,10 +4,13 @@
 //! |---|---|---|
 //! | `Closed` | `opened(token, kind)` | `Open` |
 //! | `Open` | `close` succeeds | `Closing` |
+//! | `Open` | `reconcile`, close queued by another route | `Closing` |
 //! | `Open`, `Closing` | `reconcile`, scope gone | `Closed` |
 //!
-//! A close is queued, and Canopy reports the modal open until the scope is
-//! gone, so a closed modal passes through `Closing`. Reconcile on command
+//! A close is queued. Canopy reports the modal closed as soon as its close
+//! is queued ([`ViewContext::modal_is_open`]), but the scope stays until the
+//! queue drains ([`ViewContext::modal_retired`]), and a reopen in that window
+//! fails. So a closed modal passes through `Closing`. Reconcile on command
 //! entry and in queries, not only in a poll: a modal can close by a route
 //! other than the owner's own commands, such as the close of a modal below
 //! it.
@@ -48,14 +51,17 @@ impl<K> Default for ModalSession<K> {
 }
 
 impl<K> ModalSession<K> {
-    /// Return to `Closed` when the modal's scope is gone.
+    /// Return to `Closed` when the modal's scope is gone, and move an open
+    /// session whose close another route queued to `Closing`.
     pub fn reconcile(&mut self, ctx: &(impl ViewContext + ?Sized)) {
         let token = match self {
             Self::Closed => return,
             Self::Open { token, .. } | Self::Closing { token } => *token,
         };
-        if !ctx.modal_is_open(token) {
+        if ctx.modal_retired(token) {
             *self = Self::Closed;
+        } else if !ctx.modal_is_open(token) && self.is_open() {
+            *self = Self::Closing { token };
         }
     }
 

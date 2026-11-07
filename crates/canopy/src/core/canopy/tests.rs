@@ -3381,6 +3381,66 @@ fn a_modal_session_closes_through_closing_and_reconciles_to_closed() -> Result<(
 }
 
 #[test]
+fn regression_a_modal_session_waits_while_its_queued_close_drains() -> Result<()> {
+    use crate::{core::context::CoreContext, input::ModalSession};
+
+    let mut canopy = app();
+    let modal = focused_leaf(&mut canopy, PredictingLeaf)?;
+    let token = canopy.core.open_modal(ModalOptions {
+        owner: canopy.root_id(),
+        modal,
+        initial_focus: modal,
+        dim_target: None,
+        bindings: ModalBindings::Application,
+    })?;
+    let mut session = ModalSession::Closed;
+    session.opened(token, "question");
+    let mut scope = canopy.core.enter_dispatch();
+    {
+        let mut ctx = CoreContext::new(&mut scope, modal);
+        assert_eq!(session.close(&mut ctx)?, Some("question"));
+        // The modal reads closed at once, but its scope stays until the
+        // dispatch ends, and a reopen now would fail.
+        assert!(!session.can_open(&ctx), "the session waits for the drain");
+        assert_eq!(session, ModalSession::Closing { token });
+    }
+    scope.finish(true)?;
+    let ctx = CoreContext::new(&mut canopy.core, modal);
+    assert!(session.can_open(&ctx));
+    Ok(())
+}
+
+#[test]
+fn regression_a_modal_session_sees_a_close_queued_by_another_route() -> Result<()> {
+    use crate::{core::context::CoreContext, input::ModalSession};
+
+    let mut canopy = app();
+    let modal = focused_leaf(&mut canopy, PredictingLeaf)?;
+    let token = canopy.core.open_modal(ModalOptions {
+        owner: canopy.root_id(),
+        modal,
+        initial_focus: modal,
+        dim_target: None,
+        bindings: ModalBindings::Application,
+    })?;
+    let mut session = ModalSession::Closed;
+    session.opened(token, 1);
+    let mut scope = canopy.core.enter_dispatch();
+    {
+        let mut ctx = CoreContext::new(&mut scope, modal);
+        ctx.close_modal(token)?;
+        session.reconcile(&ctx);
+        assert_eq!(session, ModalSession::Closing { token });
+        assert!(!session.can_open(&ctx));
+    }
+    scope.finish(true)?;
+    let ctx = CoreContext::new(&mut canopy.core, modal);
+    session.reconcile(&ctx);
+    assert_eq!(session, ModalSession::Closed);
+    Ok(())
+}
+
+#[test]
 fn a_modal_session_close_returns_its_kind() -> Result<()> {
     use crate::{core::context::CoreContext, input::ModalSession};
 

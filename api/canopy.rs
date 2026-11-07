@@ -3041,7 +3041,8 @@ pub mod input {
         /// first.
         pub fn opened(&mut self, token: ModalToken, kind: K);
 
-        /// Return to `Closed` when the modal's scope is gone.
+        /// Return to `Closed` when the modal's scope is gone, and move an open
+        /// session whose close another route queued to `Closing`.
         pub fn reconcile(&mut self, ctx: &(impl ?Sized + ViewContext));
 
         /// The token of a modal that is open or closing.
