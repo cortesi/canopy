@@ -227,6 +227,31 @@ mod tests {
     }
 
     #[test]
+    fn split_active_keeps_a_thumb_that_rounds_to_zero_at_one_cell() -> Result<()> {
+        let track = LineSegment { off: 0, len: 10 };
+        let view = LineSegment { off: 0, len: 1000 };
+        // A window of 1 in 1000 is 0.01 cells of a 10 cell track.
+        let at = |off| track.split_active(LineSegment { off, len: 1 }, view);
+        assert_eq!(
+            at(0)?,
+            (
+                LineSegment { off: 0, len: 0 },
+                LineSegment { off: 0, len: 1 },
+                LineSegment { off: 1, len: 9 },
+            )
+        );
+        assert_eq!(
+            at(999)?,
+            (
+                LineSegment { off: 0, len: 9 },
+                LineSegment { off: 9, len: 1 },
+                LineSegment { off: 10, len: 0 },
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
     fn split_active_handles_extreme_extents() -> Result<()> {
         let track = LineSegment {
             off: u32::MAX - 1,

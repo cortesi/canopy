@@ -36,6 +36,9 @@ mod tests {
             if matches!(event, Event::Key(key) if *key == 'f') {
                 self.text = "failed".into();
                 Err(Error::Invalid("input failed".into()))
+            } else if matches!(event, Event::FocusGained) {
+                self.text = "gained".into();
+                Ok(EventOutcome::Handle)
             } else {
                 Ok(EventOutcome::Ignore)
             }
@@ -69,6 +72,30 @@ mod tests {
             );
             assert!(canopy.turn(TurnInput::Prepare)?.frame.is_none());
         }
+        Ok(())
+    }
+
+    #[test]
+    fn focus_gained_reaches_a_widget_through_a_turn() -> Result<()> {
+        let mut canopy = CanopyBuilder::new().build()?;
+        canopy.replace_root(TextWidget {
+            text: "waiting".into(),
+        })?;
+        canopy.set_screen_size(Size::new(8, 3))?;
+        canopy.turn(TurnInput::Prepare)?;
+        let outcome = canopy.turn(TurnInput::Events(vec![Event::FocusGained]))?;
+        assert!(outcome.frame.is_some());
+        let snapshot = canopy.snapshot().expect("published cells");
+        assert_eq!(
+            snapshot
+                .buffer
+                .screen_text()
+                .lines()
+                .next()
+                .unwrap()
+                .trim_end(),
+            "gained"
+        );
         Ok(())
     }
 

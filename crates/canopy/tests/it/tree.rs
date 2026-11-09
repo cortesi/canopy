@@ -56,6 +56,41 @@ mod tests {
         })
     }
 
+    /// Fails its first mount and succeeds at every later one.
+    #[derive(Default)]
+    struct FirstMountFails {
+        attempts: usize,
+    }
+
+    impl Widget for FirstMountFails {
+        fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {
+            self.attempts += 1;
+            if self.attempts == 1 {
+                Err(Error::Invalid("first mount rejected".into()))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    #[test]
+    fn a_failed_mount_succeeds_when_tried_again() -> Result<()> {
+        let mut canopy = CanopyBuilder::new().build()?;
+        canopy.with_root_context(|ctx| {
+            let child = ctx.create_detached(FirstMountFails::default())?;
+            let root = ctx.node_id();
+            let error = ctx.edit_structure(&mut |ctx| ctx.attach(root, child.into()));
+            assert!(matches!(error, Err(Error::Invalid(_))));
+            assert!(ctx.children_of(root).is_empty());
+            ctx.edit_structure(&mut |ctx| ctx.attach(root, child.into()))?;
+            assert_eq!(ctx.children_of(root), vec![child.into()]);
+            ctx.update(child, |widget: &mut FirstMountFails| {
+                assert_eq!(widget.attempts, 2)
+            })?;
+            Ok(())
+        })
+    }
+
     #[test]
     fn nested_structural_rollback_retains_widget_mutation() -> Result<()> {
         let mut canopy = CanopyBuilder::new().build()?;

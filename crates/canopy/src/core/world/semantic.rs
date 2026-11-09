@@ -210,4 +210,48 @@ mod tests {
         }
         core.validate_semantic_keys()
     }
+
+    #[test]
+    fn validate_semantic_keys_rejects_a_broken_index() -> Result<()> {
+        let mut core = Core::new();
+        let root = core.root_id();
+        let scope = core.create_detached(Leaf)?;
+        let other = core.create_detached(Leaf)?;
+        core.attach(root, scope)?;
+        core.attach(root, other)?;
+        let child = core.create_detached(Leaf)?;
+        core.attach(scope, child)?;
+        core.set_identity(child, scope, "field")?;
+        core.validate_semantic_keys()?;
+
+        // The index loses the key of an identity.
+        let key = (scope, "field".to_owned());
+        core.semantic_keys.remove(&key);
+        assert!(matches!(
+            core.validate_semantic_keys(),
+            Err(Error::Internal(_))
+        ));
+        core.semantic_keys.insert(key.clone(), child);
+
+        // The index names a node without that identity.
+        core.semantic_keys.insert((scope, "stale".into()), child);
+        assert!(matches!(
+            core.validate_semantic_keys(),
+            Err(Error::Internal(_))
+        ));
+        core.semantic_keys.remove(&(scope, "stale".into()));
+
+        // An identity lies outside its scope's subtree.
+        core.semantic_keys.remove(&key);
+        core.semantic_keys.insert((other, "field".into()), child);
+        core.nodes[child].identity = Some(NodeIdentity {
+            scope: other,
+            key: "field".into(),
+        });
+        assert!(matches!(
+            core.validate_semantic_keys(),
+            Err(Error::Internal(_))
+        ));
+        Ok(())
+    }
 }

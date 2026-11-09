@@ -1409,6 +1409,34 @@ fn set_children_fault_restores_core_state_and_unwinds_completed_mounts() -> Resu
 }
 
 #[test]
+fn a_failed_edit_unmounts_its_completed_mounts_in_reverse_order() -> Result<()> {
+    let mut core = Core::new();
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let first = core.create_detached(FaultWidget::new("first", Arc::clone(&log)))?;
+    let second = core.create_detached(FaultWidget::new("second", Arc::clone(&log)))?;
+    let failing = core.create_detached(
+        FaultWidget::new("failing", Arc::clone(&log))
+            .with_mount(MountAction::FailAfterCoreMutations),
+    )?;
+
+    assert_structural_rollback(&mut core, |core| {
+        core.set_children(core.root, vec![first, second, failing])
+    });
+
+    assert_eq!(
+        *log.lock().unwrap(),
+        vec![
+            HookEvent::Mount("first"),
+            HookEvent::Mount("second"),
+            HookEvent::Mount("failing"),
+            HookEvent::Unmount("second"),
+            HookEvent::Unmount("first"),
+        ]
+    );
+    Ok(())
+}
+
+#[test]
 fn nested_mount_failure_joins_outer_tree_edit() -> Result<()> {
     let mut core = Core::new();
     let log = Arc::new(Mutex::new(Vec::new()));
