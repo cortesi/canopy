@@ -3,15 +3,14 @@
 
 use std::ops::Range;
 
-use canopy::{
-    geom::PointI32,
-    input::key::{self, Key},
-    testing::harness::Harness,
-};
+use canopy::{geom::PointI32, input::key, testing::harness::Harness};
 use canopy_widgets::editor::{EditMode, EditorConfig};
 use proptest::{collection::vec, option, prelude::*};
 
-use super::*;
+use super::{
+    test_support::{builder, press, service, settle},
+    *,
+};
 use crate::{
     executor::{ExecutorOptions, ManualExecutor, MarkdownExecutor},
     surface::CursorScroll,
@@ -57,43 +56,12 @@ fn reader_with(
     };
     configure(&mut options);
     let reader = Markdown::new(text.to_owned(), options).unwrap();
-    let harness = Harness::builder(reader)
+    let harness = builder(reader)
         .register::<Markdown>()
-        .script("markdown-defaults", "markdown.default_bindings()")
         .size(width, height)
         .build()
         .unwrap();
     (harness, manual)
-}
-
-/// Render, poll the reader, and render again.
-pub(super) fn service(harness: &mut Harness) {
-    harness.render().unwrap();
-    harness
-        .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            Widget::poll(reader, ctx).map(|_| ())
-        })
-        .unwrap();
-    harness.render().unwrap();
-}
-
-/// Run the reader's work until it shows its document, and focus its view.
-pub(super) fn settle(harness: &mut Harness, manual: &ManualExecutor) {
-    for _ in 0..16 {
-        service(harness);
-        manual.run_until_idle();
-        service(harness);
-        if harness.with_root_widget(|reader: &mut Markdown| reader.ready()) {
-            service(harness);
-            harness
-                .with_root_widget_context(|reader: &mut Markdown, ctx| {
-                    ctx.set_focus(reader.navigation_node().unwrap())
-                })
-                .unwrap();
-            return;
-        }
-    }
-    panic!("the reader did not settle");
 }
 
 /// The marked unit's index and rows, while the block cursor shows.
@@ -145,12 +113,6 @@ pub(super) fn bar_rows(harness: &mut Harness) -> Vec<u32> {
 pub(super) fn visible(harness: &mut Harness, rows: &Range<u32>) -> Vec<u32> {
     let (top, height) = view(harness);
     (rows.start.max(top)..rows.end.min(top + height)).collect()
-}
-
-/// Press `key` and service the reader.
-pub(super) fn press(harness: &mut Harness, key: &str) {
-    harness.key(Key::parse_spec(key).unwrap()).unwrap();
-    service(harness);
 }
 
 #[test]
@@ -422,9 +384,8 @@ fn the_object_cursor_leaves_each_end_toward_its_own_side() {
             .unwrap()
         })
         .collect();
-    let mut harness = Harness::builder(Pair { readers })
+    let mut harness = builder(Pair { readers })
         .register::<Pair>()
-        .script("markdown-defaults", "markdown.default_bindings()")
         .size(30, 12)
         .build()
         .unwrap();

@@ -11,7 +11,8 @@ use canopy_widgets::editor::{EditMode, EditorConfig};
 use proptest::{collection::vec, prelude::*};
 
 use super::{
-    cursor_tests::{marked, press, view},
+    cursor_tests::{marked, view},
+    test_support::{builder, press, reader},
     *,
 };
 use crate::{
@@ -41,9 +42,8 @@ fn clocked(text: &str, vi: bool, width: u32, height: u32) -> (Harness, Schedule,
     )
     .unwrap();
     let clock = Arc::new(ManualClock::new());
-    let mut harness = Harness::builder(reader)
+    let mut harness = builder(reader)
         .register::<Markdown>()
-        .script("markdown-defaults", "markdown.default_bindings()")
         .clock(clock.clone())
         .size(width, height)
         .build()
@@ -65,14 +65,6 @@ fn settle(harness: &mut Harness, work: &mut Schedule, node: NodeId) {
             Ok(())
         })
         .unwrap();
-}
-
-/// Run `f` on the reader.
-fn reader<R>(
-    harness: &mut Harness,
-    f: impl FnOnce(&mut Markdown, &mut dyn Context) -> Result<R>,
-) -> R {
-    harness.with_root_widget_context(f).unwrap()
 }
 
 /// Return the cells of row `y`, up to column `width`.
@@ -507,9 +499,8 @@ proptest! {
             })
             .collect();
         let clock = Arc::new(ManualClock::new());
-        let mut harness = Harness::builder(Two { readers })
+        let mut harness = builder(Two { readers })
             .register::<Two>()
-            .script("markdown-defaults", "markdown.default_bindings()")
             .clock(clock.clone())
             .size(40, 20)
             .build()

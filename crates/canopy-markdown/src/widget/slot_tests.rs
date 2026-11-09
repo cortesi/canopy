@@ -5,7 +5,8 @@ use canopy::{render::TermBuf, runtime::NoticeLevel, testing::harness::Harness};
 use canopy_widgets::editor::{EditMode, EditorConfig, TextPosition, ViMode};
 
 use super::{
-    cursor_tests::{bar_rows, marked, press, service, settle, view},
+    cursor_tests::{bar_rows, marked, view},
+    test_support::{builder, press, reader, service, settle},
     *,
 };
 use crate::{
@@ -56,21 +57,12 @@ pub(super) fn editing_with(
     };
     configure(&mut options);
     let reader = Markdown::new(text.to_owned(), options).unwrap();
-    let harness = Harness::builder(reader)
+    let harness = builder(reader)
         .register::<Markdown>()
-        .script("markdown-defaults", "markdown.default_bindings()")
         .size(width, height)
         .build()
         .unwrap();
     (harness, manual)
-}
-
-/// Run `f` on the reader.
-pub(super) fn reader<R>(
-    harness: &mut Harness,
-    f: impl FnOnce(&mut Markdown, &mut dyn Context) -> Result<R>,
-) -> R {
-    harness.with_root_widget_context(f).unwrap()
 }
 
 /// The text of the open block editor.

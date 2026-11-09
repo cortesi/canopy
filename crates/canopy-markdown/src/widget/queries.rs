@@ -495,9 +495,10 @@ pub(super) fn search(reader: &Markdown, offset: usize, limit: usize) -> ArgValue
 mod tests {
     use std::sync::Arc;
 
-    use canopy::testing::harness::Harness;
-
-    use super::{super::ActionStatus, *};
+    use super::{
+        super::{ActionStatus, test_support::builder},
+        *,
+    };
     use crate::{
         DocumentInput, MarkdownOptions,
         document::{ParseLimits, parse_document},
@@ -645,9 +646,8 @@ mod tests {
         assert!(model_bytes > 0);
         reader.shared.borrow_mut().presentation = None;
         assert_eq!(items(&objects(&reader, 0, 128)).len(), 1);
-        let mut harness = Harness::builder(reader)
+        let mut harness = builder(reader)
             .register::<Markdown>()
-            .script("markdown-defaults", "markdown.default_bindings()")
             .size(40, 8)
             .build()
             .unwrap();
@@ -675,9 +675,8 @@ mod tests {
         reader.store.append(" second").unwrap();
         assert_eq!(reader.store.snapshot().chunk_count(), 2);
         assert_eq!(reader.store.snapshot().flattened_bytes(), 0);
-        let mut harness = Harness::builder(reader)
+        let mut harness = builder(reader)
             .register::<Markdown>()
-            .script("markdown-defaults", "markdown.default_bindings()")
             .size(40, 8)
             .build()
             .unwrap();
@@ -714,9 +713,8 @@ mod tests {
         let mut reader = reader("PRIVATE WHOLE SOURCE".repeat(100));
         reader.action_status = ActionStatus::Failed("終".repeat(200));
         reader.failure = Some("error".repeat(200));
-        let mut harness = Harness::builder(reader)
+        let mut harness = builder(reader)
             .register::<Markdown>()
-            .script("markdown-defaults", "markdown.default_bindings()")
             .size(40, 8)
             .build()
             .unwrap();

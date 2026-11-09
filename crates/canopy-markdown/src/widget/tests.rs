@@ -9,7 +9,10 @@ use canopy::{
     tree::{FocusDirection, FocusScope},
 };
 
-use super::*;
+use super::{
+    test_support::{builder, service, settle},
+    *,
+};
 use crate::executor::{ExecutorOptions, HeldWork, ManualExecutor, MarkdownExecutor};
 
 fn fixture(
@@ -52,25 +55,12 @@ fn configured(
     } else {
         Markdown::new(text.to_owned(), options).unwrap()
     };
-    let harness = Harness::builder(reader)
+    let harness = builder(reader)
         .register::<Markdown>()
-        .script("markdown-defaults", "markdown.default_bindings()")
         .size(40, 8)
         .build()
         .unwrap();
     (harness, manual)
-}
-
-/// Drive owner callbacks explicitly; painting alone deliberately does not poll.
-fn service(harness: &mut Harness) {
-    harness.render().unwrap();
-    harness
-        .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            let _ = Widget::poll(reader, ctx)?;
-            Ok(())
-        })
-        .unwrap();
-    harness.render().unwrap();
 }
 
 fn next_work(harness: &mut Harness, manual: &ManualExecutor) -> HeldWork {
@@ -81,29 +71,6 @@ fn next_work(harness: &mut Harness, manual: &ManualExecutor) -> HeldWork {
         }
     }
     panic!("no work after explicit preparation turns");
-}
-
-fn settle(harness: &mut Harness, manual: &ManualExecutor) {
-    for _ in 0..16 {
-        service(harness);
-        manual.run_until_idle();
-        service(harness);
-        if harness.with_root_widget(|reader: &mut Markdown| reader.ready()) {
-            return;
-        }
-    }
-    let state = harness.with_root_widget(|reader: &mut Markdown| {
-        format!(
-            "view={:?}, accepted={}, displayed={}, dirty={}, failure={:?}, switching={}",
-            reader.active,
-            reader.accepted_revision(),
-            reader.displayed_revision(),
-            reader.submission.is_due(),
-            reader.failure,
-            reader.switching.is_some()
-        )
-    });
-    panic!("reader did not settle: {state}");
 }
 
 #[test]
@@ -2374,12 +2341,11 @@ fn source_enter_and_tab_do_not_activate_or_navigate_cached_rendered_objects() {
         },
     )
     .unwrap();
-    let mut harness = Harness::builder(TraversalHost {
+    let mut harness = builder(TraversalHost {
         reader: Some(reader),
         after: None,
     })
     .register::<TraversalHost>()
-    .script("markdown-defaults", "markdown.default_bindings()")
     .size(40, 8)
     .build()
     .unwrap();
@@ -2561,12 +2527,11 @@ fn a_followed_link_wakes_the_host_to_take_its_request() {
     )
     .unwrap();
     let polls = Rc::new(Cell::new(0));
-    let mut harness = Harness::builder(PublicationHost {
+    let mut harness = builder(PublicationHost {
         reader: Some(reader),
         polls: polls.clone(),
     })
     .register::<Markdown>()
-    .script("markdown-defaults", "markdown.default_bindings()")
     .size(40, 8)
     .build()
     .unwrap();
@@ -2607,12 +2572,11 @@ fn accepted_publication_wakes_host_but_stale_results_and_queries_do_not() {
     )
     .unwrap();
     let polls = Rc::new(Cell::new(0));
-    let mut harness = Harness::builder(PublicationHost {
+    let mut harness = builder(PublicationHost {
         reader: Some(reader),
         polls: polls.clone(),
     })
     .register::<Markdown>()
-    .script("markdown-defaults", "markdown.default_bindings()")
     .size(40, 8)
     .build()
     .unwrap();
@@ -2870,12 +2834,11 @@ fn an_item_is_what_interact_or_a_selection_chose() {
         },
     )
     .unwrap();
-    let mut harness = Harness::builder(PublicationHost {
+    let mut harness = builder(PublicationHost {
         reader: Some(reader),
         polls: Rc::new(Cell::new(0)),
     })
     .register::<Markdown>()
-    .script("markdown-defaults", "markdown.default_bindings()")
     .size(40, 8)
     .build()
     .unwrap();
