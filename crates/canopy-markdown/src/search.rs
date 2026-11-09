@@ -435,7 +435,7 @@ mod tests {
             &limits,
         )
         .unwrap();
-        let source = SourceStore::static_text(text).unwrap().snapshot();
+        let source = SourceStore::complete(text).unwrap().snapshot();
         search_document(
             &parse_document(&source, &Default::default(), None),
             &query,
@@ -541,7 +541,7 @@ mod tests {
         )
         .unwrap();
         // The second paragraph is cut by the scan budget.
-        let source = SourceStore::static_text("aaaa\n\nxy").unwrap().snapshot();
+        let source = SourceStore::complete("aaaa\n\nxy").unwrap().snapshot();
         let document = parse_document(&source, &Default::default(), None);
         let result = search_document(&document, &query, 1, &limits);
         assert_eq!(result.count, 4);
@@ -566,7 +566,7 @@ mod tests {
                 &limits,
             )
             .unwrap();
-            let source = SourceStore::static_text("foobar").unwrap().snapshot();
+            let source = SourceStore::complete("foobar").unwrap().snapshot();
             let document = parse_document(&source, &Default::default(), None);
             let result = search_document(&document, &query, 1, &limits);
             assert_eq!(result.count, 0);
@@ -577,7 +577,7 @@ mod tests {
     }
     #[test]
     fn rendered_search_is_cell_and_line_addressed_and_source_finds_destinations() {
-        let source = SourceStore::static_text(
+        let source = SourceStore::complete(
             "[label](https://secret.invalid)\n\nA | B\n- | -\nx | y\n\n```\nx\nx\n```\n",
         )
         .unwrap()
@@ -622,7 +622,7 @@ mod tests {
     }
     #[test]
     fn source_card_matches_carry_exact_original_byte_ranges() {
-        let source = SourceStore::static_text("prefix\n\n<div>\r\nneedle\r\n")
+        let source = SourceStore::complete("prefix\n\n<div>\r\nneedle\r\n")
             .unwrap()
             .snapshot();
         let document = parse_document(&source, &Default::default(), None);

@@ -2109,13 +2109,13 @@ mod tests {
     use crate::{FinishOutcome, source_store::SourceStore};
     fn complete(text: &str) -> DocumentSnapshot {
         parse_document(
-            &SourceStore::static_text(text).unwrap().snapshot(),
+            &SourceStore::complete(text).unwrap().snapshot(),
             &ParseLimits::default(),
             None,
         )
     }
     fn receiving(text: &str) -> DocumentSnapshot {
-        let mut s = SourceStore::stream();
+        let mut s = SourceStore::receiving();
         s.append(text).unwrap();
         parse_document(&s.snapshot(), &ParseLimits::default(), None)
     }
@@ -2154,7 +2154,7 @@ mod tests {
         // An edit makes a shorter text in a new epoch, while the reader still
         // holds the parse of the longer one.
         let long = complete("# One\n\nalpha beta gamma delta\n\nlast paragraph here\n");
-        let short = SourceStore::static_text("x\n").unwrap();
+        let short = SourceStore::complete("x\n").unwrap();
         let document = parse_document(&short.snapshot(), &ParseLimits::default(), Some(&long));
         assert_eq!(document.blocks.len(), 1);
         assert_eq!(document.units[0].text, "x");
@@ -2196,7 +2196,7 @@ mod tests {
     #[test]
     fn a_stream_parsed_in_pieces_reads_as_a_whole_parse() {
         let text = "# Intro\n\nSee [the site][site], a note[^n], and #tag.\n\n[site]: https://example.com\n\n[^n]: The note.\n\n# Intro\n\n> [!tip] Water\n> Drink.\n\n- one\n- two ^two\n\n^list\n\n| a | b |\n| - | - |\n| 1 | 2 | 3 |\n\n```rust\nfn main() {}\n```\n\nAgain [site] and[^n] [[Note#Intro]].\n\n## Later\n\nA long paragraph\nthat wraps\nover lines.\n\n# Intro\n";
-        let mut store = SourceStore::stream();
+        let mut store = SourceStore::receiving();
         let mut previous: Option<DocumentSnapshot> = None;
         for chunk in text.as_bytes().chunks(7) {
             store.append(str::from_utf8(chunk).unwrap()).unwrap();
@@ -2398,7 +2398,7 @@ mod tests {
                     .any(|object| matches!(object.kind, ObjectKind::Code))
             );
         }
-        let mut source = SourceStore::stream();
+        let mut source = SourceStore::receiving();
         source.append("```\nx\n```").unwrap();
         let first = parse_document(&source.snapshot(), &ParseLimits::default(), None);
         assert!(first.objects.is_empty());
@@ -2416,7 +2416,7 @@ mod tests {
     }
     #[test]
     fn identities_grow_reclassify_and_never_recycle() {
-        let mut source = SourceStore::stream();
+        let mut source = SourceStore::receiving();
         source.append("same\n\ntext").unwrap();
         let first = parse_document(&source.snapshot(), &ParseLimits::default(), None);
         source.append(" grows").unwrap();
@@ -2461,7 +2461,7 @@ mod tests {
         for text in fixtures {
             let expected = complete(text).readable_text();
             for split in (0..=text.len()).filter(|i| text.is_char_boundary(*i)) {
-                let mut source = SourceStore::stream();
+                let mut source = SourceStore::receiving();
                 let mut prior = None;
                 for chunk in [&text[..split], "", &text[split..]] {
                     source.append(chunk).unwrap();
@@ -2476,7 +2476,7 @@ mod tests {
                 assert_eq!(doc.readable_text(), expected, "{text:?} split {split}");
                 assert_eq!(&*doc.source.text(), text);
             }
-            let mut source = SourceStore::stream();
+            let mut source = SourceStore::receiving();
             let mut previous = None;
             for ch in text.chars() {
                 source.append(ch.encode_utf8(&mut [0; 4])).unwrap();
@@ -2503,7 +2503,7 @@ mod tests {
     #[test]
     fn limits_degrade_without_dropping_accepted_source() {
         let text = "one\n\ntwo\n";
-        let source = SourceStore::static_text(text).unwrap();
+        let source = SourceStore::complete(text).unwrap();
         for max_nodes in [0, 1, 2] {
             let doc = parse_document(
                 &source.snapshot(),
@@ -2516,7 +2516,7 @@ mod tests {
             assert!(doc.degraded.is_some());
             assert_eq!(doc.readable_text(), text);
         }
-        let source = SourceStore::static_text("A | B\n- | -\nx | y").unwrap();
+        let source = SourceStore::complete("A | B\n- | -\nx | y").unwrap();
         let doc = parse_document(
             &source.snapshot(),
             &ParseLimits {
@@ -2855,7 +2855,7 @@ mod tests {
     }
     #[test]
     fn table_reference_changes_values_under_existing_keys() {
-        let mut source = SourceStore::stream();
+        let mut source = SourceStore::receiving();
         source
             .append("A | B\n- | -\n[x][r] | y\n\nafter\n\n")
             .unwrap();
@@ -2875,7 +2875,7 @@ mod tests {
     }
     #[test]
     fn limits_at_n_minus_one_n_and_n_plus_one() {
-        let source = SourceStore::static_text("a").unwrap().snapshot();
+        let source = SourceStore::complete("a").unwrap().snapshot();
         for (max_nodes, degraded) in [(2, true), (3, false), (4, false)] {
             assert_eq!(
                 parse_document(
@@ -2906,7 +2906,7 @@ mod tests {
                 degraded
             );
         }
-        let source = SourceStore::static_text("A | B\n- | -\nx | y")
+        let source = SourceStore::complete("A | B\n- | -\nx | y")
             .unwrap()
             .snapshot();
         for (max_table_cells, degraded) in [(3, true), (4, false), (5, false)] {

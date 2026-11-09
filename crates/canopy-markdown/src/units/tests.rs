@@ -242,7 +242,7 @@ fn own_text_moves_inside_its_lines_and_onto_characters() {
 
 #[test]
 fn a_block_of_no_bytes_takes_its_whole_line() {
-    let store = SourceStore::static_text("a\n\nb\n").unwrap();
+    let store = SourceStore::complete("a\n\nb\n").unwrap();
     let mut document = parse_document(&store.snapshot(), &ParseLimits::default(), None);
     document.blocks[1].source = 3..3;
     let units = edit_units(&document);

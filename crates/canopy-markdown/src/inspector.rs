@@ -1007,7 +1007,7 @@ impl MarkdownInspector {
     fn open_detail(&mut self, ctx: &mut dyn Context, text: Arc<str>) -> Result<()> {
         // Preparation is submitted through the same lane. The table remains
         // mounted.
-        let store = SourceStore::static_text(text).map_err(invalid)?;
+        let store = SourceStore::complete(text).map_err(invalid)?;
         let Stage::Table { detail, .. } = &mut self.stage else {
             return Ok(());
         };
@@ -1179,7 +1179,7 @@ impl Widget for Inspector {
             InspectorContent::Code { info, text } => {
                 self.full_copy = Some(text.clone());
                 self.source_options.language = Some(Arc::from(info));
-                Some(SourceStore::static_text(text).map_err(invalid)?.snapshot())
+                Some(SourceStore::complete(text).map_err(invalid)?.snapshot())
             }
             InspectorContent::Source { snapshot } => Some(snapshot),
             InspectorContent::Table { table } => {
@@ -1222,7 +1222,7 @@ impl Widget for Inspector {
                     resolved.as_deref().unwrap_or("Unresolved")
                 );
                 self.source_options.language = None;
-                Some(SourceStore::static_text(text).map_err(invalid)?.snapshot())
+                Some(SourceStore::complete(text).map_err(invalid)?.snapshot())
             }
         };
         if let Some(source) = pending {
@@ -1527,9 +1527,7 @@ mod tests {
     }
     pub(super) fn source() -> InspectorContent {
         InspectorContent::Source {
-            snapshot: SourceStore::static_text("first\nsecond\n")
-                .unwrap()
-                .snapshot(),
+            snapshot: SourceStore::complete("first\nsecond\n").unwrap().snapshot(),
         }
     }
     #[test]
@@ -1618,7 +1616,7 @@ mod tests {
     }
     #[test]
     fn a_canceled_search_reports_as_a_notice_and_clears_the_status() -> Result<()> {
-        let mut store = SourceStore::stream();
+        let mut store = SourceStore::receiving();
         store.append("one\ntwo\n").unwrap();
         let (mut harness, _, handle, manual) = fixture(InspectorContent::Source {
             snapshot: store.snapshot(),
@@ -1653,7 +1651,7 @@ mod tests {
     }
     #[test]
     fn pinned_source_copy_is_exact_and_worker_prepared() -> Result<()> {
-        let mut store = SourceStore::stream();
+        let mut store = SourceStore::receiving();
         store.append("é\r\n\tend\n").unwrap();
         let pinned = store.snapshot();
         let (mut harness, _, handle, manual) =
@@ -1952,7 +1950,7 @@ mod interaction_tests {
 
     #[test]
     fn readiness_tracks_worker_publication_without_polling_timers() -> Result<()> {
-        let snapshot = SourceStore::static_text("source text").unwrap().snapshot();
+        let snapshot = SourceStore::complete("source text").unwrap().snapshot();
         let (mut harness, _, handle, manual) = fixture(InspectorContent::Source { snapshot })?;
         harness.canopy.with_root_context(|ctx| {
             assert!(!handle.ready(ctx)?);
@@ -1983,9 +1981,7 @@ mod interaction_tests {
 
     #[test]
     fn queued_line_reveal_applies_after_source_preparation() -> Result<()> {
-        let snapshot = SourceStore::static_text("a\r\nneedle\n")
-            .unwrap()
-            .snapshot();
+        let snapshot = SourceStore::complete("a\r\nneedle\n").unwrap().snapshot();
         let (mut harness, _, handle, manual) = fixture(InspectorContent::Source { snapshot })?;
         harness
             .canopy
@@ -2008,7 +2004,7 @@ mod interaction_tests {
 
     #[test]
     fn prompt_submission_reports_its_own_operation() -> Result<()> {
-        let snapshot = SourceStore::static_text("a\nb\nc\n").unwrap().snapshot();
+        let snapshot = SourceStore::complete("a\nb\nc\n").unwrap().snapshot();
         let (mut harness, _, _, manual) = fixture(InspectorContent::Source { snapshot })?;
         assert!(manual.run_next());
         harness.canopy.turn(TurnInput::Prepare)?;
@@ -2029,7 +2025,7 @@ mod interaction_tests {
 
     #[test]
     fn source_search_is_worker_prepared_and_escape_clears_it_first() -> Result<()> {
-        let snapshot = SourceStore::static_text("first\nneedle\nlast\nneedle\n")
+        let snapshot = SourceStore::complete("first\nneedle\nlast\nneedle\n")
             .unwrap()
             .snapshot();
         let (mut harness, _, handle, manual) = fixture(InspectorContent::Source { snapshot })?;

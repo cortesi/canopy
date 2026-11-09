@@ -1335,7 +1335,7 @@ mod tests {
 
     fn request(generation: u64) -> WorkRequest {
         WorkRequest {
-            source: SourceStore::static_text("# A\r\n\té\n").unwrap().snapshot(),
+            source: SourceStore::complete("# A\r\n\té\n").unwrap().snapshot(),
             view: ViewType::Source,
             geometry: GeometryKey::default(),
             source_options: SourceOptions::default(),
@@ -1486,8 +1486,8 @@ mod tests {
     #[test]
     fn copy_admission_charges_many_small_source_chunk_headers() {
         let text = "x".repeat(128);
-        let single = SourceStore::static_text(text.clone()).unwrap();
-        let mut chunks = SourceStore::stream();
+        let single = SourceStore::complete(text.clone()).unwrap();
+        let mut chunks = SourceStore::receiving();
         for _ in 0..text.len() {
             chunks.append("x").unwrap();
         }
@@ -1577,7 +1577,7 @@ mod tests {
     fn source_acknowledgement_rebases_prefix_provenance_before_next_job_starts() {
         let (executor, driver) = manual(1, 1);
         let handle = executor.register(None).unwrap();
-        let mut store = SourceStore::stream();
+        let mut store = SourceStore::receiving();
         store.append("prefix").unwrap();
         let mut first = request(1);
         first.source = store.snapshot();
@@ -1644,11 +1644,10 @@ mod tests {
 
     #[test]
     fn object_copy_checks_original_payload_on_worker() {
-        let source = SourceStore::static_text(
-            "[label](https://example.test/path)\n\n```txt\npayload\n```\n",
-        )
-        .unwrap()
-        .snapshot();
+        let source =
+            SourceStore::complete("[label](https://example.test/path)\n\n```txt\npayload\n```\n")
+                .unwrap()
+                .snapshot();
         let document = Arc::new(parse_document(&source, &ParseLimits::default(), None));
         let link = document
             .objects
@@ -1700,7 +1699,7 @@ mod tests {
     fn evicted_layout_reuses_semantic_base_and_preserves_queued_append_identity() {
         let (executor, driver) = manual(1, 1);
         let handle = executor.register(None).unwrap();
-        let mut store = SourceStore::stream();
+        let mut store = SourceStore::receiving();
         store.append("tail").unwrap();
         let previous = Arc::new(parse_document(
             &store.snapshot(),
@@ -1742,7 +1741,7 @@ mod tests {
     fn queued_append_uses_newly_published_tail_identity() {
         let (executor, driver) = manual(1, 1);
         let handle = executor.register(None).unwrap();
-        let mut store = SourceStore::stream();
+        let mut store = SourceStore::receiving();
         store.append("# Head\n\nnew tail").unwrap();
         let mut work = request(1);
         work.source = store.snapshot();
@@ -1769,7 +1768,7 @@ mod tests {
 
     #[test]
     fn oversized_readable_copy_fails_before_building_its_output() {
-        let source = SourceStore::static_text("one\n\ntwo").unwrap().snapshot();
+        let source = SourceStore::complete("one\n\ntwo").unwrap().snapshot();
         let document = Arc::new(parse_document(&source, &ParseLimits::default(), None));
         let expected = document.readable_text();
         assert_eq!(

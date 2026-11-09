@@ -11,7 +11,7 @@ use std::{
     },
 };
 
-use crate::FinishOutcome;
+use crate::{DocumentInput, FinishOutcome};
 
 /// Process-wide source epoch allocator.
 static NEXT_EPOCH: AtomicU64 = AtomicU64::new(1);
@@ -35,7 +35,7 @@ impl Lifecycle {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// An append or replacement rejected without accepted-state mutation.
-pub enum SourceError {
+pub enum StoreError {
     /// A complete static document or closed source epoch.
     Complete,
     /// The operation would exceed the accepted source byte limit.
@@ -46,7 +46,7 @@ pub enum SourceError {
         attempted: usize,
     },
 }
-impl fmt::Display for SourceError {
+impl fmt::Display for StoreError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Complete => f.write_str("the source is complete"),
@@ -56,7 +56,7 @@ impl fmt::Display for SourceError {
         }
     }
 }
-impl StdError for SourceError {}
+impl StdError for StoreError {}
 
 /// One immutable accepted append linked to the previous revision.
 struct Chunk {
@@ -196,11 +196,11 @@ pub struct SourceStore {
 }
 impl SourceStore {
     /// Start an empty receiving epoch with the default source limit.
-    pub fn stream() -> Self {
-        Self::with_limit(DEFAULT_SOURCE_LIMIT)
+    pub fn receiving() -> Self {
+        Self::receiving_with_limit(DEFAULT_SOURCE_LIMIT)
     }
     /// Start an empty receiving epoch with an explicit byte limit.
-    pub fn with_limit(limit: usize) -> Self {
+    pub fn receiving_with_limit(limit: usize) -> Self {
         Self {
             snapshot: SourceSnapshot {
                 epoch: NEXT_EPOCH.fetch_add(1, Ordering::Relaxed),
@@ -216,19 +216,22 @@ impl SourceStore {
         }
     }
     /// Adopt complete source with the default byte limit.
-    pub fn static_text(text: impl Into<Arc<str>>) -> Result<Self, SourceError> {
-        Self::static_with_limit(text, DEFAULT_SOURCE_LIMIT)
+    pub fn complete(text: impl Into<Arc<str>>) -> Result<Self, StoreError> {
+        Self::complete_with_limit(text, DEFAULT_SOURCE_LIMIT)
     }
     /// Adopt complete source without copying an existing Arc payload.
-    pub fn static_with_limit(text: impl Into<Arc<str>>, limit: usize) -> Result<Self, SourceError> {
+    pub fn complete_with_limit(
+        text: impl Into<Arc<str>>,
+        limit: usize,
+    ) -> Result<Self, StoreError> {
         let text = text.into();
         if text.len() > limit {
-            return Err(SourceError::Limit {
+            return Err(StoreError::Limit {
                 limit,
                 attempted: text.len(),
             });
         }
-        let mut store = Self::with_limit(limit);
+        let mut store = Self::receiving_with_limit(limit);
         if !text.is_empty() {
             store.snapshot.len = text.len();
             store.snapshot.chunk_count = 1;
@@ -246,16 +249,16 @@ impl SourceStore {
         self.snapshot.clone()
     }
     /// Accept all nonempty UTF-8 input or leave accepted state unchanged.
-    pub fn append(&mut self, text: &str) -> Result<bool, SourceError> {
+    pub fn append(&mut self, text: &str) -> Result<bool, StoreError> {
         if self.snapshot.lifecycle.is_complete() {
-            return Err(SourceError::Complete);
+            return Err(StoreError::Complete);
         }
         if text.is_empty() {
             return Ok(false);
         }
         let attempted = self.snapshot.len.saturating_add(text.len());
         if attempted > self.limit {
-            return Err(SourceError::Limit {
+            return Err(StoreError::Limit {
                 limit: self.limit,
                 attempted,
             });
@@ -280,11 +283,16 @@ impl SourceStore {
         true
     }
     /// Start a new epoch atomically, preserving the old one on rejection.
-    pub fn replace(&mut self, text: &str, receiving: bool) -> Result<(), SourceError> {
-        let mut next = Self::with_limit(self.limit);
-        next.append(text)?;
-        if !receiving {
-            next.finish(FinishOutcome::Completed);
+    pub fn replace(&mut self, input: DocumentInput) -> Result<(), StoreError> {
+        let mut next = Self::receiving_with_limit(self.limit);
+        match input {
+            DocumentInput::Complete(text) => {
+                next.append(&text)?;
+                next.finish(FinishOutcome::Completed);
+            }
+            DocumentInput::Receiving(text) => {
+                next.append(&text)?;
+            }
         }
         *self = next;
         Ok(())
@@ -292,7 +300,7 @@ impl SourceStore {
 }
 impl Default for SourceStore {
     fn default() -> Self {
-        Self::stream()
+        Self::receiving()
     }
 }
 
@@ -301,7 +309,7 @@ mod tests {
     use super::*;
     #[test]
     fn exact_immutable_all_or_nothing() {
-        let mut s = SourceStore::with_limit(8);
+        let mut s = SourceStore::receiving_with_limit(8);
         s.append("é\r").unwrap();
         let old = s.snapshot();
         s.append("\n\t終").unwrap();
@@ -318,16 +326,19 @@ mod tests {
     }
     #[test]
     fn replacement_changes_epoch_and_preserves_old_bytes() {
-        let mut s = SourceStore::static_text("old").unwrap();
+        let mut s = SourceStore::complete("old").unwrap();
         let old = s.snapshot();
-        s.replace("新", true).unwrap();
+        s.replace(DocumentInput::Receiving("新".into())).unwrap();
         assert_ne!(old.epoch, s.snapshot().epoch);
         assert_eq!(&*old.text(), "old");
         assert_eq!(s.snapshot().lifecycle, Lifecycle::Receiving);
+        s.replace(DocumentInput::Complete("終".into())).unwrap();
+        assert_eq!(&*s.snapshot().text(), "終");
+        assert!(s.snapshot().lifecycle.is_complete());
     }
     #[test]
     fn many_chunks_flatten_and_reclaim_iteratively() {
-        let mut source = SourceStore::with_limit(50_000);
+        let mut source = SourceStore::receiving_with_limit(50_000);
         for _ in 0..50_000 {
             source.append("x").unwrap();
         }

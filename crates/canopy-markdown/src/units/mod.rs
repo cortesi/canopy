@@ -132,7 +132,7 @@ pub fn edit_units(document: &DocumentSnapshot) -> Vec<EditUnit> {
 /// Parse `text` as a complete document with the default parse limits, and
 /// return its edit units. A text past a limit reads as one source unit.
 pub fn parse_units(text: &str) -> Vec<EditUnit> {
-    match SourceStore::static_with_limit(text, usize::MAX) {
+    match SourceStore::complete_with_limit(text, usize::MAX) {
         Ok(store) => edit_units(&parse_document(
             &store.snapshot(),
             &ParseLimits::default(),

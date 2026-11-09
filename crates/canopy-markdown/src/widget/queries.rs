@@ -499,7 +499,7 @@ mod tests {
 
     use super::{super::ActionStatus, *};
     use crate::{
-        MarkdownOptions,
+        DocumentInput, MarkdownOptions,
         document::{ParseLimits, parse_document},
         executor::{ExecutorOptions, MarkdownExecutor},
         presentation::{GeometryKey, PresentationSnapshot, Supplied},
@@ -668,7 +668,10 @@ mod tests {
     #[test]
     fn querying_resources_does_not_flatten_pending_accepted_chunks() {
         let mut reader = reader(String::new());
-        reader.store.replace("first", true).unwrap();
+        reader
+            .store
+            .replace(DocumentInput::Receiving("first".into()))
+            .unwrap();
         reader.store.append(" second").unwrap();
         assert_eq!(reader.store.snapshot().chunk_count(), 2);
         assert_eq!(reader.store.snapshot().flattened_bytes(), 0);

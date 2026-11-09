@@ -17,7 +17,7 @@ use crate::{
 };
 
 fn document(text: &str) -> Arc<DocumentSnapshot> {
-    let source = SourceStore::static_text(text).unwrap().snapshot();
+    let source = SourceStore::complete(text).unwrap().snapshot();
     Arc::new(parse_document(&source, &ParseLimits::default(), None))
 }
 fn prepared(text: &str, width: u32) -> PresentationSnapshot {
@@ -1157,7 +1157,7 @@ fn the_end_caret_follows_the_last_grapheme_of_the_text() {
 #[test]
 fn the_end_caret_of_a_stream_follows_an_open_fence_and_a_receiving_table() {
     let streamed = |text: &str| {
-        let mut store = SourceStore::stream();
+        let mut store = SourceStore::receiving();
         store.append(text).unwrap();
         let document = Arc::new(parse_document(
             &store.snapshot(),

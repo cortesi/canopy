@@ -1665,7 +1665,7 @@ mod tests {
         ))
     }
     fn mounted(text: &str) -> Result<(Harness, Rc<RefCell<SurfaceState>>)> {
-        let store = SourceStore::static_text(text).unwrap();
+        let store = SourceStore::complete(text).unwrap();
         let state = Rc::new(RefCell::new(SurfaceState {
             presentation: Some(prepare(&store, None)),
             ..Default::default()
@@ -1814,7 +1814,7 @@ mod tests {
 
     #[test]
     fn publication_uses_latest_selection_and_detects_changed_projection() -> Result<()> {
-        let mut store = SourceStore::stream();
+        let mut store = SourceStore::receiving();
         store.append("alpha\n\nbeta\n\n").unwrap();
         let old = prepare(&store, None);
         let mut next_document = parse_document(

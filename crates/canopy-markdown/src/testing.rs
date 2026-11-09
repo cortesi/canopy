@@ -373,7 +373,7 @@ pub fn spec_examples() -> io::Result<Vec<String>> {
 
 /// Parse `text` as a complete document with the default limits.
 pub fn parse(text: &str) -> DocumentSnapshot {
-    let store = SourceStore::static_with_limit(text, usize::MAX).expect("no source limit");
+    let store = SourceStore::complete_with_limit(text, usize::MAX).expect("no source limit");
     parse_document(&store.snapshot(), &ParseLimits::default(), None)
 }
 

@@ -328,7 +328,7 @@ fn resource_wants(document: &DocumentSnapshot) -> impl Iterator<Item = (Resource
 /// as high, or the whole note without an anchor. A heading keeps its `#`
 /// markers.
 fn embedded_section(text: &str, anchor: Option<&str>) -> Vec<String> {
-    let Ok(store) = SourceStore::static_text(text.to_owned()) else {
+    let Ok(store) = SourceStore::complete(text.to_owned()) else {
         return Vec::new();
     };
     let document = parse_document(&store.snapshot(), &ParseLimits::default(), None);
@@ -365,12 +365,12 @@ impl Markdown {
     /// Construct a complete document. Preparation begins after allocation.
     pub fn new(source: String, options: MarkdownOptions) -> Result<Self> {
         let store =
-            SourceStore::static_with_limit(source, options.source_limit).map_err(invalid)?;
+            SourceStore::complete_with_limit(source, options.source_limit).map_err(invalid)?;
         Ok(Self::from_store(store, options, Follow::Paused))
     }
     /// Construct a receiving document that initially follows its tail.
     pub fn streaming(options: MarkdownOptions) -> Result<Self> {
-        let store = SourceStore::with_limit(options.source_limit);
+        let store = SourceStore::receiving_with_limit(options.source_limit);
         Ok(Self::from_store(store, options, Follow::Following))
     }
     /// Initialize reader state without parsing or preparing document text.
@@ -456,11 +456,8 @@ impl Markdown {
     /// Replace the document epoch, retaining host presentation and query
     /// preferences.
     pub fn replace(&mut self, ctx: &mut dyn Context, input: DocumentInput) -> Result<u64> {
-        let (text, receiving) = match input {
-            DocumentInput::Complete(text) => (text, false),
-            DocumentInput::Receiving(text) => (text, true),
-        };
-        self.store.replace(&text, receiving).map_err(invalid)?;
+        let receiving = matches!(input, DocumentInput::Receiving(_));
+        self.store.replace(input).map_err(invalid)?;
         // A new text drops an open block editor and its draft.
         slot::close(self, ctx)?;
         self.dismiss_inspector(ctx)?;
@@ -1069,7 +1066,10 @@ impl Markdown {
         text.push_str(&source[..range.start]);
         text.push_str(&edit.text);
         text.push_str(&source[range.end..]);
-        self.store.replace(&text, false).map_err(invalid)?;
+        let len = text.len();
+        self.store
+            .replace(DocumentInput::Complete(text))
+            .map_err(invalid)?;
         let epoch = self.store.snapshot().epoch;
         self.dismiss_inspector(ctx)?;
         self.matches.invalidate(false);
@@ -1079,7 +1079,7 @@ impl Markdown {
         self.saved = [None, None];
         self.return_position = None;
         self.jumps.clear();
-        self.acknowledged = text.len();
+        self.acknowledged = len;
         self.failure = None;
         self.generation += 1;
         self.submission.invalidate();

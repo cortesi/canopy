@@ -2251,20 +2251,6 @@ pub mod source_store {
         pub fn is_complete(&self) -> bool;
     }
 
-    /// An append or replacement rejected without accepted-state mutation.
-    #[derive(Clone, Debug, Display, Eq, Error, PartialEq)]
-    pub enum SourceError {
-        /// A complete static document or closed source epoch.
-        Complete,
-        /// The operation would exceed the accepted source byte limit.
-        Limit {
-            /// Configured maximum accepted source bytes.
-            limit: usize,
-            /// Total source bytes the rejected operation would have retained.
-            attempted: usize,
-        },
-    }
-
     /// An immutable accepted revision with shared append chunks.
     #[derive(Clone, Debug)]
     pub struct SourceSnapshot {
@@ -2304,37 +2290,45 @@ pub mod source_store {
 
     impl SourceStore {
         /// Accept all nonempty UTF-8 input or leave accepted state unchanged.
-        pub fn append(&mut self, text: &str) -> Result<bool, crate::source_store::SourceError>;
+        pub fn append(&mut self, text: &str) -> Result<bool, StoreError>;
+
+        /// Adopt complete source with the default byte limit.
+        pub fn complete(text: impl Into<Arc<str>>) -> Result<Self, StoreError>;
+
+        /// Adopt complete source without copying an existing Arc payload.
+        pub fn complete_with_limit(
+            text: impl Into<Arc<str>>,
+            limit: usize,
+        ) -> Result<Self, StoreError>;
 
         /// Complete the epoch once, advancing revision without adding bytes.
         pub fn finish(&mut self, outcome: FinishOutcome) -> bool;
 
+        /// Start an empty receiving epoch with the default source limit.
+        pub fn receiving() -> Self;
+
+        /// Start an empty receiving epoch with an explicit byte limit.
+        pub fn receiving_with_limit(limit: usize) -> Self;
+
         /// Start a new epoch atomically, preserving the old one on rejection.
-        pub fn replace(
-            &mut self,
-            text: &str,
-            receiving: bool,
-        ) -> Result<(), crate::source_store::SourceError>;
+        pub fn replace(&mut self, input: DocumentInput) -> Result<(), StoreError>;
 
         /// Capture the current immutable accepted revision.
         pub fn snapshot(&self) -> SourceSnapshot;
+    }
 
-        /// Adopt complete source with the default byte limit.
-        pub fn static_text(
-            text: impl Into<Arc<str>>,
-        ) -> Result<Self, crate::source_store::SourceError>;
-
-        /// Adopt complete source without copying an existing Arc payload.
-        pub fn static_with_limit(
-            text: impl Into<Arc<str>>,
+    /// An append or replacement rejected without accepted-state mutation.
+    #[derive(Clone, Debug, Display, Eq, Error, PartialEq)]
+    pub enum StoreError {
+        /// A complete static document or closed source epoch.
+        Complete,
+        /// The operation would exceed the accepted source byte limit.
+        Limit {
+            /// Configured maximum accepted source bytes.
             limit: usize,
-        ) -> Result<Self, crate::source_store::SourceError>;
-
-        /// Start an empty receiving epoch with the default source limit.
-        pub fn stream() -> Self;
-
-        /// Start an empty receiving epoch with an explicit byte limit.
-        pub fn with_limit(limit: usize) -> Self;
+            /// Total source bytes the rejected operation would have retained.
+            attempted: usize,
+        },
     }
 }
 
@@ -2360,20 +2354,13 @@ pub mod source_view {
         pub fn clear_search(&mut self, ctx: &mut dyn Context);
 
         /// Copy an exact byte range only when its full output fits the budget.
-        pub fn copy_range(
-            &self,
-            range: Range<usize>,
-            limit: usize,
-        ) -> Result<String, crate::source_view::SourceError>;
+        pub fn copy_range(&self, range: Range<usize>, limit: usize) -> Result<String, SourceError>;
 
         /// Copy the exact selected bytes within an explicit byte budget.
-        pub fn copy_selection(
-            &self,
-            limit: usize,
-        ) -> Result<String, crate::source_view::SourceError>;
+        pub fn copy_selection(&self, limit: usize) -> Result<String, SourceError>;
 
         /// Copy the whole displayed revision, including its final newline.
-        pub fn copy_source(&self, limit: usize) -> Result<String, crate::source_view::SourceError>;
+        pub fn copy_source(&self, limit: usize) -> Result<String, SourceError>;
 
         /// Return the editor's logical display cursor.
         pub fn cursor(&self) -> TextPosition;
@@ -2394,7 +2381,7 @@ pub mod source_view {
             source: &str,
             query: &SearchQuery,
             limits: &SearchLimits,
-        ) -> Result<SourceMatches, crate::source_view::SourceError>;
+        ) -> Result<SourceMatches, SourceError>;
 
         /// Mount already prepared data without scanning its text.
         pub fn from_prepared(prepared: PreparedSource) -> Self;
@@ -2410,26 +2397,17 @@ pub mod source_view {
         pub fn options(&self) -> &SourceOptions;
 
         /// Return the prepared content point for a byte location in this epoch.
-        pub fn point_for_anchor(
-            &self,
-            anchor: SourceAnchor,
-        ) -> Result<Point, crate::source_view::SourceError>;
+        pub fn point_for_anchor(&self, anchor: SourceAnchor) -> Result<Point, SourceError>;
 
         /// Return the width of the displayed prepared geometry.
         pub fn prepared_width(&self) -> u32;
 
         /// Publish a revision or geometry. Same-epoch bytes must preserve the
         /// prefix. This does not focus, reveal, or scroll the widget.
-        pub fn publish(
-            &mut self,
-            prepared: PreparedSource,
-        ) -> Result<(), crate::source_view::SourceError>;
+        pub fn publish(&mut self, prepared: PreparedSource) -> Result<(), SourceError>;
 
         /// Publish precomputed source matches without moving the reader.
-        pub fn publish_matches(
-            &mut self,
-            matches: SourceMatches,
-        ) -> Result<(), crate::source_view::SourceError>;
+        pub fn publish_matches(&mut self, matches: SourceMatches) -> Result<(), SourceError>;
 
         /// Return the allocated width awaiting preparation, if geometry changed.
         pub fn requested_width(&self) -> Option<u32>;
@@ -2439,7 +2417,7 @@ pub mod source_view {
             &mut self,
             ctx: &mut dyn Context,
             anchor: SourceAnchor,
-        ) -> Result<(), crate::source_view::SourceError>;
+        ) -> Result<(), SourceError>;
 
         /// Return the displayed revision.
         pub fn revision(&self) -> u64;
@@ -2469,11 +2447,7 @@ pub mod source_view {
 
         /// Set byte-addressed selection endpoints without scrolling or taking
         /// focus.
-        pub fn set_selection(
-            &mut self,
-            anchor: usize,
-            head: usize,
-        ) -> Result<(), crate::source_view::SourceError>;
+        pub fn set_selection(&mut self, anchor: usize, head: usize) -> Result<(), SourceError>;
 
         /// Return the source byte at the display cursor.
         pub fn source_anchor(&self) -> SourceAnchor;
@@ -2525,10 +2499,7 @@ pub mod source_view {
         ///
         /// Run this on the preparation worker. Publication recognizes the shared
         /// prefix identity and does not rescan accepted bytes on the UI thread.
-        pub fn verify_prefix(
-            self,
-            previous: Arc<str>,
-        ) -> Result<Self, crate::source_view::SourceError>;
+        pub fn verify_prefix(self, previous: Arc<str>) -> Result<Self, SourceError>;
     }
 
     /// A source location within one document epoch.

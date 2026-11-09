@@ -218,7 +218,7 @@ fn fixture(kind: &str, bytes: usize) -> String {
 
 /// Accept fixed transport chunks without flattening on the input path.
 fn chunked(text: &str) -> SourceStore {
-    let mut store = SourceStore::with_limit(text.len());
+    let mut store = SourceStore::receiving_with_limit(text.len());
     for chunk in text.as_bytes().chunks(256) {
         store
             .append(str::from_utf8(chunk).expect("ASCII fixture"))
@@ -305,7 +305,7 @@ fn run_fixture(report: &mut Report, config: &Config, name: &str, bytes: usize) {
         samples.push(start.elapsed());
     }
     report.record("flatten_only", name, bytes, samples, None);
-    let source = SourceStore::static_text(Arc::<str>::from(text))
+    let source = SourceStore::complete(Arc::<str>::from(text))
         .unwrap()
         .snapshot();
     report.sample("parse_and_mapping", name, bytes, config.cold, None, || {
@@ -576,7 +576,7 @@ fn stream(report: &mut Report, config: &Config, pattern: StreamPattern) {
         768 * 1024,
     );
     let base_chunk = fixture("prose", 256);
-    let mut store = SourceStore::with_limit(MIB);
+    let mut store = SourceStore::receiving_with_limit(MIB);
     store.append(&initial).unwrap();
     let mut current = Arc::new(PresentationSnapshot::prepare(
         Arc::new(parse_document(
@@ -615,7 +615,9 @@ fn stream(report: &mut Report, config: &Config, pattern: StreamPattern) {
                     if !accepted.is_empty() {
                         break;
                     }
-                    store.replace(&initial, true).unwrap();
+                    store
+                        .replace(DocumentInput::Receiving(initial.clone()))
+                        .unwrap();
                 }
                 let at = Instant::now();
                 store.append(chunk).unwrap();
@@ -727,7 +729,9 @@ fn stream(report: &mut Report, config: &Config, pattern: StreamPattern) {
     let mut drained_revisions =
         "sample,epoch,receiving_revision,finish_revision,latency_us\n".to_owned();
     for sample in 0..config.cold {
-        store.replace(&final_text, true).unwrap();
+        store
+            .replace(DocumentInput::Receiving(final_text.to_string()))
+            .unwrap();
         let receiving = store.snapshot();
         publish_request(&handle, receiving.clone(), &mut current, &mut harness);
         assert!(!handle.is_pending());
