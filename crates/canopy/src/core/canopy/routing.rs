@@ -694,7 +694,7 @@ impl Canopy {
                     .input_map
                     .open_menu(&mode)
                     .map(|()| None)
-                    .map_err(|error| Error::App(Box::new(error))),
+                    .map_err(Error::app),
                 RunTarget::Command(call) => {
                     // Eligibility is read here, inside the event scope, rather
                     // than taken from the last frame, so a

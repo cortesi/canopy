@@ -403,7 +403,7 @@ mod tests {
     #[test]
     fn identical_failures_from_two_places_stay_apart() {
         let (mut log, now) = log();
-        let error = Error::App("disk full".into());
+        let error = Error::app("disk full");
         let mut arena = NodeArena::new();
         let (one, two) = (arena.insert(()), arena.insert(()));
         log.record_failure(&error, NoticeSource::Binding, Some(one), now);
@@ -485,7 +485,7 @@ mod tests {
     #[test]
     fn an_execution_failure_reports_its_own_message() {
         let (mut log, now) = log();
-        let error = Error::Command(CommandError::execution(Error::App("disk full".into())));
+        let error = Error::Command(CommandError::execution(Error::app("disk full")));
         log.record_failure(&error, NoticeSource::Binding, None, now);
         let notice = &log.entries()[0];
         assert_eq!(notice.message, "disk full");

@@ -150,7 +150,7 @@ mod tests {
             self.count.set(self.count.get() + 1);
             match self.fail.get() {
                 Some(true) => Err(Error::Internal("poll broke".into())),
-                Some(false) => Err(Error::App("poll failed".into())),
+                Some(false) => Err(Error::app("poll failed")),
                 None => Ok(self.interval.get()),
             }
         }

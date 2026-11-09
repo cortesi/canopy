@@ -1103,7 +1103,7 @@ mod tests {
     #[test]
     fn regression_a_turn_error_prints_each_cause_once() {
         let failure = TurnError {
-            error: Error::App("broke".into()),
+            error: Error::app("broke"),
             exit_code: None,
         };
         assert_eq!(failure.to_string(), failure.error.to_string());

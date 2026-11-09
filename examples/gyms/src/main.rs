@@ -293,7 +293,7 @@ impl Demo {
     fn build(&self, inspector: bool) -> Result<Canopy> {
         let builder = self.configure(demo_canopy());
         let read =
-            |file: &PathBuf| fs::read_to_string(file).map_err(|error| Error::App(Box::new(error)));
+            |file: &PathBuf| fs::read_to_string(file).map_err(Error::app);
         let builder = match self {
             Self::Cedit { file } => install(
                 builder,

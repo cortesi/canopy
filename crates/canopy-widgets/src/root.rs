@@ -765,7 +765,7 @@ mod tests {
         /// Fail with an application error.
         #[command]
         fn fail(&self) -> Result<()> {
-            Err(Error::App("disk full".into()))
+            Err(Error::app("disk full"))
         }
     }
 

@@ -111,7 +111,7 @@ mod tests {
 
     impl Widget for FailedMount {
         fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {
-            Err(Error::App("mount failed".into()))
+            Err(Error::app("mount failed"))
         }
 
         fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {

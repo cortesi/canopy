@@ -119,9 +119,7 @@ impl Mailbox {
     fn push(&mut self, event: InspectorEvent) -> Result<()> {
         let bytes = event_bytes(&event);
         if !self.has_capacity(bytes) {
-            return Err(Error::App(
-                IoError::other("inspector request queue is full").into(),
-            ));
+            return Err(Error::app(IoError::other("inspector request queue is full")));
         }
         self.bytes += bytes;
         self.events.push_back(event);
@@ -672,7 +670,7 @@ impl MarkdownInspector {
                             byte,
                         },
                     )
-                    .map_err(|e| Error::App(Box::new(e)))?,
+                    .map_err(Error::app)?,
             }
             Ok(())
         })?;
@@ -820,9 +818,7 @@ impl MarkdownInspector {
     /// to the document so accepted copies survive normal modal dismissal.
     fn request_source_copy(&self, text: Arc<str>, range: Range<usize>) -> Result<()> {
         if !self.allow_copy {
-            return Err(Error::App(
-                IoError::other("clipboard actions are disabled").into(),
-            ));
+            return Err(Error::app(IoError::other("clipboard actions are disabled")));
         }
         let selected = text
             .get(range.clone())
@@ -1060,7 +1056,7 @@ impl MarkdownInspector {
             },
             supplied: Arc::default(),
         })
-        .map_err(|e| Error::App(Box::new(e)))
+        .map_err(Error::app)
     }
 }
 

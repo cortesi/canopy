@@ -363,6 +363,13 @@ pub enum Error {
 }
 
 impl Error {
+    /// Wrap an application's own failure, as [`Self::App`].
+    ///
+    /// A caller converts a foreign error with `.map_err(Error::app)`.
+    pub fn app(error: impl Into<Box<dyn StdError + Send + Sync>>) -> Self {
+        Self::App(error.into())
+    }
+
     /// Return the stable script-visible category of this error.
     ///
     /// Luau error payloads and automation reports both classify through this
@@ -491,7 +498,7 @@ mod tests {
 
     #[test]
     fn notices_are_an_operations_own_failures() {
-        let app = Error::App("disk full".into());
+        let app = Error::app("disk full");
         assert!(app.is_notice());
         assert_eq!(app.script_kind(), ScriptErrorKind::App);
         assert_eq!(app.to_string(), "disk full");
@@ -503,7 +510,7 @@ mod tests {
                 operation: "event",
                 node: testing_node_id(),
                 path: "/root".into(),
-                source: Box::new(Error::App("handler failed".into())),
+                source: Box::new(Error::app("handler failed")),
             }
             .is_notice(),
             "a widget operation failure takes its source's class"

@@ -68,12 +68,12 @@ fn run(acts: &[Act], ctx: &mut dyn Context) -> Result<()> {
                     notifier.touched = true;
                     ran.set(ran.get() + 1);
                     if fail {
-                        return Err(Error::App("widget call failed".into()));
+                        return Err(Error::app("widget call failed"));
                     }
                     Ok(())
                 })?;
             }
-            Act::Fail => return Err(Error::App("trigger failed".into())),
+            Act::Fail => return Err(Error::app("trigger failed")),
         }
     }
     Ok(())
@@ -198,14 +198,14 @@ impl Host {
     #[command]
     fn fail(&mut self) -> Result<()> {
         self.log.push("fail".into());
-        Err(Error::App("host failed".into()))
+        Err(Error::app("host failed"))
     }
 
     /// Post `note(tag)`, then fail.
     #[command]
     fn post_then_fail(&self, ctx: &mut dyn Context, tag: String) -> Result<()> {
         ctx.post(&Self::call_note(tag))?;
-        Err(Error::App("nested failure".into()))
+        Err(Error::app("nested failure"))
     }
 
     /// Post `note(kept)`, then dispatch `post_then_fail(dropped)` and ignore
@@ -224,7 +224,7 @@ impl Host {
         self.log.push("catcher".into());
         let _ignored = ctx.edit_structure(&mut |ctx| {
             ctx.post(&Self::call_note("dropped".to_owned()))?;
-            Err(Error::App("edit failed".into()))
+            Err(Error::app("edit failed"))
         });
         ctx.post(&Self::call_note("kept".to_owned()))
     }
@@ -1307,7 +1307,7 @@ fn a_failed_dispatch_discards_its_widget_calls() -> Result<()> {
     let failed = site.boundary(|core| {
         inside(core, notifier, |ctx| {
             ctx.with_widget_mut_or_post(ctx.widget_stamp(notifier)?, counting(&ran))?;
-            Err(Error::App("dispatch failed".into()))
+            Err(Error::app("dispatch failed"))
         })
     });
     assert!(failed.is_err());

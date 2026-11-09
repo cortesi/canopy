@@ -996,7 +996,7 @@ impl Faulty {
     /// Fail as an application does.
     #[command]
     fn fail(&self) -> Result<()> {
-        Err(Error::App("command failed".into()))
+        Err(Error::app("command failed"))
     }
 }
 
@@ -1018,7 +1018,7 @@ impl Widget for Faulty {
     fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
         match event {
             Event::Key(_) if self.fatal => Err(Error::Internal("handler broke".into())),
-            Event::Key(_) => Err(Error::App("handler failed".into())),
+            Event::Key(_) => Err(Error::app("handler failed")),
             _ => Ok(EventOutcome::Ignore),
         }
     }

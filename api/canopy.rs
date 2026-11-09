@@ -2336,6 +2336,11 @@ pub mod error {
     }
 
     impl Error {
+        /// Wrap an application's own failure, as [`Self::App`].
+        ///
+        /// A caller converts a foreign error with `.map_err(Error::app)`.
+        pub fn app(error: impl Into<Box<dyn Send + std::error::Error + Sync>>) -> Self;
+
         /// Return whether this failure is a notice: an operation's own failure,
         /// which the runtime reports while the application keeps running.
         ///

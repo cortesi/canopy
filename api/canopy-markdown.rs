@@ -838,7 +838,8 @@ impl !Sync for Markdown {}
 /// Resource bounds and presentation policy for one Markdown reader.
 #[derive(Clone, Default)]
 pub struct MarkdownOptions {
-    /// Shared preparation service. Clone this option across readers.
+    /// Shared preparation service. Clone this option across readers. The
+    /// default starts its workers when the first reader registers with it.
     pub executor: MarkdownExecutor,
     /// Optional host wake after an accepted publication changes displayed
     /// content, search, view, or preparation failure, and whenever a host
@@ -1701,7 +1702,12 @@ pub mod executor {
         /// Start a host-owned worker pool, panicking if a thread cannot start.
         pub fn new(options: ExecutorOptions) -> Self;
 
-        /// Reserve one reader lane, optionally attaching its runtime wake.
+        /// Reserve one reader lane, optionally attaching its runtime wake. The
+        /// first registration with a default executor starts its workers.
+        ///
+        /// # Panics
+        ///
+        /// Panics if a default executor cannot start a worker thread.
         pub fn register(&self, wake: Option<NodeWakeHandle>) -> Result<WorkHandle, SubmitError>;
 
         /// Stops admission and queued work; already running passes finish in the
