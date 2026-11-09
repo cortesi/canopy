@@ -17,15 +17,19 @@ use super::*;
 use crate::{
     Context, NodeName, ViewContext,
     commands::{CommandNode, CommandSpec, CommandStatus},
-    core::{keyroute::BindingVerdict, world::test_support::assert_error_context},
+    core::{
+        context::CoreViewContext, keyroute::BindingVerdict,
+        world::test_support::assert_error_context,
+    },
     derive_commands,
     error::{Error, NodeOperationKind, Result, ScriptErrorKind},
-    geom::{PointI32, RectI32},
+    geom::{Point, PointI32, RectI32},
     input::{
         BindingActionKind, BindingId, BindingPhase, BindingTarget, BindingTier, Event, InputSpec,
-        KeyExpectation, ModalBindings, ModalOptions, RouteOutcome, RouteWinner, key, mouse,
+        KeyExpectation, ModalBindings, ModalOptions, NavIntent, RouteOutcome, RouteWinner, key,
+        mouse,
     },
-    layout::{Edges, Layout},
+    layout::{CanvasContext, Edges, Layout},
     path::Path,
     render::{NopBackend, Render},
     runtime::{NoticePost, NoticeSource},
@@ -1764,18 +1768,23 @@ fn tshift_right() -> Result<()> {
     Ok(())
 }
 
+/// Whether `node` is on the focus path, as a widget's context reports it.
+fn on_focus_path(core: &Core, node: NodeId) -> bool {
+    CoreViewContext::new(core, core.root).is_on_focus_path(node)
+}
+
 #[test]
 fn tfoci() -> Result<()> {
     run_ttree(|c, _, tree| {
         assert_eq!(c.core.focus_path(c.core.root), Path::empty());
 
-        assert!(!c.core.is_on_focus_path(tree.root));
-        assert!(!c.core.is_on_focus_path(tree.a));
+        assert!(!on_focus_path(&c.core, tree.root));
+        assert!(!on_focus_path(&c.core, tree.a));
 
         c.core.set_focus(tree.a_a)?;
-        assert!(c.core.is_on_focus_path(tree.root));
-        assert!(c.core.is_on_focus_path(tree.a));
-        assert!(!c.core.is_on_focus_path(tree.b));
+        assert!(on_focus_path(&c.core, tree.root));
+        assert!(on_focus_path(&c.core, tree.a));
+        assert!(!on_focus_path(&c.core, tree.b));
         assert_eq!(
             c.core.focus_path(c.core.root),
             Path::new(&["r", "ba", "ba_la"])
@@ -2655,6 +2664,108 @@ fn a_dormant_action_does_not_shadow_the_next_candidate() -> Result<()> {
             ..
         })
     ));
+    Ok(())
+}
+
+/// Focus nodes of the route test, filled once the tree is built.
+#[derive(Default)]
+struct RouteNodes {
+    /// The node the key starts at.
+    start: Cell<Option<NodeId>>,
+    /// The node the start moves the focus to.
+    moved: Cell<Option<NodeId>>,
+}
+
+/// A leaf that moves the focus to its sibling and declines the key.
+struct FocusMover(Rc<RouteNodes>);
+
+impl Widget for FocusMover {
+    fn accept_focus(&self, _context: &dyn ViewContext) -> bool {
+        true
+    }
+
+    fn on_event(&mut self, event: &Event, context: &mut dyn Context) -> Result<EventOutcome> {
+        if matches!(event, Event::Key(_))
+            && let Some(moved) = self.0.moved.get()
+        {
+            context.set_focus(moved)?;
+        }
+        Ok(EventOutcome::Ignore)
+    }
+}
+
+/// A scrollable parent that accepts the down intent only for a route that
+/// starts at its first child.
+struct RouteParent {
+    nodes: Rc<RouteNodes>,
+    calls: Rc<Cell<usize>>,
+}
+
+impl Widget for RouteParent {
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
+
+    fn canvas(&self, view: Size, _context: &CanvasContext) -> Size {
+        Size::new(view.w, 100)
+    }
+
+    fn accepts_intent(&self, intent: &str, context: &dyn ViewContext) -> bool {
+        intent == NavIntent::Down.name() && context.focused_node() == self.nodes.start.get()
+    }
+
+    fn on_intent(&mut self, _intent: &str, _context: &mut dyn Context) -> Result<EventOutcome> {
+        self.calls.set(self.calls.get() + 1);
+        Ok(EventOutcome::Handle)
+    }
+}
+
+#[test]
+fn an_intent_dispatches_for_the_route_focus_after_a_widget_moves_focus() -> Result<()> {
+    let mut canopy = app();
+    let nodes = Rc::new(RouteNodes::default());
+    let calls = Rc::new(Cell::new(0));
+    let parent = canopy.core.add_child_to_boxed(
+        canopy.core.root,
+        Box::new(RouteParent {
+            nodes: Rc::clone(&nodes),
+            calls: Rc::clone(&calls),
+        }),
+    )?;
+    canopy.core.set_layout_of(parent, Layout::fill())?;
+    let mut leaves = Vec::new();
+    for _ in 0..2 {
+        let leaf = canopy
+            .core
+            .add_child_to_boxed(parent, Box::new(FocusMover(Rc::clone(&nodes))))?;
+        canopy
+            .core
+            .set_layout_of(leaf, Layout::column().fixed_width(10).fixed_height(1))?;
+        leaves.push(leaf);
+    }
+    nodes.start.set(Some(leaves[0]));
+    nodes.moved.set(Some(leaves[1]));
+    canopy.set_screen_size(Size::new(10, 5))?;
+    canopy.render(&mut TestRender::new())?;
+    canopy.core.set_focus(leaves[0])?;
+    canopy.eval_script(r#"canopy.bind("ctrl-x", {description = "Down"}, "canopy.nav.down")"#)?;
+
+    canopy.key(None, key::Key::parse_spec("ctrl-x")?)?;
+    assert_eq!(
+        canopy.core.focus,
+        Some(leaves[1]),
+        "the first leaf moved focus"
+    );
+    assert_eq!(
+        calls.get(),
+        1,
+        "the parent runs the intent that selection admitted for the route focus"
+    );
+    assert_eq!(
+        canopy.core.nodes[parent].scroll,
+        Point::ZERO,
+        "the navigation fallback does not run"
+    );
     Ok(())
 }
 

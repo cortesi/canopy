@@ -687,7 +687,7 @@ fn focus_path_queries_tolerate_a_stale_internal_id() -> Result<()> {
     core.remove_subtree(child)?;
 
     core.focus = Some(child);
-    assert!(!core.is_on_focus_path(core.root));
+    assert!(!CoreViewContext::new(&core, core.root).is_on_focus_path(core.root));
     assert_eq!(core.focus_path(core.root), Path::empty());
     core.ensure_focus_valid()?;
     assert_eq!(core.focus_id(), None);

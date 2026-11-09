@@ -38,12 +38,6 @@ pub(super) enum DeferredFocusRepair {
 }
 
 impl Core {
-    /// Check whether a node is on the focus path.
-    pub fn is_on_focus_path(&self, node: NodeId) -> bool {
-        self.focus
-            .is_some_and(|focus| self.is_ancestor_or_self(node, focus))
-    }
-
     /// Does the node have terminal focus?
     pub fn is_focused(&self, node: NodeId) -> bool {
         self.focus == Some(node)
@@ -102,13 +96,6 @@ impl Core {
             .into_iter()
             .filter(|id| is_focus_candidate(self, *id, true))
             .collect()
-    }
-
-    /// Return the focused node when it is a focus candidate under `root`.
-    pub fn focused_within(&self, root: NodeId) -> Option<NodeId> {
-        let focused = self.focus?;
-        (is_focus_candidate(self, focused, true) && self.is_ancestor_or_self(root, focused))
-            .then_some(focused)
     }
 
     /// Focus the first node that accepts focus in the pre-order traversal of

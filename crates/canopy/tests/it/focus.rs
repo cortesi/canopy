@@ -2,13 +2,16 @@
 
 #[cfg(test)]
 mod tests {
+    use std::{cell::Cell, rc::Rc};
+
     use canopy::{
         Canopy, CanopyBuilder, ContextExt, NodeId, NodeName, ViewContext, Widget,
         error::Result,
         geom::Size,
         layout::Layout,
+        render::Render,
         runtime::TurnInput,
-        testing::grid::Grid,
+        testing::{grid::Grid, harness::Harness},
         tree::{FocusDirection, FocusScope},
     };
 
@@ -217,6 +220,49 @@ mod tests {
             canopy.with_root_view(|context| context.focused_within(context.root_id())),
             Some(second.into())
         );
+        Ok(())
+    }
+
+    /// What a widget's context says of the focus: whether the widget is
+    /// focused, whether it is on the focus path, and the focus within it.
+    type FocusReading = (bool, bool, Option<NodeId>);
+
+    /// Records what its context says of the focus while it renders.
+    struct Introspect {
+        seen: Rc<Cell<Option<FocusReading>>>,
+    }
+
+    impl Widget for Introspect {
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+            true
+        }
+
+        fn render(&mut self, _render: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+            let me = ctx.node_id();
+            self.seen.set(Some((
+                ctx.is_focused(),
+                ctx.is_on_focus_path(me),
+                ctx.focused_within(me),
+            )));
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_focused_widget_finds_the_focus_within_itself_while_it_renders() -> Result<()> {
+        let seen = Rc::new(Cell::new(None));
+        let mut harness = Harness::builder(Introspect {
+            seen: Rc::clone(&seen),
+        })
+        .size(5, 1)
+        .build()?;
+        let root = harness.canopy.with_root_context(|context| {
+            let root = context.root_id();
+            context.set_focus(root)?;
+            Ok(root)
+        })?;
+        harness.render()?;
+        assert_eq!(seen.get(), Some((true, true, Some(root))));
         Ok(())
     }
 }

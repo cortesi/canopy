@@ -1237,11 +1237,7 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
     }
 
     fn is_focused(&self) -> bool {
-        let node = self.node_id;
-        match self.focus_override {
-            Some(focus) => focus == node,
-            None => self.core.is_focused(node),
-        }
+        self.focused_node() == Some(self.node_id)
     }
 
     fn focused_node(&self) -> Option<NodeId> {
@@ -1253,17 +1249,12 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
     }
 
     fn is_on_focus_path(&self, node: NodeId) -> bool {
-        match self.focus_override {
-            Some(focus) => self.core.is_ancestor_or_self(node, focus),
-            None => self.core.is_on_focus_path(node),
-        }
+        self.focused_within(node).is_some()
     }
 
     fn focused_within(&self, root: NodeId) -> Option<NodeId> {
-        match self.focus_override {
-            Some(focus) => self.core.is_ancestor_or_self(root, focus).then_some(focus),
-            None => self.core.focused_within(root),
-        }
+        self.focused_node()
+            .filter(|focus| self.core.is_ancestor_or_self(root, *focus))
     }
 
     fn parent_of(&self, node: NodeId) -> Option<NodeId> {

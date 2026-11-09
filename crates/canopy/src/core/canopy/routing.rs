@@ -308,9 +308,14 @@ impl Canopy {
                             &path,
                             format!("offered intent {intent}"),
                         );
-                        let outcome = match self
-                            .offer_intent(binding_id, &intent, id, input, &mut guard)
-                        {
+                        let outcome = match self.offer_intent(
+                            binding_id,
+                            &intent,
+                            id,
+                            route_focus,
+                            input,
+                            &mut guard,
+                        ) {
                             Ok(Some(outcome)) => outcome,
                             Ok(None) => return Ok(true),
                             Err(error) => {
@@ -625,13 +630,14 @@ impl Canopy {
                     &path,
                     format!("offered intent {intent} in a transient mode"),
                 );
-                let outcome = match self.offer_intent(binding_id, &intent, id, input, &mut guard) {
-                    Ok(Some(outcome)) => outcome,
-                    Ok(None) => return Ok(true),
-                    Err(error) => {
-                        return self.route_notice(error, NoticeSource::Widget, id, &path);
-                    }
-                };
+                let outcome =
+                    match self.offer_intent(binding_id, &intent, id, start, input, &mut guard) {
+                        Ok(Some(outcome)) => outcome,
+                        Ok(None) => return Ok(true),
+                        Err(error) => {
+                            return self.route_notice(error, NoticeSource::Widget, id, &path);
+                        }
+                    };
                 // A transient decision is spent once the mode pops, so a
                 // declined intent ends the key as a transient dismissal. It
                 // does not reselect into the default tier or run raw.
@@ -828,7 +834,8 @@ impl Canopy {
         Ok(self.core.focus.unwrap_or(self.core.root))
     }
 
-    /// Offer one selected intent to its consumer.
+    /// Offer one selected intent to its consumer, for the route that `focus`
+    /// started.
     ///
     /// Returns the consumer's outcome, or `None` when a checked-route guard
     /// tripped; the caller then ends the route without acting further.
@@ -837,6 +844,7 @@ impl Canopy {
         binding: BindingId,
         action: &IntentName,
         node: NodeId,
+        focus: NodeId,
         input: RoutedInput,
         guard: &mut Option<&mut KeyRouteGuard>,
     ) -> Result<Option<EventOutcome>> {
@@ -846,7 +854,7 @@ impl Canopy {
             .with_dispatch_boundary(|canopy| {
                 canopy
                     .core
-                    .dispatch_action_on_node(node, action.as_str(), &event)
+                    .dispatch_action_on_node(node, action.as_str(), &event, focus)
             });
         let outcome = outcome?;
         debug_assert_eq!(

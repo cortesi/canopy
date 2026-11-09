@@ -558,6 +558,10 @@ mod tests {
                 let one = tabs.add_tab(c, "One", Container::new(Layout::column()))?;
                 let first = c.add_child(NodeId::from(one), Page)?;
                 let second = c.add_child(NodeId::from(one), Page)?;
+                // Each field takes a row, so each has a view to keep focus.
+                for field in [first, second] {
+                    c.set_layout_override(field.into(), Layout::fill().into())?;
+                }
                 let two = tabs.add_tab(c, "Two", Page)?;
                 Ok([first.into(), second.into(), two.into()])
             })?;

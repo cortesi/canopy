@@ -169,16 +169,20 @@ impl Core {
         .unwrap_or(false)
     }
 
-    /// Dispatch one intent to a node.
+    /// Dispatch one intent to a node, for the route that `focus` started.
+    ///
+    /// Selection admitted the intent for that route focus, so dispatch asks
+    /// the same question of it, even when a widget earlier on the route has
+    /// moved the live focus since.
     pub(crate) fn dispatch_action_on_node(
         &mut self,
         node: NodeId,
         action: &str,
         event: &Event,
+        focus: NodeId,
     ) -> Result<EventOutcome> {
         // A navigation intent the widget declines is the runtime's default:
         // it scrolls the widget's scroll target, or else the node's view.
-        let focus = self.focus.unwrap_or(self.root);
         if let Some(nav) = NavIntent::from_name(action)
             && !self.widget_accepts_intent(node, action, focus)
         {
