@@ -207,7 +207,7 @@ impl Widget for StatusLine {
         let start = Self::shown(&items, &forms, StatusSide::Start);
         let end = Self::shown(&items, &forms, StatusSide::End);
         let margin = if end.is_empty() { 0 } else { self.margin };
-        let right = area.tl.x.saturating_add(area.w).saturating_sub(margin);
+        let right = area.right().saturating_sub(margin);
         // A lone item wider than the line keeps its start and loses its end.
         let end_x = right.saturating_sub(self.side_width(&end)).max(area.tl.x);
         self.draw_side(render, &start, area.tl.x, end_x, area.tl.y)?;

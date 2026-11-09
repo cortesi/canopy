@@ -170,10 +170,7 @@ fn a_flex_axis_measures_at_its_clamped_size() -> Result<()> {
 fn a_measured_width_sees_a_fixed_height() -> Result<()> {
     let mut core = Core::new();
     let (widget, calls) = TestWidget::new(|c| {
-        let height = match c.height {
-            Constraint::Exact(n) | Constraint::AtMost(n) => n,
-            Constraint::Unbounded => 0,
-        };
+        let height = c.height.limit().unwrap_or(0);
         // Twice as wide as it is tall, as a line of text that scales.
         Measurement::Fixed(Size::new(height * 2, height))
     });
@@ -261,19 +258,11 @@ fn wrap_flex_child_behaves_as_flex_when_parent_exact() -> Result<()> {
     let mut core = Core::new();
     let parent = wrap_node(&mut core)?;
     let (child1_widget, calls1) = TestWidget::new(|c| {
-        let width = match c.width {
-            Constraint::Exact(n) => n,
-            Constraint::AtMost(n) => n,
-            Constraint::Unbounded => 0,
-        };
+        let width = c.width.limit().unwrap_or(0);
         Measurement::Fixed(Size::new(width, width))
     });
     let (child2_widget, calls2) = TestWidget::new(|c| {
-        let width = match c.width {
-            Constraint::Exact(n) => n,
-            Constraint::AtMost(n) => n,
-            Constraint::Unbounded => 0,
-        };
+        let width = c.width.limit().unwrap_or(0);
         Measurement::Fixed(Size::new(width, width))
     });
     let child1 = core.create_detached(child1_widget)?;
@@ -595,7 +584,7 @@ fn no_overlaps_with_min_expansion() -> Result<()> {
     core.update_layout(Size::new(5, 5))?;
     let first = &core.nodes[child1];
     let second = &core.nodes[child2];
-    assert_eq!(second.rect.tl.x, first.rect.tl.x + first.rect.w);
+    assert_eq!(second.rect.tl.x, first.rect.right());
     Ok(())
 }
 
@@ -1347,10 +1336,7 @@ fn refreshed_base_must_remain_valid_after_parent_constraints() -> Result<()> {
 /// `natural` cells wide under an unbounded width.
 fn natural_leaf(core: &mut Core, natural: u32) -> Result<NodeId> {
     let (widget, _) = TestWidget::new(move |c| {
-        let width = match c.width {
-            Constraint::Exact(n) | Constraint::AtMost(n) => n,
-            Constraint::Unbounded => natural,
-        };
+        let width = c.width.limit().unwrap_or(natural);
         c.clamp(Size::new(width, 1))
     });
     let node = core.create_detached(widget)?;

@@ -17,8 +17,7 @@ use canopy::{
         NavIntent, key::Key, mouse,
     },
     layout::{
-        CanvasContext, Constraint, Edges, Layout, MeasureConstraints, MeasureOverflow, Measurement,
-        RevealAlign,
+        CanvasContext, Edges, Layout, MeasureConstraints, MeasureOverflow, Measurement, RevealAlign,
     },
     render::Render,
     runtime::WidgetSemantics,
@@ -835,9 +834,7 @@ impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Widge
             if let Some((start, height)) = metrics.get(selected_idx).copied() {
                 let view_rect = view.view_rect();
                 let visible_start = start.max(view_rect.tl.y);
-                let visible_end = start
-                    .saturating_add(height)
-                    .min(view_rect.tl.y.saturating_add(view_rect.h));
+                let visible_end = start.saturating_add(height).min(view_rect.bottom());
 
                 if visible_start < visible_end {
                     let outer =
@@ -869,10 +866,7 @@ impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Widge
     fn measure(&self, c: MeasureConstraints) -> Measurement {
         // For now, defer to intrinsic content sizing
         // The actual layout will be handled by the column layout
-        let available_width = match c.width {
-            Constraint::Exact(n) | Constraint::AtMost(n) => n.max(1),
-            Constraint::Unbounded => 100,
-        };
+        let available_width = c.width.limit().map_or(100, |n| n.max(1));
 
         // Estimate based on item count (items will self-measure)
         let height = self.items.len() as u32;

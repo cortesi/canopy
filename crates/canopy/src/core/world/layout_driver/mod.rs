@@ -795,12 +795,10 @@ fn measured_width_budget(
     constraints: MeasureConstraints,
     children: usize,
 ) -> Option<u32> {
-    match constraints.width {
-        Constraint::Exact(width) | Constraint::AtMost(width) => {
-            Some(width_budget(layout, width, children))
-        }
-        Constraint::Unbounded => None,
-    }
+    constraints
+        .width
+        .limit()
+        .map(|width| width_budget(layout, width, children))
 }
 
 /// Resolve a width fraction against a parent's width budget into `max_width`.

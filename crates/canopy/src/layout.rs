@@ -746,6 +746,14 @@ impl Constraint {
         }
     }
 
+    /// Return the bound of `AtMost` or `Exact`, or `None` when unbounded.
+    pub fn limit(self) -> Option<u32> {
+        match self {
+            Self::Unbounded => None,
+            Self::AtMost(n) | Self::Exact(n) => Some(n),
+        }
+    }
+
     /// Return true if this constraint is exact.
     pub fn is_exact(self) -> bool {
         matches!(self, Self::Exact(_))
@@ -839,8 +847,8 @@ impl<'a> CanvasContext<'a> {
         let mut max_x = 0u32;
         let mut max_y = 0u32;
         for child in self.children {
-            max_x = max_x.max(child.rect.tl.x.saturating_add(child.rect.w));
-            max_y = max_y.max(child.rect.tl.y.saturating_add(child.rect.h));
+            max_x = max_x.max(child.rect.right());
+            max_y = max_y.max(child.rect.bottom());
         }
         Size::new(max_x, max_y)
     }

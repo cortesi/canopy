@@ -404,7 +404,7 @@ impl TermBuf {
             return Ok(());
         };
         let width = self.size.w as usize;
-        for y in isec.tl.y..isec.tl.y.saturating_add(isec.h) {
+        for y in isec.tl.y..isec.bottom() {
             let start = y as usize * width + isec.tl.x as usize;
             let end = start + isec.w as usize;
             // Only a wide glyph across an edge reaches outside the row, and
@@ -428,8 +428,8 @@ impl TermBuf {
     ) -> Result<()> {
         validate_cell_character(ch)?;
         if let Some(isec) = self.rect().intersect(r) {
-            let end_y = isec.tl.y.saturating_add(isec.h);
-            let end_x = isec.tl.x.saturating_add(isec.w);
+            let end_y = isec.bottom();
+            let end_x = isec.right();
             for y in isec.tl.y..end_y {
                 let row_start = y as usize * self.size.w as usize;
                 for x in isec.tl.x..end_x {

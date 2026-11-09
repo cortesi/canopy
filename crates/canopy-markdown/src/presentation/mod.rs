@@ -1000,7 +1000,7 @@ impl PresentationSnapshot {
             .and_then(|i| overlays.search.get(i))
             .and_then(|s| self.reading_span(s));
         let mut row_search = Vec::new();
-        let end = visible.tl.y.saturating_add(visible.h).min(self.height);
+        let end = visible.bottom().min(self.height);
         let text_bg = render.resolve_style("markdown/text").bg;
         for y in visible.tl.y..end {
             let Some((block, row)) = self.block_row(y) else {

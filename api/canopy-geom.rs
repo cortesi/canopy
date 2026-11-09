@@ -107,18 +107,6 @@ pub struct Line {
 }
 
 impl Line {
-    /// Return this line indented from its start, giving up the columns it
-    /// skips.
-    ///
-    /// Moving a line's start without shrinking its width is the mistake this
-    /// exists to prevent. A line that keeps its width runs past the extent it
-    /// was cut from, and painting it writes over whatever lies beyond, such as
-    /// the border it was meant to sit inside. Indenting holds the far edge
-    /// still, and indenting past that edge leaves an empty line rather than
-    /// wrapping around.
-    #[must_use]
-    pub fn indent(&self, columns: u32) -> Self;
-
     /// Construct a line from coordinates and width.
     pub fn new(x: u32, y: u32, w: u32) -> Self;
 
@@ -216,6 +204,9 @@ pub struct Rect {
 impl Rect {
     /// Empty rectangle at the origin.
     pub const ZERO: Self = _;
+    /// The exclusive bottom edge, saturated at `u32::MAX`.
+    pub fn bottom(&self) -> u32;
+
     /// Does this half-open rectangle contain the point?
     pub fn contains_point(&self, p: Point) -> bool;
 
@@ -246,6 +237,9 @@ impl Rect {
 
     /// Construct a rectangle from coordinates and size.
     pub const fn new(x: u32, y: u32, w: u32, h: u32) -> Self;
+
+    /// The exclusive right edge, saturated at `u32::MAX`.
+    pub fn right(&self) -> u32;
 
     /// Return the `Size` of this rectangle, which has the same size as the
     /// `Rect` but no location.

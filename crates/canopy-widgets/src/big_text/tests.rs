@@ -5,7 +5,7 @@ use std::sync::Arc;
 use canopy::{
     ContextExt, NodeId,
     geom::Point,
-    layout::{Edges, LayoutOverride},
+    layout::{Constraint, Edges, LayoutOverride},
     render::Glyphs,
     style::{Color, ResolvedStyle},
     testing::{ManualClock, harness::Harness},

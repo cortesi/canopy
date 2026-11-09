@@ -17,7 +17,7 @@ use canopy::{
     Context, NodeName, ViewContext, Widget,
     error::Result,
     geom::{Point, Rect, Size},
-    layout::{Align, Constraint, Layout, MeasureConstraints, Measurement},
+    layout::{Align, Layout, MeasureConstraints, Measurement},
     render::Render,
     runtime::{NodeWakeHandle, PollLifetime},
     style::{Style, roles},
@@ -580,11 +580,7 @@ impl Widget for BigText {
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let bound = |constraint| match constraint {
-            Constraint::Exact(n) | Constraint::AtMost(n) => Some(n),
-            Constraint::Unbounded => None,
-        };
-        let (width, height) = (bound(c.width), bound(c.height));
+        let (width, height) = (c.width.limit(), c.height.limit());
         let tier = self.tier.unwrap_or_else(|| tier_for(c.glyphs));
         let text = self.resolve(width, height, tier).size();
         // A fit fills each bounded axis, and a capped fit fills a bounded

@@ -28,13 +28,23 @@ impl Rect {
         }
     }
 
+    /// The exclusive right edge, saturated at `u32::MAX`.
+    pub fn right(&self) -> u32 {
+        self.tl.x.saturating_add(self.w)
+    }
+
+    /// The exclusive bottom edge, saturated at `u32::MAX`.
+    pub fn bottom(&self) -> u32 {
+        self.tl.y.saturating_add(self.h)
+    }
+
     /// Return the exclusive right edge using widened arithmetic.
-    fn right(&self) -> u64 {
+    fn wide_right(&self) -> u64 {
         u64::from(self.tl.x) + u64::from(self.w)
     }
 
     /// Return the exclusive bottom edge using widened arithmetic.
-    fn bottom(&self) -> u64 {
+    fn wide_bottom(&self) -> u64 {
         u64::from(self.tl.y) + u64::from(self.h)
     }
 
@@ -44,9 +54,9 @@ impl Rect {
             false
         } else {
             p.x >= self.tl.x
-                && u64::from(p.x) < self.right()
+                && u64::from(p.x) < self.wide_right()
                 && p.y >= self.tl.y
-                && u64::from(p.y) < self.bottom()
+                && u64::from(p.y) < self.wide_bottom()
         }
     }
 
@@ -58,8 +68,8 @@ impl Rect {
     pub fn contains_rect(&self, other: Self) -> bool {
         self.tl.x <= other.tl.x
             && self.tl.y <= other.tl.y
-            && self.right() >= other.right()
-            && self.bottom() >= other.bottom()
+            && self.wide_right() >= other.wide_right()
+            && self.wide_bottom() >= other.wide_bottom()
     }
 
     /// Extract a horizontal section of this rect based on an extent.

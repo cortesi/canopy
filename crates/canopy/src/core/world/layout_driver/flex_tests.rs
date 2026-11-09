@@ -11,7 +11,7 @@ use crate::{
     },
     error::Result,
     geom::Size,
-    layout::{Constraint, Direction, Fraction, Layout, LayoutOverride, Measurement},
+    layout::{Direction, Fraction, Layout, LayoutOverride, Measurement},
 };
 
 /// A flex item of `weight` with no bounds.
@@ -144,10 +144,7 @@ fn a_measured_row_and_its_layout_agree() -> Result<()> {
     let capped = core.create_detached(LayoutWidget(Layout::fill().max_width(3)))?;
     // Twenty-one cells of text: three lines at seven columns, four at five.
     let (text, _) = TestWidget::new(|c| {
-        let width = match c.width {
-            Constraint::Exact(n) | Constraint::AtMost(n) => n.max(1),
-            Constraint::Unbounded => 21,
-        };
+        let width = c.width.limit().map_or(21, |n| n.max(1));
         Measurement::Fixed(Size::new(width, 21u32.div_ceil(width)))
     });
     let text = core.create_detached(text)?;

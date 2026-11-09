@@ -870,7 +870,7 @@ impl RenderedSurface {
         let view = ctx.view().view_rect();
         let (_, rows) = self.state.borrow_mut().marked_unit()?;
         let from = rows.start.max(view.tl.y);
-        let end = rows.end.min(view.tl.y.saturating_add(view.h));
+        let end = rows.end.min(view.bottom());
         if from >= end {
             return None;
         }
@@ -1040,7 +1040,7 @@ impl RenderedSurface {
     /// Capture the first useful reading position within the current viewport.
     fn reading_anchor(&self, ctx: &dyn ViewContext) -> Option<(ReadingPosition, usize, u32)> {
         let view = ctx.view().view_rect();
-        self.anchor_at(view.tl, view.tl.y.saturating_add(view.h))
+        self.anchor_at(view.tl, view.bottom())
     }
 
     /// Find a useful prepared reading position within a bounded row interval.

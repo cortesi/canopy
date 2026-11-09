@@ -484,8 +484,8 @@ impl ModelBuffer {
         let Some(rect) = self.size.rect().intersect(rect) else {
             return;
         };
-        for y in rect.tl.y..rect.tl.y.saturating_add(rect.h) {
-            for x in rect.tl.x..rect.tl.x.saturating_add(rect.w) {
+        for y in rect.tl.y..rect.bottom() {
+            for x in rect.tl.x..rect.right() {
                 self.put_grapheme(Point { x, y }, &ch.to_string(), style);
             }
         }

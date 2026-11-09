@@ -12,7 +12,7 @@ use canopy::{
     error::{Error, Result},
     geom::{Rect, Size},
     input::{ModalBindings, ModalOptions, ModalToken},
-    layout::{Constraint, Direction, Layout, LayoutOverride, MeasureConstraints, Measurement},
+    layout::{Direction, Layout, LayoutOverride, MeasureConstraints, Measurement},
     render::Render,
     script::Fixture,
     style::{StyleRules, themes::Palette},
@@ -98,10 +98,7 @@ impl Widget for TodoEntry {
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let available_width = match c.width {
-            Constraint::Exact(n) | Constraint::AtMost(n) => n.max(1),
-            Constraint::Unbounded => 80,
-        };
+        let available_width = c.width.limit().map_or(80, |n| n.max(1));
         let text_width = available_width.saturating_sub(TODO_GUTTER_WIDTH);
         let height = if text_width == 0 {
             1
@@ -577,6 +574,7 @@ mod tests {
     use canopy::{
         ContextExt,
         geom::Point,
+        layout::Constraint,
         style::{ResolvedStyle, effects},
         testing::harness::Harness,
     };

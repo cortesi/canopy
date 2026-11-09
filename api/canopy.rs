@@ -3571,6 +3571,9 @@ pub mod layout {
     impl Constraint {
         /// Return true if this constraint is exact.
         pub fn is_exact(self) -> bool;
+
+        /// Return the bound of `AtMost` or `Exact`, or `None` when unbounded.
+        pub fn limit(self) -> Option<u32>;
     }
 
     /// Stack direction for children.

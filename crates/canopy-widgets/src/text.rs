@@ -4,7 +4,7 @@ use canopy::{
     NodeName, ViewContext, Widget,
     error::Result,
     geom::{Line, Size},
-    layout::{Constraint, MeasureConstraints, Measurement},
+    layout::{MeasureConstraints, Measurement},
     render::Render,
     text::{self, WrapOptions},
 };
@@ -247,11 +247,9 @@ impl Widget for Text {
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let wrap_width = match c.width {
-            Constraint::Exact(n) | Constraint::AtMost(n) => {
-                self.wrap_width.map_or(n, |wrap| wrap.min(n))
-            }
-            Constraint::Unbounded => self.wrap_width.unwrap_or_else(|| self.raw_width()),
+        let wrap_width = match c.width.limit() {
+            Some(n) => self.wrap_width.map_or(n, |wrap| wrap.min(n)),
+            None => self.wrap_width.unwrap_or_else(|| self.raw_width()),
         }
         .max(1);
 

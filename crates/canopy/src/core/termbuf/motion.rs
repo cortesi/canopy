@@ -173,8 +173,8 @@ impl TermBuf {
         let Some(isec) = self.rect().intersect(r) else {
             return;
         };
-        for y in isec.tl.y..isec.tl.y.saturating_add(isec.h) {
-            for x in isec.tl.x..isec.tl.x.saturating_add(isec.w) {
+        for y in isec.tl.y..isec.bottom() {
+            for x in isec.tl.x..isec.right() {
                 let point = Point { x, y };
                 let Some(index) = self.idx(point) else {
                     continue;

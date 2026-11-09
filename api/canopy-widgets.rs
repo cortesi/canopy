@@ -1280,6 +1280,9 @@ impl DiffView {
 
     /// Note that a model is computing. After a short delay the view shows a
     /// spinner until [`Self::set_model`] or [`Self::set_message`] arrives.
+    ///
+    /// The view repaints itself to turn the spinner while motion is active.
+    /// At rest, as in headless runs, the spinner shows its first frame.
     pub fn set_loading(&mut self);
 
     /// Highlight matches over [`Self::search_text`] and reveal the first at

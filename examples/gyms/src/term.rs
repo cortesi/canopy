@@ -5,7 +5,7 @@ use canopy::{
     ViewContextExt, Widget, derive_commands,
     error::{Error, Result},
     geom::Size,
-    layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement},
+    layout::{Direction, Layout, MeasureConstraints, Measurement},
     render::Render,
     style::{Attr, AttrSet, StyleRules, WidgetState, themes::Palette},
     tree::FocusScope,
@@ -139,10 +139,10 @@ impl Widget for TermEntry {
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let width = match c.width {
-            Constraint::Exact(n) | Constraint::AtMost(n) => n.max(1),
-            Constraint::Unbounded => self.label_width().saturating_add(2),
-        };
+        let width = c
+            .width
+            .limit()
+            .map_or_else(|| self.label_width().saturating_add(2), |n| n.max(1));
         c.clamp(Size::new(width, ENTRY_HEIGHT))
     }
 

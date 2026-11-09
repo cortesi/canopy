@@ -14,7 +14,7 @@ use canopy::{
     Context, ContextExt, NodeName, Register, Setup, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     geom::Size,
-    layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement},
+    layout::{CanvasContext, Layout, MeasureConstraints, Measurement},
     render::Render,
 };
 use tracing_subscriber::fmt;
@@ -114,10 +114,7 @@ impl Widget for Logs {
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let available_width = match c.width {
-            Constraint::Exact(n) | Constraint::AtMost(n) => n,
-            Constraint::Unbounded => 80,
-        };
+        let available_width = c.width.limit().unwrap_or(80);
         c.clamp(Size::new(available_width, 10))
     }
 

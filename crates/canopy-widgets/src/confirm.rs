@@ -13,9 +13,7 @@ use canopy::{
         BindingAction, BindingOptions, BindingPhase, BindingTier, FrameworkBindingGroup, InputSpec,
         ModalBindings, ModalOptions, ModalToken, key::Key,
     },
-    layout::{
-        CanvasContext, Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement,
-    },
+    layout::{CanvasContext, Direction, Edges, Layout, MeasureConstraints, Measurement},
     render::Render,
     text::{self, WrapOptions},
     tree::{FocusDirection, FocusScope},
@@ -611,10 +609,7 @@ impl Widget for ConfirmBody {
     fn measure(&self, c: MeasureConstraints) -> Measurement {
         // The message wraps as its text does: at the narrower of the view and
         // its width. The text then fits the body, and wraps the same way.
-        let offered = match c.width {
-            Constraint::Exact(n) | Constraint::AtMost(n) => n,
-            Constraint::Unbounded => u32::MAX,
-        };
+        let offered = c.width.limit().unwrap_or(u32::MAX);
         let message = text::expand_tabs(&self.message, TAB_STOP);
         let wrap = |width: u32| text::wrap_with(&message, width.max(1), WrapOptions::PROSE);
         let mut lines = wrap(offered.min(self.message_width));

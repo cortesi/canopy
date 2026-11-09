@@ -22,7 +22,7 @@ Geometry primitives used across canopy.
 - Publish: crates.io
 - Workspace dependencies: none
 - Workspace dependents: canopy
-- Items: 51
+- Items: 52
 - Exposes: none
 
 ## canopy
@@ -34,7 +34,7 @@ Canopy: A terminal UI library.
 - Workspace dependencies: canopy-derive, canopy-geom
 - Workspace dependents: canopy (dev), canopy-derive (dev), canopy-markdown, canopy-mcp, canopy-options, canopy-widgets, canopyctl, gyms, hello, mosaic-score, todo
 - Unnameable: crate::core::commands::sealed::Inject, crate::core::context::sealed::Context, crate::core::context::sealed::ViewContext, crate::core::world::scope::CoreOwner
-- Items: 809
+- Items: 810
 - Exposes: canopy-geom, futures-channel, ruau, ruau-declaration, schemars, serde_core, serde_json
 
 ## canopy-mcp

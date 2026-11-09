@@ -5,10 +5,7 @@ use canopy::{
     error::Result,
     geom::{Line, Point, Rect, Size},
     input::{Event, key, mouse},
-    layout::{
-        CanvasContext, Constraint, MeasureConstraints, Measurement, RevealAlign, ScrollAxis,
-        ScrollMark,
-    },
+    layout::{CanvasContext, MeasureConstraints, Measurement, RevealAlign, ScrollAxis, ScrollMark},
     render::{
         Render,
         cursor::{self, CursorRequest},
@@ -1650,11 +1647,11 @@ impl Widget for Editor {
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let mut width = match c.width {
-            Constraint::Exact(n) | Constraint::AtMost(n) => n.max(1),
-            Constraint::Unbounded => self.natural_width(),
-        };
-        width = width.max(1);
+        let width = c
+            .width
+            .limit()
+            .unwrap_or_else(|| self.natural_width())
+            .max(1);
 
         let mut height = if self.config.auto_grow {
             self.display_metrics(self.wrap(width)).0 as u32

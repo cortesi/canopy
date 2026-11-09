@@ -4,7 +4,7 @@ use canopy::{
     ViewContext, Widget,
     error::Result,
     geom::{Point, Rect, Size},
-    layout::{Constraint, Layout, MeasureConstraints, Measurement},
+    layout::{Layout, MeasureConstraints, Measurement},
     render::Render,
     style::Coverage,
 };
@@ -164,13 +164,10 @@ impl Widget for FontBanner {
     /// when it is wider. Without a bound on the height the text has no
     /// scale, so the banner wraps.
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let (Constraint::Exact(height) | Constraint::AtMost(height)) = c.height else {
+        let Some(height) = c.height.limit() else {
             return c.wrap();
         };
-        let width = match c.width {
-            Constraint::Exact(width) | Constraint::AtMost(width) => width,
-            Constraint::Unbounded => u32::MAX,
-        };
+        let width = c.width.limit().unwrap_or(u32::MAX);
         let content = self.renderer.borrow_mut().content_size(
             &self.text,
             Size::new(width, height),
@@ -196,7 +193,7 @@ impl Widget for FontBanner {
         let bounds = content_rect(view_rect, layout, options);
         for (row_idx, row) in layout.cells.iter().enumerate() {
             let y = view_rect.tl.y.saturating_add(row_idx as u32);
-            if y >= view_rect.tl.y.saturating_add(view_rect.h) {
+            if y >= view_rect.bottom() {
                 break;
             }
             for (col_idx, cell) in row.iter().enumerate() {
@@ -204,7 +201,7 @@ impl Widget for FontBanner {
                     continue;
                 }
                 let x = view_rect.tl.x.saturating_add(col_idx as u32);
-                if x >= view_rect.tl.x.saturating_add(view_rect.w) {
+                if x >= view_rect.right() {
                     continue;
                 }
                 let point = Point { x, y };
@@ -238,6 +235,8 @@ fn content_rect(view_rect: Rect, layout: &FontLayout, options: LayoutOptions) ->
 
 #[cfg(test)]
 mod tests {
+    use canopy::layout::Constraint;
+
     use super::*;
     use crate::font::Font;
 

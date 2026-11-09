@@ -922,10 +922,7 @@ impl Widget for TableView {
         if c.width != Constraint::Unbounded {
             return c.wrap();
         }
-        let height = match c.height {
-            Constraint::Exact(height) | Constraint::AtMost(height) => height,
-            Constraint::Unbounded => self.table.size().h,
-        };
+        let height = c.height.limit().unwrap_or(self.table.size().h);
         c.clamp(Size::new(self.table.natural_width(), height))
     }
     fn owns_scrollbars(&self) -> bool {

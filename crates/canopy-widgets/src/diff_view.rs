@@ -29,10 +29,7 @@ use canopy::{
     Context, NodeName, Register, Setup, ViewContext, Widget, derive_commands,
     error::Result,
     geom::{Line, Point, Rect, Size},
-    layout::{
-        CanvasContext, Constraint, MeasureConstraints, Measurement, ScrollAxis, ScrollMark,
-        ScrollOp,
-    },
+    layout::{CanvasContext, MeasureConstraints, Measurement, ScrollAxis, ScrollMark, ScrollOp},
     render::Render,
     runtime::{NodeWakeHandle, PollLifetime},
     style::Style,
@@ -1227,23 +1224,20 @@ impl Widget for DiffView {
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let width = match c.width {
-            Constraint::Exact(n) | Constraint::AtMost(n) => n,
-            Constraint::Unbounded => {
-                let model = self.model();
-                let gutter = digits(model.diff.old_len().max(model.diff.new_len())) + 2;
-                let half = gutter + model.old_width.max(model.new_width) + 1;
-                if self.strategy == Mode::Unified {
-                    half
-                } else {
-                    half * 2 + 1
-                }
+        let width = c.width.limit().unwrap_or_else(|| {
+            let model = self.model();
+            let gutter = digits(model.diff.old_len().max(model.diff.new_len())) + 2;
+            let half = gutter + model.old_width.max(model.new_width) + 1;
+            if self.strategy == Mode::Unified {
+                half
+            } else {
+                half * 2 + 1
             }
-        };
-        let height = match c.height {
-            Constraint::Exact(n) | Constraint::AtMost(n) => n,
-            Constraint::Unbounded => column(self.body_rows(width)),
-        };
+        });
+        let height = c
+            .height
+            .limit()
+            .unwrap_or_else(|| column(self.body_rows(width)));
         c.clamp(Size::new(width.max(1), height.max(1)))
     }
 

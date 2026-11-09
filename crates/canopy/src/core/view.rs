@@ -265,7 +265,7 @@ mod tests {
             part.tl.x == margin.tl.x
                 && part.w == margin.w
                 && part.tl.y >= margin.tl.y
-                && part.tl.y <= margin.tl.y.saturating_add(margin.h)
+                && part.tl.y <= margin.bottom()
         } else {
             margin.contains_rect(part)
         }
@@ -276,7 +276,7 @@ mod tests {
             part.tl.y == margin.tl.y
                 && part.h == margin.h
                 && part.tl.x >= margin.tl.x
-                && part.tl.x <= margin.tl.x.saturating_add(margin.w)
+                && part.tl.x <= margin.right()
         } else {
             margin.contains_rect(part)
         }
@@ -305,8 +305,8 @@ mod tests {
             prop_assert!(vertical_part_fits_margin(post, margin));
             prop_assert_eq!(pre.h.saturating_add(active.h).saturating_add(post.h), margin.h);
             prop_assert_eq!(pre.tl.y, margin.tl.y);
-            prop_assert_eq!(active.tl.y, pre.tl.y.saturating_add(pre.h));
-            prop_assert_eq!(post.tl.y, active.tl.y.saturating_add(active.h));
+            prop_assert_eq!(active.tl.y, pre.bottom());
+            prop_assert_eq!(post.tl.y, active.bottom());
         }
 
         #[test]
@@ -331,8 +331,8 @@ mod tests {
             prop_assert!(horizontal_part_fits_margin(post, margin));
             prop_assert_eq!(pre.w.saturating_add(active.w).saturating_add(post.w), margin.w);
             prop_assert_eq!(pre.tl.x, margin.tl.x);
-            prop_assert_eq!(active.tl.x, pre.tl.x.saturating_add(pre.w));
-            prop_assert_eq!(post.tl.x, active.tl.x.saturating_add(active.w));
+            prop_assert_eq!(active.tl.x, pre.right());
+            prop_assert_eq!(post.tl.x, active.right());
         }
     }
 

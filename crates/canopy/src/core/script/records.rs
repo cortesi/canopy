@@ -548,9 +548,9 @@ pub(super) fn screen_text_for_rect(canopy: &mut Canopy, rect: RectI32) -> Result
         return Ok(String::new());
     };
     let mut rows = Vec::with_capacity(rect.h as usize);
-    for y in rect.tl.y..rect.tl.y + rect.h {
+    for y in rect.tl.y..rect.bottom() {
         let mut row = String::new();
-        for x in rect.tl.x..rect.tl.x + rect.w {
+        for x in rect.tl.x..rect.right() {
             let cell = buffer
                 .get(Point { x, y })
                 .expect("buffer coordinates should always be valid");
