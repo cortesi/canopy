@@ -12,7 +12,7 @@ use std::ops::Range;
 
 use imara_diff::{Algorithm, InternedInput};
 
-pub use crate::diff_view::{DiffModel, Mode};
+pub use crate::diff_view::{DiffLayout, DiffModel};
 
 /// How much unchanged text the rows show.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

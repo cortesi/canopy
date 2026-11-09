@@ -83,8 +83,8 @@ pub struct ConfirmRequest {
 
 impl ConfirmRequest {
     /// A question with no answers yet, in the plain tone, closed by its calls,
-    /// with a message width of 64. Until [`ConfirmRequest::declining`] names
-    /// another, the first answer declines.
+    /// with a message width of 64. Until [`ConfirmRequest::with_declining`]
+    /// names another, the first answer declines.
     pub fn new(title: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             title: title.into(),
@@ -101,7 +101,7 @@ impl ConfirmRequest {
 
     /// Add an answer at the right.
     #[must_use]
-    pub fn answer(mut self, answer: Answer) -> Self {
+    pub fn with_answer(mut self, answer: Answer) -> Self {
         self.answers.push(answer);
         self
     }
@@ -109,7 +109,7 @@ impl ConfirmRequest {
     /// Add the answer that declines, at the right, and make it the `decline`
     /// answer.
     #[must_use]
-    pub fn declining(mut self, answer: Answer) -> Self {
+    pub fn with_declining(mut self, answer: Answer) -> Self {
         self.decline = self.answers.len();
         self.answers.push(answer);
         self
@@ -123,41 +123,41 @@ impl ConfirmRequest {
         no: CommandCall,
     ) -> Self {
         Self::new(title, message)
-            .answer(Answer::new("yes", yes))
-            .declining(Answer::new("no", no))
+            .with_answer(Answer::new("yes", yes))
+            .with_declining(Answer::new("no", no))
     }
 
     /// Show the dialog in `tone`.
     #[must_use]
-    pub fn tone(mut self, tone: Tone) -> Self {
+    pub fn with_tone(mut self, tone: Tone) -> Self {
         self.tone = tone;
         self
     }
 
     /// Let `closing` say who closes the dialog.
     #[must_use]
-    pub fn closing(mut self, closing: Closing) -> Self {
+    pub fn with_closing(mut self, closing: Closing) -> Self {
         self.closing = closing;
         self
     }
 
     /// Ignore the answers for `delay` after the dialog opens.
     #[must_use]
-    pub fn arm_after(mut self, delay: Duration) -> Self {
+    pub fn with_arm_after(mut self, delay: Duration) -> Self {
         self.arm_after = Some(delay);
         self
     }
 
     /// Wrap the message to at most `columns`.
     #[must_use]
-    pub fn message_width(mut self, columns: u32) -> Self {
+    pub fn with_message_width(mut self, columns: u32) -> Self {
         self.message_width = columns;
         self
     }
 
     /// Dim `target` while the dialog is open.
     #[must_use]
-    pub fn dim(mut self, target: NodeId) -> Self {
+    pub fn with_dim_target(mut self, target: NodeId) -> Self {
         self.dim_target = Some(target);
         self
     }
@@ -1128,7 +1128,7 @@ mod tests {
         let mut harness = host(60, 16)?;
         open_with(&mut harness, |owner| {
             ConfirmRequest::yes_no("Words", message, record(owner, "yes"), record(owner, "no"))
-                .message_width(14)
+                .with_message_width(14)
         })?;
         let lines = screen(&harness);
         let text = lines.join("\n");
@@ -1179,9 +1179,9 @@ mod tests {
         let mut harness = host(70, 14)?;
         open_with(&mut harness, |owner| {
             ConfirmRequest::new("Remove", "Remove the provider?")
-                .answer(labelled(owner, "remove"))
-                .answer(labelled(owner, "delete the secret too"))
-                .declining(labelled(owner, "cancel"))
+                .with_answer(labelled(owner, "remove"))
+                .with_answer(labelled(owner, "delete the secret too"))
+                .with_declining(labelled(owner, "cancel"))
         })?;
         let screen = screen(&harness).join("\n");
         for label in ["remove", "delete the secret too", "cancel"] {
@@ -1199,9 +1199,9 @@ mod tests {
         for (key, answer) in [('r', "remove"), ('c', "cancel")] {
             open_with(&mut harness, |owner| {
                 ConfirmRequest::new("Remove", "Remove the provider?")
-                    .answer(labelled(owner, "remove"))
-                    .answer(labelled(owner, "delete the secret too"))
-                    .declining(labelled(owner, "cancel"))
+                    .with_answer(labelled(owner, "remove"))
+                    .with_answer(labelled(owner, "delete the secret too"))
+                    .with_declining(labelled(owner, "cancel"))
             })?;
             harness.with_root_widget(|host: &mut Host| host.answered.clear());
             harness.key(key)?;
@@ -1215,16 +1215,16 @@ mod tests {
         let mut harness = host(50, 12)?;
         open_with(&mut harness, |owner| {
             ConfirmRequest::new("Key", "Check the key?")
-                .answer(labelled(owner, "check").with_key(None))
-                .declining(labelled(owner, "cancel"))
+                .with_answer(labelled(owner, "check").with_key(None))
+                .with_declining(labelled(owner, "cancel"))
         })?;
         harness.key('c')?;
         assert_eq!(answered(&mut harness), ["cancel"], "c names only cancel");
 
         open_with(&mut harness, |owner| {
             ConfirmRequest::new("Key", "Check the key?")
-                .answer(labelled(owner, "check").with_key(None))
-                .declining(labelled(owner, "quit").with_key(None))
+                .with_answer(labelled(owner, "check").with_key(None))
+                .with_declining(labelled(owner, "quit").with_key(None))
         })?;
         harness.key('c')?;
         harness.key('q')?;
@@ -1240,15 +1240,15 @@ mod tests {
         let mut harness = host(50, 12)?;
         open_with(&mut harness, |owner| {
             ConfirmRequest::new("Note", "Take a note?")
-                .answer(Answer::new(
+                .with_answer(Answer::new(
                     "take",
                     Host::call_note("take".into()).with_target(owner),
                 ))
-                .declining(Answer::new(
+                .with_declining(Answer::new(
                     "skip",
                     Host::call_note("skip".into()).with_target(owner),
                 ))
-                .closing(Closing::BeforeCall)
+                .with_closing(Closing::BeforeCall)
         })?;
         assert!(open(&mut harness)?);
         harness.key('t')?;
@@ -1258,11 +1258,11 @@ mod tests {
         // Under ByCall, a call that does not close leaves the question up.
         open_with(&mut harness, |owner| {
             ConfirmRequest::new("Note", "Take a note?")
-                .answer(Answer::new(
+                .with_answer(Answer::new(
                     "take",
                     Host::call_note("take".into()).with_target(owner),
                 ))
-                .declining(Answer::new(
+                .with_declining(Answer::new(
                     "skip",
                     Host::call_note("skip".into()).with_target(owner),
                 ))
@@ -1325,8 +1325,8 @@ mod tests {
     /// Return the question that a test asks while another closes.
     fn other_request(target: CommandTarget) -> ConfirmRequest {
         ConfirmRequest::new("Other", "/tmp/other")
-            .answer(labelled(target, "keep"))
-            .declining(labelled(target, "drop"))
+            .with_answer(labelled(target, "keep"))
+            .with_declining(labelled(target, "drop"))
     }
 
     /// Ask another question in the callback that closes the open one, before
@@ -1426,13 +1426,14 @@ mod tests {
         )));
         let mut out_of_range = ConfirmRequest::new("Range", "Out of range");
         out_of_range.decline = 1;
-        let out_of_range = out_of_range.answer(Answer::new("ok", Host::call_note("ok".into())));
+        let out_of_range =
+            out_of_range.with_answer(Answer::new("ok", Host::call_note("ok".into())));
         assert!(refused(&mut harness, &|_| out_of_range.clone()));
         assert!(
             refused(&mut harness, &|owner| {
                 ConfirmRequest::new("Keys", "Two keys")
-                    .answer(labelled(owner, "keep"))
-                    .declining(labelled(owner, "Kill"))
+                    .with_answer(labelled(owner, "keep"))
+                    .with_declining(labelled(owner, "Kill"))
             }),
             "two answers with the key k are refused"
         );
@@ -1571,8 +1572,8 @@ mod tests {
         // A host can make the first answer the one that declines.
         open_with(&mut harness, |owner| {
             ConfirmRequest::new("Bookmark", "/tmp/c")
-                .declining(labelled(owner, "keep"))
-                .answer(labelled(owner, "drop"))
+                .with_declining(labelled(owner, "keep"))
+                .with_answer(labelled(owner, "drop"))
         })?;
         let keep = answer_node(&mut harness, 0)?;
         assert_eq!(focus(&harness), Some(keep));
@@ -1592,7 +1593,7 @@ mod tests {
                 record(owner, "yes"),
                 record(owner, "no"),
             )
-            .arm_after(Duration::from_millis(600))
+            .with_arm_after(Duration::from_millis(600))
         })?;
         let yes = answer_node(&mut harness, 0)?;
         let status = |harness: &Harness| {
@@ -1632,7 +1633,7 @@ mod tests {
                 record(owner, "yes"),
                 record(owner, "no"),
             )
-            .arm_after(Duration::from_millis(600))
+            .with_arm_after(Duration::from_millis(600))
         })?;
         harness.key('y')?;
         assert_eq!(answered(&mut harness), ["yes"]);
@@ -1657,7 +1658,7 @@ mod tests {
                 record(owner, "yes"),
                 record(owner, "no"),
             )
-            .arm_after(Duration::from_millis(600))
+            .with_arm_after(Duration::from_millis(600))
         })?;
         // Before the row arms, Esc gives nothing.
         harness.key(key::KeyCode::Esc)?;
@@ -1684,8 +1685,8 @@ mod tests {
         let mut harness = host(50, 12)?;
         open_with(&mut harness, |owner| {
             ConfirmRequest::new("Failed", "The store is gone.")
-                .declining(labelled(owner, "quit"))
-                .tone(Tone::Error)
+                .with_declining(labelled(owner, "quit"))
+                .with_tone(Tone::Error)
         })?;
         let palette = themes::default_dark();
         let (border, _, _) = style_of(&harness, '\u{256d}');
@@ -1695,7 +1696,8 @@ mod tests {
         assert!(attrs.bold, "the title is bold");
 
         open_with(&mut harness, |owner| {
-            ConfirmRequest::new("Failed", "The store is gone.").declining(labelled(owner, "quit"))
+            ConfirmRequest::new("Failed", "The store is gone.")
+                .with_declining(labelled(owner, "quit"))
         })?;
         let (border, _, _) = style_of(&harness, '\u{256d}');
         assert_ne!(border, palette.red, "a plain dialog keeps its frame");
@@ -1735,7 +1737,7 @@ mod tests {
                     record(target, "yes"),
                     record(target, "no"),
                 )
-                .closing(Closing::BeforeCall),
+                .with_closing(Closing::BeforeCall),
             )
         })?;
         harness.render()?;

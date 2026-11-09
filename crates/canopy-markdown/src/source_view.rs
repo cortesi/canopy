@@ -486,8 +486,7 @@ impl MarkdownSource {
     /// Mount already prepared data without scanning its text.
     pub fn from_prepared(prepared: PreparedSource) -> Self {
         let syntax_limited = prepared.syntax_limited;
-        let mut editor =
-            Editor::with_config("", EditorConfig::new().with_interaction(Interaction::View));
+        let mut editor = Editor::new("", EditorConfig::new().with_interaction(Interaction::View));
         editor.publish_view(prepared.editor, false);
         if let Some(lines) = prepared.highlights {
             editor.set_highlight_spans(lines);

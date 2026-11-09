@@ -43,7 +43,7 @@ impl Widget for BenchmarkEditorWrapper {
             .with_mode(EditMode::Text)
             .with_wrap(WrapMode::Soft)
             .with_line_numbers(LineNumbers::Absolute);
-        let mut editor = Editor::with_config(self.text.clone(), config);
+        let mut editor = Editor::new(self.text.clone(), config);
         if let Some(syntax) = self.syntax {
             editor.set_highlighter(Some(Box::new(SyntectHighlighter::new(syntax))));
         }

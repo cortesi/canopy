@@ -752,7 +752,7 @@ impl ChartGym {
                 let (number, unit) = compact(value * 1_000.0);
                 format!("{number}{}", unit.to_lowercase())
             })
-            .with_command(moved);
+            .with_on_change(moved);
         let chart = c.add_child(page, chart)?;
         let rows = LayoutOverride::new()
             .flex_horizontal(1)
@@ -861,7 +861,7 @@ impl Widget for ChartGym {
                     .gap(1),
             )
             .with_name(name)
-            .focusable()
+            .with_focusable(true)
         };
         let widgets = c.add_child(widgets, page("widgets"))?;
         let text = c.add_child(text, page("text"))?;

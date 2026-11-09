@@ -566,7 +566,7 @@ fn editor_key(key: &str) -> key::Key {
 /// Run `case` on the editor.
 fn run_editor(case: &Case) -> Outcome {
     let config = EditorConfig::new().with_mode(EditMode::Vi).with_tab_stop(4);
-    let editor = Editor::with_config(case.text.clone(), config);
+    let editor = Editor::new(case.text.clone(), config);
     let mut harness = Harness::builder(editor)
         .register::<Editor>()
         .size(80, 24)

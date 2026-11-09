@@ -931,7 +931,9 @@ fn a_framed_row_boxes_its_panes_and_marks_the_focused_one() -> Result<()> {
     // leave three panes of three.
     let (mut harness, nodes) = scene(13, 4, |c| {
         let root = c.node_id();
-        let holder: NodeId = c.add_child(root, Container::column().focusable())?.into();
+        let holder: NodeId = c
+            .add_child(root, Container::column().with_focusable(true))?
+            .into();
         let columns: NodeId = c
             .add_child(
                 holder,

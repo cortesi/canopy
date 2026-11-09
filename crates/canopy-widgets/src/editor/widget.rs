@@ -300,7 +300,7 @@ impl HighlightCache {
 #[derive_commands]
 impl Editor {
     /// Construct an editor with a configuration.
-    pub fn with_config(text: impl Into<String>, config: EditorConfig) -> Self {
+    pub fn new(text: impl Into<String>, config: EditorConfig) -> Self {
         let mut buffer = TextBuffer::new(text);
         buffer.set_cursor(TextPosition::new(0, 0));
         let preferred_column = buffer.column_for_position(buffer.cursor(), config.tab_stop);
@@ -393,7 +393,7 @@ impl Editor {
         config: EditorConfig,
         width: u32,
     ) -> PreparedEditorView {
-        let mut editor = Self::with_config(text, config);
+        let mut editor = Self::new(text, config);
         let wrap = editor.wrap(width);
         editor.layout.sync(&mut editor.buffer, wrap);
         let derived_bytes = size_of::<Self>()

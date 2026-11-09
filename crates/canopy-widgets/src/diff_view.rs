@@ -57,7 +57,7 @@ const LOADING_DELAY: Duration = Duration::from_millis(150);
 
 /// How a diff view arranges the two versions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Mode {
+pub enum DiffLayout {
     /// One column: removed lines above added lines.
     Unified,
     /// Two columns: the old version left, the new version right.
@@ -207,12 +207,12 @@ enum Content {
 /// with no lines.
 static EMPTY_MODEL: LazyLock<DiffModel> = LazyLock::new(|| DiffModel::from_texts("", ""));
 
-/// A line diff with a display strategy, a scope, and optional highlighting.
+/// A line diff with a display layout, a scope, and optional highlighting.
 pub struct DiffView {
     /// The diff or the message being shown.
     content: Content,
     /// How the two sides are laid out.
-    strategy: Mode,
+    layout: DiffLayout,
     /// Rows paired for side-by-side layout.
     side_rows: Vec<SideRow>,
     /// Paired wrapping, rebuilt when the pane width or model changes.
@@ -244,13 +244,13 @@ pub struct DiffView {
 impl DiffView {
     /// Show `model` in unified layout.
     ///
-    /// Use [`Self::with_strategy`] to change the layout, and install
+    /// Use [`Self::with_layout`] to change the layout, and install
     /// highlighters afterwards.
     #[must_use]
     pub fn new(model: DiffModel) -> Self {
         Self {
             content: Content::Diff(model),
-            strategy: Mode::Unified,
+            layout: DiffLayout::Unified,
             side_rows: Vec::new(),
             side_layout: RefCell::new(None),
             old_highlighter: None,
@@ -388,7 +388,7 @@ impl DiffView {
     pub fn set_matches(&mut self, ctx: &mut dyn Context, ranges: Vec<TextRange>) {
         self.clear_matches();
         let mut side_rows = BTreeMap::new();
-        if self.strategy == Mode::SideBySide {
+        if self.layout == DiffLayout::SideBySide {
             for (row, pair) in self.side_rows.iter().enumerate() {
                 if let SideRow::Pair { old, new, .. } = pair {
                     if let Some(line) = old {
@@ -434,7 +434,7 @@ impl DiffView {
                 .or_default()
                 .push(index);
             // Context is drawn on both sides but counted once.
-            if self.strategy == Mode::SideBySide
+            if self.layout == DiffLayout::SideBySide
                 && found.side == Side::Old
                 && let Some(SideRow::Pair {
                     new: Some(new),
@@ -511,7 +511,7 @@ impl DiffView {
         let start = text::width(&text::expand_tabs(&prefix, model.tab_stop));
         let through = source.chars().take(found.columns.end).collect::<String>();
         let end = text::width(&text::expand_tabs(&through, model.tab_stop));
-        if self.strategy == Mode::Unified {
+        if self.layout == DiffLayout::Unified {
             return Rect::new(
                 geometry.gutter + start,
                 column(found.row),
@@ -577,11 +577,11 @@ impl DiffView {
     /// Search ranges need to be applied again because their display rows
     /// changed. The revision advances so a host can refresh its held query.
     /// Messages and loading state remain in place.
-    pub fn set_strategy(&mut self, strategy: Mode) {
-        if self.strategy == strategy {
+    pub fn set_layout(&mut self, layout: DiffLayout) {
+        if self.layout == layout {
             return;
         }
-        self.strategy = strategy;
+        self.layout = layout;
         self.ensure_side_rows();
         self.change = 0;
         self.revision = self.revision.wrapping_add(1);
@@ -590,14 +590,14 @@ impl DiffView {
 
     /// Return the current display layout.
     #[must_use]
-    pub fn strategy(&self) -> Mode {
-        self.strategy
+    pub fn layout(&self) -> DiffLayout {
+        self.layout
     }
 
-    /// Set the display strategy while constructing a view.
+    /// Set the display layout while constructing a view.
     #[must_use]
-    pub fn with_strategy(mut self, strategy: Mode) -> Self {
-        self.strategy = strategy;
+    pub fn with_layout(mut self, layout: DiffLayout) -> Self {
+        self.layout = layout;
         self.ensure_side_rows();
         self
     }
@@ -660,15 +660,15 @@ impl DiffView {
 
     /// Pair the rows for side-by-side layout, once, when that layout needs it.
     fn ensure_side_rows(&mut self) {
-        if self.strategy == Mode::SideBySide && self.side_rows.is_empty() {
+        if self.layout == DiffLayout::SideBySide && self.side_rows.is_empty() {
             self.side_rows = side_rows(&self.model().rows);
         }
     }
 
     /// Return change heads in the active layout's display coordinates.
     fn change_heads(&self, width: u32) -> Vec<usize> {
-        match self.strategy {
-            Mode::Unified => change_heads(
+        match self.layout {
+            DiffLayout::Unified => change_heads(
                 self.model().rows.iter().map(|row| {
                     (
                         matches!(row, DiffRow::Header { .. }),
@@ -677,7 +677,7 @@ impl DiffView {
                 }),
                 self.model().scope,
             ),
-            Mode::SideBySide => {
+            DiffLayout::SideBySide => {
                 let heads = change_heads(
                     self.side_rows.iter().map(|row| {
                         (
@@ -748,8 +748,8 @@ impl DiffView {
         let digits = digits(model.diff.old_len().max(model.diff.new_len()));
         let gutter = digits + 2;
         let line_width = model.old_width.max(model.new_width) + 1;
-        match self.strategy {
-            Mode::Unified => {
+        match self.layout {
+            DiffLayout::Unified => {
                 let width = (gutter + line_width).max(view_w);
                 Geometry {
                     digits,
@@ -758,7 +758,7 @@ impl DiffView {
                     width,
                 }
             }
-            Mode::SideBySide => {
+            DiffLayout::SideBySide => {
                 let half = view_w.saturating_sub(1) / 2;
                 Geometry {
                     digits,
@@ -789,11 +789,11 @@ impl DiffView {
         rndr.text(style, Line::new(x, y, width), &cell)
     }
 
-    /// Return the number of body rows for the current strategy.
+    /// Return the number of body rows for the current layout.
     fn body_rows(&self, width: u32) -> usize {
-        match self.strategy {
-            Mode::Unified => self.model().rows.len(),
-            Mode::SideBySide => {
+        match self.layout {
+            DiffLayout::Unified => self.model().rows.len(),
+            DiffLayout::SideBySide => {
                 let geom = self.geometry(width);
                 self.with_side_layout(geom.half.saturating_sub(geom.gutter), |layout| {
                     *layout.offsets.last().expect("layout has a total height")
@@ -1157,12 +1157,12 @@ impl Widget for DiffView {
             }
         } else {
             self.prepare_highlighters();
-            match self.strategy {
-                Mode::Unified => self.draw_unified(rndr, ctx)?,
-                Mode::SideBySide => self.draw_side_by_side(rndr, ctx)?,
+            match self.layout {
+                DiffLayout::Unified => self.draw_unified(rndr, ctx)?,
+                DiffLayout::SideBySide => self.draw_side_by_side(rndr, ctx)?,
             }
         }
-        if self.strategy == Mode::SideBySide && width > 0 {
+        if self.layout == DiffLayout::SideBySide && width > 0 {
             let geom = self.geometry(width);
             // Even viewport widths leave two central cells so the panes
             // remain exactly equal. Only one carries the divider glyph.
@@ -1233,7 +1233,7 @@ impl Widget for DiffView {
             let model = self.model();
             let gutter = digits(model.diff.old_len().max(model.diff.new_len())) + 2;
             let half = gutter + model.old_width.max(model.new_width) + 1;
-            if self.strategy == Mode::Unified {
+            if self.layout == DiffLayout::Unified {
                 half
             } else {
                 half * 2 + 1
@@ -1368,7 +1368,8 @@ mod tests {
     };
 
     use super::{
-        DiffModel, DiffRow, DiffView, LOADING_DELAY, Mode, Scope, SideRow, header_text, side_rows,
+        DiffLayout, DiffModel, DiffRow, DiffView, LOADING_DELAY, Scope, SideRow, header_text,
+        side_rows,
     };
     use crate::{
         Spinner,
@@ -1436,7 +1437,7 @@ mod tests {
                 "abcdefghijklmnopqrstuvwx\nshared\n",
                 "ABCDEFGHIJKLMNOPQRSTUVWXtail\nshared\n",
             ))
-            .with_strategy(Mode::SideBySide);
+            .with_layout(DiffLayout::SideBySide);
             let mut harness = Harness::builder(view).size(width, 8).build()?;
             harness.render()?;
             let rows = harness.tbuf().lines();
@@ -1487,7 +1488,8 @@ mod tests {
             "b".repeat(48),
             "tail\n".repeat(10)
         );
-        let view = DiffView::new(DiffModel::from_texts(old, new)).with_strategy(Mode::SideBySide);
+        let view =
+            DiffView::new(DiffModel::from_texts(old, new)).with_layout(DiffLayout::SideBySide);
         let mut harness = Harness::builder(view).size(33, 4).build()?;
         harness.render()?;
         harness.with_root_widget_context(|view: &mut DiffView, ctx| {
@@ -1543,8 +1545,8 @@ mod tests {
     #[test]
     fn wrapped_panes_preserve_tabs_wide_graphemes_and_combining_marks() -> Result<()> {
         let source = "abc\t界e\u{301}fghijklmnopqrst\n";
-        let view =
-            DiffView::new(DiffModel::from_texts(source, source)).with_strategy(Mode::SideBySide);
+        let view = DiffView::new(DiffModel::from_texts(source, source))
+            .with_layout(DiffLayout::SideBySide);
         let mut harness = Harness::builder(view).size(33, 10).build()?;
         harness.render()?;
         for start in [3, 20] {
@@ -1578,12 +1580,12 @@ mod tests {
             view.set_matches(ctx, ranges.clone());
             view.search_next(ctx, 1);
             view.set_loading();
-            view.set_strategy(Mode::Unified);
+            view.set_layout(DiffLayout::Unified);
             assert_eq!(view.revision(), 0, "the current layout is a no-op");
             assert_eq!((view.search_matches(), view.search_position()), (2, 2));
 
-            view.set_strategy(Mode::SideBySide);
-            assert_eq!(view.strategy(), Mode::SideBySide);
+            view.set_layout(DiffLayout::SideBySide);
+            assert_eq!(view.layout(), DiffLayout::SideBySide);
             assert!(ptr::eq(view.diff(), model.diff()));
             assert!(ptr::eq(view.rows(), model.rows.as_ref()));
             assert!(view.loading.running());
@@ -1593,13 +1595,13 @@ mod tests {
             assert_eq!((view.search_matches(), view.search_position()), (2, 1));
             assert!(view.matches.iter().all(|found| found.row == 0));
 
-            view.set_strategy(Mode::Unified);
+            view.set_layout(DiffLayout::Unified);
             assert_eq!(view.revision(), 2);
             assert!(ptr::eq(view.diff(), model.diff()));
             view.set_model(model.clone());
-            assert_eq!(view.strategy(), Mode::Unified);
+            assert_eq!(view.layout(), DiffLayout::Unified);
             view.set_message("binary file");
-            view.set_strategy(Mode::SideBySide);
+            view.set_layout(DiffLayout::SideBySide);
             assert_eq!(view.message(), Some("binary file"));
             Ok(())
         })?;
@@ -1673,12 +1675,12 @@ mod tests {
             [(Scope::WholeFile, 19, 18), (Scope::Context(0), 11, 10)]
         {
             for (mode, head) in [
-                (Mode::Unified, unified_head),
-                (Mode::SideBySide, paired_head),
+                (DiffLayout::Unified, unified_head),
+                (DiffLayout::SideBySide, paired_head),
             ] {
                 let view = DiffView::new(DiffModel::from_texts(&old, &new))
                     .with_scope(scope)
-                    .with_strategy(mode);
+                    .with_layout(mode);
                 let mut harness = Harness::builder(view).size(80, 2).build()?;
                 harness.render()?;
                 harness.with_root_widget_context(|view: &mut DiffView, ctx| {
@@ -1715,7 +1717,7 @@ mod tests {
         assert!(ptr::eq(model.diff(), cloned.diff()));
 
         let mut view = DiffView::new(cloned);
-        let other = DiffView::new(model.clone()).with_strategy(Mode::SideBySide);
+        let other = DiffView::new(model.clone()).with_layout(DiffLayout::SideBySide);
         assert!(ptr::eq(view.diff(), other.diff()));
         assert!(ptr::eq(view.rows(), other.rows()));
         let original_rows = other.rows().to_vec();
@@ -1762,7 +1764,7 @@ mod tests {
             .size(50, 5)
             .build()?;
         let mut second =
-            Harness::builder(DiffView::new(model.clone()).with_strategy(Mode::SideBySide))
+            Harness::builder(DiffView::new(model.clone()).with_layout(DiffLayout::SideBySide))
                 .size(50, 5)
                 .build()?;
         first.render()?;
@@ -1793,7 +1795,7 @@ mod tests {
         })?;
         second.with_root_widget_context(|view: &mut DiffView, _| {
             assert!(ptr::eq(view.diff(), model.diff()));
-            assert_eq!(view.strategy, Mode::SideBySide);
+            assert_eq!(view.layout, DiffLayout::SideBySide);
             assert!(!view.side_rows.is_empty());
             assert_eq!(view.revision(), 0);
             assert_eq!((view.search_matches(), view.search_position()), (2, 1));
@@ -1806,12 +1808,12 @@ mod tests {
 
     #[test]
     fn search_highlights_both_versions_and_wraps_in_each_layout() -> Result<()> {
-        for mode in [Mode::Unified, Mode::SideBySide] {
+        for mode in [DiffLayout::Unified, DiffLayout::SideBySide] {
             let view = DiffView::new(DiffModel::from_texts(
                 "alpha\nold needle\nsame needle\n",
                 "alpha\nnew needle\nsame needle\n",
             ))
-            .with_strategy(mode);
+            .with_layout(mode);
             let mut harness = Harness::builder(view).size(50, 5).build()?;
             harness.render()?;
             harness.with_root_widget_context(|view: &mut DiffView, ctx| {
@@ -1845,8 +1847,8 @@ mod tests {
             })?;
             harness.render()?;
             let point = match mode {
-                Mode::Unified => Point::new(7, 2),
-                Mode::SideBySide => Point::new(33, 1),
+                DiffLayout::Unified => Point::new(7, 2),
+                DiffLayout::SideBySide => Point::new(33, 1),
             };
             assert_eq!(
                 harness.buf().get(point).expect("added match").style.bg,

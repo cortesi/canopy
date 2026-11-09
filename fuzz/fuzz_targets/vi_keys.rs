@@ -149,7 +149,7 @@ fuzz_target!(|data: &[u8]| {
         } else {
             Interaction::Edit
         });
-    let mut editor = Editor::with_config(text.clone(), config);
+    let mut editor = Editor::new(text.clone(), config);
     APP.with(|app| {
         app.borrow_mut()
             .with_root_context(|ctx| {

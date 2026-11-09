@@ -84,7 +84,7 @@ where
     /// needs no second owner.
     list: TypedId<PickerList<T>>,
     /// The filter field under the list.
-    filter: NodeId,
+    field: TypedId<Input>,
 }
 
 impl<T> Default for Picker<T>
@@ -128,12 +128,12 @@ where
     pub fn set_items(
         &mut self,
         context: &mut dyn Context,
-        title: &str,
+        title: impl Into<String>,
         placeholder: &'static str,
         items: Vec<T>,
     ) -> Result<()> {
         let list = self.typed_list()?;
-        let title = title.to_owned();
+        let title = title.into();
         context.with_widget_mut(list, |list: &mut PickerList<T>, context| {
             list.set_items(context, title, placeholder, items)
         })
@@ -144,13 +144,13 @@ where
     pub fn update_items(
         &mut self,
         context: &mut dyn Context,
-        title: &str,
+        title: impl Into<String>,
         placeholder: &'static str,
         items: Vec<T>,
         same: impl Fn(&T, &T) -> bool,
     ) -> Result<()> {
         let list = self.typed_list()?;
-        let title = title.to_owned();
+        let title = title.into();
         context.with_widget_mut(list, |list: &mut PickerList<T>, context| {
             list.update_items(context, title, placeholder, items, same)
         })
@@ -195,15 +195,20 @@ where
     /// as a delete.
     pub const BINDINGS: FrameworkBindingGroup = FrameworkBindingGroup::new("picker");
 
-    /// Set what accepting the selection and closing the picker post.
+    /// Set what accepting the selection posts.
     ///
-    /// Both calls usually target the host, which reads the selection and
-    /// closes the modal. The picker posts them with [`Context::post`], so they
-    /// run once the picker's command has returned, and the host may read,
-    /// change, or close the picker. The accept call carries no selection: the
-    /// host reads the list as it is when the call runs.
-    pub fn set_commands(&mut self, accept: CommandCall, cancel: CommandCall) {
+    /// The call, and the one of [`Self::set_on_cancel`], usually target the
+    /// host, which reads the selection and closes the modal. The picker posts
+    /// them with [`Context::post`], so they run once the picker's command has
+    /// returned, and the host may read, change, or close the picker. The
+    /// accept call carries no selection: the host reads the list as it is
+    /// when the call runs.
+    pub fn set_on_accept(&mut self, accept: CommandCall) {
         self.on_accept = Some(accept);
+    }
+
+    /// Set what closing the picker posts. See [`Self::set_on_accept`].
+    pub fn set_on_cancel(&mut self, cancel: CommandCall) {
         self.on_cancel = Some(cancel);
     }
 
@@ -232,8 +237,8 @@ where
     }
 
     /// Return the filter field, or an error before the picker mounts.
-    pub fn filter(&self) -> Result<NodeId> {
-        Ok(self.parts.mounted()?.filter)
+    pub fn field(&self) -> Result<TypedId<Input>> {
+        Ok(self.parts.mounted()?.field)
     }
 
     /// Return the typed list, or an error before the picker mounts.
@@ -297,7 +302,7 @@ where
             })?;
             Ok(Parts {
                 list,
-                filter: field,
+                field: filter,
             })
         })
     }
@@ -645,16 +650,16 @@ where
         self.filter.text().to_string()
     }
 
-    /// Show `items` under `label`, dropping any filter.
+    /// Show `items` under `title`, dropping any filter.
     pub fn set_items(
         &mut self,
         context: &mut dyn Context,
-        label: String,
+        title: impl Into<String>,
         placeholder: &'static str,
         items: Vec<T>,
     ) -> Result<()> {
         self.items = items;
-        self.label = label;
+        self.label = title.into();
         self.placeholder = placeholder;
         self.filter = Filter::Off;
         self.apply_filter();
@@ -665,14 +670,14 @@ where
         self.refresh(context)
     }
 
-    /// Show `items` under `label` in place of the current items, and keep
+    /// Show `items` under `title` in place of the current items, and keep
     /// the filter and the selected item, which `same` finds among the new
     /// items. A selected item that left the list leaves the selection at its
     /// row.
     pub fn update_items(
         &mut self,
         context: &mut dyn Context,
-        label: String,
+        title: impl Into<String>,
         placeholder: &'static str,
         items: Vec<T>,
         same: impl Fn(&T, &T) -> bool,
@@ -682,7 +687,7 @@ where
             .selected()
             .and_then(|old| items.iter().position(|new| same(old, new)));
         self.items = items;
-        self.label = label;
+        self.label = title.into();
         self.placeholder = placeholder;
         self.apply_filter();
         match kept.and_then(|item| self.shown.iter().position(|&shown| shown == item)) {
@@ -1278,7 +1283,7 @@ mod tests {
     fn parts(harness: &mut Harness) -> Result<Geometry> {
         let (list, filter) =
             harness.with_root_widget_context(|picker: &mut Picker<String>, _| {
-                Ok((picker.list()?, picker.filter()?))
+                Ok((picker.list()?, NodeId::from(picker.field()?)))
             })?;
         let frame = harness
             .find_nodes("**/picker/**/frame")?
@@ -1339,10 +1344,8 @@ mod tests {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let owner = CommandTarget::Exact(ctx.node_id());
             let mut picker = Picker::<String>::new();
-            picker.set_commands(
-                Self::call_accepted().with_target(owner),
-                Self::call_cancelled().with_target(owner),
-            );
+            picker.set_on_accept(Self::call_accepted().with_target(owner));
+            picker.set_on_cancel(Self::call_cancelled().with_target(owner));
             self.picker = Some(ctx.add_child(ctx.node_id(), picker)?.into());
             Ok(())
         }
@@ -1380,7 +1383,7 @@ mod tests {
                 ctx.create_detached(Picker::<String>::new().with_truncate(Truncate::Start))?;
             attach_and_roll_back(ctx, picker.into());
             let unmounted = ctx.with_widget(picker, |picker: &Picker<String>| {
-                Ok(picker.list().is_err() && picker.filter().is_err())
+                Ok(picker.list().is_err() && picker.field().is_err())
             })?;
             assert!(unmounted, "a rolled-back picker has no list and no field");
             ctx.attach(ctx.node_id(), picker.into())?;

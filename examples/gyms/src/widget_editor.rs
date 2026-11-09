@@ -52,7 +52,7 @@ impl Widget for WidgetEditor {
         let config = EditorConfig::new()
             .with_mode(EditMode::Vi)
             .with_wrap(WrapMode::None);
-        let mut editor = Editor::with_config(&self.contents, config);
+        let mut editor = Editor::new(&self.contents, config);
         editor.set_highlighter(Some(Box::new(SyntectHighlighter::new(
             self.extension.as_str(),
         ))));

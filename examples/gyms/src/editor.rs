@@ -72,7 +72,7 @@ fn add_editor_frame(
     height: Option<u32>,
     highlighter: Option<SyntectHighlighter>,
 ) -> Result<()> {
-    let mut editor = Editor::with_config(text, config);
+    let mut editor = Editor::new(text, config);
     if let Some(highlighter) = highlighter {
         editor.set_highlighter(Some(Box::new(highlighter)));
     }

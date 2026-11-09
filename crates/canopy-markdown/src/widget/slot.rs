@@ -560,7 +560,7 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context, opening: Openin
     )?;
     let editor = ctx.add_child(
         slot,
-        Editor::with_config(opening_text.clone(), slot_config(&config)),
+        Editor::new(opening_text.clone(), slot_config(&config)),
     )?;
     #[cfg(feature = "syntax")]
     ctx.update(editor, |editor: &mut Editor| {
@@ -830,15 +830,15 @@ fn ask_discard(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
         "Discard changes",
         "Drop the changes to this block since it was last kept?",
     )
-    .answer(Answer::new(
+    .with_answer(Answer::new(
         "discard",
         Markdown::call_discard_block(true).with_target(target),
     ))
-    .declining(Answer::new(
+    .with_declining(Answer::new(
         "keep editing",
         Markdown::call_focus_block().with_target(target),
     ))
-    .closing(Closing::BeforeCall);
+    .with_closing(Closing::BeforeCall);
     Confirm::open(ctx, confirm, owner, request)?;
     Ok(())
 }

@@ -729,7 +729,7 @@ fn missing_keys_clamp_axes_and_clear_empty_selection_membership() -> Result<()> 
 
 #[test]
 fn header_and_gutter_selection_focus_the_body_for_keyboard_actions() -> Result<()> {
-    let mut h = Harness::builder(crate::Container::stack().focusable())
+    let mut h = Harness::builder(crate::Container::stack().with_focusable(true))
         .register::<TableView>()
         .size(25, 7)
         .build()?;

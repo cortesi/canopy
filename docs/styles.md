@@ -300,7 +300,7 @@ as a logo, shows the ground of whatever holds it, and so does the area around
 an image that does not fill its view. The effect stack then acts on both colors
 of each cell alike, so an effect that dims the view dims the whole image, and
 the view does not match the image again for it. `ImageView::from_bytes`
-decodes an image an application embeds, and `with_focus(false)` keeps a
+decodes an image an application embeds, and `with_focusable(false)` keeps a
 decorative image out of keyboard traversal.
 
 ## Block mosaics

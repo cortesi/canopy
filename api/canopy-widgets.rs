@@ -777,12 +777,6 @@ impl ColumnChart {
     /// Shows or hides the scale in the gutter.
     pub fn set_scale_labels(&mut self, shown: bool);
 
-    /// Sets a call that runs after each change of the cursor or the hover by
-    /// input or by a cursor command. The setters do not post it. The chart
-    /// posts the call, so it runs once the handler of the chart returns.
-    #[must_use]
-    pub fn with_command(self, call: CommandCall) -> Self;
-
     /// Sets the text of the values in the gutter.
     #[must_use]
     pub fn with_format(self, format: impl 'static + Fn(f64) -> String) -> Self;
@@ -790,6 +784,12 @@ impl ColumnChart {
     /// Sets the rows below the axis. Zero rows leave only the upper stacks.
     #[must_use]
     pub fn with_lower_rows(self, rows: u32) -> Self;
+
+    /// Sets a call that runs after each change of the cursor or the hover by
+    /// input or by a cursor command. The setters do not post it. The chart
+    /// posts the call, so it runs once the handler of the chart returns.
+    #[must_use]
+    pub fn with_on_change(self, call: CommandCall) -> Self;
 
     /// Shows or hides the scale in the gutter.
     #[must_use]
@@ -1023,39 +1023,39 @@ pub struct ConfirmRequest {
 }
 
 impl ConfirmRequest {
+    /// A question with no answers yet, in the plain tone, closed by its calls,
+    /// with a message width of 64. Until [`ConfirmRequest::with_declining`]
+    /// names another, the first answer declines.
+    pub fn new(title: impl Into<String>, message: impl Into<String>) -> Self;
+
     /// Add an answer at the right.
     #[must_use]
-    pub fn answer(self, answer: Answer) -> Self;
+    pub fn with_answer(self, answer: Answer) -> Self;
 
     /// Ignore the answers for `delay` after the dialog opens.
     #[must_use]
-    pub fn arm_after(self, delay: Duration) -> Self;
+    pub fn with_arm_after(self, delay: Duration) -> Self;
 
     /// Let `closing` say who closes the dialog.
     #[must_use]
-    pub fn closing(self, closing: Closing) -> Self;
+    pub fn with_closing(self, closing: Closing) -> Self;
 
     /// Add the answer that declines, at the right, and make it the `decline`
     /// answer.
     #[must_use]
-    pub fn declining(self, answer: Answer) -> Self;
+    pub fn with_declining(self, answer: Answer) -> Self;
 
     /// Dim `target` while the dialog is open.
     #[must_use]
-    pub fn dim(self, target: NodeId) -> Self;
+    pub fn with_dim_target(self, target: NodeId) -> Self;
 
     /// Wrap the message to at most `columns`.
     #[must_use]
-    pub fn message_width(self, columns: u32) -> Self;
-
-    /// A question with no answers yet, in the plain tone, closed by its calls,
-    /// with a message width of 64. Until [`ConfirmRequest::declining`] names
-    /// another, the first answer declines.
-    pub fn new(title: impl Into<String>, message: impl Into<String>) -> Self;
+    pub fn with_message_width(self, columns: u32) -> Self;
 
     /// Show the dialog in `tone`.
     #[must_use]
-    pub fn tone(self, tone: Tone) -> Self;
+    pub fn with_tone(self, tone: Tone) -> Self;
 
     /// A `yes` and a `no` answer, where `no` declines.
     pub fn yes_no(
@@ -1092,10 +1092,6 @@ impl Container {
     /// Fill the available space and stack children in a column.
     pub fn column() -> Self;
 
-    /// Accept focus as a node of its own.
-    #[must_use]
-    pub fn focusable(self) -> Self;
-
     /// Construct a container with any layout.
     pub fn new(layout: Layout) -> Self;
 
@@ -1122,6 +1118,10 @@ impl Container {
     /// then reaches every cell of it, the cells that no child paints too.
     #[must_use]
     pub fn with_fill(self) -> Self;
+
+    /// Accept focus as a node of its own, or not.
+    #[must_use]
+    pub fn with_focusable(self, focusable: bool) -> Self;
 
     /// Name this node's path segment.
     #[must_use]
@@ -1201,7 +1201,7 @@ impl Dialog {
 
 impl Widget for Dialog {}
 
-/// A line diff with a display strategy, a scope, and optional highlighting.
+/// A line diff with a display layout, a scope, and optional highlighting.
 pub struct DiffView {/* private fields */}
 
 impl DiffView {
@@ -1226,13 +1226,17 @@ impl DiffView {
     #[must_use]
     pub fn diff(&self) -> &Diff;
 
+    /// Return the current display layout.
+    #[must_use]
+    pub fn layout(&self) -> DiffLayout;
+
     /// Return whether the view shows a message rather than a diff.
     #[must_use]
     pub fn message(&self) -> Option<&str>;
 
     /// Show `model` in unified layout.
     ///
-    /// Use [`Self::with_strategy`] to change the layout, and install
+    /// Use [`Self::with_layout`] to change the layout, and install
     /// highlighters afterwards.
     #[must_use]
     pub fn new(model: DiffModel) -> Self;
@@ -1280,6 +1284,13 @@ impl DiffView {
         new: Option<Box<dyn Highlighter>>,
     );
 
+    /// Change the display layout without replacing the model or highlighters.
+    ///
+    /// Search ranges need to be applied again because their display rows
+    /// changed. The revision advances so a host can refresh its held query.
+    /// Messages and loading state remain in place.
+    pub fn set_layout(&mut self, layout: DiffLayout);
+
     /// Note that a model is computing. After a short delay the view shows a
     /// spinner until [`Self::set_model`] or [`Self::set_message`] arrives.
     ///
@@ -1304,16 +1315,9 @@ impl DiffView {
     /// and returns change movement to the first change.
     pub fn set_model(&mut self, model: DiffModel);
 
-    /// Change the display layout without replacing the model or highlighters.
-    ///
-    /// Search ranges need to be applied again because their display rows
-    /// changed. The revision advances so a host can refresh its held query.
-    /// Messages and loading state remain in place.
-    pub fn set_strategy(&mut self, strategy: Mode);
-
-    /// Return the current display layout.
+    /// Set the display layout while constructing a view.
     #[must_use]
-    pub fn strategy(&self) -> Mode;
+    pub fn with_layout(self, layout: DiffLayout) -> Self;
 
     /// Show a message in place of any diff, such as before one is chosen.
     ///
@@ -1334,10 +1338,6 @@ impl DiffView {
     /// a message, which has no model, this does nothing.
     #[must_use]
     pub fn with_scope(self, scope: Scope) -> Self;
-
-    /// Set the display strategy while constructing a view.
-    #[must_use]
-    pub fn with_strategy(self, strategy: Mode) -> Self;
 
     /// Set the tab stop width in columns. On a view that shows a message,
     /// which has no model, this does nothing.
@@ -1556,6 +1556,9 @@ impl Editor {
     /// unbroken block, such as a column centred in a wider pane.
     pub fn natural_width(&self) -> u32;
 
+    /// Construct an editor with a configuration.
+    pub fn new(text: impl Into<String>, config: EditorConfig) -> Self;
+
     /// Return the UTF-8 byte offset of `position` in the text, clamped to
     /// the text.
     pub fn offset_of_position(&self, position: TextPosition) -> usize;
@@ -1720,9 +1723,6 @@ impl Editor {
 
     /// Return the vi mode, or `None` for a text editor.
     pub fn vi_mode(&self) -> Option<ViMode>;
-
-    /// Construct an editor with a configuration.
-    pub fn with_config(text: impl Into<String>, config: EditorConfig) -> Self;
 }
 
 impl CommandNode for Editor {}
@@ -1950,7 +1950,7 @@ impl ImageView {
     /// Set whether the view takes focus, which its zoom and pan keys need.
     /// A decorative image, such as a logo, stays out of keyboard traversal.
     #[must_use]
-    pub fn with_focus(self, focusable: bool) -> Self;
+    pub fn with_focusable(self, focusable: bool) -> Self;
 
     /// Draw with the symbols of `tier`, whatever glyphs the terminal has.
     #[must_use]
@@ -2418,6 +2418,10 @@ impl<W: Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> List<W, K> {
     #[must_use]
     pub fn with_checks(self) -> Self;
 
+    /// Set the semantic label of the collection.
+    #[must_use]
+    pub fn with_label(self, label: impl Into<String>) -> Self;
+
     /// Build a list that posts a command when a row is activated.
     ///
     /// The list posts the command with [`Context::post`] and the row's index
@@ -2425,11 +2429,7 @@ impl<W: Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> List<W, K> {
     /// names a position, not a row: a list that changes its rows before the
     /// command runs can put another row at that index.
     #[must_use]
-    pub fn with_command(self, command: CommandCall) -> Self;
-
-    /// Set the semantic label of the collection.
-    #[must_use]
-    pub fn with_label(self, label: impl Into<String>) -> Self;
+    pub fn with_on_activate(self, command: CommandCall) -> Self;
 
     /// Build a list with a list-level selection indicator.
     /// Repeat controls whether the indicator renders on every visible line.
@@ -2544,12 +2544,12 @@ impl MenuList {
     #[must_use]
     pub fn selected(&self) -> Option<usize>;
 
+    /// Show `items`, with the row at `selected` selected.
+    pub fn set_items(&mut self, items: Vec<MenuItem>, selected: usize);
+
     /// Set the call that closes the menu: the list posts it after a row's
     /// own call, and for Esc.
-    pub fn set_close(&mut self, close: Option<CommandCall>);
-
-    /// Show `items`, with the row at `selected` selected, or the first row.
-    pub fn set_items(&mut self, items: Vec<MenuItem>, selected: Option<usize>);
+    pub fn set_on_close(&mut self, close: Option<CommandCall>);
 
     /// Show `rows`, which do nothing, as a list without selection does.
     pub fn set_rows(&mut self, rows: Vec<MenuRow>);
@@ -2684,11 +2684,6 @@ impl Widget for Meter {}
 pub struct Pane {/* private fields */}
 
 impl Pane {
-    /// Hold focus, as `Container::focusable` does, so children can swap
-    /// without moving focus.
-    #[must_use]
-    pub fn focusable(self) -> Self;
-
     /// Return whether this pane has the keys. `ctx` is the context of this
     /// pane.
     pub fn has_keys(&self, ctx: &dyn ViewContext) -> bool;
@@ -2696,6 +2691,11 @@ impl Pane {
     /// Construct a pane named `name`, with the keys while its `Columns` marks
     /// it.
     pub fn new(name: &'static str) -> Self;
+
+    /// Hold focus, or not, as `Container::with_focusable` says, so
+    /// children can swap without moving focus.
+    #[must_use]
+    pub fn with_focusable(self, focusable: bool) -> Self;
 
     /// Build a pane whose keys follow `keys`.
     #[must_use]
@@ -2761,7 +2761,7 @@ where
     pub fn cancel(&mut self, context: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Return the filter field, or an error before the picker mounts.
-    pub fn filter(&self) -> canopy::error::Result<NodeId>;
+    pub fn field(&self) -> canopy::error::Result<TypedId<Input>>;
 
     /// Return the list, which takes the keyboard while the modal is open, or
     /// an error before the picker mounts.
@@ -2780,15 +2780,6 @@ where
     where
         T: Clone;
 
-    /// Set what accepting the selection and closing the picker post.
-    ///
-    /// Both calls usually target the host, which reads the selection and
-    /// closes the modal. The picker posts them with [`Context::post`], so they
-    /// run once the picker's command has returned, and the host may read,
-    /// change, or close the picker. The accept call carries no selection: the
-    /// host reads the list as it is when the call runs.
-    pub fn set_commands(&mut self, accept: CommandCall, cancel: CommandCall);
-
     /// Show the item count in the title, or the label alone. A picker counts
     /// its items until it is told otherwise.
     pub fn set_counted(
@@ -2804,7 +2795,7 @@ where
     pub fn set_items(
         &mut self,
         context: &mut dyn Context,
-        title: &str,
+        title: impl Into<String>,
         placeholder: &'static str,
         items: Vec<T>,
     ) -> canopy::error::Result<()>;
@@ -2817,12 +2808,25 @@ where
         note: String,
     ) -> canopy::error::Result<()>;
 
+    /// Set what accepting the selection posts.
+    ///
+    /// The call, and the one of [`Self::set_on_cancel`], usually target the
+    /// host, which reads the selection and closes the modal. The picker posts
+    /// them with [`Context::post`], so they run once the picker's command has
+    /// returned, and the host may read, change, or close the picker. The
+    /// accept call carries no selection: the host reads the list as it is
+    /// when the call runs.
+    pub fn set_on_accept(&mut self, accept: CommandCall);
+
+    /// Set what closing the picker posts. See [`Self::set_on_accept`].
+    pub fn set_on_cancel(&mut self, cancel: CommandCall);
+
     /// Show `items` in place of the current items, and keep the filter and
     /// the selected item. See [`PickerList::update_items`].
     pub fn update_items(
         &mut self,
         context: &mut dyn Context,
-        title: &str,
+        title: impl Into<String>,
         placeholder: &'static str,
         items: Vec<T>,
         same: impl Fn(&T, &T) -> bool,
@@ -2989,11 +2993,11 @@ where
         text: String,
     ) -> canopy::error::Result<()>;
 
-    /// Show `items` under `label`, dropping any filter.
+    /// Show `items` under `title`, dropping any filter.
     pub fn set_items(
         &mut self,
         context: &mut dyn Context,
-        label: String,
+        title: impl Into<String>,
         placeholder: &'static str,
         items: Vec<T>,
     ) -> canopy::error::Result<()>;
@@ -3015,14 +3019,14 @@ where
     /// match it.
     pub fn start_filter(&mut self, context: &mut dyn Context) -> canopy::error::Result<()>;
 
-    /// Show `items` under `label` in place of the current items, and keep
+    /// Show `items` under `title` in place of the current items, and keep
     /// the filter and the selected item, which `same` finds among the new
     /// items. A selected item that left the list leaves the selection at its
     /// row.
     pub fn update_items(
         &mut self,
         context: &mut dyn Context,
-        label: String,
+        title: impl Into<String>,
         placeholder: &'static str,
         items: Vec<T>,
         same: impl Fn(&T, &T) -> bool,
@@ -4587,6 +4591,15 @@ pub mod diff {
         pub fn rows(&self, scope: Scope) -> Vec<DiffRow>;
     }
 
+    /// How a diff view arranges the two versions.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum DiffLayout {
+        /// One column: removed lines above added lines.
+        Unified,
+        /// Two columns: the old version left, the new version right.
+        SideBySide,
+    }
+
     /// The expensive parts of a diff view, ready to adopt without recomputation.
     ///
     /// A host that computes diffs off the UI thread builds one of these there and
@@ -4650,15 +4663,6 @@ pub mod diff {
             /// New lines the block shows, changes and context together.
             new: Range<usize>,
         },
-    }
-
-    /// How a diff view arranges the two versions.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum Mode {
-        /// One column: removed lines above added lines.
-        Unified,
-        /// Two columns: the old version left, the new version right.
-        SideBySide,
     }
 
     /// How much unchanged text the rows show.

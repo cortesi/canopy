@@ -832,7 +832,7 @@ fn add_syntax_samples(c: &mut dyn Context, parent: NodeId) -> Result<()> {
             .with_interaction(Interaction::View)
             .with_line_numbers(LineNumbers::Absolute)
             .with_wrap(WrapMode::None);
-        let mut editor = Editor::with_config(source, config);
+        let mut editor = Editor::new(source, config);
         editor.set_highlighter(Some(Box::new(SyntectHighlighter::new(extension))));
         let frame = c.add_child(parent, Frame::new().with_title(title))?;
         let editor = c.add_child(frame, editor)?;

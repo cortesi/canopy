@@ -814,9 +814,10 @@ re-declares their keys. An inline
 widget, such as Button or Root, keeps a default-binding script at the
 application tier instead. `Confirm::open` asks a question in a modal of a named
 owner that admits `Confirm::BINDINGS` and `Answers::BINDINGS`, and
-`Picker::set_commands` names what the picker's Enter and Esc run. The keys of
-the answers of an `Answers` row depend on their labels, so the row takes them in
-`on_event` rather than as bindings, and help does not list them.
+`Picker::set_on_accept` and `set_on_cancel` name what the picker's Enter and
+Esc run. The keys of the answers of an `Answers` row depend on their labels, so
+the row takes them in `on_event` rather than as bindings, and help does not list
+them.
 
 Core registers the navigation intents (`input::NavIntent`) in every catalog.
 A node accepts one when its widget does, or when its view can move that way:

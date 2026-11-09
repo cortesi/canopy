@@ -297,8 +297,8 @@ impl Menu {
         let &Parts { frame, list } = self.parts.mounted()?;
         context.update(frame, |frame: &mut Frame| frame.set_title(title))?;
         context.with_widget_mut(list, |list: &mut MenuList, context| {
-            list.set_items(items, Some(selected));
-            list.set_close(Some(close));
+            list.set_items(items, selected);
+            list.set_on_close(Some(close));
             // New rows open at the top, scrolled only as far as the
             // selection needs.
             context.scroll(ScrollOp::To(Point::ZERO));
@@ -378,22 +378,22 @@ impl MenuList {
         self
     }
 
-    /// Show `items`, with the row at `selected` selected, or the first row.
-    pub fn set_items(&mut self, items: Vec<MenuItem>, selected: Option<usize>) {
+    /// Show `items`, with the row at `selected` selected.
+    pub fn set_items(&mut self, items: Vec<MenuItem>, selected: usize) {
         self.layout = RowLayout::fit(items.iter().map(|item| &item.row));
         self.cursor = RowCursor::new(items.len());
-        self.cursor.set_index(selected.unwrap_or(0));
+        self.cursor.set_index(selected);
         self.items = items;
     }
 
     /// Show `rows`, which do nothing, as a list without selection does.
     pub fn set_rows(&mut self, rows: Vec<MenuRow>) {
-        self.set_items(rows.into_iter().map(MenuItem::note).collect(), None);
+        self.set_items(rows.into_iter().map(MenuItem::note).collect(), 0);
     }
 
     /// Set the call that closes the menu: the list posts it after a row's
     /// own call, and for Esc.
-    pub fn set_close(&mut self, close: Option<CommandCall>) {
+    pub fn set_on_close(&mut self, close: Option<CommandCall>) {
         self.close = close;
     }
 

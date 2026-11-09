@@ -17,7 +17,7 @@ use super::{
 
 /// Return a vi editor of `text` with its cursor at `line:column`.
 fn vi_at(text: &str, line: usize, column: usize) -> Editor {
-    let mut editor = Editor::with_config(text, EditorConfig::new().with_mode(EditMode::Vi));
+    let mut editor = Editor::new(text, EditorConfig::new().with_mode(EditMode::Vi));
     editor.buffer.set_cursor(TextPosition::new(line, column));
     editor.update_preferred_column();
     editor
@@ -158,7 +158,7 @@ fn a_set_text_ends_the_undo_group_of_an_insert() {
 fn a_switch_from_text_to_vi_mode_ends_the_typing() {
     // Regression: the typing of text mode stayed open in normal mode, and
     // took the vi edits after it.
-    let mut editor = Editor::with_config("", EditorConfig::new());
+    let mut editor = Editor::new("", EditorConfig::new());
     drive(&mut editor, "ab");
     editor.set_config(EditorConfig::new().with_mode(EditMode::Vi));
     drive(&mut editor, "hx");

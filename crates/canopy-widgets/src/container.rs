@@ -93,10 +93,10 @@ impl Container {
         self
     }
 
-    /// Accept focus as a node of its own.
+    /// Accept focus as a node of its own, or not.
     #[must_use]
-    pub fn focusable(mut self) -> Self {
-        self.focusable = true;
+    pub fn with_focusable(mut self, focusable: bool) -> Self {
+        self.focusable = focusable;
         self
     }
 
@@ -186,7 +186,7 @@ mod tests {
         }
 
         fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-            let region = c.add_child(c.node_id(), Container::column().focusable())?;
+            let region = c.add_child(c.node_id(), Container::column().with_focusable(true))?;
             c.set_layout_override(region.into(), Layout::fill().into())?;
             let plain = c.add_child(region, Plain)?;
             c.set_layout_override(plain.into(), Layout::fill().into())?;

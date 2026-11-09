@@ -77,7 +77,7 @@ impl EditorHost {
 
 impl Widget for EditorHost {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let editor = Editor::with_config(self.text.clone(), self.config.clone());
+        let editor = Editor::new(self.text.clone(), self.config.clone());
         let editor_id = c.add_slot::<EditorSlot>(c.node_id(), editor)?;
         c.set_layout_override(c.node_id(), Layout::fill().into())?;
         c.set_layout_override(editor_id.into(), Layout::fill().into())?;
@@ -252,7 +252,7 @@ fn assert_capture_matches(mode: EditMode, read_only: bool, setup: &[&str]) {
             } else {
                 Interaction::Edit
             });
-        let mut editor = Editor::with_config("alpha\nbeta", config);
+        let mut editor = Editor::new("alpha\nbeta", config);
         let probe = key::Key::parse_spec(spec).expect("valid key spec");
         let (predicted, outcome) = app
             .with_root_context(|ctx| {
@@ -2119,7 +2119,7 @@ fn search_current_other_matches_and_syntax_keep_separate_styles() {
 #[test]
 fn scroll_marks_report_one_row_per_match_line() {
     let config = EditorConfig::new().with_wrap(WrapMode::None);
-    let mut editor = Editor::with_config("aa aa\nbb", config);
+    let mut editor = Editor::new("aa aa\nbb", config);
     editor
         .search
         .set_query(&editor.buffer, "aa", SearchDirection::Forward);
@@ -2146,7 +2146,7 @@ fn scroll_marks_follow_soft_wrapped_rows_on_both_layout_paths() {
     let config = EditorConfig::new().with_wrap(WrapMode::Soft);
     // At width ten the 25-character first line wraps across rows 0-2, and
     // the second line sits on row 3.
-    let mut editor = Editor::with_config("aaaaaaaaaaaaaaaaaaaaaaaaa\nbb", config);
+    let mut editor = Editor::new("aaaaaaaaaaaaaaaaaaaaaaaaa\nbb", config);
     editor
         .search
         .set_query(&editor.buffer, "a", SearchDirection::Forward);
@@ -2179,7 +2179,7 @@ fn scroll_marks_follow_soft_wrapped_rows_on_both_layout_paths() {
 #[test]
 fn scroll_marks_skip_matches_past_the_buffer() {
     let config = EditorConfig::new().with_wrap(WrapMode::None);
-    let mut editor = Editor::with_config("aa", config);
+    let mut editor = Editor::new("aa", config);
     editor.search.set_matches(
         &editor.buffer,
         vec![
@@ -2398,18 +2398,17 @@ fn natural_width_is_the_widest_unwrapped_line_its_gutter_and_caret_column() {
     let display = EditorConfig::new()
         .with_tab_stop(4)
         .with_interaction(Interaction::Display);
-    let plain = Editor::with_config(text, display.clone());
+    let plain = Editor::new(text, display.clone());
     assert_eq!(
         plain.natural_width(),
         21,
         "the widest line sets the width, however the editor wraps"
     );
-    let tabbed = Editor::with_config("ab\n\tcd", display.clone());
+    let tabbed = Editor::new("ab\n\tcd", display.clone());
     assert_eq!(tabbed.natural_width(), 6, "a tab expands to its stop");
-    let numbered =
-        Editor::with_config("ab\n\tcd", display.with_line_numbers(LineNumbers::Absolute));
+    let numbered = Editor::new("ab\n\tcd", display.with_line_numbers(LineNumbers::Absolute));
     assert_eq!(numbered.natural_width(), 8, "the gutter adds its own width");
-    let editable = Editor::with_config("ab\n\tcd", EditorConfig::new().with_tab_stop(4));
+    let editable = Editor::new("ab\n\tcd", EditorConfig::new().with_tab_stop(4));
     assert_eq!(
         editable.natural_width(),
         7,
@@ -2449,7 +2448,7 @@ fn prepared_view_append_preserves_selection_focus_and_paused_scroll() {
 fn prepared_view_keeps_its_wrap_geometry_until_next_publication() {
     let config = EditorConfig::new().with_interaction(Interaction::View);
     let prepared = Editor::prepare_view("one two three four", config.clone(), 6);
-    let mut editor = Editor::with_config("", config);
+    let mut editor = Editor::new("", config);
     editor.publish_view(prepared, false);
     let before = editor.layout.total_lines();
     editor.update_layout(Rect::new(0, 0, 50, 10), 0);

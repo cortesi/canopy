@@ -271,7 +271,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     /// names a position, not a row: a list that changes its rows before the
     /// command runs can put another row at that index.
     #[must_use]
-    pub fn with_command(mut self, command: CommandCall) -> Self {
+    pub fn with_on_activate(mut self, command: CommandCall) -> Self {
         self.on_activate = Some(command);
         self
     }
@@ -946,7 +946,7 @@ mod tests {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let list = ctx.add_child(
                 ctx.node_id(),
-                List::<Text>::new().with_command(Self::spec_activate().call()),
+                List::<Text>::new().with_on_activate(Self::spec_activate().call()),
             )?;
             ctx.with_widget_mut::<List<Text>, _>(list, |list, ctx| {
                 list.append(ctx, Text::new("First row"))?;
@@ -1333,7 +1333,7 @@ mod tests {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let list = ctx.add_child(
                 ctx.node_id(),
-                List::<Text, i64>::new().with_command(
+                List::<Text, i64>::new().with_on_activate(
                     Self::spec_activate()
                         .call()
                         .with_target(CommandTarget::Exact(ctx.node_id())),
@@ -1386,7 +1386,7 @@ mod tests {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let list = ctx.add_child(
                 ctx.node_id(),
-                List::<Text, i64>::new().with_command(
+                List::<Text, i64>::new().with_on_activate(
                     Self::spec_activate()
                         .call()
                         .with_target(CommandTarget::Exact(ctx.node_id())),

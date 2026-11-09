@@ -228,7 +228,7 @@ impl ColumnChart {
     /// input or by a cursor command. The setters do not post it. The chart
     /// posts the call, so it runs once the handler of the chart returns.
     #[must_use]
-    pub fn with_command(mut self, call: CommandCall) -> Self {
+    pub fn with_on_change(mut self, call: CommandCall) -> Self {
         self.command = Some(call);
         self
     }
@@ -822,7 +822,7 @@ mod tests {
                 .chart
                 .take()
                 .expect("chart")
-                .with_command(Self::spec_moved().call().with_target(owner));
+                .with_on_change(Self::spec_moved().call().with_target(owner));
             let chart = c.add_child(c.node_id(), chart)?;
             c.set_layout_override(chart.into(), Layout::fill().into())
         }

@@ -19,7 +19,7 @@ use crate::{editor::VisualMode, text_buffer::TextBuffer};
 /// Run `keys` on a vi editor of `text` with its cursor at `line:column`,
 /// with no render, and return the editor.
 fn run_with(config: EditorConfig, text: &str, start: (usize, usize), keys: &str) -> Editor {
-    let mut editor = Editor::with_config(text, config);
+    let mut editor = Editor::new(text, config);
     in_root(|ctx| {
         editor.set_cursor(ctx, TextPosition::new(start.0, start.1));
         run_keys(&mut editor, keys, ctx)

@@ -593,7 +593,7 @@ impl ImageView {
     /// Set whether the view takes focus, which its zoom and pan keys need.
     /// A decorative image, such as a logo, stays out of keyboard traversal.
     #[must_use]
-    pub fn with_focus(mut self, focusable: bool) -> Self {
+    pub fn with_focusable(mut self, focusable: bool) -> Self {
         self.focusable = focusable;
         self
     }
@@ -1129,7 +1129,9 @@ mod tests {
         );
         assert!(DecodedImage::read(&path)?.scale(Size::new(0, 8)).is_err());
 
-        let mut view = ImageView::empty().with_focus(false).with_tier(Tier::Halves);
+        let mut view = ImageView::empty()
+            .with_focusable(false)
+            .with_tier(Tier::Halves);
         view.zoom = Zoom::Manual(2.0);
         view.set_preview(preview.clone());
         assert!(Arc::ptr_eq(&view.image, &preview.image), "no copy");

@@ -60,11 +60,11 @@ impl Pane {
         self
     }
 
-    /// Hold focus, as `Container::focusable` does, so children can swap
-    /// without moving focus.
+    /// Hold focus, or not, as `Container::with_focusable` says, so
+    /// children can swap without moving focus.
     #[must_use]
-    pub fn focusable(mut self) -> Self {
-        self.focusable = true;
+    pub fn with_focusable(mut self, focusable: bool) -> Self {
+        self.focusable = focusable;
         self
     }
 
@@ -222,7 +222,9 @@ mod tests {
     /// panes, and the leaves.
     fn columns(c: &mut dyn Context) -> Result<Vec<NodeId>> {
         let root = c.node_id();
-        let holder: NodeId = c.add_child(root, Container::column().focusable())?.into();
+        let holder: NodeId = c
+            .add_child(root, Container::column().with_focusable(true))?
+            .into();
         let columns: NodeId = c
             .add_child(
                 holder,
@@ -309,12 +311,16 @@ mod tests {
         let (mut harness, nodes) = scene(|c| {
             let root = c.node_id();
             let row: NodeId = c.add_child(root, Container::row())?.into();
-            let region: NodeId = c.add_child(row, Container::column().focusable())?.into();
+            let region: NodeId = c
+                .add_child(row, Container::column().with_focusable(true))?
+                .into();
             let pane = c.add_child(
                 region,
                 Pane::new("view").with_keys(PaneKeys::Within(region)),
             )?;
-            let other: NodeId = c.add_child(row, Container::column().focusable())?.into();
+            let other: NodeId = c
+                .add_child(row, Container::column().with_focusable(true))?
+                .into();
             Ok(vec![region, pane.into(), other])
         })?;
         let (region, other) = (nodes[0], nodes[2]);
