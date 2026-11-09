@@ -46,7 +46,10 @@ impl Add<Self> for Mods {
 }
 
 /// No modifiers pressed.
-#[allow(non_upper_case_globals)]
+#[expect(
+    non_upper_case_globals,
+    reason = "modifier constants read as values, as in `mods::Ctrl`"
+)]
 pub const Empty: Mods = Mods {
     shift: false,
     ctrl: false,
@@ -54,7 +57,10 @@ pub const Empty: Mods = Mods {
 };
 
 /// Shift-only modifier state.
-#[allow(non_upper_case_globals)]
+#[expect(
+    non_upper_case_globals,
+    reason = "modifier constants read as values, as in `mods::Ctrl`"
+)]
 pub const Shift: Mods = Mods {
     shift: true,
     ctrl: false,
@@ -62,7 +68,10 @@ pub const Shift: Mods = Mods {
 };
 
 /// Control-only modifier state.
-#[allow(non_upper_case_globals)]
+#[expect(
+    non_upper_case_globals,
+    reason = "modifier constants read as values, as in `mods::Ctrl`"
+)]
 pub const Ctrl: Mods = Mods {
     shift: false,
     ctrl: true,
@@ -70,7 +79,10 @@ pub const Ctrl: Mods = Mods {
 };
 
 /// Alt-only modifier state.
-#[allow(non_upper_case_globals)]
+#[expect(
+    non_upper_case_globals,
+    reason = "modifier constants read as values, as in `mods::Ctrl`"
+)]
 pub const Alt: Mods = Mods {
     shift: false,
     ctrl: false,

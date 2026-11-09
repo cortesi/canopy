@@ -8,7 +8,7 @@ use std::{
     ops::{Deref, DerefMut},
     result::Result as StdResult,
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, MutexGuard,
         atomic::{AtomicBool, AtomicU64, Ordering},
     },
     task::{Context, Poll, Wake, Waker},
@@ -199,13 +199,18 @@ struct PublicationState {
 #[derive(Clone, Default)]
 pub struct PublicationWatch(Arc<Mutex<PublicationState>>);
 impl PublicationWatch {
+    /// Lock the shared state. Its holders only count and swap wakers, so a
+    /// panic under the lock is a defect.
+    fn state(&self) -> MutexGuard<'_, PublicationState> {
+        self.0.lock().expect("publication lock poisoned")
+    }
     /// Read the current generation.
     pub(crate) fn generation(&self) -> u64 {
-        self.0.lock().expect("publication lock poisoned").generation
+        self.state().generation
     }
     /// Read the count of observable changes.
     pub(crate) fn changes(&self) -> u64 {
-        self.0.lock().expect("publication lock poisoned").changes
+        self.state().changes
     }
     /// Register and recheck atomically before parking, until the count of
     /// observable changes moves from `since` or the deadline passes.
@@ -215,7 +220,7 @@ impl PublicationWatch {
         deadline: Option<Instant>,
         cx: &Context<'_>,
     ) -> Poll<u64> {
-        let mut state = self.0.lock().expect("publication lock poisoned");
+        let mut state = self.state();
         if state.changes != since || deadline.is_some_and(|d| state.now.is_some_and(|now| now >= d))
         {
             return Poll::Ready(state.changes);
@@ -244,7 +249,7 @@ impl PublicationWatch {
     /// wake every subscriber.
     fn change(&self, frame: bool) {
         let waiters = {
-            let mut state = self.0.lock().expect("publication lock poisoned");
+            let mut state = self.state();
             if frame {
                 state.generation += 1;
             }
@@ -257,7 +262,7 @@ impl PublicationWatch {
     }
     /// Wake deadline subscribers using the driver's clock.
     fn advance(&self, now: Instant) {
-        let mut state = self.0.lock().expect("publication lock poisoned");
+        let mut state = self.state();
         state.now = Some(now);
         let mut ready = Vec::new();
         state.waiters.retain(|(w, d)| {
@@ -275,30 +280,16 @@ impl PublicationWatch {
     }
     /// Release all subscriptions when their only evaluation completes.
     fn clear_waiters(&self) {
-        self.0
-            .lock()
-            .expect("publication lock poisoned")
-            .waiters
-            .clear();
+        self.state().waiters.clear();
     }
     /// Count the pending subscribers.
     #[cfg(test)]
     pub(super) fn waiter_count(&self) -> usize {
-        self.0
-            .lock()
-            .expect("publication lock poisoned")
-            .waiters
-            .len()
+        self.state().waiters.len()
     }
     /// Earliest subscribed timeout.
     fn next_deadline(&self) -> Option<Instant> {
-        self.0
-            .lock()
-            .expect("publication lock poisoned")
-            .waiters
-            .iter()
-            .filter_map(|(_, d)| *d)
-            .min()
+        self.state().waiters.iter().filter_map(|(_, d)| *d).min()
     }
 }
 /// Coalesced notification for a suspended VM.

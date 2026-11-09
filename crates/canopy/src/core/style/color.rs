@@ -387,7 +387,10 @@ struct Oklch {
 
 impl Oklab {
     /// Convert an sRGB color.
-    #[allow(clippy::many_single_char_names)]
+    #[expect(
+        clippy::many_single_char_names,
+        reason = "the names are the channels of the published color formula"
+    )]
     fn from_color(color: Color) -> Self {
         let (r, g, b) = color.rgb();
         let (r, g, b) = (srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b));
@@ -403,7 +406,6 @@ impl Oklab {
     }
 
     /// Return the linear sRGB channels, which can fall outside 0 to 1.
-    #[allow(clippy::many_single_char_names)]
     fn linear(self) -> [f32; 3] {
         let l = self.l + 0.396_337_78 * self.a + 0.215_803_76 * self.b;
         let m = self.l - 0.105_561_346 * self.a - 0.063_854_17 * self.b;
@@ -496,7 +498,10 @@ fn ansi_to_rgb(n: u8) -> (u8, u8, u8) {
 }
 
 /// Convert RGB to HSL.
-#[allow(clippy::many_single_char_names)]
+#[expect(
+    clippy::many_single_char_names,
+    reason = "the names are the channels of the published color formula"
+)]
 fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
     let r = r as f32 / 255.0;
     let g = g as f32 / 255.0;
@@ -533,7 +538,10 @@ fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
 }
 
 /// Convert HSL to RGB.
-#[allow(clippy::many_single_char_names)]
+#[expect(
+    clippy::many_single_char_names,
+    reason = "the names are the channels of the published color formula"
+)]
 fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
     if s.abs() < f32::EPSILON {
         let v = (l * 255.0).round() as u8;

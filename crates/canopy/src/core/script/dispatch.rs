@@ -61,6 +61,18 @@ pub(super) fn host_value<'s>(
     ret_arg(scope, &value)
 }
 
+/// Run an action against the live Canopy and return nothing to the script.
+///
+/// This is the unit twin of [`host_value`]: the action's own value stays
+/// on the Rust side.
+pub(super) fn host_unit<'s, R>(
+    scope: &Scope<'s>,
+    f: impl FnOnce(&mut Canopy, NodeId) -> Result<R>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    with_current_canopy(scope, f)?;
+    Ok(ret_none())
+}
+
 /// Build an empty host-call return.
 pub(super) fn ret_none<'s>() -> MultiValue<'s> {
     MultiValue::new()

@@ -1,4 +1,3 @@
-#![allow(clippy::new_without_default)]
 //! Core types and traits for the Canopy terminal UI library.
 
 /// Backend implementations.

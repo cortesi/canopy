@@ -22,13 +22,13 @@ use ruau::{
 use super::{
     ArgValue, Canopy, ChangeOutcome, CommandSet, Context, CoreContext, CoreViewContext, FocusScope,
     NodeId, PathFilter, Pin, Point, RectI32, ReentrantCanopyGuard, Result, ScriptCommandCall,
-    ScriptMenu, ViewContext, available_bindings_to_arg, base_api, binding_id_arg,
-    binding_info_to_arg, command_call_from_value, command_call_type, command_info_to_arg, commands,
-    defs, dispatch_command, dispatch_explicit, error, fixtures_to_arg, host_return, host_value,
-    inputmap, key, key_explanation_to_arg, luau_global_owner_name, menu_bindings_to_arg,
-    menu_from_value, menu_type, mouse, node_handle_type, node_id_from_value, node_info_to_arg,
-    node_list_to_arg, notices_to_arg, owned_truthy, ret_arg, ret_none, ret_one, route_trace_to_arg,
-    screen_capture, screen_text, screen_text_for_rect, script_callback_label,
+    ScriptMenu, available_bindings_to_arg, base_api, binding_id_arg, binding_info_to_arg,
+    command_call_from_value, command_call_type, command_info_to_arg, commands, defs,
+    dispatch_command, dispatch_explicit, error, fixtures_to_arg, host_return, host_unit,
+    host_value, inputmap, key, key_explanation_to_arg, luau_global_owner_name,
+    menu_bindings_to_arg, menu_from_value, menu_type, mouse, node_handle_type, node_id_from_value,
+    node_info_to_arg, node_list_to_arg, notices_to_arg, owned_truthy, ret_arg, ret_none, ret_one,
+    route_trace_to_arg, screen_capture, screen_text, screen_text_for_rect, script_callback_label,
     script_journal_to_arg, snapshot_to_arg, validate_node_handle, values_to_args,
     with_current_canopy,
 };
@@ -840,11 +840,10 @@ fn host_set_cursor_look<'s>(
             }
         }
     }
-    with_current_canopy(scope, |canopy, _| {
+    host_unit(scope, |canopy, _| {
         canopy.set_cursor_look(&role, patch);
         Ok(())
-    })?;
-    Ok(ret_none())
+    })
 }
 
 /// `canopy.glyphs`: return the block mosaic characters the terminal draws.
@@ -869,11 +868,10 @@ fn host_set_glyphs<'s>(
             "glyphs must be \"full\" or \"blocks\", got {name:?}"
         ))
     })?;
-    with_current_canopy(scope, |canopy, _| {
+    host_unit(scope, |canopy, _| {
         canopy.set_glyphs(glyphs);
         Ok(())
-    })?;
-    Ok(ret_none())
+    })
 }
 
 /// `canopy.set_motion`: replace the given motion settings.
@@ -937,7 +935,7 @@ fn host_set_motion<'s>(
             _ => blink = Some(millis(&name, value)?),
         }
     }
-    with_current_canopy(scope, |canopy, _| {
+    host_unit(scope, |canopy, _| {
         let mut settings = canopy.motion();
         settings.enabled = enabled.unwrap_or(settings.enabled);
         settings.max_fps = max_fps.unwrap_or(settings.max_fps);
@@ -945,8 +943,7 @@ fn host_set_motion<'s>(
         settings.blink_pause = blink.unwrap_or(settings.blink_pause);
         canopy.set_motion(settings);
         Ok(())
-    })?;
-    Ok(ret_none())
+    })
 }
 
 /// Read a required node-id argument, validating the handle against the live
@@ -956,14 +953,8 @@ pub(super) fn read_node_id<'s>(
     args: &mut HostArgCursor<'_, 's>,
     name: &str,
 ) -> StdResult<NodeId, RuntimeError> {
-    let value = args
-        .raw()
-        .ok_or_else(|| RuntimeError::runtime(format!("argument `{name}` is required")))?;
-    let node_id = node_id_from_value(scope, value)?;
-    with_current_canopy(scope, |canopy, _| {
-        validate_node_handle(&canopy.core, node_id).map(|()| node_id)
-    })
-    .map_err(RuntimeError::from)
+    read_opt_node_id(scope, args)?
+        .ok_or_else(|| RuntimeError::runtime(format!("argument `{name}` is required")))
 }
 
 /// Read an optional node-id argument, validating a present handle against the
@@ -974,14 +965,17 @@ fn read_opt_node_id<'s>(
 ) -> StdResult<Option<NodeId>, RuntimeError> {
     match args.raw() {
         None | Some(ScopedValue::Nil) => Ok(None),
-        Some(value) => {
-            let node_id = node_id_from_value(scope, value)?;
-            with_current_canopy(scope, |canopy, _| {
-                validate_node_handle(&canopy.core, node_id).map(|()| Some(node_id))
-            })
-            .map_err(RuntimeError::from)
-        }
+        Some(value) => live_node(scope, node_id_from_value(scope, value)?).map(Some),
     }
+}
+
+/// Return `node` when the live tree still holds it, the one check that every
+/// node handle a script passes in takes.
+fn live_node(scope: &Scope<'_>, node: NodeId) -> StdResult<NodeId, RuntimeError> {
+    with_current_canopy(scope, |canopy, _| {
+        validate_node_handle(&canopy.core, node).map(|()| node)
+    })
+    .map_err(RuntimeError::from)
 }
 
 /// Parsed arguments for `canopy.wait_for`.
@@ -1177,7 +1171,7 @@ fn parse_command_target<'s>(
     match (kind.as_str(), node) {
         ("focus", None) => Ok(commands::CommandTarget::Focus),
         ("exact" | "from", Some(ArgValue::Node(node))) => {
-            with_current_canopy(scope, |canopy, _| validate_node_handle(&canopy.core, node))?;
+            live_node(scope, node)?;
             Ok(if kind == "exact" {
                 commands::CommandTarget::Exact(node)
             } else {
@@ -1274,11 +1268,10 @@ fn host_log<'s>(
     let mut args = HostArgCursor::new(scope, args);
     let message = args.raw().unwrap_or(ScopedValue::Nil).display(scope);
     tracing::info!("{message}");
-    with_current_canopy(scope, |canopy, _| {
+    host_unit(scope, |canopy, _| {
         canopy.script.host.push_log(message);
         Ok(())
-    })?;
-    Ok(ret_none())
+    })
 }
 
 /// `canopy.assert`: record an assertion and fail the script when false.
@@ -1352,12 +1345,11 @@ fn host_find_identity<'s>(
     let key = args.required::<String>("key")?;
     let requested_scope = read_opt_node_id(scope, &mut args)?;
     host_value(scope, |canopy, _| {
-        let root = canopy.core.root_id();
-        let context = CoreViewContext::new(&canopy.core, root);
-        Ok(context
-            .find_identity(requested_scope.unwrap_or(root), &key)?
-            .map(ArgValue::Node)
-            .unwrap_or(ArgValue::Null))
+        canopy.with_root_view(|context| {
+            Ok(context
+                .find_identity(requested_scope.unwrap_or_else(|| context.root_id()), &key)?
+                .map_or(ArgValue::Null, ArgValue::Node))
+        })
     })
 }
 
@@ -1414,13 +1406,12 @@ fn host_focus_move<'s>(
     scope: &Scope<'s>,
     direction: FocusDirection,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    with_current_canopy(scope, |canopy, _| {
+    host_unit(scope, |canopy, _| {
         let root_id = canopy.core.root_id();
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
         ctx.focus_move(FocusScope::Root, direction)?;
         Ok(())
-    })?;
-    Ok(ret_none())
+    })
 }
 
 /// `canopy.move_focus`: move focus in a direction.
@@ -1442,12 +1433,11 @@ fn host_send_key<'s>(
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = HostArgCursor::new(scope, args);
     let key_spec = args.required::<String>("key")?;
-    with_current_canopy(scope, |canopy, _| {
+    host_unit(scope, |canopy, _| {
         let key = key::Key::parse_spec(&key_spec)?;
         let _reentrant = ReentrantCanopyGuard::push(canopy);
         canopy.key(Some(scope), key)
-    })?;
-    Ok(ret_none())
+    })
 }
 
 /// `canopy.send_key_checked`: inject a key only when its route is expected.
@@ -1459,12 +1449,11 @@ fn host_send_key_checked<'s>(
     let key_spec = args.required::<String>("key")?;
     let expectation = args.required::<Table<'_>>("expectation")?;
     let expectation = parse_key_expectation(scope, ScopedValue::Table(expectation))?;
-    with_current_canopy(scope, |canopy, _| {
+    host_unit(scope, |canopy, _| {
         let key = key::Key::parse_spec(&key_spec)?;
         let _reentrant = ReentrantCanopyGuard::push(canopy);
         canopy.key_checked(Some(scope), key, expectation)
-    })?;
-    Ok(ret_none())
+    })
 }
 
 /// Parse one `KeyExpectation` table.
@@ -1496,7 +1485,7 @@ fn parse_key_expectation<'s>(
         return Err(RuntimeError::runtime("unknown expectation field"));
     }
     if let KeyExpectation::Widget(node) = expectation {
-        with_current_canopy(scope, |canopy, _| validate_node_handle(&canopy.core, node))?;
+        live_node(scope, node)?;
     }
     Ok(expectation)
 }
@@ -1552,14 +1541,13 @@ fn host_send_click<'s>(
     let x = args.required::<u32>("x")?;
     let y = args.required::<u32>("y")?;
     let at = Point { x, y };
-    with_current_canopy(scope, |canopy, _| {
+    host_unit(scope, |canopy, _| {
         send_mouse_sequence(
             scope,
             canopy,
             [(mouse::Action::Down, at), (mouse::Action::Up, at)],
         )
-    })?;
-    Ok(ret_none())
+    })
 }
 
 /// `canopy.send_scroll`: inject a scroll event at screen coordinates.
@@ -1571,7 +1559,7 @@ fn host_send_scroll<'s>(
     let dir = args.required::<String>("direction")?;
     let x = args.required::<u32>("x")?;
     let y = args.required::<u32>("y")?;
-    with_current_canopy(scope, |canopy, _| {
+    host_unit(scope, |canopy, _| {
         let action = match dir.to_ascii_lowercase().as_str() {
             "up" => mouse::Action::ScrollUp,
             "down" => mouse::Action::ScrollDown,
@@ -1593,8 +1581,7 @@ fn host_send_scroll<'s>(
                 location: PointI32::try_from(Point { x, y })?,
             },
         )
-    })?;
-    Ok(ret_none())
+    })
 }
 /// `canopy.send_drag`: press at one screen cell, drag to another, and release.
 fn host_send_drag<'s>(
@@ -1610,7 +1597,7 @@ fn host_send_drag<'s>(
         x: args.required::<u32>("x2")?,
         y: args.required::<u32>("y2")?,
     };
-    with_current_canopy(scope, |canopy, _| {
+    host_unit(scope, |canopy, _| {
         send_mouse_sequence(
             scope,
             canopy,
@@ -1620,8 +1607,7 @@ fn host_send_drag<'s>(
                 (mouse::Action::Up, to),
             ],
         )
-    })?;
-    Ok(ret_none())
+    })
 }
 
 /// `canopy.bindings`: return the active binding table across all modes.
@@ -1716,8 +1702,7 @@ fn host_enter_mode<'s>(
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = HostArgCursor::new(scope, args);
     let mode = args.required::<String>("mode")?;
-    with_current_canopy(scope, |canopy, _| canopy.enter_mode(&mode))?;
-    Ok(ret_none())
+    host_unit(scope, |canopy, _| canopy.enter_mode(&mode))
 }
 
 /// `canopy.leave_mode`: remove a mode from the active modes.
@@ -1727,8 +1712,7 @@ fn host_leave_mode<'s>(
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = HostArgCursor::new(scope, args);
     let mode = args.required::<String>("mode")?;
-    with_current_canopy(scope, |canopy, _| canopy.leave_mode(&mode))?;
-    Ok(ret_none())
+    host_unit(scope, |canopy, _| canopy.leave_mode(&mode))
 }
 
 /// `canopy.active_modes`: return the active modes, newest first.
@@ -2106,7 +2090,7 @@ fn host_unbind_key<'s>(
     let mut args = HostArgCursor::new(scope, args);
     let key_spec = args.required::<String>("key")?;
     let options = parse_unbind_selector(scope, args.optional::<Table<'_>>("options")?)?;
-    with_current_canopy(scope, |canopy, _| {
+    host_unit(scope, |canopy, _| {
         let key = key::Key::parse_spec(&key_spec)?;
         let tier = options
             .mode
@@ -2120,8 +2104,7 @@ fn host_unbind_key<'s>(
             },
         );
         Ok(())
-    })?;
-    Ok(ret_none())
+    })
 }
 
 /// `canopy.clear_bindings`: remove every application binding and clear the
@@ -2130,11 +2113,10 @@ fn host_clear_bindings<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    with_current_canopy(scope, |canopy, _| {
+    host_unit(scope, |canopy, _| {
         let _ = canopy.clear_bindings();
         Ok(())
-    })?;
-    Ok(ret_none())
+    })
 }
 
 /// `canopy.snapshot`: copy the last publication into detached Luau records.
@@ -2163,8 +2145,7 @@ fn host_prepare<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    with_current_canopy(scope, |canopy, _| canopy.prepare())?;
-    Ok(ret_none())
+    host_unit(scope, |canopy, _| canopy.prepare())
 }
 
 /// `canopy.screen_text`: return the published frame's text, whole or
@@ -2197,9 +2178,8 @@ fn host_screen_text<'s>(
             with_current_canopy(scope, |canopy, _| screen_text_for_rect(canopy, rect))?
         }
         Some(value) => {
-            let node_id = node_id_from_value(scope, value)?;
+            let node_id = live_node(scope, node_id_from_value(scope, value)?)?;
             with_current_canopy(scope, |canopy, _| {
-                validate_node_handle(&canopy.core, node_id)?;
                 canopy.prepare()?;
                 let view = canopy
                     .core
@@ -2233,8 +2213,7 @@ fn host_advance<'s>(
     let ms = args.required::<f64>("ms")?;
     let duration = Duration::try_from_secs_f64(ms / 1000.0)
         .map_err(|_| RuntimeError::runtime(format!("advance takes a duration in ms, got {ms}")))?;
-    with_current_canopy(scope, |canopy, _| canopy.advance_clock(duration))?;
-    Ok(ret_none())
+    host_unit(scope, |canopy, _| canopy.advance_clock(duration))
 }
 
 /// `canopy.notify`: post a notice to the log.
@@ -2281,11 +2260,10 @@ fn host_notify<'s>(
     if let Some(duration) = duration {
         post = post.with_duration(duration);
     }
-    with_current_canopy(scope, |canopy, _| {
+    host_unit(scope, |canopy, _| {
         canopy.notify(post);
         Ok(())
-    })?;
-    Ok(ret_none())
+    })
 }
 
 /// `canopy.route_trace`: return the most recent input route trace.
@@ -2395,7 +2373,7 @@ fn host_on_start<'s>(
     let mut args = HostArgCursor::new(scope, args);
     let function = args.required::<Function<'_>>("handler")?;
     let stashed = scope.stash_function(function)?;
-    with_current_canopy(scope, |canopy, _| {
+    host_unit(scope, |canopy, _| {
         let function_id = canopy.script.host.store_function(stashed)?;
         canopy
             .script
@@ -2405,8 +2383,7 @@ fn host_on_start<'s>(
             .on_start_hooks
             .push(function_id);
         Ok(())
-    })?;
-    Ok(ret_none())
+    })
 }
 
 /// `canopy.fixtures`: list all registered fixtures.
