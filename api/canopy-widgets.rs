@@ -1568,6 +1568,8 @@ impl Editor {
 
     /// Return the UTF-8 byte offset of `position` in the text, clamped to
     /// the text.
+    /// [`editor::offset_of_position`](crate::editor::offset_of_position)
+    /// counts a string the same way.
     pub fn offset_of_position(&self, position: TextPosition) -> usize;
 
     /// Map a logical text position to its prepared content point.
@@ -1582,6 +1584,8 @@ impl Editor {
     /// Return the position of the character that holds UTF-8 byte `offset`
     /// of the text. An offset past the end clamps to the end, and an offset
     /// in a line's separator clamps to the end of that line.
+    /// [`editor::position_of_offset`](crate::editor::position_of_offset)
+    /// counts a string the same way.
     pub fn position_of_offset(&self, offset: usize) -> TextPosition;
 
     /// Prepare text and wrapping without a mounted editor or UI context.
@@ -4924,6 +4928,21 @@ pub mod editor {
         /// Return whether rows break at the view width.
         pub fn wraps(self) -> bool;
     }
+
+    /// Return the UTF-8 byte offset in `text` of `position`, as an editor over
+    /// `text` counts it, clamped to the text.
+    ///
+    /// A line past the last clamps to the last line, and a column past the end
+    /// of its line clamps to the end of the line, before its break.
+    pub fn offset_of_position(text: &str, position: TextPosition) -> usize;
+
+    /// Return the position of the character of `text` that holds UTF-8 byte
+    /// `offset`, as an editor over `text` counts it.
+    ///
+    /// Lines break at LF and at CRLF, and a column counts chars. An offset past
+    /// the end clamps to the end, and an offset in a line's break, such as the
+    /// LF of a CRLF, clamps to the end of that line.
+    pub fn position_of_offset(text: &str, offset: usize) -> TextPosition;
 }
 
 pub mod font {

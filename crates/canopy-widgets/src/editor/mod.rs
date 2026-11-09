@@ -20,7 +20,9 @@ pub(crate) mod widget;
 pub use vi::{ViMode, VisualMode};
 pub use widget::{MARK_STYLE, PreparedEditorView};
 
-pub use crate::text_buffer::{Selection, TextPosition, TextRange};
+pub use crate::text_buffer::{
+    Selection, TextPosition, TextRange, offset_of_position, position_of_offset,
+};
 
 #[cfg(test)]
 mod tests;

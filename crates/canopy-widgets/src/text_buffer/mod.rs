@@ -12,6 +12,6 @@ mod selection;
 mod util;
 
 pub use buffer::{LineChange, TextBuffer};
-pub use position::{TextPosition, TextRange};
+pub use position::{TextPosition, TextRange, offset_of_position, position_of_offset};
 pub use selection::Selection;
 pub use util::single_line;

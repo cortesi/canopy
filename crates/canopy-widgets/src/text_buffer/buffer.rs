@@ -582,6 +582,7 @@ mod tests {
     use proptest::{char, prelude::*};
 
     use super::*;
+    use crate::text_buffer::{offset_of_position, position_of_offset};
 
     #[test]
     fn lines_match_each_line_text() {
@@ -830,7 +831,67 @@ mod tests {
         assert_eq!(crlf.line_text(0), "a");
     }
 
+    #[test]
+    fn text_positions_agree_with_the_buffer_over_crlf() {
+        let text = "ab\r\nc界\nd\re\r\n";
+        let buffer = TextBuffer::new(text);
+        // Bytes: `ab` 0-1, CRLF 2-3, `c` 4, `界` 5-7, LF 8, `d` 9, a lone CR
+        // 10, `e` 11, CRLF 12-13.
+        let expect = [
+            (0, TextPosition::new(0, 0)),
+            (2, TextPosition::new(0, 2)),
+            (3, TextPosition::new(0, 2)),
+            (4, TextPosition::new(1, 0)),
+            (5, TextPosition::new(1, 1)),
+            (7, TextPosition::new(1, 1)),
+            (8, TextPosition::new(1, 2)),
+            (10, TextPosition::new(2, 1)),
+            (12, TextPosition::new(2, 3)),
+            (13, TextPosition::new(2, 3)),
+            (99, TextPosition::new(3, 0)),
+        ];
+        for (offset, position) in expect {
+            assert_eq!(
+                position_of_offset(text, offset),
+                position,
+                "offset {offset}"
+            );
+            assert_eq!(
+                buffer.position_of_offset(offset),
+                position,
+                "offset {offset}"
+            );
+        }
+        let offsets = [
+            (TextPosition::new(0, 9), 2),
+            (TextPosition::new(1, 2), 8),
+            (TextPosition::new(2, 1), 10),
+            (TextPosition::new(2, 9), 12),
+            (TextPosition::new(9, 0), text.len()),
+        ];
+        for (position, offset) in offsets {
+            assert_eq!(offset_of_position(text, position), offset, "{position:?}");
+            assert_eq!(buffer.offset_of_position(position), offset, "{position:?}");
+        }
+    }
+
     proptest! {
+        #[test]
+        fn text_positions_match_the_buffer(
+            text in crlf_text_strategy(),
+            offset in 0usize..=60,
+            line in 0usize..8,
+            column in 0usize..12,
+        ) {
+            let buffer = TextBuffer::new(text.as_str());
+            prop_assert_eq!(position_of_offset(&text, offset), buffer.position_of_offset(offset));
+            let position = TextPosition::new(line, column);
+            prop_assert_eq!(
+                offset_of_position(&text, position),
+                buffer.offset_of_position(position)
+            );
+        }
+
         #[test]
         fn replace_range_matches_string(
             text in text_strategy(),
@@ -859,6 +920,20 @@ mod tests {
             prop_assert!(buf.undo());
             prop_assert_eq!(buf.text(), original);
         }
+    }
+
+    /// Text with LF and CRLF breaks, lone CRs, and wide chars.
+    fn crlf_text_strategy() -> impl Strategy<Value = String> {
+        let pieces = prop_oneof![
+            Just("\n"),
+            Just("\r\n"),
+            Just("\r"),
+            Just("é"),
+            Just("界"),
+            Just("a"),
+            Just("b"),
+        ];
+        prop::collection::vec(pieces, 0..30).prop_map(|items| items.concat())
     }
 
     fn text_strategy() -> impl Strategy<Value = String> {

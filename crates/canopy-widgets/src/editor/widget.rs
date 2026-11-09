@@ -1303,12 +1303,16 @@ impl Editor {
     /// Return the position of the character that holds UTF-8 byte `offset`
     /// of the text. An offset past the end clamps to the end, and an offset
     /// in a line's separator clamps to the end of that line.
+    /// [`editor::position_of_offset`](crate::editor::position_of_offset)
+    /// counts a string the same way.
     pub fn position_of_offset(&self, offset: usize) -> TextPosition {
         self.buffer.position_of_offset(offset)
     }
 
     /// Return the UTF-8 byte offset of `position` in the text, clamped to
     /// the text.
+    /// [`editor::offset_of_position`](crate::editor::offset_of_position)
+    /// counts a string the same way.
     pub fn offset_of_position(&self, position: TextPosition) -> usize {
         self.buffer.offset_of_position(position)
     }
