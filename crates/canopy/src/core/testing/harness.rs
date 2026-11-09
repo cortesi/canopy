@@ -319,6 +319,66 @@ impl Harness {
         }
     }
 
+    /// Run turns, as [`Self::wait_until`] does, until the screen shows
+    /// `text`.
+    ///
+    /// # Panics
+    ///
+    /// Panics at the caller after `timeout` of real time, with the notices
+    /// and the screen in the message.
+    #[track_caller]
+    pub fn wait_for_text(&mut self, timeout: Duration, text: &str) {
+        if let Err(error) = self.wait_until(timeout, |h| Ok(h.tbuf().contains_text(text))) {
+            let notices = self
+                .canopy
+                .notices()
+                .iter()
+                .map(|notice| notice.message.as_str())
+                .collect::<Vec<_>>();
+            panic!("{text:?}: {error}\n{notices:?}\n{}", self.screen());
+        }
+    }
+
+    /// Run turns, as [`Self::wait_until`] does, until the screen no longer
+    /// shows `text`.
+    ///
+    /// # Panics
+    ///
+    /// Panics at the caller after `timeout` of real time, with the screen in
+    /// the message.
+    #[track_caller]
+    pub fn wait_for_no_text(&mut self, timeout: Duration, text: &str) {
+        if let Err(error) = self.wait_until(timeout, |h| Ok(!h.tbuf().contains_text(text))) {
+            panic!("{text:?} stays: {error}\n{}", self.screen());
+        }
+    }
+
+    /// Run turns, as [`Self::wait_until`] does, until the message of a
+    /// notice in [`Canopy::notices`] contains `text`. A toast wraps its text,
+    /// so the wait reads the notices rather than the screen.
+    ///
+    /// # Panics
+    ///
+    /// Panics at the caller after `timeout` of real time, with the screen in
+    /// the message.
+    #[track_caller]
+    pub fn wait_for_notice(&mut self, timeout: Duration, text: &str) {
+        let waited = self.wait_until(timeout, |h| {
+            Ok(h.canopy
+                .notices()
+                .iter()
+                .any(|notice| notice.message.contains(text)))
+        });
+        if let Err(error) = waited {
+            panic!("no notice {text:?}: {error}\n{}", self.screen());
+        }
+    }
+
+    /// The screen, one line for each row.
+    fn screen(&self) -> String {
+        self.tbuf().lines().join("\n")
+    }
+
     /// Wait for the next turn input, or return `None` at `deadline`.
     fn next_input(
         &mut self,
@@ -361,7 +421,7 @@ mod tests {
     use std::{
         sync::{
             Arc, Mutex,
-            atomic::{AtomicUsize, Ordering},
+            atomic::{AtomicBool, AtomicUsize, Ordering},
         },
         thread,
     };
@@ -373,7 +433,7 @@ mod tests {
         geom::Line,
         layout::Layout,
         render::Render,
-        runtime::{NodeWakeHandle, PollLifetime},
+        runtime::{NodeWakeHandle, NoticePost, PollLifetime},
         testing::ManualClock,
         widget::Widget,
     };
@@ -490,6 +550,96 @@ mod tests {
             clock.advance(Duration::from_secs(60))?;
             Ok(polls.load(Ordering::SeqCst) >= 3)
         })
+    }
+
+    /// Shows "before" until a poll after the test arms it, then "after", and
+    /// posts a notice.
+    struct Flip {
+        /// Whether the next poll flips the widget, shared with the test.
+        armed: Arc<AtomicBool>,
+        /// Whether a poll has flipped the widget.
+        flipped: bool,
+        /// Handle the test uses to wake the widget.
+        wake: Arc<Mutex<Option<NodeWakeHandle>>>,
+    }
+
+    impl Widget for Flip {
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            *self.wake.lock().expect("wake lock") = Some(ctx.wake_handle(PollLifetime::Node)?);
+            Ok(())
+        }
+
+        fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
+            if self.armed.load(Ordering::SeqCst) && !self.flipped {
+                self.flipped = true;
+                ctx.notify(NoticePost::info("flipped"))?;
+            }
+            Ok(None)
+        }
+
+        fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+            let text = if self.flipped { "after" } else { "before" };
+            r.text("base", Line::new(0, 0, 6), text)?;
+            Ok(())
+        }
+    }
+
+    /// A harness over a `Flip` whose wake is pending, so the next serviced
+    /// turn polls it.
+    fn flipping() -> Result<Harness> {
+        let wake = Arc::new(Mutex::new(None));
+        let armed = Arc::new(AtomicBool::new(false));
+        let mut harness = Harness::builder(Flip {
+            armed: Arc::clone(&armed),
+            flipped: false,
+            wake: Arc::clone(&wake),
+        })
+        .size(10, 2)
+        .build()?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("before"));
+        armed.store(true, Ordering::SeqCst);
+        let handle = wake.lock().expect("wake lock").clone().expect("mounted");
+        handle.wake()?;
+        Ok(harness)
+    }
+
+    #[test]
+    fn wait_for_text_runs_turns_until_the_screen_shows_the_text() -> Result<()> {
+        let mut harness = flipping()?;
+        harness.wait_for_text(Duration::from_secs(10), "after");
+        Ok(())
+    }
+
+    #[test]
+    fn wait_for_no_text_runs_turns_until_the_text_leaves_the_screen() -> Result<()> {
+        let mut harness = flipping()?;
+        harness.wait_for_no_text(Duration::from_secs(10), "before");
+        assert!(harness.tbuf().contains_text("after"));
+        Ok(())
+    }
+
+    #[test]
+    fn wait_for_notice_runs_turns_until_a_notice_says_the_text() -> Result<()> {
+        let mut harness = flipping()?;
+        harness.wait_for_notice(Duration::from_secs(10), "flipped");
+        Ok(())
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "\"absent\": invalid: the condition did not hold within 0ns\n[]\nbefore"
+    )]
+    fn wait_for_text_panics_with_the_screen() {
+        let mut harness = Harness::builder(Flip {
+            armed: Arc::default(),
+            flipped: false,
+            wake: Arc::default(),
+        })
+        .size(10, 2)
+        .build()
+        .unwrap();
+        harness.wait_for_text(Duration::ZERO, "absent");
     }
 
     /// Records the clock and the motion policy of its last render.
