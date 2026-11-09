@@ -17,7 +17,7 @@ use canopy::{
     Canopy, Register, Widget,
     commands::{CommandCall, CommandNode, CommandSpec},
 };
-use canopy_mcp::ConfigHome;
+use canopy_mcp::{AppFactory, ConfigHome};
 
 /// Default configuration: the startup script that runs when the user has no
 /// `init.luau`, and the file a first run writes for them to edit.
@@ -52,3 +52,10 @@ impl Widget for Hello {}
 /// otherwise the application runs [`DEFAULT_CONFIG`]. Headless and API launch
 /// modes pass `None` so they never read user state.
 pub fn create_app(home: Option<&ConfigHome>) -> canopy::error::Result<Canopy>;
+
+/// Return the factory that builds the application for each run, with the
+/// user configuration of `home`.
+///
+/// The counter lives in the widget tree, so each run owns its state and the
+/// factory declares [`ResetPolicy::Isolated`].
+pub fn factory(home: Option<ConfigHome>) -> AppFactory;

@@ -129,7 +129,7 @@ Minimal Canopy application, and the reference for building one outside the Canop
 - Binaries: hello
 - Workspace dependencies: canopy, canopy-mcp, canopy-widgets
 - Workspace dependents: none
-- Items: 6
+- Items: 7
 - Exposes: canopy, canopy-mcp
 
 ## todo
@@ -140,7 +140,7 @@ Todo application used as Canopy's end-to-end example and smoke-test target.
 - Binaries: todo
 - Workspace dependencies: canopy, canopy-mcp, canopy-options, canopy-widgets
 - Workspace dependents: none
-- Items: 15
+- Items: 16
 - Exposes: anyhow, canopy, canopy-mcp, canopy-options, canopy-widgets, musq
 
 ## Binary-only packages

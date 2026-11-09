@@ -19,7 +19,7 @@ use canopy::{
     text,
     tree::ChildSlot,
 };
-use canopy_mcp::{ConfigHome, UserConfig};
+use canopy_mcp::{AppFactory, AppMetadata, ConfigHome, Error as McpError, ResetPolicy, UserConfig};
 use canopy_options::{Follower, Options, OptionsHandle};
 use canopy_widgets::{
     Container, Frame, Input, KeyHint, List, Root, Selectable, StatusBar, Text, ValueExposure,
@@ -567,6 +567,30 @@ pub fn create_app(store: store::Store, home: Option<&ConfigHome>) -> AnyResult<C
             Ok(())
         })
         .build()?)
+}
+
+/// Return the factory that builds the application for each run, over the
+/// database at `path` and with the user configuration of `home`.
+///
+/// An in-memory database, `":memory:"`, is new in each run, so the factory
+/// declares [`ResetPolicy::Isolated`]. A file outlives a run, so it declares
+/// [`ResetPolicy::External`].
+pub fn factory(path: String, home: Option<ConfigHome>) -> AppFactory {
+    let reset = if path == ":memory:" {
+        ResetPolicy::Isolated
+    } else {
+        ResetPolicy::External
+    };
+    AppFactory::new(
+        AppMetadata {
+            app: "todo".into(),
+            reset,
+        },
+        move || {
+            let store = store::Store::open(&path).map_err(McpError::app)?;
+            create_app(store, home.as_ref()).map_err(McpError::app)
+        },
+    )
 }
 
 #[cfg(test)]

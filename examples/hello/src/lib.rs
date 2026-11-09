@@ -14,7 +14,7 @@ use canopy::{
     render::Render,
     style::{StyleRules, themes::Palette},
 };
-use canopy_mcp::{ConfigHome, UserConfig};
+use canopy_mcp::{AppFactory, AppMetadata, ConfigHome, Error as McpError, ResetPolicy, UserConfig};
 use canopy_widgets::{KeyHint, Root, StatusBar, Text};
 
 /// Default configuration: the startup script that runs when the user has no
@@ -109,6 +109,21 @@ pub fn create_app(home: Option<&ConfigHome>) -> Result<Canopy> {
         })
         .user_config(home, DEFAULT_CONFIG)
         .build()
+}
+
+/// Return the factory that builds the application for each run, with the
+/// user configuration of `home`.
+///
+/// The counter lives in the widget tree, so each run owns its state and the
+/// factory declares [`ResetPolicy::Isolated`].
+pub fn factory(home: Option<ConfigHome>) -> AppFactory {
+    AppFactory::new(
+        AppMetadata {
+            app: "hello".into(),
+            reset: ResetPolicy::Isolated,
+        },
+        move || create_app(home.as_ref()).map_err(McpError::app),
+    )
 }
 
 /// Install the per-element styles from the active palette.

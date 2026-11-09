@@ -11,7 +11,7 @@
 use std::{fmt::Debug, path::Path};
 
 use canopy::{Canopy, Widget};
-use canopy_mcp::ConfigHome;
+use canopy_mcp::{AppFactory, ConfigHome};
 use canopy_options::{LeafValue, OptionEnum, OptionField, OptionGroup};
 use canopy_widgets::Selectable;
 use musq::{
@@ -43,6 +43,14 @@ pub fn api_app() -> canopy::error::Result<Canopy>;
 /// `init.luau` replaces [`DEFAULT_CONFIG`], and its `options.toml` holds the
 /// options. Without a `home`, the options keep no file.
 pub fn create_app(store: Store, home: Option<&ConfigHome>) -> anyhow::Result<Canopy>;
+
+/// Return the factory that builds the application for each run, over the
+/// database at `path` and with the user configuration of `home`.
+///
+/// An in-memory database, `":memory:"`, is new in each run, so the factory
+/// declares [`ResetPolicy::Isolated`]. A file outlives a run, so it declares
+/// [`ResetPolicy::External`].
+pub fn factory(path: String, home: Option<ConfigHome>) -> AppFactory;
 
 pub mod options {
     //! The todo's options: how the list orders and shows its todos.

@@ -205,17 +205,34 @@ preparation runs startup scripts, calculates geometry, and then calls
 ## 3. Launch
 
 One `AppFactory` serves every launch mode. It pairs `AppMetadata` with a
-closure that builds a fresh application on demand, so `src/main.rs` only has
-to parse arguments and choose a mode:
+closure that builds a fresh application on demand. The library builds it, so
+`src/main.rs` and the tests share one factory:
+
+```rust
+/// Return the factory that builds the application for each run, with the
+/// user configuration of `home`.
+///
+/// The counter lives in the widget tree, so each run owns its state and the
+/// factory declares [`ResetPolicy::Isolated`].
+pub fn factory(home: Option<ConfigHome>) -> AppFactory {
+    AppFactory::new(
+        AppMetadata {
+            app: "hello".into(),
+            reset: ResetPolicy::Isolated,
+        },
+        move || create_app(home.as_ref()).map_err(McpError::app),
+    )
+}
+```
+
+`src/main.rs` only has to parse arguments and choose a mode:
 
 ```rust
 use std::{path::PathBuf, process::ExitCode};
 
 use anyhow::{Context, Result};
 use canopy::terminal::RunOptions;
-use canopy_mcp::{
-    AppFactory, AppMetadata, ConfigHome, Error as McpError, LaunchMode, ResetPolicy, launch,
-};
+use canopy_mcp::{ConfigHome, LaunchMode, launch};
 use clap::{Parser, Subcommand};
 
 /// Minimal Canopy application.
@@ -277,14 +294,7 @@ fn main() -> Result<ExitCode> {
             .with_context(|| format!("write default config to {}", home.path().display()))?;
     }
 
-    let factory = AppFactory::new(
-        AppMetadata {
-            app: "hello".into(),
-            reset: ResetPolicy::Isolated,
-        },
-        move || hello::create_app(home.as_ref()).map_err(McpError::app),
-    );
-    Ok(launch(factory, mode)?)
+    Ok(launch(hello::factory(home), mode)?)
 }
 ```
 
@@ -376,16 +386,9 @@ the workspace root, so the test walks up out of the crate directory to reach it:
 #[test]
 fn luau_smoke_suite_passes() -> Result<()> {
     let suite_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../smoke");
-    let factory = AppFactory::new(
-        AppMetadata {
-            app: "hello".into(),
-            reset: ResetPolicy::Isolated,
-        },
-        // The suite never mounts a user script root, so a run cannot
-        // depend on or modify developer configuration.
-        || hello::create_app(None).map_err(McpError::app),
-    );
-    let result = run_suite(&factory, &SuiteConfig::new(suite_dir))?;
+    // The suite never mounts a user script root, so a run cannot
+    // depend on or modify developer configuration.
+    let result = run_suite(&hello::factory(None), &SuiteConfig::new(suite_dir))?;
     assert!(result.success(), "{result:#?}");
     assert_eq!(result.scripts.len(), 1, "all checked-in smoke scripts ran");
     assert!(result.scripts.iter().all(|script| {

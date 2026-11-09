@@ -244,19 +244,22 @@ fn main() -> StdResult<ExitCode, Box<dyn StdError>> {
             options: args.demo.run_options()?,
         }
     };
-    let demo = args.demo;
-    let inspector = args.inspector;
-    let factory = AppFactory::new(
-        AppMetadata {
-            app: "gyms".into(),
-            reset: ResetPolicy::Isolated,
-        },
-        move || demo.build(inspector).map_err(McpError::app),
-    );
-    Ok(launch(factory, mode)?)
+    Ok(launch(args.demo.factory(args.inspector), mode)?)
 }
 
 impl Demo {
+    /// Return the factory that builds the demo for each run, with the
+    /// inspector when `inspector` is set.
+    fn factory(self, inspector: bool) -> AppFactory {
+        AppFactory::new(
+            AppMetadata {
+                app: "gyms".into(),
+                reset: ResetPolicy::Isolated,
+            },
+            move || self.build(inspector).map_err(McpError::app),
+        )
+    }
+
     /// Queue the demo's API registration and binding setup.
     fn configure(&self, builder: CanopyBuilder) -> CanopyBuilder {
         match self {

@@ -3,21 +3,15 @@
 use std::path::PathBuf;
 
 use canopy::error::{Error, Result};
-use canopy_mcp::{AppFactory, AppMetadata, Error as McpError, ResetPolicy, SuiteConfig, run_suite};
+use canopy_mcp::{SuiteConfig, run_suite};
 
 use crate::Demo;
 
 #[test]
 fn luau_smoke_suite_passes() -> Result<()> {
     let suite_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("smoke");
-    let factory = AppFactory::new(
-        AppMetadata {
-            app: "gyms".into(),
-            reset: ResetPolicy::Isolated,
-        },
-        || Demo::List.build(false).map_err(McpError::app),
-    );
-    let result = run_suite(&factory, &SuiteConfig::new(suite_dir)).map_err(Error::app)?;
+    let result =
+        run_suite(&Demo::List.factory(false), &SuiteConfig::new(suite_dir)).map_err(Error::app)?;
     assert!(result.success(), "{result:#?}");
     assert_eq!(result.scripts.len(), 1, "all checked-in smoke scripts ran");
     Ok(())
@@ -27,13 +21,7 @@ fn luau_smoke_suite_passes() -> Result<()> {
 /// of a demo.
 fn run_script(demo: Demo, dir: &str, script: &str) -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(dir);
-    let factory = AppFactory::new(
-        AppMetadata {
-            app: "gyms".into(),
-            reset: ResetPolicy::Isolated,
-        },
-        move || demo.build(false).map_err(McpError::app),
-    );
+    let factory = demo.factory(false);
     let config = SuiteConfig {
         scripts: vec![dir.join(script)],
         ..SuiteConfig::new(&dir)

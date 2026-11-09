@@ -5,25 +5,13 @@ mod tests {
     use std::path::PathBuf;
 
     use anyhow::Result;
-    use canopy_mcp::{
-        AppFactory, AppMetadata, Error as McpError, ResetPolicy, SuiteConfig, run_suite,
-    };
-    use todo::{create_app, store::Store};
+    use canopy_mcp::{ResetPolicy, SuiteConfig, run_suite};
 
     #[test]
     fn luau_smoke_suite_passes() -> Result<()> {
         let suite_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("smoke");
         let result = run_suite(
-            &AppFactory::new(
-                AppMetadata {
-                    app: "todo".into(),
-                    reset: ResetPolicy::Isolated,
-                },
-                || {
-                    let store = Store::open(":memory:").map_err(McpError::app)?;
-                    create_app(store, None).map_err(McpError::app)
-                },
-            ),
+            &todo::factory(":memory:".into(), None),
             &SuiteConfig::new(suite_dir),
         )?;
         assert!(result.success(), "{result:#?}");

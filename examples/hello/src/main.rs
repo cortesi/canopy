@@ -5,9 +5,7 @@ use std::{path::PathBuf, process::ExitCode};
 
 use anyhow::{Context, Result};
 use canopy::terminal::RunOptions;
-use canopy_mcp::{
-    AppFactory, AppMetadata, ConfigHome, Error as McpError, LaunchMode, ResetPolicy, launch,
-};
+use canopy_mcp::{ConfigHome, LaunchMode, launch};
 use clap::{Parser, Subcommand};
 
 /// Minimal Canopy application.
@@ -69,12 +67,5 @@ fn main() -> Result<ExitCode> {
             .with_context(|| format!("write default config to {}", home.path().display()))?;
     }
 
-    let factory = AppFactory::new(
-        AppMetadata {
-            app: "hello".into(),
-            reset: ResetPolicy::Isolated,
-        },
-        move || hello::create_app(home.as_ref()).map_err(McpError::app),
-    );
-    Ok(launch(factory, mode)?)
+    Ok(launch(hello::factory(home), mode)?)
 }

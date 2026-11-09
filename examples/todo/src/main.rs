@@ -5,11 +5,8 @@ use std::{path::PathBuf, process::ExitCode};
 
 use anyhow::{Result, bail};
 use canopy::terminal::RunOptions;
-use canopy_mcp::{
-    AppFactory, AppMetadata, ConfigHome, Error as McpError, LaunchMode, ResetPolicy, launch,
-};
+use canopy_mcp::{ConfigHome, LaunchMode, launch};
 use clap::{Parser, Subcommand};
-use todo::{create_app, store::Store};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -50,26 +47,6 @@ enum Command {
     },
 }
 
-/// Build an application factory for a database and optional configuration
-/// home.
-fn make_factory(path: String, home: Option<ConfigHome>) -> AppFactory {
-    let reset = if path == ":memory:" {
-        ResetPolicy::Isolated
-    } else {
-        ResetPolicy::External
-    };
-    AppFactory::new(
-        AppMetadata {
-            app: "todo".into(),
-            reset,
-        },
-        move || {
-            let store = Store::open(&path).map_err(McpError::app)?;
-            create_app(store, home.as_ref()).map_err(McpError::app)
-        },
-    )
-}
-
 fn main() -> Result<ExitCode> {
     let args = Args::parse();
 
@@ -91,6 +68,6 @@ fn main() -> Result<ExitCode> {
         }
     };
     let home = ConfigHome::resolve("todo", args.config_home, args.no_config, &mode)?;
-    let code = launch(make_factory(path, home), mode)?;
+    let code = launch(todo::factory(path, home), mode)?;
     Ok(code)
 }
