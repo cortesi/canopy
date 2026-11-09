@@ -40,6 +40,7 @@ use crate::{
     search::{SearchLimits, SearchQuery},
     source_store::{SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, SourceAnchor, SourceOptions},
+    widget::invalid,
 };
 
 /// Maximum host actions retained before the controller drains the mailbox.
@@ -825,12 +826,9 @@ impl MarkdownInspector {
         }
         let selected = text
             .get(range.clone())
-            .ok_or_else(|| Error::Invalid("Invalid source selection".into()))?;
+            .ok_or_else(|| invalid("Invalid source selection"))?;
         if selected.len() > self.copy_limit {
-            return Err(Error::Invalid(format!(
-                "Copy exceeds {} bytes",
-                self.copy_limit
-            )));
+            return Err(invalid(format!("Copy exceeds {} bytes", self.copy_limit)));
         }
         self.emit(InspectorEvent::CopySource { text, range })
     }
@@ -976,7 +974,7 @@ impl MarkdownInspector {
         if let Some(table) = self.stage.table() {
             ctx.with_widget_mut(table, |table: &mut TableView, ctx| {
                 if table.table().data().dataset() != prepared.data().dataset() {
-                    return Err(Error::Invalid("table inspector identity changed".into()));
+                    return Err(invalid("table inspector identity changed"));
                 }
                 table.publish(ctx, prepared)
             })?;
@@ -1023,7 +1021,7 @@ impl MarkdownInspector {
     fn open_detail(&mut self, ctx: &mut dyn Context, text: Arc<str>) -> Result<()> {
         // Preparation is submitted through the same lane. The table remains
         // mounted.
-        let store = SourceStore::static_text(text).map_err(|e| Error::Invalid(e.to_string()))?;
+        let store = SourceStore::static_text(text).map_err(invalid)?;
         let Stage::Table { detail, .. } = &mut self.stage else {
             return Ok(());
         };
@@ -1176,15 +1174,11 @@ impl Widget for Inspector {
     }
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
         self.wake = Some(ctx.wake_handle(PollLifetime::Node)?);
-        self.lane = Some(
-            self.executor
-                .register(self.wake.clone())
-                .map_err(|e| Error::Invalid(e.to_string()))?,
-        );
+        self.lane = Some(self.executor.register(self.wake.clone()).map_err(invalid)?);
         let content = self
             .content
             .take()
-            .ok_or_else(|| Error::Invalid("inspector already mounted".into()))?;
+            .ok_or_else(|| invalid("inspector already mounted"))?;
         // The inspector takes the reader's place with no frame of its own.
         let body = ctx.add_child(
             ctx.node_id(),
@@ -1199,11 +1193,7 @@ impl Widget for Inspector {
             InspectorContent::Code { info, text } => {
                 self.full_copy = Some(text.clone());
                 self.source_options.language = Some(Arc::from(info));
-                Some(
-                    SourceStore::static_text(text)
-                        .map_err(|e| Error::Invalid(e.to_string()))?
-                        .snapshot(),
-                )
+                Some(SourceStore::static_text(text).map_err(invalid)?.snapshot())
             }
             InspectorContent::Source { snapshot } => Some(snapshot),
             InspectorContent::Table { table } => {
@@ -1247,11 +1237,7 @@ impl Widget for Inspector {
                     resolved.as_deref().unwrap_or("Unresolved")
                 );
                 self.source_options.language = None;
-                Some(
-                    SourceStore::static_text(text)
-                        .map_err(|e| Error::Invalid(e.to_string()))?
-                        .snapshot(),
-                )
+                Some(SourceStore::static_text(text).map_err(invalid)?.snapshot())
             }
         };
         if let Some(source) = pending {
@@ -1299,9 +1285,7 @@ impl Widget for Inspector {
                             let count = matches.ranges.len();
                             let complete = matches.complete;
                             ctx.with_widget_mut(source, |source: &mut MarkdownSource, _| {
-                                source
-                                    .publish_matches(matches)
-                                    .map_err(|e| Error::Invalid(e.to_string()))
+                                source.publish_matches(matches).map_err(invalid)
                             })?;
                             self.search = Search::Fresh;
                             self.show_status(
@@ -2437,7 +2421,7 @@ mod table_tests {
                 .with_root_context(
                     |ctx| handle.publish_table(ctx, prepared("other", 2, "different"))
                 )
-                .is_err()
+                .is_err_and(|error| error.is_notice())
         );
         harness.with_unique(|table: &mut TableView, _| {
             assert_eq!(table.table().data().dataset().as_ref(), "table");
