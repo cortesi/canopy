@@ -39,6 +39,7 @@ pub mod font;
 /// Banner widget that renders ASCII fonts.
 #[cfg(feature = "graphics")]
 mod font_banner;
+pub mod format;
 /// Scrollable frame container.
 mod frame;
 /// Fuzzy label ranking for lists that jump or filter as the operator types.

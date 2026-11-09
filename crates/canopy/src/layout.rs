@@ -829,17 +829,28 @@ pub enum Measurement {
 pub struct CanvasContext<'a> {
     /// Child layout results in this node's content coordinate space.
     children: &'a [CanvasChild],
+    /// The block mosaic characters that the terminal draws well.
+    glyphs: Glyphs,
 }
 
 impl<'a> CanvasContext<'a> {
-    /// Construct a canvas context from a child slice.
-    pub fn new(children: &'a [CanvasChild]) -> Self {
-        Self { children }
+    /// Construct a canvas context from a child slice and the terminal's
+    /// glyphs.
+    pub fn new(children: &'a [CanvasChild], glyphs: Glyphs) -> Self {
+        Self { children, glyphs }
     }
 
     /// Child layout results in this node's content coordinate space.
     pub fn children(&self) -> &[CanvasChild] {
         self.children
+    }
+
+    /// The block mosaic characters that the terminal draws well, as
+    /// [`MeasureConstraints::glyphs`] carries them. A widget whose canvas
+    /// depends on its symbols reads them here, so that its canvas matches
+    /// what it renders.
+    pub fn glyphs(&self) -> Glyphs {
+        self.glyphs
     }
 
     /// Extent of children outer rects.
@@ -905,7 +916,7 @@ mod tests {
 
     #[test]
     fn children_extent_empty() {
-        let ctx = CanvasContext::new(&[]);
+        let ctx = CanvasContext::new(&[], Glyphs::default());
         assert_eq!(ctx.children_extent(), Size::ZERO);
     }
 
@@ -915,7 +926,7 @@ mod tests {
             CanvasChild::new(Rect::new(0, 0, 5, 3), Size::new(1, 1)),
             CanvasChild::new(Rect::new(6, 2, 4, 2), Size::new(100, 100)),
         ];
-        let ctx = CanvasContext::new(&children);
+        let ctx = CanvasContext::new(&children, Glyphs::default());
         assert_eq!(ctx.children_extent(), Size::new(10, 4));
     }
 

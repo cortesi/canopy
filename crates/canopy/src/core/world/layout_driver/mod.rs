@@ -698,7 +698,7 @@ impl<'a> LayoutPass<'a> {
             let child_canvas: Size = node.canvas;
             canvas_children.push(CanvasChild::new(node.rect, child_canvas));
         }
-        let ctx = CanvasContext::new(&canvas_children);
+        let ctx = CanvasContext::new(&canvas_children, self.core.glyphs);
         let canvas = self.core.with_widget(
             node_id,
             WidgetOperation::layout("canvas"),

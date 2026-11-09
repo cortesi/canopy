@@ -24,6 +24,7 @@ use crate::{
     path::{Path, PathFilter},
     render::Glyphs,
     runtime::{NodeWakeHandle, NoticeId, NoticeLog, NoticePost, PollLifetime},
+    status::StatusItem,
     style::themes::Palette,
     tree::NodeIdentity,
     widget::Widget,
@@ -154,6 +155,10 @@ pub trait ViewContext: sealed::ViewContext {
         node: NodeId,
         callback: &mut dyn FnMut(&dyn Widget) -> Result<()>,
     ) -> Result<()>;
+
+    /// Return the status items that the widget of `node` shows, as
+    /// [`Widget::status`] reports them with a context of that node.
+    fn status_of(&self, node: NodeId) -> Result<Vec<StatusItem>>;
 
     /// Inspect a command call for display. A call without a target resolves
     /// from the current node. Registry and target resolution failures are
@@ -1178,6 +1183,18 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
             })?
     }
 
+    fn status_of(&self, node: NodeId) -> Result<Vec<StatusItem>> {
+        let view = NodeCtx {
+            core: &*self.core,
+            node_id: node,
+            focus_override: self.focus_override,
+        };
+        self.core
+            .with_widget(node, WidgetOperation::access("read status"), |widget, _| {
+                widget.status(&view)
+            })
+    }
+
     fn command_status(&self, call: &CommandCall) -> Result<CommandStatus> {
         commands::command_status(&self.core, self.node_id, call)
     }
@@ -1523,7 +1540,7 @@ impl Context for NodeCtx<&mut Core> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Widget, tree::ChildSlot};
+    use crate::{Widget, error::Result, status::StatusItem, tree::ChildSlot};
 
     slot!(Editor);
     impl Widget for Editor {}
@@ -1543,6 +1560,34 @@ mod tests {
         assert_eq!(context.glyphs(), Glyphs::Full);
         context.set_glyphs(Glyphs::Blocks);
         assert_eq!(context.glyphs(), Glyphs::Blocks);
+    }
+
+    /// Reports the node of the context its status is read with.
+    struct Reporter;
+    impl Widget for Reporter {
+        fn status(&self, ctx: &dyn super::ViewContext) -> Vec<StatusItem> {
+            vec![StatusItem::new("node").span("", format!("{:?}", ctx.node_id()))]
+        }
+    }
+
+    #[test]
+    fn status_of_reads_a_widget_in_its_own_context() -> Result<()> {
+        use super::{CoreViewContext, ViewContext};
+        use crate::core::Core;
+
+        let mut core = Core::new();
+        let root = core.root_id();
+        let reporter = core.create_detached(Reporter)?;
+        let view = CoreViewContext::new(&core, root);
+        let items = view.status_of(reporter)?;
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].spans[0].text, format!("{reporter:?}"));
+        assert!(view.status_of(root)?.is_empty());
+
+        core.remove_subtree(reporter)?;
+        let view = CoreViewContext::new(&core, root);
+        assert!(view.status_of(reporter).is_err());
+        Ok(())
     }
 
     #[test]

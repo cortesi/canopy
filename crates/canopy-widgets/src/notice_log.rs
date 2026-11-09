@@ -11,7 +11,6 @@ use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, TypedId, ViewContext, ViewContextExt,
     Widget,
     error::{Error, Result},
-    format::AgeFormat,
     geom::{Line, Size},
     input::Event,
     layout::{
@@ -22,7 +21,7 @@ use canopy::{
     text::{self, Truncate},
 };
 
-use crate::Dialog;
+use crate::{Dialog, format::AgeFormat};
 
 /// Columns the age takes, right-aligned, such as "12s", "59m", or "11mo".
 const AGE_WIDTH: usize = 4;

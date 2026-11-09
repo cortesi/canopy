@@ -31,6 +31,7 @@ use crate::{
         Align, Constraint, Direction, Direction as LayoutDirection, Edges, Layout, LayoutOverride,
         MeasureConstraints, MeasureOverflow, Measurement, RevealAlign, ScrollOp, Sizing,
     },
+    render::Glyphs,
 };
 
 #[test]
@@ -613,6 +614,32 @@ fn canvas_clamped_at_least_view() -> Result<()> {
     core.update_layout(Size::new(5, 5))?;
     let node = &core.nodes[child];
     assert_eq!(node.canvas, Size::new(5, 5));
+    Ok(())
+}
+
+#[test]
+fn canvas_reads_the_terminal_glyphs() -> Result<()> {
+    let mut core = Core::new();
+    core.glyphs = Glyphs::Blocks;
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let canvassed = Arc::clone(&seen);
+    let (widget, _) = TestWidget::with_canvas(
+        |_c| Measurement::Wrap,
+        move |view, ctx| {
+            canvassed.lock().unwrap().push(ctx.glyphs());
+            view
+        },
+    );
+    let child = core.create_detached(widget)?;
+    attach_root_child(&mut core, child)?;
+    core.set_layout_of(child, Layout::fill())?;
+    core.update_layout(Size::new(5, 5))?;
+    let seen = seen.lock().unwrap();
+    assert!(!seen.is_empty());
+    assert!(
+        seen.iter().all(|glyphs| *glyphs == Glyphs::Blocks),
+        "{seen:?}"
+    );
     Ok(())
 }
 

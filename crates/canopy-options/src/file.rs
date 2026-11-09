@@ -10,7 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use canopy::format::Home;
+use canopy_widgets::format::Home;
 use toml_edit::{Array, DocumentMut, Item as TomlItem, Table, TableLike};
 
 use crate::model::{Group, Item, Kind, OptionGroup, Schema, Value, Variant, join_path};

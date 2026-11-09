@@ -31,14 +31,15 @@ The root holds the application, the widget, the contexts, and node handles:
 | `canopy::commands` | Command metadata, calls (`CommandCall::with_arg`), and arguments |
 | `canopy::style` | Style maps, `PartialStyle`, colors, effects, shared part `roles`, and `themes` with its `Palette` |
 | `canopy::text` | `width`, `cell_width`, truncation (`Truncate`), word wrapping (`wrap`, `wrap_with`, `WrapOptions`), grapheme slicing, and grapheme iteration (`graphemes`, `grapheme_indices`), which skips Unicode segmentation between ASCII characters |
-| `canopy::format` | Formats of values for display: ages (`AgeFormat`, `AgeUnits`), counts (`count`, `grouped`), sizes (`bytes`), durations (`duration`), and paths below a home directory (`Home`) |
 | `canopy::geom`, `canopy::path`, `canopy::error` | Geometry, node paths, and errors |
 | `canopy::terminal` | The Crossterm run loop |
 
 `canopy_widgets` follows the same rule: every widget is exported at its crate
 root once, and a module is public only when it carries a family of supporting
 types: `editor`, `highlight`, `font`, `terminal`, `scrollbar`, `diff`, `list`,
-and `paged`. Glyph sets are associated constants (`BoxGlyphs::ROUND`,
+and `paged`. `canopy_widgets::format` holds formats of values for display:
+ages (`AgeFormat`, `AgeUnits`), counts (`count`, `grouped`), sizes (`bytes`),
+durations (`duration`), and paths below a home directory (`Home`). Glyph sets are associated constants (`BoxGlyphs::ROUND`,
 `ScrollbarGlyphs::THIN`), and a widget that runs inside modals ships its
 framework group as an associated constant (`Confirm::BINDINGS`).
 

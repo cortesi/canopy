@@ -77,10 +77,7 @@ impl StatusLine {
     pub fn items(&self, ctx: &dyn ViewContext) -> Result<Vec<StatusItem>> {
         let mut items = Vec::new();
         for source in &self.sources {
-            ctx.with_widget_dyn(*source, &mut |widget| {
-                items.extend(widget.status(ctx));
-                Ok(())
-            })?;
+            items.extend(ctx.status_of(*source)?);
         }
         items.retain(|item| !item.is_empty());
         Ok(items)
