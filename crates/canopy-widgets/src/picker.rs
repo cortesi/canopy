@@ -554,9 +554,39 @@ where
     /// @param delta Negative values move up; positive values move down.
     #[command]
     pub fn page(&mut self, context: &mut dyn Context, delta: i32) -> Result<()> {
-        let rows = context.view().view_rect().h;
-        self.cursor.page(delta, rows);
+        let items = self.page_items(delta, context.view().view_rect().h);
+        self.cursor.select_by(items);
         self.refresh(context)
+    }
+
+    /// Return how many items `delta` pages of `height` rows pass from the
+    /// selected item, signed as `delta` is.
+    ///
+    /// The rows hold group headings as well as items, so a page counts the
+    /// items among its rows. Each page passes at least one item, so a page
+    /// of one row still moves past a heading.
+    fn page_items(&self, delta: i32, height: u32) -> i32 {
+        let Some(row) = self
+            .cursor
+            .index()
+            .and_then(|selected| self.rows.iter().position(|row| *row == Row::Item(selected)))
+        else {
+            return 0;
+        };
+        let span = (height.max(1) as usize).saturating_mul(delta.unsigned_abs() as usize);
+        let passed = if delta < 0 {
+            row.saturating_sub(span)..row
+        } else {
+            let end = row.saturating_add(span).saturating_add(1);
+            row + 1..end.min(self.rows.len())
+        };
+        let items = self.rows[passed]
+            .iter()
+            .filter(|row| matches!(row, Row::Item(_)))
+            .count()
+            .max(usize::from(delta != 0));
+        let items = i32::try_from(items).unwrap_or(i32::MAX);
+        if delta < 0 { -items } else { items }
     }
 
     /// Open the filter field. Typed text narrows the list to the items that
@@ -2551,6 +2581,30 @@ mod tests {
             harness.tbuf().contains_text("~/fh"),
             "an item that passes keeps its heading"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn a_page_of_a_grouped_list_passes_the_items_its_rows_show() -> Result<()> {
+        let items = [
+            ("~/one", "a"),
+            ("~/one", "b"),
+            ("~/two", "c"),
+            ("~/two", "d"),
+            ("~/three", "e"),
+            ("~/three", "f"),
+            ("~/four", "g"),
+            ("~/four", "h"),
+        ];
+        // The view holds six of the twelve rows. Below `a`, they hold two
+        // headings and four items.
+        let mut harness = grouped(&items, 10)?;
+        on_grouped(&mut harness, |list, context| list.page(context, 1))?;
+        assert_eq!(grouped_selection(&mut harness)?, "~/three/e");
+        on_grouped(&mut harness, |list, context| list.page(context, -1))?;
+        assert_eq!(grouped_selection(&mut harness)?, "~/one/a");
+        on_grouped(&mut harness, |list, context| list.page(context, 9))?;
+        assert_eq!(grouped_selection(&mut harness)?, "~/four/h");
         Ok(())
     }
 
