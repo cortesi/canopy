@@ -22,7 +22,7 @@ use std::{
     mem,
     ops::Range,
     sync::{Arc, LazyLock},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use canopy::{
@@ -34,6 +34,7 @@ use canopy::{
         ScrollOp,
     },
     render::Render,
+    runtime::{NodeWakeHandle, PollLifetime},
     style::Style,
     text,
 };
@@ -47,6 +48,7 @@ use crate::{
     },
     highlight::{HighlightSpan, Highlighter},
     run_paint::{self, column},
+    spinner::SpinnerRun,
     view_search,
 };
 
@@ -224,8 +226,10 @@ pub struct DiffView {
     new_highlighter: Option<Box<dyn Highlighter>>,
     /// Whether both highlighters hold the current texts.
     prepared: bool,
-    /// When the view started waiting for a model, while it waits.
-    loading: Option<Instant>,
+    /// Whether the view waits for a model, and since when.
+    loading: SpinnerRun,
+    /// Wake handle that starts the polls of a wait, after the view mounts.
+    wake: Option<NodeWakeHandle>,
     /// Index into the change heads that the last change move reached.
     change: usize,
     /// Changes whenever the displayed text changes.
@@ -255,7 +259,8 @@ impl DiffView {
             old_highlighter: None,
             new_highlighter: None,
             prepared: false,
-            loading: None,
+            loading: SpinnerRun::Idle,
+            wake: None,
             change: 0,
             revision: 0,
             matches: Vec::new(),
@@ -294,7 +299,7 @@ impl DiffView {
         self.side_layout.get_mut().take();
         self.ensure_side_rows();
         self.prepared = false;
-        self.loading = None;
+        self.loading.set(false);
         self.change = 0;
         self.clear_matches();
     }
@@ -331,8 +336,17 @@ impl DiffView {
 
     /// Note that a model is computing. After a short delay the view shows a
     /// spinner until [`Self::set_model`] or [`Self::set_message`] arrives.
+    ///
+    /// The view repaints itself to turn the spinner while motion is active.
+    /// At rest, as in headless runs, the spinner shows its first frame.
     pub fn set_loading(&mut self) {
-        self.loading = Some(Instant::now());
+        if self.loading.set(true)
+            && let Some(wake) = &self.wake
+        {
+            // An expired handle means that the view left the tree, and its
+            // next mount takes a new one.
+            let _outcome = wake.wake();
+        }
     }
 
     /// Return whether the view shows a message rather than a diff.
@@ -1167,11 +1181,19 @@ impl Widget for DiffView {
             )?;
         }
         // A model that takes a while to compute shows a spinner in the top
-        // right corner, over whatever the view showed before.
-        if let Some(started) = self.loading
-            && started.elapsed() >= LOADING_DELAY
+        // right corner, over whatever the view showed before. A view at rest
+        // dates the wait when it paints, as no poll does.
+        self.loading.turn(ctx.now());
+        if let SpinnerRun::Running { since: Some(since) } = self.loading
+            && let waited = ctx.now().saturating_duration_since(since)
+            && waited >= LOADING_DELAY
         {
-            let label = format!("{} diffing", Spinner::LINE.frame(started.elapsed()));
+            let frame = if ctx.motion_active() {
+                Spinner::LINE.frame(waited)
+            } else {
+                Spinner::LINE.step(0)
+            };
+            let label = format!("{frame} diffing");
             let label_width = text::width(&label).min(width);
             let x = origin.x + width.saturating_sub(label_width);
             rndr.text("loading", Line::new(x, origin.y, label_width), &label)?;
@@ -1191,9 +1213,17 @@ impl Widget for DiffView {
         )
     }
 
-    fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {
-        // A waiting view repaints to turn its spinner.
-        Ok(self.loading.map(|_| Spinner::LINE.period()))
+    fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
+        // A waiting view repaints to turn its spinner, while motion shows it.
+        if !ctx.motion_active() || !self.loading.turn(ctx.now()) {
+            return Ok(None);
+        }
+        Ok(Some(Spinner::LINE.period()))
+    }
+
+    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        self.wake = Some(ctx.wake_handle(PollLifetime::Node)?);
+        Ok(())
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
@@ -1329,19 +1359,76 @@ fn header_text(old: &Range<usize>, new: &Range<usize>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::ptr;
+    use std::{ptr, sync::Arc, time::Duration};
 
     use canopy::{
+        Widget,
         error::Result,
         geom::{Point, Size},
-        testing::harness::Harness,
+        testing::{ManualClock, harness::Harness},
     };
 
-    use super::{DiffModel, DiffRow, DiffView, Mode, Scope, SideRow, header_text, side_rows};
+    use super::{
+        DiffModel, DiffRow, DiffView, LOADING_DELAY, Mode, Scope, SideRow, header_text, side_rows,
+    };
     use crate::{
+        Spinner,
         editor::{TextPosition, TextRange},
         view_search,
     };
+
+    /// Return the spinner frame of the loading label, if it shows.
+    fn loading_frame(harness: &Harness) -> Option<char> {
+        let top = harness.tbuf().lines()[0].trim_end().to_string();
+        top.strip_suffix(" diffing")?.chars().last()
+    }
+
+    /// Build a view of a small diff on `clock`, with motion or at rest.
+    fn loading_harness(clock: &Arc<ManualClock>, motion: bool) -> Result<Harness> {
+        let model = DiffModel::from_texts("old\n", "new\n");
+        let mut harness = Harness::builder(DiffView::new(model))
+            .size(30, 3)
+            .clock(Arc::clone(clock))
+            .motion(motion)
+            .build()?;
+        harness.render()?;
+        Ok(harness)
+    }
+
+    #[test]
+    fn with_motion_the_loading_spinner_turns_on_the_driver_clock() -> Result<()> {
+        let clock = Arc::new(ManualClock::new());
+        let mut harness = loading_harness(&clock, true)?;
+        harness.with_root_widget(DiffView::set_loading);
+        harness.render()?;
+        assert_eq!(loading_frame(&harness), None, "a short wait shows nothing");
+        // The view polls itself: no host ticks it.
+        harness.wait_until(Duration::from_secs(10), |harness| {
+            clock.advance(Spinner::LINE.period())?;
+            Ok(loading_frame(harness) == Some(Spinner::LINE.step(3)))
+        })?;
+        harness.with_root_widget(|view: &mut DiffView| {
+            view.set_model(DiffModel::from_texts("a\n", "b\n"));
+        });
+        harness.render()?;
+        assert_eq!(loading_frame(&harness), None, "a model ends the wait");
+        Ok(())
+    }
+
+    #[test]
+    fn at_rest_the_loading_spinner_shows_its_first_frame_and_never_polls() -> Result<()> {
+        let clock = Arc::new(ManualClock::new());
+        let mut harness = loading_harness(&clock, false)?;
+        harness.with_root_widget(DiffView::set_loading);
+        harness.render()?;
+        let poll = harness.with_root_widget_context(|view: &mut DiffView, ctx| view.poll(ctx))?;
+        assert_eq!(poll, None, "a view at rest schedules no repaint");
+        assert_eq!(loading_frame(&harness), None);
+        clock.advance(LOADING_DELAY * 3)?;
+        harness.render()?;
+        assert_eq!(loading_frame(&harness), Some(Spinner::LINE.step(0)));
+        Ok(())
+    }
 
     #[test]
     fn paired_panes_wrap_equally_and_keep_the_divider_through_empty_rows() -> Result<()> {
@@ -1500,7 +1587,7 @@ mod tests {
             assert_eq!(view.strategy(), Mode::SideBySide);
             assert!(ptr::eq(view.diff(), model.diff()));
             assert!(ptr::eq(view.rows(), model.rows.as_ref()));
-            assert!(view.loading.is_some());
+            assert!(view.loading.running());
             assert_eq!(view.revision(), 1);
             assert_eq!(view.search_matches(), 0, "the host refreshes its query");
             view.set_matches(ctx, ranges);
@@ -1701,7 +1788,7 @@ mod tests {
             assert!(ptr::eq(view.diff(), model.diff()));
             assert_eq!(view.revision(), 1);
             assert_eq!((view.search_matches(), view.search_position()), (0, 0));
-            assert!(view.loading.is_none());
+            assert!(!view.loading.running());
             assert!(!view.prepared);
             Ok(())
         })?;
@@ -1711,7 +1798,7 @@ mod tests {
             assert!(!view.side_rows.is_empty());
             assert_eq!(view.revision(), 0);
             assert_eq!((view.search_matches(), view.search_position()), (2, 1));
-            assert!(view.loading.is_none());
+            assert!(!view.loading.running());
             assert!(view.prepared);
             Ok(())
         })?;

@@ -1,6 +1,6 @@
 //! One row under search results that says what the search found.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use canopy::{
     Context, NodeName, ViewContext, Widget,
@@ -12,48 +12,11 @@ use canopy::{
     style::roles,
 };
 
-use crate::Spinner;
+use crate::{Spinner, spinner::SpinnerRun};
 
 /// Narrowest width that the row asks for, so that it never widens the pane
 /// that holds it.
 const MIN_WIDTH: u32 = 12;
-
-/// Whether the search of a row runs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Run {
-    /// The search does not run.
-    Idle,
-    /// The search runs.
-    Running {
-        /// When the spinner started to turn, after the first poll of a run.
-        since: Option<Instant>,
-    },
-}
-
-impl Run {
-    /// Record whether the search runs, and return whether a run started.
-    fn set(&mut self, running: bool) -> bool {
-        let started = running && *self == Self::Idle;
-        match (running, *self) {
-            (false, _) => *self = Self::Idle,
-            (true, Self::Idle) => *self = Self::Running { since: None },
-            (true, Self::Running { .. }) => {}
-        }
-        started
-    }
-
-    /// Start the spinner of a run at `now`, once. Return whether the
-    /// search runs.
-    fn turn(&mut self, now: Instant) -> bool {
-        match self {
-            Self::Idle => false,
-            Self::Running { since } => {
-                since.get_or_insert(now);
-                true
-            }
-        }
-    }
-}
 
 /// One row under a list of search results: a spinner while the search runs,
 /// and what the search found, such as `12 matches`.
@@ -72,7 +35,7 @@ pub struct SearchProgress {
     /// What the search found.
     text: String,
     /// Whether the search runs, and when its spinner started.
-    run: Run,
+    run: SpinnerRun,
     /// Wake handle that starts the polls of a run, after the row mounts.
     wake: Option<NodeWakeHandle>,
 }
@@ -89,7 +52,7 @@ impl SearchProgress {
         Self {
             name: NodeName::convert("search_progress"),
             text: String::new(),
-            run: Run::Idle,
+            run: SpinnerRun::Idle,
             wake: None,
         }
     }
@@ -122,18 +85,18 @@ impl SearchProgress {
 
     /// Return whether the search runs.
     pub fn running(&self) -> bool {
-        self.run != Run::Idle
+        self.run.running()
     }
 
     /// Return the glyph before the text: a spinner frame while the search
     /// runs, and a blank otherwise.
     fn lead(&self, ctx: &dyn ViewContext) -> char {
         match self.run {
-            Run::Idle => ' ',
-            Run::Running { since: Some(since) } if ctx.motion_active() => {
+            SpinnerRun::Idle => ' ',
+            SpinnerRun::Running { since: Some(since) } if ctx.motion_active() => {
                 Spinner::DOTS.frame(ctx.now().saturating_duration_since(since))
             }
-            Run::Running { .. } => Spinner::DOTS.step(0),
+            SpinnerRun::Running { .. } => Spinner::DOTS.step(0),
         }
     }
 }
@@ -229,34 +192,6 @@ mod tests {
     /// Returns the first glyph of the row.
     fn lead(harness: &Harness) -> Option<char> {
         harness.tbuf().lines()[0].chars().next()
-    }
-
-    #[test]
-    fn run_transitions() {
-        let now = Instant::now();
-        let later = now + Duration::from_secs(1);
-        let turning = Run::Running { since: Some(now) };
-        let waiting = Run::Running { since: None };
-        for (run, running, next, started) in [
-            (Run::Idle, false, Run::Idle, false),
-            (Run::Idle, true, waiting, true),
-            (waiting, true, waiting, false),
-            (turning, true, turning, false),
-            (turning, false, Run::Idle, false),
-        ] {
-            let mut moved = run;
-            assert_eq!(moved.set(running), started, "{run:?} set {running}");
-            assert_eq!(moved, next, "{run:?} set {running}");
-        }
-        for (run, next, runs) in [
-            (Run::Idle, Run::Idle, false),
-            (waiting, Run::Running { since: Some(later) }, true),
-            (turning, turning, true),
-        ] {
-            let mut moved = run;
-            assert_eq!(moved.turn(later), runs, "{run:?} turns");
-            assert_eq!(moved, next, "{run:?} turns");
-        }
     }
 
     #[test]
