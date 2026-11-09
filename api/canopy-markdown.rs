@@ -921,160 +921,6 @@ pub struct MarkdownOptions {
     pub status_row: bool,
 }
 
-/// Composable read-only Markdown source widget with exact-byte copying.
-/// Register this widget to install syntax colors that follow the active
-/// palette.
-pub struct MarkdownSource {/* private fields */}
-
-impl MarkdownSource {
-    /// Activate an explicit zero-based result without depending on Editor's
-    /// retained match cursor. Out-of-range indices are ignored.
-    pub fn activate_match(&mut self, ctx: &mut dyn Context, index: usize);
-
-    /// Cancel a pointer gesture and release its capture before replacement or
-    /// dismissal.
-    pub fn cancel_drag(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
-
-    /// Clear stored search results without moving the reader.
-    pub fn clear_search(&mut self, ctx: &mut dyn Context);
-
-    /// Copy an exact byte range only when its full output fits the budget.
-    pub fn copy_range(
-        &self,
-        range: Range<usize>,
-        limit: usize,
-    ) -> Result<String, crate::source_view::SourceError>;
-
-    /// Copy the exact selected bytes within an explicit byte budget.
-    pub fn copy_selection(&self, limit: usize) -> Result<String, crate::source_view::SourceError>;
-
-    /// Copy the whole displayed revision, including its final newline.
-    pub fn copy_source(&self, limit: usize) -> Result<String, crate::source_view::SourceError>;
-
-    /// Return the editor's logical display cursor.
-    pub fn cursor(&self) -> TextPosition;
-
-    /// Constant-time estimate of retained display, layout, map, highlighting,
-    /// and search storage. Accepted source bytes and shared executor storage
-    /// are excluded; active readability can exceed the inactive cache budget.
-    pub fn derived_bytes(&self) -> usize;
-
-    /// Return the displayed epoch.
-    pub fn epoch(&self) -> u64;
-
-    /// Prepare bounded matching over raw source lines, independent of
-    /// rendering.
-    pub fn find_matches(
-        epoch: u64,
-        revision: u64,
-        source: &str,
-        query: &SearchQuery,
-        limits: &SearchLimits,
-    ) -> Result<SourceMatches, crate::source_view::SourceError>;
-
-    /// Mount already prepared data without scanning its text.
-    pub fn from_prepared(prepared: PreparedSource) -> Self;
-
-    /// Jump to a one-based logical source line.
-    pub fn jump_line(&mut self, ctx: &mut dyn Context, line: usize);
-
-    /// Construct a standalone widget. Mounted hosts should prepare at their
-    /// actual width with [`PreparedSource::new`].
-    pub fn new(source: impl Into<Arc<str>>) -> Self;
-
-    /// Return current presentation options.
-    pub fn options(&self) -> &SourceOptions;
-
-    /// Return the prepared content point for a byte location in this epoch.
-    pub fn point_for_anchor(
-        &self,
-        anchor: SourceAnchor,
-    ) -> Result<Point, crate::source_view::SourceError>;
-
-    /// Return the width of the displayed prepared geometry.
-    pub fn prepared_width(&self) -> u32;
-
-    /// Publish a revision or geometry. Same-epoch bytes must preserve the
-    /// prefix. This does not focus, reveal, or scroll the widget.
-    pub fn publish(
-        &mut self,
-        prepared: PreparedSource,
-    ) -> Result<(), crate::source_view::SourceError>;
-
-    /// Publish precomputed source matches without moving the reader.
-    pub fn publish_matches(
-        &mut self,
-        matches: SourceMatches,
-    ) -> Result<(), crate::source_view::SourceError>;
-
-    /// Return the allocated width awaiting preparation, if geometry changed.
-    pub fn requested_width(&self) -> Option<u32>;
-
-    /// Restore a byte location and reveal it without taking focus.
-    pub fn restore_anchor(
-        &mut self,
-        ctx: &mut dyn Context,
-        anchor: SourceAnchor,
-    ) -> Result<(), crate::source_view::SourceError>;
-
-    /// Return the displayed revision.
-    pub fn revision(&self) -> u64;
-
-    /// Return the stored match count.
-    pub fn search_matches(&self) -> usize;
-
-    /// Navigate the current match window and reveal the activated result.
-    pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32);
-
-    /// Return the current one-based match index, or zero when there is none.
-    pub fn search_position(&self) -> usize;
-
-    /// Return exact source-byte selection endpoints, preserving drag direction,
-    /// even inside hidden CRLF boundaries. Hosts can retain these when
-    /// evicting an inactive prepared surface.
-    pub fn selection_bytes(&self) -> (usize, usize);
-
-    /// Return whether publication must wait for a pointer drag to finish.
-    pub fn selection_drag_active(&self) -> bool;
-
-    /// Return the selected exact source interval, excluding display decoration.
-    pub fn selection_range(&self) -> Range<usize>;
-
-    /// Move the display cursor and reveal it without taking focus.
-    pub fn set_cursor(&mut self, ctx: &mut dyn Context, position: TextPosition);
-
-    /// Set byte-addressed selection endpoints without scrolling or taking
-    /// focus.
-    pub fn set_selection(
-        &mut self,
-        anchor: usize,
-        head: usize,
-    ) -> Result<(), crate::source_view::SourceError>;
-
-    /// Return the source byte at the display cursor.
-    pub fn source_anchor(&self) -> SourceAnchor;
-
-    /// Return the source location at a prepared content point, such as the
-    /// viewport top.
-    pub fn source_anchor_at(&self, point: Point) -> SourceAnchor;
-
-    /// Return the immutable displayed bytes.
-    pub fn source_text(&self) -> Arc<str>;
-
-    /// Return whether automatic syntax work was disabled by its byte cap.
-    pub fn syntax_limited(&self) -> bool;
-
-    /// Construct a standalone widget with explicit presentation options.
-    pub fn with_options(source: impl Into<Arc<str>>, options: SourceOptions) -> Self;
-}
-
-impl Register for MarkdownSource {}
-
-impl Widget for MarkdownSource {}
-
-impl !Send for MarkdownSource {}
-impl !Sync for MarkdownSource {}
-
 /// Where a Rendered search match lies, so a reload of the document can
 /// make the same match current again.
 ///
@@ -1983,13 +1829,6 @@ pub mod host {
     }
 }
 
-pub mod options {
-    //! Reader configuration and state values.
-    //! Host choices and independent reader state values.
-
-    pub use crate::{Follow, MarkdownOptions, Mode as MarkdownMode, Mode, ViewType};
-}
-
 pub mod presentation {
     //! Prepared terminal presentation.
     //! Immutable Markdown geometry. Preparation owns wrapping; painting visits only
@@ -2395,8 +2234,6 @@ pub mod source_store {
     //! Exact, append-only accepted source. Snapshots keep accepted revisions
     //! immutable.
 
-    pub use crate::{DocumentInput, FinishOutcome};
-
     /// Default maximum accepted source size, in bytes.
     pub const DEFAULT_SOURCE_LIMIT: usize = _;
 
@@ -2505,7 +2342,162 @@ pub mod source_view {
     //! Exact source text viewing.
     //! Read-only Markdown source presentation over immutable accepted UTF-8 bytes.
 
-    pub use crate::MarkdownSource;
+    /// Composable read-only Markdown source widget with exact-byte copying.
+    /// Register this widget to install syntax colors that follow the active
+    /// palette.
+    pub struct MarkdownSource {/* private fields */}
+
+    impl MarkdownSource {
+        /// Activate an explicit zero-based result without depending on Editor's
+        /// retained match cursor. Out-of-range indices are ignored.
+        pub fn activate_match(&mut self, ctx: &mut dyn Context, index: usize);
+
+        /// Cancel a pointer gesture and release its capture before replacement or
+        /// dismissal.
+        pub fn cancel_drag(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
+
+        /// Clear stored search results without moving the reader.
+        pub fn clear_search(&mut self, ctx: &mut dyn Context);
+
+        /// Copy an exact byte range only when its full output fits the budget.
+        pub fn copy_range(
+            &self,
+            range: Range<usize>,
+            limit: usize,
+        ) -> Result<String, crate::source_view::SourceError>;
+
+        /// Copy the exact selected bytes within an explicit byte budget.
+        pub fn copy_selection(
+            &self,
+            limit: usize,
+        ) -> Result<String, crate::source_view::SourceError>;
+
+        /// Copy the whole displayed revision, including its final newline.
+        pub fn copy_source(&self, limit: usize) -> Result<String, crate::source_view::SourceError>;
+
+        /// Return the editor's logical display cursor.
+        pub fn cursor(&self) -> TextPosition;
+
+        /// Constant-time estimate of retained display, layout, map, highlighting,
+        /// and search storage. Accepted source bytes and shared executor storage
+        /// are excluded; active readability can exceed the inactive cache budget.
+        pub fn derived_bytes(&self) -> usize;
+
+        /// Return the displayed epoch.
+        pub fn epoch(&self) -> u64;
+
+        /// Prepare bounded matching over raw source lines, independent of
+        /// rendering.
+        pub fn find_matches(
+            epoch: u64,
+            revision: u64,
+            source: &str,
+            query: &SearchQuery,
+            limits: &SearchLimits,
+        ) -> Result<SourceMatches, crate::source_view::SourceError>;
+
+        /// Mount already prepared data without scanning its text.
+        pub fn from_prepared(prepared: PreparedSource) -> Self;
+
+        /// Jump to a one-based logical source line.
+        pub fn jump_line(&mut self, ctx: &mut dyn Context, line: usize);
+
+        /// Construct a standalone widget. Mounted hosts should prepare at their
+        /// actual width with [`PreparedSource::new`].
+        pub fn new(source: impl Into<Arc<str>>) -> Self;
+
+        /// Return current presentation options.
+        pub fn options(&self) -> &SourceOptions;
+
+        /// Return the prepared content point for a byte location in this epoch.
+        pub fn point_for_anchor(
+            &self,
+            anchor: SourceAnchor,
+        ) -> Result<Point, crate::source_view::SourceError>;
+
+        /// Return the width of the displayed prepared geometry.
+        pub fn prepared_width(&self) -> u32;
+
+        /// Publish a revision or geometry. Same-epoch bytes must preserve the
+        /// prefix. This does not focus, reveal, or scroll the widget.
+        pub fn publish(
+            &mut self,
+            prepared: PreparedSource,
+        ) -> Result<(), crate::source_view::SourceError>;
+
+        /// Publish precomputed source matches without moving the reader.
+        pub fn publish_matches(
+            &mut self,
+            matches: SourceMatches,
+        ) -> Result<(), crate::source_view::SourceError>;
+
+        /// Return the allocated width awaiting preparation, if geometry changed.
+        pub fn requested_width(&self) -> Option<u32>;
+
+        /// Restore a byte location and reveal it without taking focus.
+        pub fn restore_anchor(
+            &mut self,
+            ctx: &mut dyn Context,
+            anchor: SourceAnchor,
+        ) -> Result<(), crate::source_view::SourceError>;
+
+        /// Return the displayed revision.
+        pub fn revision(&self) -> u64;
+
+        /// Return the stored match count.
+        pub fn search_matches(&self) -> usize;
+
+        /// Navigate the current match window and reveal the activated result.
+        pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32);
+
+        /// Return the current one-based match index, or zero when there is none.
+        pub fn search_position(&self) -> usize;
+
+        /// Return exact source-byte selection endpoints, preserving drag direction,
+        /// even inside hidden CRLF boundaries. Hosts can retain these when
+        /// evicting an inactive prepared surface.
+        pub fn selection_bytes(&self) -> (usize, usize);
+
+        /// Return whether publication must wait for a pointer drag to finish.
+        pub fn selection_drag_active(&self) -> bool;
+
+        /// Return the selected exact source interval, excluding display decoration.
+        pub fn selection_range(&self) -> Range<usize>;
+
+        /// Move the display cursor and reveal it without taking focus.
+        pub fn set_cursor(&mut self, ctx: &mut dyn Context, position: TextPosition);
+
+        /// Set byte-addressed selection endpoints without scrolling or taking
+        /// focus.
+        pub fn set_selection(
+            &mut self,
+            anchor: usize,
+            head: usize,
+        ) -> Result<(), crate::source_view::SourceError>;
+
+        /// Return the source byte at the display cursor.
+        pub fn source_anchor(&self) -> SourceAnchor;
+
+        /// Return the source location at a prepared content point, such as the
+        /// viewport top.
+        pub fn source_anchor_at(&self, point: Point) -> SourceAnchor;
+
+        /// Return the immutable displayed bytes.
+        pub fn source_text(&self) -> Arc<str>;
+
+        /// Return whether automatic syntax work was disabled by its byte cap.
+        pub fn syntax_limited(&self) -> bool;
+
+        /// Construct a standalone widget with explicit presentation options.
+        pub fn with_options(source: impl Into<Arc<str>>, options: SourceOptions) -> Self;
+    }
+
+    impl Register for MarkdownSource {}
+
+    impl Widget for MarkdownSource {}
+
+    impl !Send for MarkdownSource {}
+    impl !Sync for MarkdownSource {}
 
     /// Owned source geometry and highlighting prepared without UI access.
     ///

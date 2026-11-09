@@ -22,12 +22,11 @@ use canopy::{
     testing::harness::Harness,
 };
 use canopy_markdown::{
-    Markdown, MarkdownOptions,
+    DocumentInput, FinishOutcome, Markdown, MarkdownOptions, ViewType,
     document::{BlockKind, ParseLimits, parse_document},
     executor::{ExecutorOptions, MarkdownExecutor, PreparedView, WorkHandle, WorkRequest},
-    options::ViewType,
     presentation::{GeometryKey, PaintOverlays, PaintStats, PresentationSnapshot, Supplied},
-    source_store::{DocumentInput, FinishOutcome, SourceSnapshot, SourceStore},
+    source_store::{SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, PreparedSource, SourceOptions},
 };
 

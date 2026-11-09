@@ -38,7 +38,7 @@ use canopy_widgets::{
 
 use self::{matches::Matches, submission::Submission};
 use crate::{
-    Follow, MarkdownOptions, Mode, ViewType,
+    DocumentInput, FinishOutcome, Follow, MarkdownOptions, Mode, ViewType,
     document::{
         BlockKind, DocumentSnapshot, Link, LocalLink, ObjectKind, ParseLimits, ReadingPosition,
         ReadingRange, ResolvedLink, cell_spans, parse_document,
@@ -53,7 +53,7 @@ use crate::{
     inspector::{Inspector, InspectorContent, InspectorEvent, InspectorHandle, InspectorOptions},
     presentation::{EmbedInfo, GeometryKey, Supplied},
     search::{SearchAddress, SearchCase, SearchLimits, SearchMatch, SearchMode, SearchQuery},
-    source_store::{DocumentInput, FinishOutcome, Lifecycle, SourceSnapshot, SourceStore},
+    source_store::{Lifecycle, SourceSnapshot, SourceStore},
     source_view::{MarkdownSource, SourceAnchor, SourceOptions},
     surface::{Focus, Interaction, Pending, PendingMark, RenderedSurface, SurfaceState},
     units::EditUnit,

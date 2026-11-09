@@ -2106,7 +2106,7 @@ fn local_link(destination: &str) -> ResolvedLink {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source_store::{FinishOutcome, SourceStore};
+    use crate::{FinishOutcome, source_store::SourceStore};
     fn complete(text: &str) -> DocumentSnapshot {
         parse_document(
             &SourceStore::static_text(text).unwrap().snapshot(),

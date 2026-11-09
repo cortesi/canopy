@@ -11,28 +11,13 @@ use std::{
     },
 };
 
+use crate::FinishOutcome;
+
 /// Process-wide source epoch allocator.
 static NEXT_EPOCH: AtomicU64 = AtomicU64::new(1);
 /// Default maximum accepted source size, in bytes.
 pub const DEFAULT_SOURCE_LIMIT: usize = 16 * 1024 * 1024;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-/// Source replacement with an explicit initial lifecycle.
-pub enum DocumentInput {
-    /// A complete static document or closed source epoch.
-    Complete(String),
-    /// A source epoch that still accepts appends.
-    Receiving(String),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-/// The producer outcome applied with ordinary final EOF interpretation.
-pub enum FinishOutcome {
-    /// The producer completed normally.
-    Completed,
-    /// The producer stopped with a retained reason.
-    Aborted(String),
-}
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// Whether a producer can append to the current source epoch.
 pub enum Lifecycle {

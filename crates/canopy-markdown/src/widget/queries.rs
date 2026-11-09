@@ -6,10 +6,10 @@ use canopy::{ViewContext, ViewContextExt, commands::ArgValue, error::Result};
 
 use super::{Markdown, ReaderPosition};
 use crate::{
-    Follow, Mode, ViewType,
+    FinishOutcome, Follow, Mode, ViewType,
     document::ObjectKind,
     search::{SearchAddress, SearchCase, SearchMode},
-    source_store::{FinishOutcome, Lifecycle},
+    source_store::Lifecycle,
     source_view::MarkdownSource,
 };
 

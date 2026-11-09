@@ -14,7 +14,7 @@ pub mod host;
 /// Read-only inspector overlays.
 mod inspector;
 /// Reader configuration and state values.
-pub mod options;
+mod options;
 /// Prepared terminal presentation.
 pub mod presentation;
 /// Bounded literal and regex queries.
@@ -36,9 +36,25 @@ mod widget;
 use canopy::Setup;
 use canopy_widgets::{highlight::palette_style_rules, table};
 pub use options::{Follow, MarkdownOptions, Mode, ViewType};
-pub use source_store::{DocumentInput, FinishOutcome};
-pub use source_view::MarkdownSource;
 pub use widget::{BlockEdit, Markdown, MatchPlace, ReaderPosition};
+
+/// Source replacement with an explicit initial lifecycle.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DocumentInput {
+    /// A complete static document or closed source epoch.
+    Complete(String),
+    /// A source epoch that still accepts appends.
+    Receiving(String),
+}
+
+/// The producer outcome applied with ordinary final EOF interpretation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FinishOutcome {
+    /// The producer completed normally.
+    Completed,
+    /// The producer stopped with a retained reason.
+    Aborted(String),
+}
 
 /// Register the styles that prepared documents paint with: the Markdown roles,
 /// the colors of syntax highlighting, and tables. A host that paints documents
