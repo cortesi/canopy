@@ -234,7 +234,7 @@ pub struct Link {
 impl Link {
     /// Classify the destination. A wikilink is always local to the host;
     /// other destinations resolve as [`resolve_link`] does.
-    pub fn resolve(&self, base: Option<&url::Url>) -> ResolvedLink {
+    pub(crate) fn resolve(&self, base: Option<&url::Url>) -> ResolvedLink {
         if !self.wiki {
             return resolve_link(&self.destination, base);
         }
@@ -2037,7 +2037,7 @@ pub fn parse_document(
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// A destination classified without filesystem inference or shell
 /// interpolation.
-pub enum ResolvedLink {
+pub(crate) enum ResolvedLink {
     /// A local heading fragment requiring no external host action.
     Fragment(String),
     /// A structured HTTP(S) URL eligible for an explicit host Open.
@@ -2065,7 +2065,7 @@ pub struct LocalLink {
 /// Resolve without filesystem inference. Only control-free HTTP(S) URLs can
 /// open by default. Without a base URL, a relative path or `file:` URL is
 /// local to the host.
-pub fn resolve_link(destination: &str, base: Option<&url::Url>) -> ResolvedLink {
+pub(crate) fn resolve_link(destination: &str, base: Option<&url::Url>) -> ResolvedLink {
     if destination.chars().any(char::is_control) {
         return ResolvedLink::Unavailable("URL contains control characters".into());
     }

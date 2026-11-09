@@ -2734,9 +2734,9 @@ fn syntax_known(_info: &str) -> bool {
     false
 }
 
-/// Pass directly to `Setup::widget_styles` to retain roles through theme
-/// changes.
-pub fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
+/// The style rules of the Markdown roles, which `register_styles` installs
+/// beside the syntax and table rules.
+pub(crate) fn style_rules(palette: &Palette, rules: StyleRules<'_>) {
     let mut rules = heading_rules(palette, rules);
     rules = rules
         .fg("markdown", palette.fg)

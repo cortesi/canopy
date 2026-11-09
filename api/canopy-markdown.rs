@@ -30,7 +30,6 @@ use canopy::{
     layout::ScrollOp,
     render::Render,
     runtime::NodeWakeHandle,
-    style::{StyleRules, themes::Palette},
 };
 use canopy_widgets::{
     Tier,
@@ -39,7 +38,6 @@ use canopy_widgets::{
 };
 use canopy_xmark::BlockQuoteKind;
 use image::RgbaImage;
-use url::Url;
 
 /// One edit of the reader's text, for the host to apply to its own copy of
 /// the text in order.
@@ -1220,12 +1218,6 @@ pub mod document {
         pub wiki: bool,
     }
 
-    impl Link {
-        /// Classify the destination. A wikilink is always local to the host;
-        /// other destinations resolve as [`resolve_link`] does.
-        pub fn resolve(&self, base: Option<&Url>) -> ResolvedLink;
-    }
-
     /// A link to a document of the host's own: a relative or absolute path, a
     /// `file:` URL, or a wikilink. The reader never touches the filesystem; the
     /// host decides what the path names.
@@ -1351,20 +1343,6 @@ pub mod document {
         pub soft_breaks: Vec<usize>,
     }
 
-    /// A destination classified without filesystem inference or shell
-    /// interpolation.
-    #[derive(Clone, Debug, Eq, PartialEq)]
-    pub enum ResolvedLink {
-        /// A local heading fragment requiring no external host action.
-        Fragment(String),
-        /// A structured HTTP(S) URL eligible for an explicit host Open.
-        External(Url),
-        /// A document of the host's own, which only the host can find.
-        Local(LocalLink),
-        /// A destination that requires a base URL or explicit host handler.
-        Unavailable(String),
-    }
-
     /// One readable Markdown cell with source-derived column identity.
     #[derive(Clone, Debug)]
     pub struct TableCell {
@@ -1407,11 +1385,6 @@ pub mod document {
         limits: &ParseLimits,
         previous: Option<&DocumentSnapshot>,
     ) -> DocumentSnapshot;
-
-    /// Resolve without filesystem inference. Only control-free HTTP(S) URLs can
-    /// open by default. Without a base URL, a relative path or `file:` URL is
-    /// local to the host.
-    pub fn resolve_link(destination: &str, base: Option<&Url>) -> ResolvedLink;
 }
 
 pub mod executor {
@@ -2086,10 +2059,6 @@ pub mod presentation {
         /// Local link destinations that name nothing.
         pub missing_links: HashSet<String>,
     }
-
-    /// Pass directly to `Setup::widget_styles` to retain roles through theme
-    /// changes.
-    pub fn style_rules(palette: &Palette, rules: StyleRules<'_>);
 }
 
 pub mod search {
