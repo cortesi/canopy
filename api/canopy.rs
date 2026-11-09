@@ -5451,8 +5451,6 @@ pub mod style {
     /// Colors over time: stops over one run, a run length, and a repeat.
     #[derive(Clone, Debug, PartialEq)]
     pub struct Animation {
-        /// Colors over one run, as gradient stops are colors over space.
-        pub stops: Vec<GradientStop>,
         /// Length of one run.
         pub duration: Duration,
         /// What follows one run.
@@ -5488,6 +5486,9 @@ pub mod style {
         /// Return the color that frames show at rest: the last stop of a single
         /// run, and the first stop of a repeating one.
         pub fn rest(&self) -> Color;
+
+        /// The stops in offset order. An animation always has at least one.
+        pub fn stops(&self) -> &[GradientStop];
 
         /// Replace the easing.
         #[must_use]
@@ -5726,14 +5727,13 @@ pub mod style {
     pub struct GradientSpec {
         /// Gradient angle in degrees (0 = left to right, 90 = top to bottom).
         pub angle_deg: f32,
-        /// Ordered list of gradient stops.
-        pub stops: Vec<GradientStop>,
         /// The space that mixes colors between stops.
         pub mix: Mix,
         /// How the gradient moves across its rectangle. `None` holds it still.
         pub drift: Option<Drift>,
         /// When a drifting gradient holds at rest.
         pub pause: Pause,
+        /* private fields */
     }
 
     impl GradientSpec {
@@ -5743,6 +5743,9 @@ pub mod style {
         /// Map all colors in this gradient through a transform.
         #[must_use]
         pub fn map_colors(&self, f: impl Fn(Color) -> Color) -> Self;
+
+        /// The stops in offset order. A gradient always has at least one.
+        pub fn stops(&self) -> &[GradientStop];
 
         /// Move the gradient across its rectangle.
         #[must_use]

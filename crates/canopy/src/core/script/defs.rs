@@ -371,13 +371,13 @@ fn phase_field() -> declaration::Field {
     .doc("Phase relative to widget input handling. An intent is before_widget.")
 }
 
+/// The labels of `BindingActionKind`, as binding records carry them.
+const ACTION_KINDS: [&str; 4] = ["script", "command", "intent", "menu"];
+
 /// The binding action-kind field shared by binding records.
 fn action_field() -> declaration::Field {
-    declaration::Field::new(
-        "action",
-        declaration::Type::literals(["script", "command", "intent", "menu"]),
-    )
-    .doc("Kind of action the binding runs. A menu opens a transient mode.")
+    declaration::Field::new("action", declaration::Type::literals(ACTION_KINDS))
+        .doc("Kind of action the binding runs. A menu opens a transient mode.")
 }
 
 /// Register the active-binding discovery record.
@@ -704,9 +704,9 @@ fn register_observation_info(builder: &mut module::Builder) {
                 .doc("Route path of node."),
             declaration::Field::new(
                 "action",
-                declaration::Type::literals(["script", "command", "intent"]).optional(),
+                declaration::Type::literals(ACTION_KINDS).optional(),
             )
-            .doc("Kind of action the winning binding runs."),
+            .doc("Kind of action the winning binding runs. A menu opens a transient mode."),
             declaration::Field::new(
                 "phase",
                 declaration::Type::literals(["before_widget", "after_widget"]).optional(),
@@ -916,4 +916,22 @@ fn command_availability_fields() -> Vec<declaration::Field> {
             declaration::Type::literals(["event", "mouse"]).array(),
         ),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ACTION_KINDS;
+    use crate::input::BindingActionKind;
+
+    #[test]
+    fn the_declared_action_kinds_are_the_binding_labels() {
+        let labels = [
+            BindingActionKind::Script,
+            BindingActionKind::Command,
+            BindingActionKind::Intent,
+            BindingActionKind::Menu,
+        ]
+        .map(BindingActionKind::label);
+        assert_eq!(labels, ACTION_KINDS);
+    }
 }

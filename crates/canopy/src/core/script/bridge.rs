@@ -3,11 +3,12 @@
 use std::{fmt, result::Result as StdResult};
 
 use ruau::vm::{
-    HostType, HostTypeBuilder, MarshaledPair, RuntimeError, Scope, ScopedValue, ScriptErrorField,
-    ValueSnapshot,
+    HostType, HostTypeBuilder, MarshaledPair, RuntimeError, Scope, ScopedValue, ValueSnapshot,
 };
 
-use super::{Canopy, Core, LuauState, NodeId, NonNull, Rc, RefCell, Result, commands, error};
+use super::{
+    Canopy, Core, LuauState, NodeId, NonNull, Rc, RefCell, Result, commands, error, errors,
+};
 
 thread_local! {
     /// Stack of canopy pointers made available to reentrant host calls.
@@ -278,14 +279,7 @@ pub(super) fn node_id_from_value<'s>(
 ) -> StdResult<NodeId, RuntimeError> {
     match value {
         ScopedValue::Userdata(userdata) => Ok(*userdata.borrow::<NodeId>(scope)?),
-        other => Err(RuntimeError::structured(
-            format!("expected NodeId, got {}", other.type_name()),
-            [
-                ScriptErrorField::new("kind", "type_mismatch"),
-                ScriptErrorField::new("expected", "NodeId"),
-                ScriptErrorField::new("got", other.type_name()),
-            ],
-        )),
+        other => Err(errors::type_mismatch("NodeId", other.type_name())),
     }
 }
 

@@ -227,8 +227,8 @@ impl Drift {
 pub struct GradientSpec {
     /// Gradient angle in degrees (0 = left to right, 90 = top to bottom).
     pub angle_deg: f32,
-    /// Ordered list of gradient stops.
-    pub stops: Vec<GradientStop>,
+    /// Ordered list of gradient stops, never empty.
+    stops: Vec<GradientStop>,
     /// The space that mixes colors between stops.
     pub mix: Mix,
     /// How the gradient moves across its rectangle. `None` holds it still.
@@ -252,6 +252,11 @@ impl GradientSpec {
             drift: None,
             pause: Pause::Idle,
         }
+    }
+
+    /// The stops in offset order. A gradient always has at least one.
+    pub fn stops(&self) -> &[GradientStop] {
+        &self.stops
     }
 
     /// Replace the mixing space.

@@ -1473,6 +1473,58 @@ fn register_default_bindings_is_idempotent_for_identical_scripts() -> Result<()>
 }
 
 #[test]
+fn bind_rejects_an_unknown_option_field() {
+    let mut canopy = app();
+    let error = canopy
+        .eval_script(r#"canopy.bind("x", {description = "X", mdoe = "m"}, function() end)"#)
+        .expect_err("a misspelt option fails");
+    assert!(
+        error
+            .to_string()
+            .contains("binding options has an unknown field `mdoe`"),
+        "{error}"
+    );
+    assert!(
+        !canopy
+            .core
+            .input_map
+            .bindings()
+            .iter()
+            .any(|binding| binding.description == "X"),
+        "nothing is bound"
+    );
+}
+
+#[test]
+fn a_value_that_is_not_a_node_fails_as_a_type_mismatch_in_rust() {
+    let mut canopy = app();
+    let error = canopy
+        .eval_script("local forged: any = 1\ncanopy.node_info(forged)")
+        .expect_err("a number is not a node handle");
+    assert_eq!(
+        error.script_kind(),
+        ScriptErrorKind::TypeMismatch,
+        "{error}"
+    );
+}
+
+#[test]
+fn unbind_key_rejects_an_unknown_selector_field() -> Result<()> {
+    let mut canopy = app();
+    canopy.eval_script(r#"canopy.bind("x", {description = "X"}, function() end)"#)?;
+    let error = canopy
+        .eval_script(r#"canopy.unbind_key("x", {pth = "a/"})"#)
+        .expect_err("a misspelt selector fails");
+    assert!(
+        error
+            .to_string()
+            .contains("unbind selector has an unknown field `pth`"),
+        "{error}"
+    );
+    Ok(())
+}
+
+#[test]
 fn tkey() -> Result<()> {
     run_ttree(|c, _, tree| {
         c.core.set_focus(tree.root)?;

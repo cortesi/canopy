@@ -228,7 +228,8 @@ Use `canopy.bind(key, options, action)` for one key binding, and a
 required. Its `description` field must contain user-facing text. The optional `path` field limits a binding
 to matching route paths. The optional `mode` field puts a binding in a named
 mode. Set `tier = "global"` for a global binding; a global binding cannot also
-name a mode, and its path must be anchored at both ends.
+name a mode, and its path must be anchored at both ends. An unknown field is
+an error.
 
 ```luau
 canopy.bind("Ctrl+g", {
@@ -378,7 +379,8 @@ widget prediction, `handle` or `ignore`, and an optional `binding` record with
 the selected binding's `id`, `target`, and `phase`. The `outcome` has a `kind`:
 `binding`, `transient`, `widget`, `transient_dismiss`, or `unhandled`. A
 `binding` or `transient` outcome names the winning `binding`, its `node` and
-`path`, its `target`, and its `phase`. A `widget` outcome names the consuming
+`path`, its `action` (`script`, `command`, `intent`, or `menu`), and its
+`phase`. A `widget` outcome names the consuming
 `node` and `path`. The explanation is advisory, because routing still acts one
 node at a time.
 
@@ -409,7 +411,7 @@ or `ScrollUp`, so a reported label parses back to the record it names.
 
 `canopy.unbind(id)` removes one binding. `canopy.unbind_key(key, options?)`
 removes matching application key bindings. Its optional selector has exact
-`mode` and `path` filters. `canopy.clear_bindings()` removes every application
+`mode` and `path` filters, and no other fields. `canopy.clear_bindings()` removes every application
 binding and clears the mode stack. Scripts cannot remove or replace
 framework-owned bindings.
 

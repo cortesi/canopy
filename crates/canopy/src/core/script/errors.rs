@@ -68,6 +68,25 @@ impl From<error::Error> for RuntimeError {
     }
 }
 
+/// A script value of the wrong type: the error Rust sees as
+/// [`error::ScriptErrorKind::TypeMismatch`], whose fields name both types for
+/// Luau.
+pub(super) fn type_mismatch(expected: &'static str, got: &'static str) -> RuntimeError {
+    let payload = CanopyErrorPayload::new(
+        error::ScriptErrorKind::TypeMismatch,
+        format!("expected {expected}, got {got}"),
+    );
+    RuntimeError::structured(
+        payload.message.clone(),
+        [
+            ScriptErrorField::new("kind", payload.kind.label()),
+            ScriptErrorField::new("expected", expected),
+            ScriptErrorField::new("got", got),
+        ],
+    )
+    .with_payload(payload)
+}
+
 /// Normalized cloneable canopy error payload carried through Ruau errors.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CanopyErrorPayload {

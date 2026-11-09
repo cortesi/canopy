@@ -18,6 +18,11 @@ use crate::{
     widget::EventOutcome,
 };
 
+/// Return the value a binding identifier crosses to a script as.
+pub(super) fn binding_id_arg(id: input::BindingId) -> ArgValue {
+    ArgValue::UInt(id.as_u64())
+}
+
 /// Convert a publication without consulting live widget or node state.
 pub(super) fn snapshot_to_arg(frame: &FrameSnapshot) -> ArgValue {
     let size = frame.size();
@@ -303,7 +308,7 @@ pub(super) fn binding_info_to_arg(binding: &inputmap::BindingRecord) -> ArgValue
             "input_type".to_string(),
             ArgValue::String(input_type.to_string()),
         ),
-        ("id".to_string(), ArgValue::UInt(binding.id.as_u64())),
+        ("id".to_string(), binding_id_arg(binding.id)),
         (
             "path".to_string(),
             ArgValue::String(binding.path_filter().to_string()),
@@ -646,7 +651,7 @@ pub(super) fn route_trace_to_arg(canopy: &Canopy) -> ArgValue {
 /// and the two lists cannot drift apart.
 fn available_binding_to_arg<I: ToString>(binding: input::AvailableBinding<I>) -> ArgValue {
     let mut record = BTreeMap::from([
-        ("id".to_string(), ArgValue::UInt(binding.id.as_u64())),
+        ("id".to_string(), binding_id_arg(binding.id)),
         (
             "input".to_string(),
             ArgValue::String(binding.input.to_string()),
@@ -869,7 +874,7 @@ fn key_route_step_to_arg(step: &KeyRouteStep) -> ArgValue {
         record.insert(
             "binding".to_string(),
             ArgValue::Map(BTreeMap::from([
-                ("id".to_string(), ArgValue::UInt(binding.id.as_u64())),
+                ("id".to_string(), binding_id_arg(binding.id)),
                 (
                     "action".to_string(),
                     ArgValue::String(binding.kind.label().to_string()),
@@ -904,10 +909,7 @@ fn key_route_outcome_to_arg(outcome: RouteOutcome) -> ArgValue {
     let mut record = BTreeMap::from([("kind".to_string(), ArgValue::String(kind.to_string()))]);
     if let Some(winner) = winner {
         record.extend([
-            (
-                "binding".to_string(),
-                ArgValue::UInt(winner.binding.as_u64()),
-            ),
+            ("binding".to_string(), binding_id_arg(winner.binding)),
             ("node".to_string(), ArgValue::Node(winner.node)),
             (
                 "path".to_string(),

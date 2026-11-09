@@ -158,8 +158,9 @@ impl MotionClocks {
 /// Colors over time: stops over one run, a run length, and a repeat.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Animation {
-    /// Colors over one run, as gradient stops are colors over space.
-    pub stops: Vec<GradientStop>,
+    /// Colors over one run, as gradient stops are colors over space. Never
+    /// empty.
+    stops: Vec<GradientStop>,
     /// Length of one run.
     pub duration: Duration,
     /// What follows one run.
@@ -193,6 +194,11 @@ impl Animation {
             pause: Pause::Idle,
             shown: ShownAt::default(),
         }
+    }
+
+    /// The stops in offset order. An animation always has at least one.
+    pub fn stops(&self) -> &[GradientStop] {
+        &self.stops
     }
 
     /// Fade once from `from` to `to`, from the first frame that shows it.

@@ -247,10 +247,12 @@ impl Canopy {
     ) -> Result<(TermBuf, Vec<CursorSnapshot>)> {
         let mut styl = StyleManager::default();
 
+        let screen_clip = Rect::new(0, 0, screen_size.w, screen_size.h);
+        // The root rule may hold a gradient or an animation, so the blank
+        // screen takes its color at the top left cell.
         let def_style = styl
             .get(&self.style, "")
-            .resolve_solid()
-            .expect("default style resolves to solid colors");
+            .resolve_at(screen_clip, Point::ZERO);
         let mut next = TermBuf::reuse_with_limits(
             spare,
             screen_size,
@@ -259,7 +261,6 @@ impl Canopy {
             self.frame.render_limits,
         )?;
 
-        let screen_clip = Rect::new(0, 0, screen_size.w, screen_size.h);
         let mut effect_stack: Vec<Effect> = Vec::new();
         let mut cursors = Vec::new();
         let mut traversal = RenderTraversal {

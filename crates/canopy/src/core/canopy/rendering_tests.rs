@@ -7,11 +7,11 @@ use crate::{
     ContextExt, ViewContext, Widget,
     commands::ArgValue,
     error::{Error, Result},
-    geom::{Line, Point, Size},
+    geom::{Line, Point, Rect, Size},
     layout::Layout,
     render::{Render, RenderBackend, TermBuf},
     runtime::{FrameId, FrameSnapshot},
-    style::{AttrSet, Color, ResolvedStyle},
+    style::{AttrSet, Color, GradientSpec, GradientStop, Paint as StylePaint, ResolvedStyle},
     testing::backend::TestRender,
 };
 
@@ -123,6 +123,35 @@ impl RenderBackend for FailingBackend {
         self.flushes += 1;
         self.check_failure(Failure::Flush)
     }
+}
+
+#[test]
+fn a_gradient_root_style_paints_the_blank_screen_at_its_top_left() -> Result<()> {
+    let mut canopy = app()?;
+    canopy.set_screen_size(Size::new(4, 1))?;
+    let gradient: StylePaint = GradientSpec::with_stops(
+        0.0,
+        vec![
+            GradientStop::new(0.0, Color::Red),
+            GradientStop::new(1.0, Color::Blue),
+        ],
+    )
+    .into();
+    canopy
+        .style_mut()
+        .rules()
+        .fg("", gradient.clone())
+        .bg("", gradient.clone())
+        .apply();
+    canopy.render(&mut TestRender::new())?;
+    let cell = canopy
+        .published_buf()
+        .and_then(|buf| buf.get(Point::ZERO))
+        .expect("the frame has its top left cell")
+        .clone();
+    let top_left = gradient.resolve(Rect::new(0, 0, 4, 1), Point::ZERO);
+    assert_eq!((cell.style.fg, cell.style.bg), (top_left, top_left));
+    Ok(())
 }
 
 #[test]

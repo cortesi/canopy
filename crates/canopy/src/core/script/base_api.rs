@@ -22,14 +22,15 @@ use ruau::{
 use super::{
     ArgValue, Canopy, ChangeOutcome, CommandSet, Context, CoreContext, CoreViewContext, FocusScope,
     NodeId, PathFilter, Pin, Point, RectI32, ReentrantCanopyGuard, Result, ScriptCommandCall,
-    ScriptMenu, ViewContext, available_bindings_to_arg, base_api, binding_info_to_arg,
-    command_call_from_value, command_call_type, command_info_to_arg, commands, defs,
-    dispatch_command, dispatch_explicit, error, fixtures_to_arg, host_return, host_value, inputmap,
-    key, key_explanation_to_arg, luau_global_owner_name, menu_bindings_to_arg, menu_from_value,
-    menu_type, mouse, node_handle_type, node_id_from_value, node_info_to_arg, node_list_to_arg,
-    notices_to_arg, owned_truthy, ret_arg, ret_none, ret_one, route_trace_to_arg, screen_capture,
-    screen_text, screen_text_for_rect, script_callback_label, script_journal_to_arg,
-    snapshot_to_arg, validate_node_handle, values_to_args, with_current_canopy,
+    ScriptMenu, ViewContext, available_bindings_to_arg, base_api, binding_id_arg,
+    binding_info_to_arg, command_call_from_value, command_call_type, command_info_to_arg, commands,
+    defs, dispatch_command, dispatch_explicit, error, fixtures_to_arg, host_return, host_value,
+    inputmap, key, key_explanation_to_arg, luau_global_owner_name, menu_bindings_to_arg,
+    menu_from_value, menu_type, mouse, node_handle_type, node_id_from_value, node_info_to_arg,
+    node_list_to_arg, notices_to_arg, owned_truthy, ret_arg, ret_none, ret_one, route_trace_to_arg,
+    screen_capture, screen_text, screen_text_for_rect, script_callback_label,
+    script_journal_to_arg, snapshot_to_arg, validate_node_handle, values_to_args,
+    with_current_canopy,
 };
 use crate::{
     core::{context::matching_nodes, inputmap::IntentCatalog},
@@ -672,6 +673,16 @@ fn optional_string_field<'s>(
     }
 }
 
+/// Fields of `BindOptions`.
+const BIND_OPTIONS: [&str; 6] = [
+    "description",
+    "mode",
+    "path",
+    "phase",
+    "tier",
+    "show_in_help",
+];
+
 /// Parse `BindOptions` from a required script table.
 fn parse_bind_options<'s>(
     scope: &Scope<'s>,
@@ -680,6 +691,7 @@ fn parse_bind_options<'s>(
     let Some(options) = options else {
         return Err(RuntimeError::runtime("binding options table is required"));
     };
+    option_fields(scope, &options, "binding options", &BIND_OPTIONS)?;
     let field = |name: &str| optional_string_field(scope, &options, name);
     // `InputMap::bind` rejects a blank description on
     // the next step.
@@ -731,6 +743,7 @@ fn parse_unbind_selector<'s>(
     let Some(options) = options else {
         return Ok(ScriptUnbindSelector::default());
     };
+    option_fields(scope, &options, "unbind selector", &["mode", "path"])?;
     let field = |name: &str| optional_string_field(scope, &options, name);
     Ok(ScriptUnbindSelector {
         mode: field("mode")?.filter(|mode| !mode.is_empty()),
@@ -1102,11 +1115,11 @@ fn install_binding(
     target: inputmap::BindingAction,
     input: inputmap::InputSpec,
     options: &inputmap::BindingOptions,
-) -> StdResult<i64, RuntimeError> {
+) -> StdResult<BindingId, RuntimeError> {
     with_current_canopy(scope, |canopy, _| {
         let (binding_id, removed) = canopy.core.input_map.bind(input, options.clone(), target)?;
         canopy.release_removed_bindings(removed);
-        Ok(binding_id.as_u64() as i64)
+        Ok(binding_id)
     })
     .map_err(RuntimeError::from)
 }
@@ -1118,7 +1131,7 @@ fn install_function_binding<'s>(
     function: Function<'s>,
     input: inputmap::InputSpec,
     options: &inputmap::BindingOptions,
-) -> StdResult<i64, RuntimeError> {
+) -> StdResult<BindingId, RuntimeError> {
     let stashed = scope.stash_function(function)?;
     let function_id = with_current_canopy(scope, |canopy, _| {
         canopy.script.host.store_function(stashed)
@@ -1492,11 +1505,19 @@ fn parse_key_expectation<'s>(
 fn expectation_binding(
     fields: &mut BTreeMap<String, ArgValue>,
 ) -> StdResult<BindingId, RuntimeError> {
-    match fields.remove("binding") {
-        Some(ArgValue::UInt(id)) => Ok(BindingId::from_u64(id)),
-        Some(ArgValue::Int(id)) if id >= 0 => Ok(BindingId::from_u64(id as u64)),
+    binding_id_from_arg(fields.remove("binding").as_ref())
+}
+
+/// Read a binding identifier that a script passes back. Luau holds it as a
+/// number, which converts to a non-negative integer.
+fn binding_id_from_arg(value: Option<&ArgValue>) -> StdResult<BindingId, RuntimeError> {
+    match value {
+        Some(ArgValue::UInt(id)) => Ok(BindingId::from_u64(*id)),
+        Some(ArgValue::Int(id)) => u64::try_from(*id)
+            .map(BindingId::from_u64)
+            .map_err(|_| RuntimeError::runtime("a binding id must be a binding number")),
         _ => Err(RuntimeError::runtime(
-            "expectation binding must be a binding number",
+            "a binding id must be a binding number",
         )),
     }
 }
@@ -1814,7 +1835,7 @@ fn install_action_binding<'s>(
     action: ScriptAction<'s>,
     input: inputmap::InputSpec,
     options: &inputmap::BindingOptions,
-) -> StdResult<i64, RuntimeError> {
+) -> StdResult<BindingId, RuntimeError> {
     match action {
         ScriptAction::Target(target) => install_binding(scope, target, input, options),
         ScriptAction::Function(function) => {
@@ -1835,7 +1856,7 @@ fn host_bind<'s>(
     let action = read_action(scope, &mut args)?;
     let input = inputmap::InputSpec::Key(key::Key::parse_spec(&spec).map_err(error::Error::from)?);
     let id = install_action_binding(scope, action, input, &options)?;
-    Ok(ret_one(ScopedValue::Number(id as f64)))
+    ret_arg(scope, &binding_id_arg(id))
 }
 
 /// Keymap option fields, which are the `BindOptions` fields other than
@@ -2060,7 +2081,7 @@ fn host_keymap<'s>(
     let mut ids = Vec::with_capacity(planned.len());
     for binding in planned {
         let id = install_action_binding(scope, binding.action, binding.input, &binding.options)?;
-        ids.push(ArgValue::Int(id));
+        ids.push(binding_id_arg(id));
     }
     ret_arg(scope, &ArgValue::Array(ids))
 }
@@ -2071,10 +2092,9 @@ fn host_unbind<'s>(
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = HostArgCursor::new(scope, args);
-    let id = args.required::<u64>("id")?;
-    let removed = with_current_canopy(scope, |canopy, _| {
-        canopy.unbind(inputmap::BindingId::from_u64(id))
-    })?;
+    let id = args.required::<ScopedValue<'_>>("id")?;
+    let id = binding_id_from_arg(super::scoped_to_arg_value(scope, id).ok().as_ref())?;
+    let removed = with_current_canopy(scope, |canopy, _| canopy.unbind(id))?;
     Ok(ret_one(ScopedValue::Boolean(removed)))
 }
 
