@@ -125,10 +125,6 @@ impl Help {
 
     /// Rank the bindings against `query`, as the bar posts after each edit.
     #[command]
-    #[allow(
-        clippy::needless_pass_by_value,
-        reason = "command arguments are owned values"
-    )]
     pub fn search_changed(&mut self, context: &mut dyn Context, query: String) -> Result<()> {
         let Parts { list, bar } = self.parts()?;
         let found = context.with_widget_mut(list, |list: &mut BindingList, context| {

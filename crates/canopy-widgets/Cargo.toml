@@ -22,8 +22,6 @@ canopy-mosaic.workspace = true
 
 # Widget-specific dependencies
 icu_segmenter.workspace = true
-textwrap.workspace = true
-unicode-segmentation.workspace = true
 grep-matcher = "0.1.9"
 grep-regex = "0.1.14"
 imara-diff = "0.2.0"

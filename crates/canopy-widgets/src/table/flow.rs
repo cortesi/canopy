@@ -18,7 +18,6 @@ use canopy::{
     render::Render,
     text,
 };
-use unicode_segmentation::UnicodeSegmentation;
 
 use super::{TableCell, TableData, TableGlyphs, TableOverlay, display_control};
 
@@ -290,9 +289,8 @@ pub(super) fn wrap(value: &str, m: &Measure, width: u32, lines: u32) -> Vec<Frag
     if cut && let Some(last) = out.last_mut() {
         // Room for the ellipsis comes from the end of the last line.
         while last.width + 1 > width && !last.bytes.is_empty() {
-            let (i, g) = value[last.bytes.clone()]
-                .grapheme_indices(true)
-                .next_back()
+            let (i, g) = text::grapheme_indices(&value[last.bytes.clone()])
+                .last()
                 .expect("nonempty fragment");
             last.bytes.end = last.bytes.start + i;
             last.width -= cells(g);

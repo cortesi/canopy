@@ -17,12 +17,11 @@ use std::{
     process::{Command, Stdio},
 };
 
-use canopy::{input::key, testing::harness::Harness};
+use canopy::{input::key, testing::harness::Harness, text};
 use canopy_widgets::editor::{
     EditMode, Editor, EditorConfig, TextPosition, TextRange, ViMode, VisualMode,
 };
 use serde_json::{Value, json};
-use unicode_segmentation::UnicodeSegmentation;
 
 /// The seed of the generator when `VIM_DIFF_SEED` is not set.
 const DEFAULT_SEED: u64 = 0x5eed_c0de;
@@ -223,7 +222,7 @@ fn prose(rng: &mut Rng) -> String {
 fn grapheme_columns(line: &str) -> Vec<usize> {
     let mut columns = Vec::new();
     let mut column = 0;
-    for grapheme in line.graphemes(true) {
+    for grapheme in text::graphemes(line) {
         columns.push(column);
         column += grapheme.chars().count();
     }

@@ -15,9 +15,8 @@ use canopy::{
         CanvasContext, Constraint, Edges, Layout, MeasureConstraints, MeasureOverflow, Measurement,
     },
     render::Render,
-    text,
+    text::{self, WrapOptions},
 };
-use unicode_segmentation::UnicodeSegmentation;
 
 use super::index::{self, HelpEntry, HelpTree};
 use crate::fuzzy::{self, Case, Haystack, Pattern, Scorer};
@@ -139,8 +138,8 @@ impl BindingList {
             .map(|(_, _, order, haystack)| {
                 let entry = &self.entries[order];
                 let positions = scorer.positions(&pattern, &haystack).into();
-                let trail =
-                    haystack.graphemes(true).count() - entry.description.graphemes(true).count();
+                let trail = text::graphemes(&haystack).count()
+                    - text::graphemes(&entry.description).count();
                 let mut text = haystack;
                 if entry.opens_menu {
                     text.push_str(MENU_MARKER);
@@ -382,9 +381,7 @@ pub(super) fn render_line(
     // The trail reads quietly before the description. Each part paints the
     // graphemes the query matched.
     let trail = matched.trail.saturating_sub(matched.first);
-    let split = line
-        .text
-        .grapheme_indices(true)
+    let split = text::grapheme_indices(&line.text)
         .nth(trail as usize)
         .map_or(line.text.len(), |(index, _)| index);
     let (quiet, rest) = line.text.split_at(split);
@@ -407,7 +404,7 @@ pub(super) fn render_line(
     }
     let first = matched
         .first
-        .saturating_add(u32::try_from(quiet.graphemes(true).count()).unwrap_or(u32::MAX));
+        .saturating_add(u32::try_from(text::graphemes(quiet).count()).unwrap_or(u32::MAX));
     fuzzy::paint_matched(
         render,
         at(quiet_width),
@@ -450,16 +447,12 @@ fn result_lines(rows: &[ResultRow], width: u32) -> Vec<DisplayLine> {
     let mut lines = Vec::new();
     for row in rows {
         let (indent, wrap_width) = if narrow {
-            lines.extend(
-                textwrap::wrap(&row.chain, width.max(1))
-                    .into_iter()
-                    .map(|text| DisplayLine {
-                        key: None,
-                        text: text.into_owned(),
-                        style: "key",
-                        matched: None,
-                    }),
-            );
+            lines.extend(wrap(&row.chain, width).into_iter().map(|text| DisplayLine {
+                key: None,
+                text,
+                style: "key",
+                matched: None,
+            }));
             (2, width.saturating_sub(2).max(1))
         } else {
             (
@@ -494,19 +487,30 @@ fn result_lines(rows: &[ResultRow], width: u32) -> Vec<DisplayLine> {
     lines
 }
 
+/// Wrap `text` to lines of at most `width` columns, breaking words at
+/// their hyphens.
+fn wrap(text: &str, width: usize) -> Vec<String> {
+    let options = WrapOptions {
+        break_hyphens: true,
+        paragraphs: false,
+        max_lines: None,
+    };
+    text::wrap_with(text, u32::try_from(width).unwrap_or(u32::MAX), options)
+}
+
 /// Wrap `text` to `width`, and return each line with the position of its
 /// first grapheme in `text`.
 fn wrapped_pieces(text: &str, width: usize) -> Vec<(u32, String)> {
     let mut cursor = 0;
-    textwrap::wrap(text, width)
+    wrap(text, width)
         .into_iter()
         .map(|piece| {
             let start = text[cursor..]
-                .find(piece.as_ref())
+                .find(piece.as_str())
                 .map_or(cursor, |offset| cursor + offset);
             cursor = start + piece.len();
-            let first = text[..start].graphemes(true).count();
-            (u32::try_from(first).unwrap_or(u32::MAX), piece.into_owned())
+            let first = text::graphemes(&text[..start]).count();
+            (u32::try_from(first).unwrap_or(u32::MAX), piece)
         })
         .collect()
 }
@@ -617,17 +621,15 @@ fn binding_lines(
     for (keys, description) in groups {
         if narrow {
             for row in keys {
-                lines.extend(textwrap::wrap(row, width.max(1)).into_iter().map(|text| {
-                    DisplayLine {
-                        key: None,
-                        text: text.into_owned(),
-                        style: "key",
-                        matched: None,
-                    }
+                lines.extend(wrap(row, width).into_iter().map(|text| DisplayLine {
+                    key: None,
+                    text,
+                    style: "key",
+                    matched: None,
                 }));
             }
             let wrap_width = width.saturating_sub(2).max(1);
-            for text in textwrap::wrap(description, wrap_width) {
+            for text in wrap(description, wrap_width) {
                 lines.push(DisplayLine {
                     key: None,
                     text: format!("  {text}"),
@@ -637,7 +639,7 @@ fn binding_lines(
             }
         } else {
             let wrap_width = width.saturating_sub(max_key_width + 2).max(1);
-            let wrapped = textwrap::wrap(description, wrap_width);
+            let wrapped = wrap(description, wrap_width);
             for index in 0..keys.len().max(wrapped.len()) {
                 let text = wrapped
                     .get(index)

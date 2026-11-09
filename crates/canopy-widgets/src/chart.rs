@@ -495,7 +495,7 @@ fn tones(
 
 /// Returns the color of `paint` over `rect` where a run that fills in `fill`
 /// direction ends after `reach` of its length, from zero to one.
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
     reason = "a position within a cell rectangle needs no more precision than f32"

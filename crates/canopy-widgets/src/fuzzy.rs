@@ -21,7 +21,6 @@ use nucleo_matcher::{
     Config, Matcher, Utf32Str,
     pattern::{CaseMatching, Normalization, Pattern as NucleoPattern},
 };
-use unicode_segmentation::UnicodeSegmentation;
 
 /// How a query matches case.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -156,7 +155,7 @@ pub fn rank<'a>(query: &str, labels: impl IntoIterator<Item = &'a str>) -> Vec<u
 /// run with its own offset. `positions` is sorted, as [`Scorer::positions`]
 /// returns it. The matched graphemes keep the ground of `style`, so a row
 /// that a selection paints stays one band.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments, reason = "a run of text and how its matches paint")]
 pub fn paint_matched(
     render: &mut Render,
     at: Point,
@@ -178,7 +177,7 @@ pub fn paint_matched(
     let row = Rect::new(at.x, at.y, width, 1);
     let limit = at.x.saturating_add(width);
     let mut x = at.x;
-    for (offset, grapheme) in text.graphemes(true).enumerate() {
+    for (offset, grapheme) in text::graphemes(text).enumerate() {
         let grapheme_width = u32::try_from(text::grapheme_width(grapheme)).unwrap_or(0);
         if x.saturating_add(grapheme_width) > limit {
             break;

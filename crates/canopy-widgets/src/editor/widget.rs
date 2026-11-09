@@ -1260,10 +1260,6 @@ impl Editor {
     /// text only in insert mode, and a read-only editor never takes it.
     /// @param text Text to insert.
     #[command]
-    #[allow(
-        clippy::needless_pass_by_value,
-        reason = "command arguments are owned values"
-    )]
     pub fn insert(&mut self, ctx: &mut dyn Context, text: String) {
         match self.config.mode {
             EditMode::Text => {

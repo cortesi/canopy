@@ -642,7 +642,7 @@ impl Widget for Terminal {
 
         if child_exited {
             let message = format!("Process exited (status {child_exit_code})");
-            let width = message.chars().count() as u32;
+            let width = text::width(&message);
             let x = (content_size.w.saturating_sub(width)) / 2;
             let y = content_size.h / 2;
             let line = geom::Line::new(

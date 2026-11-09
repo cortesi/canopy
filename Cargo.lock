@@ -506,10 +506,8 @@ dependencies = [
  "serde_json",
  "syntect",
  "tempfile",
- "textwrap",
  "tracing-subscriber",
  "two-face",
- "unicode-segmentation",
 ]
 
 [[package]]

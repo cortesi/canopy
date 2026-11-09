@@ -470,7 +470,7 @@ impl Input {
 
     /// Insert `text` at the cursor, as a paste does.
     #[command]
-    #[allow(
+    #[expect(
         clippy::needless_pass_by_value,
         reason = "command arguments are owned values"
     )]

@@ -1146,7 +1146,12 @@ impl Widget for DiffView {
             // A message wraps at word boundaries, so a narrow pane shows all
             // of it rather than a clipped first line.
             let height = view.view_rect().h as usize;
-            let lines = textwrap::wrap(message, (width as usize).max(1));
+            let options = text::WrapOptions {
+                break_hyphens: true,
+                paragraphs: false,
+                max_lines: None,
+            };
+            let lines = text::wrap_with(message, width, options);
             for (row, line) in (0..).zip(lines.iter().take(height)) {
                 rndr.text("message", Line::new(origin.x, origin.y + row, width), line)?;
             }
