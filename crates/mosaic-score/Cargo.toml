@@ -11,8 +11,8 @@ description = "Score the block mosaics of Canopy against a model of the human ey
 canopy.workspace = true
 canopy-mosaic.workspace = true
 clap.workspace = true
-fontdue = "0.9.4"
-image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+fontdue.workspace = true
+image = { workspace = true, features = ["jpeg", "png"] }
 
 [lints]
 workspace = true

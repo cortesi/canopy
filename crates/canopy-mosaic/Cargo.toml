@@ -14,8 +14,8 @@ thiserror.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
-fontdue = "0.9.4"
-image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+fontdue.workspace = true
+image = { workspace = true, features = ["jpeg", "png"] }
 proptest.workspace = true
 
 [[bench]]

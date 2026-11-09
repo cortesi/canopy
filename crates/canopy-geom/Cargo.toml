@@ -4,6 +4,7 @@ version = "0.0.1"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Geometry primitives for Canopy"
 
 [lib]
 doctest = false

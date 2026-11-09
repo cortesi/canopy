@@ -81,25 +81,32 @@ anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
 convert_case = "0.12.0"
 criterion = "0.8.2"
+fontdue = "0.9.4"
 foldhash = "0.2.0"
 futures = "0.3.34"
 # The features match those that textwrap enables, so no other crates join the build.
 icu_segmenter = { version = "2.3.0", default-features = false, features = ["compiled_data"] }
+# Each member enables the formats that it decodes.
+image = { version = "0.25.10", default-features = false }
 itty-core = { version = "0.1.0", path = "../itty/crates/itty-core" }
 itty-headless = { version = "0.1.0", path = "../itty/crates/itty-headless" }
+proc-macro2 = "1.0.107"
 proptest = "1.11.0"
+quote = "1.0.47"
 rand = "0.10.3"
 ruau = { version = "0.1.0", path = "../../private/ruau/crates/ruau", default-features = false }
 ruau-script-api = { path = "../../private/ruau/crates/ruau-script-api" }
 schemars = "1.2.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+syn = { version = "3.0.6", features = ["extra-traits", "full"] }
 tempfile = "3.27.0"
 textwrap = "0.16.4"
 thiserror = "2.0.21"
 tracing-subscriber = "0.3.23"
 tmcp = { version = "0.6.0", path = "../tmcp/crates/tmcp" }
 tokio = "1.53.2"
+trybuild = "1.0.121"
 unicode-segmentation = "1.13.3"
 unicode-width = "0.2.2"
 

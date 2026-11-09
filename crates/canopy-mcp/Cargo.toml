@@ -4,6 +4,7 @@ version = "0.1.0"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Launch Canopy applications and drive them through MCP and smoke suites"
 
 [lib]
 doctest = false
