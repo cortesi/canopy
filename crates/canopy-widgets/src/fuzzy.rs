@@ -155,7 +155,10 @@ pub fn rank<'a>(query: &str, labels: impl IntoIterator<Item = &'a str>) -> Vec<u
 /// run with its own offset. `positions` is sorted, as [`Scorer::positions`]
 /// returns it. The matched graphemes keep the ground of `style`, so a row
 /// that a selection paints stays one band.
-#[expect(clippy::too_many_arguments, reason = "a run of text and how its matches paint")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a run of text and how its matches paint"
+)]
 pub fn paint_matched(
     render: &mut Render,
     at: Point,
