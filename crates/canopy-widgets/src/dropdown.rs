@@ -283,7 +283,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use canopy::testing::harness::Harness;
+    use canopy::{geom::PointI32, input::key, testing::harness::Harness};
 
     use super::*;
 
@@ -367,8 +367,8 @@ mod tests {
         mouse::MouseEvent {
             action: mouse::Action::Down,
             button,
-            modifiers: canopy::input::key::Empty,
-            location: canopy::geom::PointI32 { x, y },
+            modifiers: key::Empty,
+            location: PointI32 { x, y },
         }
     }
 
