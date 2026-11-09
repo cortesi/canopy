@@ -887,6 +887,12 @@ mod tests {
     use crate::geom::Rect;
 
     #[test]
+    fn a_row_rejects_center_natural() {
+        assert!(Layout::row().center_natural(true).validate().is_err());
+        assert!(Layout::column().center_natural(true).validate().is_ok());
+    }
+
+    #[test]
     fn clamp_size_unbounded() {
         let c = MeasureConstraints::new(Constraint::Unbounded, Constraint::Unbounded);
         let size = Size::new(12, 7);

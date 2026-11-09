@@ -206,6 +206,15 @@ mod tests {
     }
 
     #[test]
+    fn leave_prints_as_a_mouse_action_and_is_not_a_binding_spec() {
+        let error = Mouse::parse_spec("Leave").expect_err("no binding");
+        assert!(error.to_string().contains("runs no binding"), "{error}");
+        let spec = spec(Action::Leave, Button::None, key::Empty);
+        assert_eq!(spec.to_string(), "Leave", "a trace names it");
+        assert_eq!(Action::Leave.scroll_delta(), None);
+    }
+
+    #[test]
     fn mouse_event_converts_to_a_spec() {
         let event = MouseEvent {
             action: Action::Drag,

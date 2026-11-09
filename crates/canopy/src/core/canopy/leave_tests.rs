@@ -195,16 +195,3 @@ fn the_ancestors_of_a_removed_node_still_get_leave() -> Result<()> {
     assert_eq!(names, ["right"]);
     Ok(())
 }
-
-#[test]
-fn leave_prints_as_a_mouse_action_and_is_not_a_binding_spec() {
-    let error = mouse::Mouse::parse_spec("Leave").expect_err("no binding");
-    assert!(error.to_string().contains("runs no binding"), "{error}");
-    let spec = mouse::Mouse {
-        action: mouse::Action::Leave,
-        button: mouse::Button::None,
-        modifiers: key::Empty,
-    };
-    assert_eq!(spec.to_string(), "Leave", "a trace names it");
-    assert_eq!(mouse::Action::Leave.scroll_delta(), None);
-}

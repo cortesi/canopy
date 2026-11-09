@@ -1,5 +1,7 @@
 //! Scroll, reveal ordering, and default action tests.
 
+use std::sync::{Arc, Mutex};
+
 use super::{super::test_support::*, *};
 use crate::{
     Context, ViewContext,
@@ -593,4 +595,106 @@ fn top_and_bottom_keep_the_horizontal_offset() {
         ScrollOp::Bottom.target(scroll, SCREEN),
         Point { x: 3, y: u32::MAX }
     );
+}
+
+#[test]
+fn reveal_uses_new_canvas_and_view_dimensions_once() -> Result<()> {
+    let mut core = Core::new();
+    let canvas = Arc::new(Mutex::new(Size::new(1, 1)));
+    let source = Arc::clone(&canvas);
+    let (widget, _) = TestWidget::with_canvas(
+        |_c| Measurement::Wrap,
+        move |_view, _ctx| *source.lock().unwrap(),
+    );
+    let child = core.create_detached(widget)?;
+    attach_root_child(&mut core, child)?;
+    core.set_layout_of(child, Layout::fill())?;
+    core.update_layout(Size::new(5, 3))?;
+    *canvas.lock().unwrap() = Size::new(100, 100);
+    let mut ctx = CoreContext::new(&mut core, child);
+    assert!(
+        ctx.reveal_area(Rect::new(10, 20, 2, 2), RevealAlign::Nearest)
+            .changed()
+    );
+    core.update_layout(Size::new(7, 4))?;
+    assert_eq!(core.nodes[child].view.scroll, Point { x: 5, y: 18 });
+    // Once consumed, a request must not keep forcing its target into view.
+    core.update_layout(Size::new(3, 2))?;
+    assert_eq!(core.nodes[child].view.scroll, Point { x: 5, y: 18 });
+    Ok(())
+}
+
+/// Add a fill-sized surface with a large scrollable canvas.
+fn add_reveal_surface(core: &mut Core) -> Result<NodeId> {
+    let (widget, _) =
+        TestWidget::with_canvas(|_c| Measurement::Wrap, |_view, _ctx| Size::new(100, 100));
+    let child = core.create_detached(widget)?;
+    attach_root_child(core, child)?;
+    core.set_layout_of(child, Layout::fill())?;
+    Ok(child)
+}
+
+#[test]
+fn reveal_obeys_request_and_explicit_scroll_order() -> Result<()> {
+    let mut core = Core::new();
+    let child = add_reveal_surface(&mut core)?;
+    core.update_layout(Size::new(10, 4))?;
+    let mut ctx = CoreContext::new(&mut core, child);
+    assert!(
+        ctx.reveal_area(Rect::new(20, 20, 1, 1), RevealAlign::Nearest)
+            .changed()
+    );
+    assert!(
+        !ctx.reveal_area(Rect::new(20, 20, 1, 1), RevealAlign::Nearest)
+            .changed()
+    );
+    assert!(
+        ctx.reveal_area(Rect::new(40, 40, 1, 1), RevealAlign::Nearest)
+            .changed()
+    );
+    assert!(!ctx.reveal_area(Rect::ZERO, RevealAlign::Nearest).changed());
+    core.update_layout(Size::new(10, 4))?;
+    assert_eq!(core.nodes[child].view.scroll, Point { x: 31, y: 37 });
+
+    let mut ctx = CoreContext::new(&mut core, child);
+    ctx.reveal_area(Rect::new(80, 80, 1, 1), RevealAlign::Nearest);
+    ctx.scroll(ScrollOp::To(Point { x: 2, y: 3 }));
+    core.update_layout(Size::new(10, 4))?;
+    assert_eq!(core.nodes[child].view.scroll, Point { x: 2, y: 3 });
+    let mut ctx = CoreContext::new(&mut core, child);
+    ctx.reveal_area(Rect::new(80, 80, 1, 1), RevealAlign::Nearest);
+    assert!(
+        ctx.scroll(ScrollOp::By(0, 0)).changed(),
+        "cancelling a request changes state"
+    );
+    core.update_layout(Size::new(10, 4))?;
+    assert_eq!(core.nodes[child].view.scroll, Point { x: 2, y: 3 });
+    Ok(())
+}
+
+#[test]
+fn reveal_waits_for_visibility_and_does_not_reach_replacement_widgets() -> Result<()> {
+    let mut core = Core::new();
+    let child = add_reveal_surface(&mut core)?;
+    CoreContext::new(&mut core, child).reveal_area(Rect::new(40, 40, 1, 1), RevealAlign::Nearest);
+    core.set_hidden(child, true)?;
+    core.update_layout(Size::new(10, 4))?;
+    core.set_hidden(child, false)?;
+    core.update_layout(Size::ZERO)?;
+    core.detach(child)?;
+    core.update_layout(Size::new(10, 4))?;
+    attach_root_child(&mut core, child)?;
+    core.update_layout(Size::new(10, 4))?;
+    assert_eq!(core.nodes[child].view.scroll, Point { x: 31, y: 37 });
+
+    let mut ctx = CoreContext::new(&mut core, child);
+    ctx.scroll(ScrollOp::To(Point { x: 0, y: 0 }));
+    ctx.reveal_area(Rect::new(80, 80, 1, 1), RevealAlign::Nearest);
+    let (replacement, _) =
+        TestWidget::with_canvas(|_c| Measurement::Wrap, |_view, _ctx| Size::new(100, 100));
+    core.replace_subtree(child, replacement)?;
+    core.set_layout_of(child, Layout::fill())?;
+    core.update_layout(Size::new(10, 4))?;
+    assert_eq!(core.nodes[child].view.scroll, Point::ZERO);
+    Ok(())
 }
