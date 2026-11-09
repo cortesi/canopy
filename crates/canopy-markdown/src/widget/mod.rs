@@ -253,7 +253,7 @@ pub struct BlockEdit {
 }
 
 /// Convert an application-facing error into the common Canopy error type.
-pub(crate) fn invalid(error: impl Display) -> Error {
+pub fn invalid(error: impl Display) -> Error {
     Error::app(error.to_string())
 }
 /// Map the two representations to their fixed saved-state slots.

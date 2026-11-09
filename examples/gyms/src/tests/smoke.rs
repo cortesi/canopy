@@ -17,8 +17,7 @@ fn luau_smoke_suite_passes() -> Result<()> {
         },
         || Demo::List.build(false).map_err(McpError::app),
     );
-    let result = run_suite(&factory, &SuiteConfig::new(suite_dir))
-        .map_err(Error::app)?;
+    let result = run_suite(&factory, &SuiteConfig::new(suite_dir)).map_err(Error::app)?;
     assert!(result.success(), "{result:#?}");
     assert_eq!(result.scripts.len(), 1, "all checked-in smoke scripts ran");
     Ok(())

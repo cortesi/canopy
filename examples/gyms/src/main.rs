@@ -292,8 +292,7 @@ impl Demo {
     /// Build the demo application: its registration, bindings, and root.
     fn build(&self, inspector: bool) -> Result<Canopy> {
         let builder = self.configure(demo_canopy());
-        let read =
-            |file: &PathBuf| fs::read_to_string(file).map_err(Error::app);
+        let read = |file: &PathBuf| fs::read_to_string(file).map_err(Error::app);
         let builder = match self {
             Self::Cedit { file } => install(
                 builder,
