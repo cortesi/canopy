@@ -225,8 +225,8 @@ The `options` commands take a leaf's dotted path:
 | `get(path)` | Return the current value. |
 | `set(path, value)` | Set a live value, and show it in a toast. |
 | `set_default(path, value)` | Set a default, below the files. |
-| `toggle(path)` | Toggle a bool. |
-| `cycle(path, delta)` | Step a choice, wrapping, or an integer. |
+| `toggle(path)` | Toggle a bool, and show it in a toast. |
+| `cycle(path, delta)` | Step a choice, wrapping, or an integer, and show it in a toast. |
 | `revert(path)` | Remove the live values at or below a path, or every one. |
 | `clear(path)` | Remove the option from the nearest file that sets it. |
 | `save(scope)` | Save the live values to the `"global"` or `"local"` file. |

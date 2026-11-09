@@ -134,7 +134,7 @@ Adjacent quotes keep a gap between their rails.
 Alerts take the colour of their tone on their rail and label. GitHub's five
 kinds set the tones, and the common labels of other tools, such as Obsidian's
 `info`, `success`, `question`, and `danger`, take the tone of the closest
-kind. `AlertTone::of` lists them. A marker must stand alone on the quote's
+kind. The docs of the `AlertTone` variants list them. A marker must stand alone on the quote's
 first line, as GitHub requires; an unknown label stays quote text.
 
 An inspector takes the reader's place: it covers the whole reader, its status
@@ -344,8 +344,9 @@ locks blocks. It never returns the full source; `accepted_source` does, in
 Rust. The `select_block_at` command marks a unit from a script.
 
 The default crate feature enables syntax highlighting. With default features
-removed, both views retain reading, search, selection, and copy. The crate does
-not require the graphics or terminal-emulator widget features.
+removed, both views retain reading, search, selection, and copy. The crate
+enables the `graphics` feature of `canopy-widgets`, which draws its images, and
+does not require the `terminal-widget` feature.
 
 Built-in syntax colors follow the current palette in both views and code
 inspectors. Theme changes reuse prepared text and geometry. Fence grammar

@@ -21,8 +21,10 @@ Factories declare identity and reset behavior with
 declares independent state per factory call. Every application integration
 supplies its own declaration.
 
-Todo declares `isolated` for `:memory:` and `external` for file databases. The
-reset policy is always the declared one. An explicitly applied fixture is
+Todo declares `isolated` for `:memory:` and `external` for file databases. A
+headless evaluation reports the declared policy. A live session reports
+`external`, whatever the declaration, because the domain state of a running
+application outlives any one evaluation. An explicitly applied fixture is
 reported separately, in `metadata.fixture`: a headless request names the fixture
 it applied, and a live session names the last fixture a successful
 `apply_fixture` call applied. Reconnecting never resets domain state. Failed
@@ -67,10 +69,11 @@ fixture.
 
 ## Guardrails
 
-`cargo xtask smoke` discovers every `.canopyctl.toml` file and runs its configured
-smoke suite. The Todo and Hello examples each check in a suite. New examples
-should add a `.canopyctl.toml`, at least one root smoke script, and fixture-specific
-scripts for every non-trivial state they register.
+`cargo xtask smoke` lists the `.canopyctl.toml` files that Git tracks and runs
+the configured smoke suite of each. Five suites are tracked: those of Hello,
+Todo, and Gyms, and the `markdown-smoke` and `table-smoke` suites of Gyms. New
+examples should add a `.canopyctl.toml`, at least one root smoke script, and
+fixture-specific scripts for every non-trivial state they register.
 
 `cargo xtask smoke` is the executable guardrail for this inventory. That keeps fixture
 coverage visible when examples and smoke scripts change.

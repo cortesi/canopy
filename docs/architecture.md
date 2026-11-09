@@ -36,11 +36,14 @@ The root holds the application, the widget, the contexts, and node handles:
 
 `canopy_widgets` follows the same rule: every widget is exported at its crate
 root once, and a module is public only when it carries a family of supporting
-types: `editor`, `highlight`, `font`, `terminal`, `scrollbar`, `diff`, `list`,
-and `paged`. `canopy_widgets::format` holds formats of values for display:
-ages (`AgeFormat`, `AgeUnits`), counts (`count`, `grouped`), sizes (`bytes`),
-durations (`duration`), and paths below a home directory (`Home`). Glyph sets are associated constants (`BoxGlyphs::ROUND`,
-`ScrollbarGlyphs::THIN`), and a widget that runs inside modals ships its
+types: `chart`, `diff`, `editor`, `font`, `fuzzy`, `highlight`, `list`, `menu`,
+`mosaic`, `paged`, `regex_search`, `scrollbar`, `table`, `terminal`, and
+`view_search`. `canopy_widgets::format` holds formats of values for
+display: ages (`AgeFormat`, `AgeUnits`), counts (`count`, `grouped`), sizes
+(`bytes`), durations (`duration`), and paths below a home directory (`Home`).
+With `graphics`, `canopy_widgets::image` re-exports the `image` crate, so a
+caller of the image views needs no dependency of its own. Glyph sets are
+associated constants (`BoxGlyphs::ROUND`, `ScrollbarGlyphs::THIN`), and a widget that runs inside modals ships its
 framework group as an associated constant (`Confirm::BINDINGS`).
 
 The `testing` feature adds `canopy::testing`. A public signature names its
@@ -69,8 +72,10 @@ Path-oriented APIs use `Path`, `PathFilter`, and `NodeName`. Literal path
 components must be valid node names. Raw script path strings are validated at the
 Luau boundary before matching.
 
-Two rules keep the surface small. `Canopy` holds only operations that cannot
-live on a context or on `Setup`. A new context query or mutation replaces or
+Two rules keep the surface small. `Canopy` holds the operations that cannot
+live on a context or on `Setup`, and the facade that tests and tools drive an
+application through, such as `turn`, `eval_script`, and `apply_fixture`. A
+new context query or mutation replaces or
 generalizes an existing one, in the node-addressed form: it takes the node it
 acts on rather than acting on the calling node alone. The generated captures
 in `api/` record the surface, and every public API change is reviewed as a
@@ -87,9 +92,11 @@ changing the contract.
 `default-features = false`; Input, List, Root, Help, and Editor remain
 available. Input and Editor share a crate-private text buffer; `editor`
 re-exports only `TextPosition` and `TextRange`, which `Editor::set_matches`
-and `Editor::set_marks` take. Every widget is exported at the crate root once, and a module is public
-only when it carries a family of supporting types: `editor`, `highlight`,
-`font`, `terminal`, `scrollbar`, `diff`, `list`, `paged`, and `mosaic`. Every widget measures
+and `Editor::set_marks` take. Every widget is exported at the crate root
+once, and a module is public only when it carries a family of supporting
+types: `chart`, `diff`, `editor`, `font`, `fuzzy`, `highlight`, `list`, `menu`,
+`mosaic`, `paged`, `regex_search`, `scrollbar`, `table`, `terminal`, and
+`view_search`. Every widget measures
 text with `canopy::text::width`, and tab-aware cells with
 `canopy::text::cell_width`, so measurement and painting agree.
 
@@ -256,8 +263,10 @@ A worker often pairs the two sides: a request slot for its requests, and a
 
 ## Invariants
 
-`Core::validate_invariants()` checks invariants that do not mutate widgets. Every
-layout pass ends with it, so any tree mutation that reaches layout is checked.
+`Core::validate_invariants()` checks invariants that do not mutate widgets. In
+debug builds every layout pass ends with it, so any tree mutation that reaches
+layout is checked in tests. Release builds skip it, because it walks the
+ancestors of every node.
 `Core` is crate-private, so only canopy's own tests call it directly.
 
 It checks the root, widget cells, reciprocal links, duplicate children, cycles,
@@ -297,8 +306,8 @@ error. Cell take and restore are safe code through `WidgetCellGuard`. The only
 ## Callback Mutation
 
 Callback mutation is immediate. A widget callback can create, attach, detach,
-hide, focus, capture, scroll, restyle, and dispatch during the callback. Later
-code in the same callback observes the new state.
+hide, focus, capture, scroll, and dispatch during the callback. Later code in
+the same callback observes the new state.
 
 A callback cannot remove or replace the active callback subtree. Removing or
 replacing the current node fails. Removing or replacing an ancestor that contains

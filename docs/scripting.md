@@ -441,7 +441,7 @@ Builder user and project script roots default to disabled. Register each root
 with `user_script_root(path, ScriptTrust::TrustedLocal)` or
 `project_script_root(path, ScriptTrust::TrustedLocal)` to enable it. A root
 declared `ScriptTrust::Disabled` is not mounted, inspected, required, or executed.
-An explicit `config(path)` call selects that local file for execution.
+An explicit `script_file(path)` call selects that local file for execution.
 
 Trusted scripts can exercise the application's exposed native actions,
 including filesystem and database effects. VM limits bound script execution;

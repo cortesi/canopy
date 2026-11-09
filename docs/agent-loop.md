@@ -17,9 +17,9 @@ Disabled roots are not mounted, required, or executed. Register a trusted root
 only when its contents have the same authority as the application user.
 
 Passing `LaunchMode::HeadlessMcp` or `LaunchMode::Run { mcp_socket: Some(...) }`
-to `launch` opts into trusted-local automation. Ordinary interactive and
-API-output modes open no automation listener. The third `launch` argument is a
-`RunOptions` value that controls terminal input behavior.
+to `launch` opts into trusted-local automation. An interactive run without a
+socket opens no automation listener. The `options` field of `LaunchMode::Run`
+is a `RunOptions` value that controls terminal input behavior.
 
 Low-level `serve_stdio` and `serve_uds` calls are explicit trusted-local
 operations. Socket placement and host filesystem permissions are deployment
