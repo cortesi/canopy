@@ -24,7 +24,7 @@ use crate::{
     path::{Path, PathFilter},
     render::Glyphs,
     runtime::{NodeWakeHandle, NoticeId, NoticeLog, NoticePost, PollLifetime},
-    style::{StyleChange, StyleMap, themes::Palette},
+    style::themes::Palette,
     tree::NodeIdentity,
     widget::Widget,
 };
@@ -890,11 +890,6 @@ pub trait Context: ViewContext + sealed::Context {
     /// Clear all effects on a node.
     fn clear_effects(&mut self, node: NodeId) -> Result<()>;
 
-    /// Replace the whole style map before the next render.
-    ///
-    /// Widget style rule sets are not reapplied; prefer [`Self::set_theme`].
-    fn set_style(&mut self, style: StyleMap);
-
     /// Switch to the theme `palette` before the next render, reapplying every
     /// widget style rule set.
     fn set_theme(&mut self, palette: Palette);
@@ -1501,13 +1496,8 @@ impl Context for NodeCtx<&mut Core> {
         Ok(())
     }
 
-    fn set_style(&mut self, style: StyleMap) {
-        self.core.pending_style = Some(StyleChange::Map(style));
-        self.core.invalidate(crate::Invalidation::Paint);
-    }
-
     fn set_theme(&mut self, palette: Palette) {
-        self.core.pending_style = Some(StyleChange::Theme(palette));
+        self.core.pending_theme = Some(palette);
         self.core.invalidate(crate::Invalidation::Paint);
     }
 

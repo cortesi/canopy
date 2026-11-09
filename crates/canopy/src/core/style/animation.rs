@@ -71,7 +71,7 @@ impl Pause {
 /// The time that binds an [`AnimationStart::Shown`] animation, shared by its
 /// clones.
 #[derive(Clone, Default)]
-pub(crate) struct ShownAt(Arc<OnceLock<Instant>>);
+pub struct ShownAt(Arc<OnceLock<Instant>>);
 
 impl ShownAt {
     /// Return the bound time.
@@ -100,7 +100,7 @@ impl PartialEq for ShownAt {
 
 /// The clocks that motion evaluates against.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct MotionClocks {
+pub struct MotionClocks {
     /// Current driver time.
     pub now: Instant,
     /// Shared start of [`AnimationStart::Epoch`] animations.
@@ -116,7 +116,7 @@ pub(crate) struct MotionClocks {
 
 /// How far motion has come to rest, each step holding more still.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Rest {
+pub enum Rest {
     /// Everything moves.
     Moving,
     /// The blink pause passed: the primary cursor holds at rest, and
@@ -465,7 +465,7 @@ fn nanos(n: u128) -> Duration {
 }
 
 /// Ease a position with a cubic in-out curve.
-pub(crate) fn ease_in_out(t: f32) -> f32 {
+pub fn ease_in_out(t: f32) -> f32 {
     if t < 0.5 {
         4.0 * t * t * t
     } else {

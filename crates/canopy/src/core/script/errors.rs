@@ -57,7 +57,7 @@ pub(super) fn prepare_graph_error_to_canopy(error: &PrepareGraphError) -> error:
 impl From<error::Error> for RuntimeError {
     fn from(error: error::Error) -> Self {
         let payload = CanopyErrorPayload::from(&error);
-        let mut fields = vec![ScriptErrorField::new("kind", payload.kind.as_str())];
+        let mut fields = vec![ScriptErrorField::new("kind", payload.kind.label())];
         if let Some(command) = payload.command.clone() {
             fields.push(ScriptErrorField::new("command", command));
         }
@@ -316,7 +316,7 @@ mod tests {
         for (err, label) in cases {
             let payload = CanopyErrorPayload::from(&err);
             assert_eq!(payload.kind, err.script_kind(), "{err}");
-            assert_eq!(payload.kind.as_str(), label, "{err}");
+            assert_eq!(payload.kind.label(), label, "{err}");
         }
     }
 

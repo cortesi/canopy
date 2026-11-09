@@ -268,7 +268,9 @@ impl AutomationHandle {
         self.submit(Box::new(move |canopy| {
             let _ignored = tx.send(callback(canopy));
         }))?;
-        rx.recv()?
+        rx.recv().map_err(|_| {
+            error::Error::Driver("the UI thread dropped the automation request".into())
+        })?
     }
 }
 

@@ -618,7 +618,7 @@ fn bootstrap_commands(
                 missing_requirements: availability
                     .missing_requirements
                     .into_iter()
-                    .map(|requirement| requirement.as_str().to_string())
+                    .map(|requirement| requirement.label().to_string())
                     .collect(),
             }
         })

@@ -285,7 +285,7 @@ impl BindingPhase {
     }
 
     /// Parse a scripting label into a binding phase.
-    pub fn parse(value: &str) -> Option<Self> {
+    pub fn from_label(value: &str) -> Option<Self> {
         match value {
             "before_widget" => Some(Self::BeforeWidget),
             "after_widget" => Some(Self::AfterWidget),

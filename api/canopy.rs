@@ -42,7 +42,7 @@ use std::{
     sync::{
         Arc,
         atomic::AtomicBool,
-        mpmc::{RecvError, SendError, TrySendError},
+        mpmc::{SendError, TrySendError},
     },
     time::{Duration, Instant},
 };
@@ -351,11 +351,6 @@ pub trait Context: ViewContext + Context {
         node: NodeId,
         overrides: LayoutOverride,
     ) -> crate::error::Result<()>;
-
-    /// Replace the whole style map before the next render.
-    ///
-    /// Widget style rule sets are not reapplied; prefer [`Self::set_theme`].
-    fn set_style(&mut self, style: StyleMap);
 
     /// Switch to the theme `palette` before the next render, reapplying every
     /// widget style rule set.
@@ -1977,7 +1972,7 @@ pub mod commands {
 
     impl CommandRequirement {
         /// Return the stable scripting label.
-        pub fn as_str(self) -> &'static str;
+        pub fn label(self) -> &'static str;
     }
 
     /// Resolution of a command dispatch target.
@@ -2121,17 +2116,6 @@ pub mod commands {
         ctx: &mut dyn Context,
         args: &CommandArgs,
     ) -> Result<ArgValue, CommandError>;
-
-    /// Wrapper for fallible serde argument conversion.
-    pub struct SerdeArg<T>(pub T);
-
-    impl<T> SerdeArg<T>
-    where
-        T: Serialize,
-    {
-        /// Encode a serde argument into ArgValue, returning conversion errors.
-        pub fn try_to_arg_value(self) -> Result<ArgValue, CommandError>;
-    }
 
     /// Read-only, erased command eligibility hook.
     ///
@@ -2379,8 +2363,6 @@ pub mod error {
 
     impl From<ParseError> for Error {}
 
-    impl From<RecvError> for Error {}
-
     impl From<TurnError> for Error {}
 
     impl From<canopy_geom::Error> for Error {}
@@ -2504,7 +2486,7 @@ pub mod error {
 
     impl ScriptErrorKind {
         /// Return the stable protocol label for this category.
-        pub const fn as_str(self) -> &'static str;
+        pub const fn label(self) -> &'static str;
     }
 
     impl JsonSchema for ScriptErrorKind {}
@@ -2755,11 +2737,11 @@ pub mod input {
     }
 
     impl BindingPhase {
+        /// Parse a scripting label into a binding phase.
+        pub fn from_label(value: &str) -> Option<Self>;
+
         /// Return a stable scripting and diagnostic label.
         pub fn label(&self) -> &'static str;
-
-        /// Parse a scripting label into a binding phase.
-        pub fn parse(value: &str) -> Option<Self>;
     }
 
     /// Owned snapshot of the effective bindings for one focus context.
@@ -4441,10 +4423,6 @@ pub mod render {
         /// Resolve a style by name and apply the current effect stack.
         pub fn resolve_style(&self, name: &str) -> Style;
 
-        /// Apply a named style to the painted grapheme at a point, preserving its
-        /// text.
-        pub fn restyle(&mut self, style: &str, point: Point);
-
         /// Paint styled runs left to right from the start of `l`, clipped to it.
         ///
         /// Each run is a style path and its text. A run takes its foreground from
@@ -6120,16 +6098,6 @@ pub mod style {
     /// surface.
     #[doc(hidden)]
     pub const fn hex_byte(high: u8, low: u8) -> u8;
-
-    pub mod animation {
-        //! Colors that change over time.
-        //!
-        //! An [`Animation`] is to time what a gradient is to space: colors at stops
-        //! over one run. Canopy renders every animation at rest, and evaluates it only
-        //! when it emits cells to the terminal.
-
-        pub use crate::style::{Animation, AnimationStart, Easing, Pause, Repeat};
-    }
 
     pub mod effects {
         //! Style effects system.

@@ -19,9 +19,7 @@ use crate::{
     error::Result,
     geom::{Point, Rect, Size},
     render::{Render, RenderBackend},
-    style::{
-        AttrSet, Color, MotionClocks, Paint, Style, StyleChange, StyleManager, effects::Effect,
-    },
+    style::{AttrSet, Color, MotionClocks, Paint, Style, StyleManager, effects::Effect},
 };
 
 /// Rendering traversal scratch state shared across recursion.
@@ -357,10 +355,8 @@ impl Canopy {
         let Some(screen_size) = self.frame.screen_size else {
             return Ok(false);
         };
-        match self.core.pending_style.take() {
-            Some(StyleChange::Theme(palette)) => self.set_theme(palette),
-            Some(StyleChange::Map(style)) => self.style = style,
-            None => {}
+        if let Some(palette) = self.core.pending_theme.take() {
+            self.set_theme(palette);
         }
         self.run_state_hooks()?;
         let mut mounted = self.mount_pending()?;

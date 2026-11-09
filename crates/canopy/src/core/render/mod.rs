@@ -401,19 +401,6 @@ impl<'a> Render<'a> {
         self.style.push_layer(name);
     }
 
-    /// Apply a named style to the painted grapheme at a point, preserving its
-    /// text.
-    pub fn restyle(&mut self, style: &str, point: geom::Point) {
-        if self.clip.contains_point(point) {
-            let style = self.resolve_style(style);
-            let at = self.translate_point(point);
-            self.buf
-                .restyle_grapheme(at, style.resolve_at(self.clip, point));
-            let clip = self.clip;
-            self.mark_motion(&style, geom::Rect::new(at.x, at.y, 1, 1), clip);
-        }
-    }
-
     /// Fill a rectangle with a specified character. Writes out of bounds will
     /// be clipped.
     pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {

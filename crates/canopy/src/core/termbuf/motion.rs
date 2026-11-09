@@ -351,10 +351,9 @@ mod tests {
         let rect = Rect::new(0, 0, 3, 1);
         buf.set_motion(rect, |_| moving(rect));
         assert_eq!(buf.motion.len(), 3);
-        // A modal over the middle cell, and a restyle of the last one.
+        // A modal over the middle cell.
         buf.put(Point { x: 1, y: 0 }, 'm', ground())?;
-        buf.restyle_grapheme(Point { x: 2, y: 0 }, ground());
-        assert_eq!(buf.motion.keys().copied().collect::<Vec<_>>(), [0]);
+        assert_eq!(buf.motion.keys().copied().collect::<Vec<_>>(), [0, 2]);
         buf.apply_motion(&clocks_after(100));
         assert_eq!(buf.cells[0].style.fg, Color::Blue);
         assert_eq!(buf.cells[1].style, ground());

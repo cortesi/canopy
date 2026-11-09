@@ -29,7 +29,7 @@ use crate::{
     input::{FrameworkBindingGroup, ModalBindings, ModalOptions},
     layout::{Layout, LayoutOverride, Measurement},
     path::Path,
-    style::StyleMap,
+    style::themes,
     widget::{Mount, Widget},
 };
 
@@ -67,7 +67,7 @@ struct StructuralSnapshot {
     mouse_capture: Option<NodeId>,
     deferred_focus_repair: Option<DeferredFocusRepair>,
     exit_requested: Option<i32>,
-    pending_style: bool,
+    pending_theme: bool,
     commands: Vec<&'static str>,
 }
 
@@ -114,7 +114,7 @@ impl StructuralSnapshot {
             mouse_capture: core.mouse_capture,
             deferred_focus_repair: core.deferred_focus_repair,
             exit_requested: core.exit_requested,
-            pending_style: core.pending_style.is_some(),
+            pending_theme: core.pending_theme.is_some(),
             commands,
         }
     }
@@ -208,7 +208,7 @@ impl Widget for FaultWidget {
             MountAction::FailAfterCoreMutations => {
                 ctx.set_hidden(ctx.node_id(), true)?;
                 ctx.exit(73);
-                ctx.set_style(StyleMap::default());
+                ctx.set_theme(themes::default_dark());
                 Err(Error::Invalid("fault-injected mount failure".into()))
             }
             MountAction::FailFromNestedEdit => {

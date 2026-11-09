@@ -27,7 +27,7 @@ use crate::{
     input::Event,
     layout::Layout,
     render::Glyphs,
-    style::StyleChange,
+    style::themes::Palette,
     widget::Widget,
 };
 
@@ -84,8 +84,8 @@ pub struct Core {
     pub(crate) focus: Option<NodeId>,
     /// Exit code requested by a widget or command, if any.
     pub(crate) exit_requested: Option<i32>,
-    /// Pending style map to be applied before next render.
-    pub(crate) pending_style: Option<StyleChange>,
+    /// Theme to switch to before the next render.
+    pub(crate) pending_theme: Option<Palette>,
     /// Node that captures mouse events regardless of cursor position.
     pub(crate) mouse_capture: Option<NodeId>,
     /// Focus repair waiting for mutable callbacks to return their widget
@@ -174,8 +174,8 @@ struct TreeStateSnapshot {
     focus: Option<NodeId>,
     /// Requested process exit.
     exit_requested: Option<i32>,
-    /// Pending style replacement.
-    pending_style: Option<StyleChange>,
+    /// Pending theme switch.
+    pending_theme: Option<Palette>,
     /// Mouse capture target.
     mouse_capture: Option<NodeId>,
     /// Deferred focus repair.
@@ -234,7 +234,7 @@ impl Core {
             root,
             focus: None,
             exit_requested: None,
-            pending_style: None,
+            pending_theme: None,
             mouse_capture: None,
             deferred_focus_repair: None,
             tree_edit: None,

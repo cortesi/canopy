@@ -5,16 +5,15 @@ mod tests {
     use std::{any::Any, cell::RefCell, collections::BTreeMap};
 
     use canopy::{
-        CanopyBuilder, CommandArg, CommandEnum, Context, ContextExt, ViewContext, Widget,
+        CanopyBuilder, CommandEnum, Context, ContextExt, ViewContext, Widget,
         commands::{
             ArgValue, CommandArgs, CommandError, CommandResolution, CommandStatus, CommandTarget,
-            FromArgValue, SerdeArg, ToArgValue,
+            FromArgValue, ToArgValue,
         },
         derive_commands,
         error::{Error, Result},
         input::Event,
     };
-    use serde::{Deserialize, Serialize};
 
     /// Run `f` against the root context of an empty application.
     fn with_ctx<R>(f: impl FnOnce(&mut dyn Context) -> R) -> R {
@@ -185,47 +184,11 @@ mod tests {
         Ok(())
     }
 
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, CommandArg)]
-    struct Inner {
-        count: i32,
-        label: String,
-    }
-
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, CommandArg)]
-    struct Outer {
-        name: String,
-        inner: Inner,
-        optional: Option<bool>,
-        tags: Vec<String>,
-        map: BTreeMap<String, usize>,
-    }
-
     #[derive(Debug, Clone, PartialEq, CommandEnum)]
     enum Mode {
         Fast,
         Slow,
         ExtraFast,
-    }
-
-    #[test]
-    fn command_arg_round_trip_nested() {
-        let mut map = BTreeMap::new();
-        map.insert("a".to_string(), 1);
-        map.insert("b".to_string(), 2);
-        let value = Outer {
-            name: "outer".to_string(),
-            inner: Inner {
-                count: 42,
-                label: "inner".to_string(),
-            },
-            optional: Some(true),
-            tags: vec!["x".to_string(), "y".to_string()],
-            map,
-        };
-
-        let encoded = SerdeArg(value.clone()).try_to_arg_value().unwrap();
-        let decoded = Outer::from_arg_value(&encoded).unwrap();
-        assert_eq!(decoded, value);
     }
 
     #[test]

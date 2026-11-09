@@ -527,7 +527,7 @@ impl<'a> DeclRegistry<'a> {
 }
 
 /// Wrapper for fallible serde argument conversion.
-pub struct SerdeArg<T>(pub T);
+pub(crate) struct SerdeArg<T>(pub T);
 
 /// Convert ArgValue into a JSON value for serde interop.
 fn arg_value_to_json(value: &ArgValue, node_json: NodeJson) -> Result<JsonValue, CommandError> {
@@ -632,7 +632,7 @@ where
     T: Serialize,
 {
     /// Encode a serde argument into ArgValue, returning conversion errors.
-    pub fn try_to_arg_value(self) -> Result<ArgValue, CommandError> {
+    pub(crate) fn try_to_arg_value(self) -> Result<ArgValue, CommandError> {
         let value = serde_json::to_value(self.0)
             .map_err(|err| CommandError::conversion(err.to_string()))?;
         json_to_arg_value(value)
@@ -759,7 +759,7 @@ pub enum CommandRequirement {
 
 impl CommandRequirement {
     /// Return the stable scripting label.
-    pub fn as_str(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Self::Event => "event",
             Self::Mouse => "mouse",
@@ -1650,7 +1650,7 @@ fn validate_node_arg(core: &Core, value: &ArgValue) -> Result<(), CommandError> 
 
 #[cfg(test)]
 mod tests {
-    use serde::{Serialize, ser};
+    use serde::{Deserialize, Serialize, ser};
 
     use super::*;
     use crate::{NodeName, Widget, core::id::testing_node_id, error::Error};
@@ -1867,6 +1867,42 @@ mod tests {
         let json = value.to_external_json_value().unwrap();
         assert_eq!(json["type"], JsonValue::String("NodeId".to_string()));
         assert!(json["token"].is_string());
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, crate::CommandArg)]
+    struct Inner {
+        count: i32,
+        label: String,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, crate::CommandArg)]
+    struct Outer {
+        name: String,
+        inner: Inner,
+        optional: Option<bool>,
+        tags: Vec<String>,
+        map: BTreeMap<String, usize>,
+    }
+
+    #[test]
+    fn command_arg_round_trip_nested() {
+        let mut map = BTreeMap::new();
+        map.insert("a".to_string(), 1);
+        map.insert("b".to_string(), 2);
+        let value = Outer {
+            name: "outer".to_string(),
+            inner: Inner {
+                count: 42,
+                label: "inner".to_string(),
+            },
+            optional: Some(true),
+            tags: vec!["x".to_string(), "y".to_string()],
+            map,
+        };
+
+        let encoded = SerdeArg(value.clone()).try_to_arg_value().unwrap();
+        let decoded = Outer::from_arg_value(&encoded).unwrap();
+        assert_eq!(decoded, value);
     }
 
     #[test]

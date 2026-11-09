@@ -704,7 +704,7 @@ fn parse_bind_options<'s>(
     let phase = match field("phase")?.as_deref() {
         None => None,
         Some(label) => Some(
-            inputmap::BindingPhase::parse(label)
+            inputmap::BindingPhase::from_label(label)
                 .ok_or_else(|| RuntimeError::runtime(format!("unknown binding phase: {label}")))?,
         ),
     };

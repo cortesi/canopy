@@ -1,4 +1,4 @@
-pub mod animation;
+mod animation;
 /// Color helpers.
 mod color;
 /// Style effects system.
@@ -17,7 +17,7 @@ use std::{
 };
 
 pub use animation::{Animation, AnimationStart, Easing, Pause, Repeat};
-pub(crate) use animation::{MotionClocks, Rest};
+pub(crate) use animation::{MotionClocks, Rest, ease_in_out};
 pub use color::{Color, Mix, hex_byte};
 use foldhash::HashMap;
 
@@ -53,16 +53,6 @@ pub mod roles {
             "selection/dimmed"
         }
     }
-}
-
-/// A style replacement requested during a turn and applied before the next
-/// render.
-#[derive(Clone, Debug)]
-pub(crate) enum StyleChange {
-    /// Switch to a theme, reapplying every widget style rule set.
-    Theme(themes::Palette),
-    /// Replace the whole style map.
-    Map(StyleMap),
 }
 
 /// Style rules a widget crate or application derives from the palette.

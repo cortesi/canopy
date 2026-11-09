@@ -14,7 +14,7 @@ use std::{
 use crate::{
     NodeId,
     geom::Point,
-    style::{Color, Mix, animation::ease_in_out, themes::Palette},
+    style::{Color, Mix, ease_in_out, themes::Palette},
 };
 
 /// The root cursor role, which every other role falls back to.

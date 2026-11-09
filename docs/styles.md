@@ -118,8 +118,7 @@ setup.widget_styles(|palette, rules| {
 
 The rules apply over the theme at once, and again after every
 `Setup::set_theme` or `Context::set_theme`, so a switch keeps them. Edits made
-through `Canopy::style_mut` or a map installed with `Context::set_style` do not
-survive a theme switch.
+through `Canopy::style_mut` do not survive a theme switch.
 
 A rule that puts one color on another can derive the pair from the palette and
 a contrast target, so it reads in every theme. `Color::contrast_ratio` gives

@@ -40,7 +40,7 @@ impl TreeStateSnapshot {
             root: core.root,
             focus: core.focus,
             exit_requested: core.exit_requested,
-            pending_style: core.pending_style.clone(),
+            pending_theme: core.pending_theme,
             mouse_capture: core.mouse_capture,
             deferred_focus_repair: core.deferred_focus_repair,
         }
@@ -56,7 +56,7 @@ impl TreeStateSnapshot {
         core.root = self.root;
         core.focus = self.focus;
         core.exit_requested = self.exit_requested;
-        core.pending_style = self.pending_style;
+        core.pending_theme = self.pending_theme;
         core.mouse_capture = self.mouse_capture;
         core.deferred_focus_repair = self.deferred_focus_repair;
     }

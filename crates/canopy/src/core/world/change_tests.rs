@@ -7,7 +7,7 @@ use crate::{
     error::Result,
     geom::Point,
     layout::{LayoutOverride, ScrollOp},
-    style::StyleMap,
+    style::themes,
 };
 
 struct Leaf;
@@ -57,7 +57,7 @@ fn native_style_and_scroll_changes_mark_publication() -> Result<()> {
             .changed()
     );
     assert!(!core.changes.is_pending());
-    CoreContext::new(&mut core, root).set_style(StyleMap::default());
+    CoreContext::new(&mut core, root).set_theme(themes::default_dark());
     assert!(core.changes.level() >= Some(Invalidation::Paint));
     Ok(())
 }

@@ -420,7 +420,7 @@ fn insert_command_availability(
         ArgValue::Array(
             missing
                 .iter()
-                .map(|requirement| ArgValue::String(requirement.as_str().to_string()))
+                .map(|requirement| ArgValue::String(requirement.label().to_string()))
                 .collect(),
         ),
     );
@@ -456,7 +456,7 @@ fn command_param_to_arg(param: &commands::CommandParamSpec) -> ArgValue {
     if let Some(requirement) = param.requirement.and_then(|requirement| requirement()) {
         record.insert(
             "requirement".to_string(),
-            ArgValue::String(requirement.as_str().to_string()),
+            ArgValue::String(requirement.label().to_string()),
         );
     }
     if let Some(doc) = param.ty.doc {
@@ -600,7 +600,7 @@ pub(super) fn notices_to_arg(canopy: &Canopy) -> ArgValue {
                 if let Some(failure) = notice.failure {
                     record.insert(
                         "kind".to_string(),
-                        ArgValue::String(failure.kind.as_str().to_string()),
+                        ArgValue::String(failure.kind.label().to_string()),
                     );
                     record.insert(
                         "source".to_string(),

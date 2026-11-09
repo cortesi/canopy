@@ -444,20 +444,6 @@ impl TermBuf {
         Ok(())
     }
 
-    /// Restyle the complete grapheme at a cell without changing its text.
-    pub(crate) fn restyle_grapheme(&mut self, location: Point, style: ResolvedStyle) {
-        let Some(idx) = self.idx(location) else {
-            return;
-        };
-        let Some(range) = self.grapheme_span(idx) else {
-            return;
-        };
-        self.clear_motion(range.start);
-        for cell in &mut self.cells[range] {
-            cell.style = style;
-        }
-    }
-
     /// Draw text clipped to the given line.
     pub fn text(&mut self, style: &ResolvedStyle, l: Line, txt: &str) -> Result<()> {
         self.text_with(l, txt, |_| *style)

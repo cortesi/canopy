@@ -1,4 +1,4 @@
-use std::{error::Error as StdError, fmt, io, result::Result as StdResult, sync::mpsc};
+use std::{error::Error as StdError, fmt, io, result::Result as StdResult};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -97,7 +97,7 @@ macro_rules! script_error_kinds {
 
         impl ScriptErrorKind {
             /// Return the stable protocol label for this category.
-            pub const fn as_str(self) -> &'static str {
+            pub const fn label(self) -> &'static str {
                 match self {
                     $( Self::$variant => $label, )*
                 }
@@ -161,7 +161,7 @@ script_error_kinds! {
 
 impl fmt::Display for ScriptErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
+        f.write_str(self.label())
     }
 }
 
@@ -481,12 +481,6 @@ impl Error {
     /// Construct an unclassified structured script failure.
     pub(crate) fn script(message: impl Into<String>) -> Self {
         Self::script_structured(ScriptErrorKind::Canopy, message)
-    }
-}
-
-impl From<mpsc::RecvError> for Error {
-    fn from(e: mpsc::RecvError) -> Self {
-        Self::Driver(e.to_string())
     }
 }
 
