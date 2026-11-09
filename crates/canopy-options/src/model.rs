@@ -471,13 +471,6 @@ pub fn join_path(prefix: &str, name: &str) -> String {
 pub enum SetError {
     /// The path names no leaf.
     UnknownPath,
-    /// The value has the wrong kind for the leaf.
-    Kind {
-        /// The kind of the leaf.
-        expected: &'static str,
-        /// The value.
-        got: String,
-    },
     /// The value is not valid for the leaf.
     Invalid(String),
 }
@@ -486,7 +479,6 @@ impl fmt::Display for SetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnknownPath => f.write_str("unknown option"),
-            Self::Kind { expected, got } => write!(f, "expected a {expected}, got {got}"),
             Self::Invalid(message) => f.write_str(message),
         }
     }

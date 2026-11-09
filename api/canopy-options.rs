@@ -791,13 +791,6 @@ impl<E: crate::OptionEnum> OptionField for Set<E> {}
 pub enum SetError {
     /// The path names no leaf.
     UnknownPath,
-    /// The value has the wrong kind for the leaf.
-    Kind {
-        /// The kind of the leaf.
-        expected: &'static str,
-        /// The value.
-        got: String,
-    },
     /// The value is not valid for the leaf.
     Invalid(String),
 }

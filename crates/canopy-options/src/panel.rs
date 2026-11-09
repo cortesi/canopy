@@ -1269,7 +1269,7 @@ impl PanelBody {
     /// Run `intent`.
     fn run(&mut self, context: &mut dyn Context, intent: Intent) -> Result<()> {
         match intent {
-            Intent::Nav(nav) => self.navigate(nav),
+            Intent::Nav(nav) => self.navigate(context, nav),
             Intent::Activate => self.activate(context)?,
             Intent::Forward => self.forward(context)?,
             Intent::Pop | Intent::Back => self.back(context)?,
@@ -1323,9 +1323,10 @@ impl PanelBody {
         Ok(())
     }
 
-    /// Move the selection as `nav` says.
-    fn navigate(&mut self, nav: NavIntent) {
-        let page = 10;
+    /// Move the selection as `nav` says. A page is the rows that the view
+    /// shows.
+    fn navigate(&mut self, context: &dyn ViewContext, nav: NavIntent) {
+        let page = context.view().view_rect_local().h.max(1) as isize;
         match nav {
             NavIntent::Up => self.move_by(-1),
             NavIntent::Down => self.move_by(1),

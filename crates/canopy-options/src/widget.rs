@@ -1,7 +1,7 @@
 //! The `options` command owner, which wraps the application and opens the
 //! options panel.
 
-use std::{mem, rc::Rc, result::Result as StdResult, time::Duration};
+use std::{fmt::Display, mem, rc::Rc, result::Result as StdResult, time::Duration};
 
 use canopy::{
     Context, ContextExt, Mount, NodeId, NodeName, Register, Setup, TypedId, ViewContext, Widget,
@@ -18,7 +18,7 @@ use crate::{
     file::Scope,
     model::{Kind, Leaf, OptionGroup, Value},
     panel::{self, OptionsPanel},
-    store::{Backend, Cleared, Saved, Source, Store, StoreError},
+    store::{Backend, Cleared, Saved, Source, Store},
 };
 
 /// What `options.save` and `options.clear` return for a change that waits
@@ -401,8 +401,7 @@ impl Register for Options {
 }
 
 /// Convert a store error into a command error.
-#[allow(clippy::needless_pass_by_value, reason = "it maps `Result` errors")]
-fn store_error(error: StoreError) -> Error {
+fn store_error(error: impl Display) -> Error {
     Error::Invalid(error.to_string())
 }
 

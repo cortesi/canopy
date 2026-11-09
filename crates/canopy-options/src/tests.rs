@@ -747,6 +747,63 @@ fn the_panel_is_as_tall_as_its_rows() {
     );
 }
 
+/// A root of more options than a short screen shows.
+#[derive(OptionGroup, Clone, Debug, PartialEq)]
+struct ManyOptions {
+    /// Alpha.
+    alpha: bool,
+    /// Bravo.
+    bravo: bool,
+    /// Charlie.
+    charlie: bool,
+    /// Delta.
+    delta: bool,
+    /// Echo.
+    echo: bool,
+    /// Foxtrot.
+    foxtrot: bool,
+    /// Golf.
+    golf: bool,
+    /// Hotel.
+    hotel: bool,
+    /// India.
+    india: bool,
+    /// Juliet.
+    juliet: bool,
+    /// Kilo.
+    kilo: bool,
+    /// Lima.
+    lima: bool,
+}
+
+#[test]
+fn a_short_panel_pages_by_the_rows_it_shows() {
+    let labels = [
+        "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india",
+        "juliet", "kilo", "lima",
+    ];
+    let store: Store<ManyOptions> = Store::default();
+    let mut harness = Harness::builder(Options::new(&store, Blank))
+        .register::<Options>()
+        .size(80, 8)
+        .build()
+        .unwrap();
+    harness.script("options.open()").unwrap();
+    let first = screen(&mut harness);
+    assert!(
+        !first.contains("lima"),
+        "the screen is shorter than the rows:\n{first}"
+    );
+    let mut seen = first;
+    for _ in 0..labels.len() {
+        keys(&mut harness, &["PageDown"]);
+        seen.push_str(&screen(&mut harness));
+    }
+    for label in labels {
+        assert!(seen.contains(label), "paging skipped {label}");
+    }
+}
+
 #[test]
 fn an_edit_that_fails_reports_as_a_toast_and_stays_open() {
     let store: Store<Root> = Store::default();
