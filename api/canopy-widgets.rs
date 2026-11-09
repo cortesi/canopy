@@ -3613,6 +3613,12 @@ impl StatusLine {
     /// Add a source widget after the sources already added.
     #[must_use]
     pub fn with_source(self, node: impl Into<NodeId>) -> Self;
+
+    /// Keep `margin` columns clear at the left end while start items show,
+    /// so they stand apart from what precedes the line, such as the edge of
+    /// the bar.
+    #[must_use]
+    pub fn with_start_margin(self, margin: u32) -> Self;
 }
 
 impl Widget for StatusLine {}
@@ -5431,6 +5437,19 @@ pub mod mosaic {
     /// The name of a widget's own tier, or `terminal` when it follows the
     /// terminal's glyphs.
     pub fn label(tier: Option<Tier>) -> &'static str;
+
+    /// Paint one mosaic cell: `ch` at `at`, drawn in `fg` over `bg`.
+    ///
+    /// Each color passes through the effect stack of `render`, resolved at `at`
+    /// within `bounds`, so an effect that dims a view dims its mosaic too.
+    pub fn put_cell(
+        render: &mut Render<'_>,
+        bounds: Rect,
+        at: Point,
+        fg: [u8; 3],
+        bg: [u8; 3],
+        ch: char,
+    ) -> canopy::error::Result<()>;
 
     /// The richest tier that the terminal's glyphs allow.
     pub fn tier_for(glyphs: Glyphs) -> Tier;

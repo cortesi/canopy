@@ -26,6 +26,8 @@ pub struct StatusLine {
     sources: Vec<NodeId>,
     /// Runs drawn between two neighbouring items on one side.
     separator: Vec<StatusSpan>,
+    /// Columns kept clear at the left end while start items show.
+    start_margin: u32,
     /// Columns kept clear at the right end while end items show.
     margin: u32,
 }
@@ -47,6 +49,7 @@ impl StatusLine {
         Self {
             sources: Vec::new(),
             separator: vec![StatusSpan::plain("  ")],
+            start_margin: 0,
             margin: 0,
         }
     }
@@ -62,6 +65,15 @@ impl StatusLine {
     #[must_use]
     pub fn with_separator(mut self, separator: impl IntoIterator<Item = StatusSpan>) -> Self {
         self.separator = separator.into_iter().collect();
+        self
+    }
+
+    /// Keep `margin` columns clear at the left end while start items show,
+    /// so they stand apart from what precedes the line, such as the edge of
+    /// the bar.
+    #[must_use]
+    pub fn with_start_margin(mut self, margin: u32) -> Self {
+        self.start_margin = margin;
         self
     }
 
@@ -121,10 +133,12 @@ impl StatusLine {
         let start = self.side_width(&Self::shown(items, forms, StatusSide::Start));
         let end = self.side_width(&Self::shown(items, forms, StatusSide::End));
         let gap = u32::from(start > 0 && end > 0);
+        let start_margin = if start > 0 { self.start_margin } else { 0 };
         let margin = if end > 0 { self.margin } else { 0 };
         start
             .saturating_add(end)
             .saturating_add(gap)
+            .saturating_add(start_margin)
             .saturating_add(margin)
     }
 
@@ -203,11 +217,17 @@ impl Widget for StatusLine {
         let forms = self.fit(&items, area.w);
         let start = Self::shown(&items, &forms, StatusSide::Start);
         let end = Self::shown(&items, &forms, StatusSide::End);
+        let start_margin = if start.is_empty() {
+            0
+        } else {
+            self.start_margin
+        };
+        let left = area.tl.x.saturating_add(start_margin).min(area.right());
         let margin = if end.is_empty() { 0 } else { self.margin };
-        let right = area.right().saturating_sub(margin);
+        let right = area.right().saturating_sub(margin).max(left);
         // A lone item wider than the line keeps its start and loses its end.
-        let end_x = right.saturating_sub(self.side_width(&end)).max(area.tl.x);
-        self.draw_side(render, &start, area.tl.x, end_x, area.tl.y)?;
+        let end_x = right.saturating_sub(self.side_width(&end)).max(left);
+        self.draw_side(render, &start, left, end_x, area.tl.y)?;
         self.draw_side(render, &end, end_x, right, area.tl.y)
     }
 
@@ -285,6 +305,39 @@ mod tests {
             line.fit(&items, 9),
             [Form::Full, Form::Hidden, Form::Hidden]
         );
+    }
+
+    #[test]
+    fn a_start_margin_keeps_columns_clear_before_start_items() {
+        let line = StatusLine::new().with_start_margin(2);
+        let items = vec![item("path", "~/project", 10)];
+        assert_eq!(line.fit(&items, 11), [Form::Full]);
+        assert_eq!(line.fit(&items, 10), [Form::Hidden], "the margin counts");
+        let end = vec![item("age", "now", 1).at_end()];
+        assert_eq!(line.fit(&end, 3), [Form::Full], "only start items keep it");
+    }
+
+    #[test]
+    fn a_start_margin_draws_start_items_after_it() -> Result<()> {
+        struct Margined;
+        impl Widget for Margined {
+            fn layout(&self) -> Layout {
+                Layout::column()
+            }
+            fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+                let root = ctx.node_id();
+                let line = StatusLine::new().with_source(root).with_start_margin(1);
+                ctx.add_child(root, line)?;
+                Ok(())
+            }
+            fn status(&self, _ctx: &dyn ViewContext) -> Vec<StatusItem> {
+                vec![item("name", "project", 1)]
+            }
+        }
+        let mut harness = Harness::builder(Margined).size(12, 1).build()?;
+        harness.render()?;
+        assert_eq!(harness.tbuf().lines()[0], " project    ");
+        Ok(())
     }
 
     #[test]

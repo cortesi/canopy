@@ -96,7 +96,7 @@ Built-in widgets for canopy applications.
 - Declared features: default, devtools, graphics, syntax, terminal-widget
 - Workspace dependencies: canopy, canopy-mosaic, canopy-xmark (optional)
 - Workspace dependents: canopy-markdown, canopy-options, canopyctl, gyms, hello, todo
-- Items: 1119
+- Items: 1121
 - Exposes: canopy, canopy-mosaic, grep-regex, image, syntect
 
 ## canopy-markdown

@@ -16,10 +16,7 @@ use canopy::{
     geom::{Point, Rect, Size},
     render::Render,
     rgb,
-    style::{
-        Attr, AttrSet, Color, Mix, Paint, PartialStyle, ResolvedStyle, Style, StyleRules,
-        themes::Palette,
-    },
+    style::{Attr, AttrSet, Color, Mix, Paint, PartialStyle, StyleRules, themes::Palette},
     text,
 };
 #[cfg(feature = "syntax")]
@@ -29,7 +26,7 @@ use canopy_widgets::{
     highlight::SpanStyle,
     image::RgbaImage,
     image_cells,
-    mosaic::{Cell, Tier, tier_for},
+    mosaic::{self, Cell, Tier, tier_for},
     table::{
         self, CellMark, CellRange, FlowOptions, FlowTable, PreparedTable, TableAlignment,
         TableCell, TableColumn, TableData, TableGlyphs, TableLayoutOptions, TableOverlay, TableRow,
@@ -2066,27 +2063,7 @@ fn paint_image(
             x: at.x - visible.tl.x,
             y: at.y - visible.tl.y,
         };
-        let pen = |rgb: [u8; 3]| {
-            let color = Color::Rgb {
-                r: rgb[0],
-                g: rgb[1],
-                b: rgb[2],
-            };
-            render
-                .apply_effects(Style {
-                    fg: color.into(),
-                    bg: color.into(),
-                    attrs: AttrSet::default(),
-                })
-                .resolve_at(bounds, local)
-        };
-        let (fg, bg) = (pen(cell.fg), pen(cell.bg));
-        let style = ResolvedStyle {
-            fg: fg.fg,
-            bg: bg.fg,
-            attrs: fg.attrs,
-        };
-        render.put_cell(style, local, cell.ch)?;
+        mosaic::put_cell(render, bounds, local, cell.fg, cell.bg, cell.ch)?;
     }
     Ok(())
 }

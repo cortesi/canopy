@@ -5,8 +5,44 @@
 //! application set them, unless the widget has a tier of its own. A gym
 //! sets one to compare tiers side by side.
 
-use canopy::render::Glyphs;
+use canopy::{
+    error::Result,
+    geom::{Point, Rect},
+    render::{Glyphs, Render},
+    style::{AttrSet, Color, ResolvedStyle, Style},
+};
 pub use canopy_mosaic::{Cell, Family, Tier};
+
+/// Paint one mosaic cell: `ch` at `at`, drawn in `fg` over `bg`.
+///
+/// Each color passes through the effect stack of `render`, resolved at `at`
+/// within `bounds`, so an effect that dims a view dims its mosaic too.
+pub fn put_cell(
+    render: &mut Render,
+    bounds: Rect,
+    at: Point,
+    fg: [u8; 3],
+    bg: [u8; 3],
+    ch: char,
+) -> Result<()> {
+    let pen = |[r, g, b]: [u8; 3]| {
+        let color = Color::Rgb { r, g, b };
+        render
+            .apply_effects(Style {
+                fg: color.into(),
+                bg: color.into(),
+                attrs: AttrSet::default(),
+            })
+            .resolve_at(bounds, at)
+    };
+    let (fg, bg) = (pen(fg), pen(bg));
+    let style = ResolvedStyle {
+        fg: fg.fg,
+        bg: bg.fg,
+        attrs: fg.attrs,
+    };
+    render.put_cell(style, at, ch)
+}
 
 /// The richest tier that the terminal's glyphs allow.
 pub fn tier_for(glyphs: Glyphs) -> Tier {

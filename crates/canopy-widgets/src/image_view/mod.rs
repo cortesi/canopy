@@ -8,7 +8,6 @@ use canopy::{
     geom::{Point, Rect, Size},
     layout::{CanvasContext, Layout, ScrollDirection, ScrollOp},
     render::Render,
-    style::{AttrSet, Color, ResolvedStyle, Style},
 };
 use canopy_mosaic::{
     Cell, RasterView, SymbolSet, Tier,
@@ -18,7 +17,7 @@ use canopy_mosaic::{
 use image::{DynamicImage, ImageDecoder, RgbaImage};
 use resvg::usvg::Tree;
 
-use crate::mosaic::{cycle, tier_for};
+use crate::mosaic::{self, cycle, tier_for};
 
 mod svg;
 
@@ -545,27 +544,7 @@ impl ImageView {
         };
         for (index, cell) in mosaic.cells.iter().enumerate() {
             let at = point(index as u32 % view.w, index as u32 / view.w);
-            let pen = |rgb: [u8; 3]| {
-                let color = Color::Rgb {
-                    r: rgb[0],
-                    g: rgb[1],
-                    b: rgb[2],
-                };
-                render
-                    .apply_effects(Style {
-                        fg: color.into(),
-                        bg: color.into(),
-                        attrs: AttrSet::default(),
-                    })
-                    .resolve_at(bounds, at)
-            };
-            let (fg, bg) = (pen(cell.fg), pen(cell.bg));
-            let style = ResolvedStyle {
-                fg: fg.fg,
-                bg: bg.fg,
-                attrs: fg.attrs,
-            };
-            render.put_cell(style, at, cell.ch)?;
+            mosaic::put_cell(render, bounds, at, cell.fg, cell.bg, cell.ch)?;
         }
         Ok(())
     }
@@ -781,7 +760,7 @@ mod tests {
         Canopy, CanopyBuilder, ContextExt,
         render::{Glyphs, TermBuf},
         style::{
-            GradientSpec, GradientStop, Paint,
+            AttrSet, Color, GradientSpec, GradientStop, Paint, Style,
             effects::{self, Effect, StyleEffect},
         },
         testing::harness::Harness,
