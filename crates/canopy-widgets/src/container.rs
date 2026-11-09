@@ -235,9 +235,8 @@ mod tests {
     /// Accept focus on the container, or stop accepting it.
     fn set_focusable(harness: &mut Harness, region: NodeId, focusable: bool) -> Result<()> {
         harness.canopy.with_root_context(|c| {
-            c.with_widget_mut(region, |container: &mut Container, _| {
-                container.set_focusable(focusable);
-                Ok(())
+            c.update(region, |container: &mut Container| {
+                container.set_focusable(focusable)
             })
         })
     }

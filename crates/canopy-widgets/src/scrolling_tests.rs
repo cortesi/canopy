@@ -977,9 +977,8 @@ fn a_framed_row_boxes_its_panes_and_marks_the_focused_one() -> Result<()> {
         "focus above the row marks no pane without a home"
     );
     harness.canopy.with_root_context(|c| {
-        c.with_widget_mut(columns, |columns: &mut Columns, _| {
-            columns.set_home(vec![first]);
-            Ok(())
+        c.update(columns, |columns: &mut Columns| {
+            columns.set_home(vec![first])
         })
     })?;
     assert_eq!(
@@ -1011,9 +1010,8 @@ fn a_framed_row_labels_a_pane_at_the_right_of_its_rule() -> Result<()> {
     let (columns, left, right) = (nodes[0], nodes[1], nodes[2]);
     let label = |harness: &mut Harness, pane: NodeId, text: &str| -> Result<String> {
         harness.canopy.with_root_context(|c| {
-            c.with_widget_mut(columns, |columns: &mut Columns, _| {
-                columns.set_label(pane, "columns/divider", text);
-                Ok(())
+            c.update(columns, |columns: &mut Columns| {
+                columns.set_label(pane, "columns/divider", text)
             })
         })?;
         harness.render()?;

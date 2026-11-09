@@ -293,10 +293,7 @@ mod tests {
             "focus above the columns marks no pane without a home"
         );
         harness.canopy.with_root_context(|c| {
-            c.with_widget_mut(columns, |row: &mut Columns, _| {
-                row.set_home(vec![right]);
-                Ok(())
-            })
+            c.update(columns, |row: &mut Columns| row.set_home(vec![right]))
         })?;
         harness.render()?;
         assert_eq!(

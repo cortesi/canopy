@@ -408,14 +408,12 @@ mod tests {
         // A call without a target resolves from the dispatching node.
         app.with_context(second, |ctx| Ok(ctx.dispatch(&call)?))?;
         app.with_root_context(|ctx| {
-            ctx.with_widget_mut(first, |counter: &mut TargetCounter, _| {
-                assert_eq!(counter.count, 2);
-                Ok(())
+            ctx.update(first, |counter: &mut TargetCounter| {
+                assert_eq!(counter.count, 2)
             })?;
-            ctx.with_widget_mut(second, |counter: &mut TargetCounter, _| {
+            ctx.update(second, |counter: &mut TargetCounter| {
                 assert_eq!(counter.count, 6);
                 counter.enabled = false;
-                Ok(())
             })
         })?;
         let exact = call

@@ -120,10 +120,7 @@ impl CounterItem {
     fn sync_label(&self, ctx: &mut dyn Context) -> Result<()> {
         let label = self.label();
         if let Some(text) = ctx.unique_descendant::<Text>(ctx.node_id())? {
-            ctx.with_widget_mut(text, |text: &mut Text, _ctx| {
-                text.set_text(label);
-                Ok(())
-            })?;
+            ctx.update(text, |text: &mut Text| text.set_text(label))?;
         }
         self.update_box_layout(ctx)?;
         Ok(())

@@ -383,10 +383,7 @@ impl Widget for OptionsPanel {
                 .with_max_width(MAX_WIDTH + CHROME_WIDTH)
                 .add(context, me, PanelBody::new(Rc::clone(backend)))?;
             let frame = Dialog::frame(context, dialog.into())?;
-            context.with_widget_mut(body, |body: &mut PanelBody, _| {
-                body.frame = Some(frame);
-                Ok(())
-            })?;
+            context.update(body, |body: &mut PanelBody| body.frame = Some(frame))?;
             Ok(body)
         })
     }
@@ -656,10 +653,7 @@ impl PanelBody {
     fn retitle(&self, context: &mut dyn Context) -> Result<()> {
         let title = self.title();
         if let Some(frame) = self.frame {
-            context.with_widget_mut(frame, |frame: &mut Frame, _| {
-                frame.set_title(title);
-                Ok(())
-            })?;
+            context.update(frame, |frame: &mut Frame| frame.set_title(title))?;
         }
         Ok(())
     }

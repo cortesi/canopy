@@ -196,10 +196,7 @@ impl Todo {
             let wrap = next.list.wrap;
             self.with_list(c, |list, ctx| {
                 for entry in (0..list.len()).filter_map(|index| list.item(index)) {
-                    ctx.with_widget_mut(entry, |entry: &mut TodoEntry, _| {
-                        entry.wrap = wrap;
-                        Ok(())
-                    })?;
+                    ctx.update(entry, |entry: &mut TodoEntry| entry.wrap = wrap)?;
                 }
                 Ok(())
             })?;
@@ -289,10 +286,7 @@ impl Todo {
                 keys,
                 |key| Ok(TodoEntry::new(items[key].clone(), wrap)),
                 |key, id, ctx| {
-                    ctx.with_widget_mut(id, |entry: &mut TodoEntry, _| {
-                        entry.todo = items[key].clone();
-                        Ok(())
-                    })
+                    ctx.update(id, |entry: &mut TodoEntry| entry.todo = items[key].clone())
                 },
             )?;
             Ok(())

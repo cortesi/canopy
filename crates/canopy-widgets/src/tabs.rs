@@ -729,10 +729,9 @@ mod tests {
         #[command]
         fn selected(&mut self, c: &mut dyn Context, index: usize) -> Result<()> {
             self.selections.push(index);
-            c.with_widget_mut(self.nodes[0], |bar: &mut TabBar, _| {
+            c.update(self.nodes[0], |bar: &mut TabBar| {
                 let labels = bar.labels().to_vec();
                 bar.set_tabs(labels, index);
-                Ok(())
             })
         }
     }

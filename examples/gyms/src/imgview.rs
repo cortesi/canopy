@@ -177,10 +177,7 @@ impl ImgGym {
             return Ok(());
         };
         let label = self.label();
-        ctx.with_widget_mut(nodes.label, |text: &mut Text, _| {
-            text.set_text(label);
-            Ok(())
-        })?;
+        ctx.update(nodes.label, |text: &mut Text| text.set_text(label))?;
         ctx.set_hidden(nodes.view.into(), self.chart)?;
         ctx.set_hidden(nodes.chart.into(), !self.chart)?;
         // The stage that shows holds the focus, so the gym's keys apply.
@@ -199,10 +196,7 @@ impl ImgGym {
         self.tier = mosaic::cycle(self.tier);
         if let Ok(nodes) = self.mount.mounted() {
             let tier = self.tier;
-            ctx.with_widget_mut(nodes.view, |view: &mut ImageView, _| {
-                view.set_tier(tier);
-                Ok(())
-            })?;
+            ctx.update(nodes.view, |view: &mut ImageView| view.set_tier(tier))?;
         }
         self.sync(ctx)
     }

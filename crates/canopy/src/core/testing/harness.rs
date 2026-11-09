@@ -229,9 +229,7 @@ impl Harness {
     {
         let node_id = node_id.into();
         self.canopy
-            .with_context(node_id, |ctx| {
-                ctx.with_widget_mut(node_id, |widget, _| Ok(f(widget)))
-            })
+            .with_context(node_id, |ctx| ctx.update(node_id, |widget| f(widget)))
             .expect("with_widget failed")
     }
 

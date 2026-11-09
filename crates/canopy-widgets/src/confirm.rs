@@ -269,9 +269,8 @@ impl Confirm {
                     intents: &[],
                 },
             })?;
-            ctx.with_widget_mut(confirm, |dialog: &mut Self, _| {
-                dialog.question = Some(Question { request, token });
-                Ok(())
+            ctx.update(confirm, |dialog: &mut Self| {
+                dialog.question = Some(Question { request, token })
             })?;
             opened = Some(token);
             Ok(())
@@ -439,10 +438,7 @@ impl Confirm {
     /// Put back the row of answers that `shown` holds, after a failed open
     /// rolled back its buttons, with the text of the earlier question.
     fn restore(&self, ctx: &mut dyn Context, shown: answers::Shown) -> Result<()> {
-        ctx.with_widget_mut(self.row()?, |row: &mut Answers, _| {
-            row.restore(shown);
-            Ok(())
-        })?;
+        ctx.update(self.row()?, |row: &mut Answers| row.restore(shown))?;
         match &self.question {
             Some(Question { request, .. }) => {
                 self.show_text(ctx, &request.title, &request.message, request.message_width)
@@ -467,18 +463,13 @@ impl Confirm {
             row,
         } = self.parts.mounted()?;
         let row_width = ctx.with_widget(row, |row: &Answers| Ok(row.width()))?;
-        ctx.with_widget_mut(frame, |frame: &mut Frame, _| {
-            frame.set_title(title);
-            Ok(())
-        })?;
-        ctx.with_widget_mut(text, |text: &mut Text, _| {
+        ctx.update(frame, |frame: &mut Frame| frame.set_title(title))?;
+        ctx.update(text, |text: &mut Text| {
             text.set_text(message);
             text.set_wrap_width(width);
-            Ok(())
         })?;
-        ctx.with_widget_mut(body, |body: &mut ConfirmBody, _| {
-            body.show(message, width, row_width);
-            Ok(())
+        ctx.update(body, |body: &mut ConfirmBody| {
+            body.show(message, width, row_width)
         })
     }
 }
@@ -1815,9 +1806,8 @@ mod tests {
             })?;
             // The question stands, so only the admission keeps it from an
             // answer.
-            ctx.with_widget_mut(node, |confirm: &mut Confirm, _| {
-                confirm.question = Some(Question { request, token });
-                Ok(())
+            ctx.update(node, |confirm: &mut Confirm| {
+                confirm.question = Some(Question { request, token })
             })
         })?;
         harness.render()?;

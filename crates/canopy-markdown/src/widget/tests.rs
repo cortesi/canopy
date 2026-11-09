@@ -2042,12 +2042,9 @@ fn source_selection_pauses_follow_and_survives_independently_of_rendered_selecti
     harness
         .with_root_widget_context(|reader: &mut Markdown, ctx| {
             reader.follow(ctx)?;
-            ctx.with_widget_mut(
+            ctx.update(
                 reader.navigation_node().unwrap(),
-                |source: &mut MarkdownSource, _| {
-                    source.set_selection(5, 0).unwrap();
-                    Ok(())
-                },
+                |source: &mut MarkdownSource| source.set_selection(5, 0).unwrap(),
             )
         })
         .unwrap();
@@ -2096,12 +2093,9 @@ fn zero_cache_budget_restores_evicted_source_selection_and_view_anchor() {
     settle(&mut harness, &manual);
     harness
         .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            ctx.with_widget_mut(
+            ctx.update(
                 reader.navigation_node().unwrap(),
-                |source: &mut MarkdownSource, _| {
-                    source.set_selection(byte + 9, byte).unwrap();
-                    Ok(())
-                },
+                |source: &mut MarkdownSource| source.set_selection(byte + 9, byte).unwrap(),
             )?;
             reader.restore_position(
                 ctx,

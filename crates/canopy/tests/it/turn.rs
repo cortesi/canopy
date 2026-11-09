@@ -121,9 +121,8 @@ mod tests {
         assert!(parked.completed.is_empty());
         assert!(parked.frame.is_none());
         canopy.with_root_context(|ctx| {
-            ctx.with_widget_mut(widget, |widget: &mut TextWidget, _| {
-                widget.text = "ready".into();
-                Ok(())
+            ctx.update(widget, |widget: &mut TextWidget| {
+                widget.text = "ready".into()
             })
         })?;
         let published = canopy.turn(TurnInput::Prepare)?;
@@ -300,9 +299,8 @@ mod tests {
         ];
         let batch = canopy.turn(TurnInput::Events(keys))?;
         assert_eq!(batch.frame.map(|frame| frame.0), Some(prepared.0 + 1));
-        let counted = canopy.with_root_context(|ctx| {
-            ctx.with_widget_mut(split, |split: &mut Split, _| Ok(split.keys))
-        })?;
+        let counted =
+            canopy.with_root_context(|ctx| ctx.update(split, |split: &mut Split| split.keys))?;
         assert_eq!(counted, 3);
         Ok(())
     }
@@ -323,8 +321,8 @@ mod tests {
             ctx.with_widget_mut(split, |split: &mut Split, ctx| {
                 let top = split.top.expect("mounted");
                 let bottom = split.bottom.expect("mounted");
-                let top = ctx.with_widget_mut(top, |pane: &mut Clicks, _| Ok(pane.clicks))?;
-                let bottom = ctx.with_widget_mut(bottom, |pane: &mut Clicks, _| Ok(pane.clicks))?;
+                let top = ctx.update(top, |pane: &mut Clicks| pane.clicks)?;
+                let bottom = ctx.update(bottom, |pane: &mut Clicks| pane.clicks)?;
                 Ok((top, bottom))
             })
         })?;

@@ -445,10 +445,7 @@ impl ChartGym {
     #[command]
     pub fn toggle_fit(&self, c: &mut dyn Context) -> Result<()> {
         let chart = self.nodes()?.timeline;
-        c.with_widget_mut(chart, |chart: &mut ColumnChart, _| {
-            chart.set_fit(!chart.fit());
-            Ok(())
-        })?;
+        c.update(chart, |chart: &mut ColumnChart| chart.set_fit(!chart.fit()))?;
         self.inspect(c)
     }
 
@@ -573,7 +570,7 @@ impl ChartGym {
             .filter(|(_, sample)| sample.index.is_multiple_of(LABEL_EVERY))
             .map(|(position, sample)| (position, format!("#{}", sample.index)))
             .collect();
-        c.with_widget_mut(timeline, |chart: &mut ColumnChart, _| {
+        c.update(timeline, |chart: &mut ColumnChart| {
             let selected = previous_first
                 .filter(|_| !chart.following())
                 .and_then(|previous| chart.cursor().map(|cursor| previous + cursor as u64));
@@ -583,7 +580,6 @@ impl ChartGym {
                 let position = selected.saturating_sub(first) as usize;
                 chart.set_cursor(Some(position));
             }
-            Ok(())
         })?;
         self.charted_first = first;
         self.inspect(c)
@@ -593,11 +589,10 @@ impl ChartGym {
     /// the column chart.
     fn inspect(&self, c: &mut dyn Context) -> Result<()> {
         let nodes = self.nodes()?;
-        let (cursor, hover, fit) =
-            c.with_widget_mut(nodes.timeline, |chart: &mut ColumnChart, _| {
-                let group = |column: Option<usize>| column.and_then(|column| chart.group(column));
-                Ok((group(chart.cursor()), group(chart.hover()), chart.fit()))
-            })?;
+        let (cursor, hover, fit) = c.update(nodes.timeline, |chart: &mut ColumnChart| {
+            let group = |column: Option<usize>| column.and_then(|column| chart.group(column));
+            (group(chart.cursor()), group(chart.hover()), chart.fit())
+        })?;
         let (what, group) = match (hover, cursor) {
             (Some(hover), _) => ("hover", Some(hover)),
             (None, Some(cursor)) => ("cursor", Some(cursor)),
@@ -632,9 +627,8 @@ impl ChartGym {
             ),
             None => format!("{mode} · no attempt under the cursor"),
         };
-        c.with_widget_mut(nodes.inspector, |inspector: &mut Text, _| {
-            inspector.set_text(text);
-            Ok(())
+        c.update(nodes.inspector, |inspector: &mut Text| {
+            inspector.set_text(text)
         })
     }
 
@@ -644,10 +638,7 @@ impl ChartGym {
         let nodes = self.nodes()?;
         let state = if self.paused { "paused" } else { "live" };
         let title = format!("chart gym · {} · {state}", THEMES[self.theme].0);
-        c.with_widget_mut(nodes.title, |text: &mut Text, _| {
-            text.set_text(title);
-            Ok(())
-        })?;
+        c.update(nodes.title, |text: &mut Text| text.set_text(title))?;
         let live = &self.live;
         let tokens = live.tokens();
         set_value(c, nodes.tokens.value, compact(tokens))?;
@@ -698,18 +689,14 @@ impl ChartGym {
             seconds / 60 % 60,
             seconds % 60
         );
-        c.with_widget_mut(nodes.clock, |text: &mut BigText, _| {
-            text.set_text(clock);
-            Ok(())
-        })?;
+        c.update(nodes.clock, |text: &mut BigText| text.set_text(clock))?;
         let scene = Scene {
             step: live.step,
             muted: self.muted,
             attempts: live.attempts.iter().copied().collect(),
         };
-        c.with_widget_mut(nodes.primitives, |primitives: &mut Primitives, _| {
-            primitives.scene = scene;
-            Ok(())
+        c.update(nodes.primitives, |primitives: &mut Primitives| {
+            primitives.scene = scene
         })
     }
 
@@ -1029,10 +1016,7 @@ fn push(
     value: impl Into<Option<f64>>,
 ) -> Result<()> {
     let value = value.into();
-    c.with_widget_mut(spark, |spark: &mut Sparkline, _| {
-        spark.push(value);
-        Ok(())
-    })
+    c.update(spark, |spark: &mut Sparkline| spark.push(value))
 }
 
 /// Replaces the values of a sparkline.
@@ -1041,10 +1025,7 @@ fn replace_values(
     spark: TypedId<Sparkline>,
     values: Vec<Option<f64>>,
 ) -> Result<()> {
-    c.with_widget_mut(spark, |spark: &mut Sparkline, _| {
-        spark.set_values(values);
-        Ok(())
-    })
+    c.update(spark, |spark: &mut Sparkline| spark.set_values(values))
 }
 
 /// Shows a number and its unit in big text, the unit dimmer.
@@ -1054,10 +1035,7 @@ fn set_value(
     (number, unit): (String, &str),
 ) -> Result<()> {
     let runs = [("text", number), ("unit", unit.to_owned())];
-    c.with_widget_mut(text, |text: &mut BigText, _| {
-        text.set_runs(runs);
-        Ok(())
-    })
+    c.update(text, |text: &mut BigText| text.set_runs(runs))
 }
 
 /// Shows segments on a meter with a top and an optional label.
@@ -1068,11 +1046,10 @@ fn set_meter(
     max: f64,
     label: Option<String>,
 ) -> Result<()> {
-    c.with_widget_mut(meter, |meter: &mut Meter, _| {
+    c.update(meter, |meter: &mut Meter| {
         meter.set_max(max);
         meter.set_segments(segments);
         meter.set_label(label);
-        Ok(())
     })
 }
 

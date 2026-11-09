@@ -787,10 +787,9 @@ mod tests {
             let root = context.root_id();
             let attached = context.attach(root, options.into());
             assert!(attached.is_err(), "the application's mount fails");
-            context.with_widget_mut(options, |options: &mut Options, _| {
+            context.update(options, |options: &mut Options| {
                 assert!(!options.mount.is_mounted(), "the mount is pending");
                 assert_eq!(options.panel, PanelState::Closed);
-                Ok(())
             })?;
             // The failed mount took the application, so the widget mounts
             // once only.

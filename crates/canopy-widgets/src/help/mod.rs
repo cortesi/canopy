@@ -87,9 +87,8 @@ impl Help {
                 .with_on_submit(Self::call_search_submitted().with_target(owner))
                 .with_on_cancel(Self::call_search_cancelled().with_target(owner)),
         )?;
-        context.with_widget_mut(help, |help: &mut Self, _| {
-            help.parts = Some(Parts { list, bar });
-            Ok(())
+        context.update(help, |help: &mut Self| {
+            help.parts = Some(Parts { list, bar })
         })?;
         Ok(help.into())
     }
@@ -116,10 +115,7 @@ impl Help {
         let bar = self.parts()?.bar;
         let query = self.query.clone();
         let list = self.parts()?.list;
-        context.with_widget_mut(list, |list: &mut BindingList, _| {
-            list.set_query(Some(&query));
-            Ok(())
-        })?;
+        context.update(list, |list: &mut BindingList| list.set_query(Some(&query)))?;
         context.with_widget_mut(bar, |bar: &mut SearchBar, context| {
             bar.open(context, &query)
         })?;
@@ -211,10 +207,7 @@ impl Help {
     pub(crate) fn close_search(&mut self, context: &mut dyn Context) -> Result<()> {
         let Parts { list, bar } = self.parts()?;
         context.with_widget_mut(bar, |bar: &mut SearchBar, context| bar.close(context))?;
-        context.with_widget_mut(list, |list: &mut BindingList, _| {
-            list.set_query(None);
-            Ok(())
-        })?;
+        context.update(list, |list: &mut BindingList| list.set_query(None))?;
         self.searching = false;
         self.query.clear();
         Ok(())

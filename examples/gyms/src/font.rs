@@ -354,23 +354,16 @@ impl FontGym {
             return Ok(());
         };
         let height = self.height;
-        c.with_widget_mut(nodes.size, |text: &mut Text, _| {
-            text.set_text(size_label(height));
-            Ok(())
+        c.update(nodes.size, |text: &mut Text| {
+            text.set_text(size_label(height))
         })?;
         for (tier, button) in tiers().zip(&nodes.tiers) {
             let label = tier_label(tier, tier == self.tier);
-            c.with_widget_mut(*button, |button: &mut Button, _| {
-                button.set_label(label);
-                Ok(())
-            })?;
+            c.update(*button, |button: &mut Button| button.set_label(label))?;
         }
         for (effect, button) in Effect::ALL.into_iter().zip(&nodes.effects) {
             let label = effect.label(effect.on(self.effects));
-            c.with_widget_mut(*button, |button: &mut Button, _| {
-                button.set_label(label);
-                Ok(())
-            })?;
+            c.update(*button, |button: &mut Button| button.set_label(label))?;
         }
         Ok(())
     }
@@ -622,10 +615,7 @@ impl FontBlock {
         f: impl FnOnce(&mut FontBanner),
     ) -> Result<()> {
         if let Some(banner_id) = self.banner_id {
-            ctx.with_widget_mut(banner_id, |banner: &mut FontBanner, _| {
-                f(banner);
-                Ok(())
-            })?;
+            ctx.update(banner_id, f)?;
         } else if let Some(banner) = self.banner.as_mut() {
             f(banner);
         }
@@ -891,7 +881,7 @@ mod tests {
             .ok_or_else(|| Error::NotFound("font gym".into()))?;
         harness
             .canopy
-            .with_root_context(|ctx| ctx.with_widget_mut(gym, |gym: &mut FontGym, _| Ok(f(gym))))
+            .with_root_context(|ctx| ctx.update(gym, |gym: &mut FontGym| f(gym)))
     }
 
     /// Returns the scroll offset of the list of fonts.

@@ -37,10 +37,7 @@ fn app() -> Result<Canopy> {
 fn paint(canopy: &mut Canopy, character: char) -> Result<()> {
     canopy.with_root_context(|ctx| {
         let root = ctx.node_id();
-        ctx.with_widget_mut(root, |widget: &mut Paint, _| {
-            widget.0 = character;
-            Ok(())
-        })
+        ctx.update(root, |widget: &mut Paint| widget.0 = character)
     })
 }
 

@@ -284,8 +284,10 @@ instead of aliasing the widget.
 
 `ViewContextExt::with_widget` is the typed read path. It borrows in place and
 does not invalidate. `ContextExt::with_widget_mut` takes the widget cell for a
-mutation callback and invalidates layout. Both check the node's widget type at
-runtime and fail with `NodeTypeMismatch` for another type.
+mutation callback and invalidates layout. `ContextExt::update` is the same call
+for a setter, whose closure takes only the widget and cannot fail. All three
+check the node's widget type at runtime and fail with `NodeTypeMismatch` for
+another type.
 
 All widget access failures include the operation, node ID, node path, and source
 error. Cell take and restore are safe code through `WidgetCellGuard`. The only

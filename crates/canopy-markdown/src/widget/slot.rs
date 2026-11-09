@@ -563,11 +563,10 @@ pub(super) fn open(reader: &mut Markdown, ctx: &mut dyn Context, opening: Openin
         Editor::with_config(opening_text.clone(), slot_config(&config)),
     )?;
     #[cfg(feature = "syntax")]
-    ctx.with_widget_mut(editor, |editor: &mut Editor, _| {
+    ctx.update(editor, |editor: &mut Editor| {
         editor.set_highlighter(Some(Box::new(
             SyntectHighlighter::new("md").with_palette_roles(),
-        )));
-        Ok(())
+        )))
     })?;
     let below = ctx.add_child(
         column,
@@ -771,13 +770,12 @@ fn finish(reader: &mut Markdown, ctx: &mut dyn Context, target: &str) -> Result<
         // no more keys: they go to the reader, whose keys that need the new
         // layout wait for it.
         let (editor, column) = (slot.editor, slot.column);
-        ctx.with_widget_mut(editor, |editor: &mut Editor, _| {
+        ctx.update(editor, |editor: &mut Editor| {
             let config = editor
                 .config()
                 .clone()
                 .with_interaction(Interaction::Display);
             editor.set_config(config);
-            Ok(())
         })?;
         if ctx.is_on_focus_path(column)
             && let Some(nodes) = reader.nodes.as_ref()

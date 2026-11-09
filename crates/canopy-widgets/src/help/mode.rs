@@ -85,14 +85,8 @@ impl ModeHelp {
             .unique_descendant::<MenuList>(overlay)?
             .ok_or_else(|| Error::NotFound("mode help bindings".into()))?;
         let frame = Dialog::frame(context, dialog.into())?;
-        context.with_widget_mut(frame, |frame: &mut Frame, _context| {
-            frame.set_title(mode);
-            Ok(())
-        })?;
-        context.with_widget_mut(list, |list: &mut MenuList, _context| {
-            list.set_rows(rows);
-            Ok(())
-        })?;
+        context.update(frame, |frame: &mut Frame| frame.set_title(mode))?;
+        context.update(list, |list: &mut MenuList| list.set_rows(rows))?;
         if !context.set_hidden(overlay, false)?.changed() {
             return Ok(Shown::Kept);
         }

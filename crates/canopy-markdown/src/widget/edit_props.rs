@@ -226,10 +226,7 @@ fn run(harness: &mut Harness, work: &mut Schedule, node: NodeId, vi: bool, op: &
         }
         Op::SetText(text) if open => reader(harness, |reader, ctx| {
             let editor = reader.block_editor().unwrap();
-            ctx.with_widget_mut(editor, |editor: &mut Editor, _| {
-                editor.set_text(text.clone());
-                Ok(())
-            })
+            ctx.update(editor, |editor: &mut Editor| editor.set_text(text.clone()))
         }),
         Op::Commit => reader(harness, |reader, ctx| reader.commit_block(ctx)),
         Op::Discard => reader(harness, |reader, ctx| reader.discard_block(ctx, true)),

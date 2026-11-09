@@ -291,8 +291,8 @@ impl TableGym {
     /// Drain bounded public table events into the recording host, resolving
     /// each activated cell's full value against the published data.
     fn record(&mut self, c: &mut dyn Context) -> Result<()> {
-        let events = c.with_widget_mut(self.table_id()?, |table: &mut TableView, _| {
-            Ok(table
+        let events = c.update(self.table_id()?, |table: &mut TableView| {
+            table
                 .take_events(EVENT_CAPACITY)
                 .into_iter()
                 .map(|event| {
@@ -303,7 +303,7 @@ impl TableGym {
                     .map_or_else(|| Arc::from(""), TableCell::shared_text);
                     (event, detail)
                 })
-                .collect::<Vec<_>>())
+                .collect::<Vec<_>>()
         })?;
         for (event, detail) in events {
             match event {

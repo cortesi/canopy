@@ -936,6 +936,18 @@ pub trait ContextExt: Context + ViewContextExt {
         once.finish()
     }
 
+    /// Change a widget with a closure that needs no context and cannot fail.
+    ///
+    /// This is [`Self::with_widget_mut`] for a setter. It invalidates layout
+    /// as that call does, and fails only when the node is missing or holds
+    /// another widget type.
+    fn update<W, R>(&mut self, node: impl Into<NodeId>, f: impl FnOnce(&mut W) -> R) -> Result<R>
+    where
+        W: Widget + 'static,
+    {
+        self.with_widget_mut(node, |widget: &mut W, _| Ok(f(widget)))
+    }
+
     /// Run `f` on the widget of `widget`: now if the widget is free, or as
     /// the outermost dispatch completes if a callback on the stack holds it.
     ///

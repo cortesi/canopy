@@ -84,9 +84,8 @@ impl DemoShell {
                 nodes
             }
         };
-        c.with_widget_mut(selector, |selector: &mut Selector<&'static str>, _| {
-            selector.set_items(VIEW_LABELS.to_vec(), Some(self.view));
-            Ok(())
+        c.update(selector, |selector: &mut Selector<&'static str>| {
+            selector.set_items(VIEW_LABELS.to_vec(), Some(self.view))
         })?;
         self.token = Some(c.open_modal(ModalOptions {
             owner: c.node_id(),
@@ -107,8 +106,8 @@ impl DemoShell {
         let Some((_, selector)) = self.mount.mounted()?.selector else {
             return Ok(());
         };
-        self.view = c.with_widget_mut(selector, |selector: &mut Selector<&'static str>, _| {
-            Ok(selector.selected_index())
+        self.view = c.update(selector, |selector: &mut Selector<&'static str>| {
+            selector.selected_index()
         })?;
         // The cap sits on the root, so help, notices, and modals such as
         // inspectors share the simulated terminal with the gym.

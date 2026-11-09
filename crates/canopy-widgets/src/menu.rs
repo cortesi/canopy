@@ -316,10 +316,7 @@ impl Menu {
         let title = title.into();
         self.parts.pending_mut().clone_from(&title);
         let &Parts { frame, list } = self.parts.mounted()?;
-        context.with_widget_mut(frame, |frame: &mut Frame, _| {
-            frame.set_title(title);
-            Ok(())
-        })?;
+        context.update(frame, |frame: &mut Frame| frame.set_title(title))?;
         context.with_widget_mut(list, |list: &mut MenuList, context| {
             list.set_items(items, Some(selected));
             list.set_close(Some(close));

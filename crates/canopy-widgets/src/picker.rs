@@ -291,10 +291,9 @@ where
                     .fixed_height(FILTER_ROWS)
                     .into(),
             )?;
-            context.with_widget_mut(list, |list: &mut PickerList<T>, _| {
+            context.update(list, |list: &mut PickerList<T>| {
                 list.truncate = truncate;
                 list.chrome = Some(Chrome { frame, field });
-                Ok(())
             })?;
             Ok(Parts {
                 list,
@@ -789,17 +788,13 @@ where
             // Hidden, it leaves the layout entirely, so the frame gives the row
             // back to the list.
             context.set_hidden(field, self.filter == Filter::Off)?;
-            context.with_widget_mut(field, |field: &mut Input, _| {
+            context.update(field, |field: &mut Input| {
                 field.set_value(text);
                 field.set_active(Some(active));
-                Ok(())
             })?;
         }
         let title = self.title();
-        context.with_widget_mut(frame, |frame: &mut Frame, _| {
-            frame.set_title(title);
-            Ok(())
-        })
+        context.update(frame, |frame: &mut Frame| frame.set_title(title))
     }
 
     /// Return the title the frame shows: the label, and the item count
@@ -1240,7 +1235,7 @@ mod tests {
         harness
             .with_root_widget_context(|picker: &mut Picker<String>, context| {
                 let list = picker.list()?;
-                context.with_widget_mut(list, |list: &mut PickerList<String>, _| Ok(read(list)))
+                context.update(list, |list: &mut PickerList<String>| read(list))
             })
             .expect("the picker is mounted")
     }
@@ -1304,9 +1299,7 @@ mod tests {
                 .ok_or_else(|| Error::NotFound("picker".into()))?;
             let name = ctx.with_widget_mut(picker, |picker: &mut Picker<String>, ctx| {
                 let list = picker.list()?;
-                ctx.with_widget_mut(list, |list: &mut PickerList<String>, _| {
-                    Ok(list.selected_name())
-                })
+                ctx.update(list, |list: &mut PickerList<String>| list.selected_name())
             })?;
             self.accepted.push(name);
             if self.close_on_accept {

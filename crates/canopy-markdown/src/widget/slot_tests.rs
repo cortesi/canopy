@@ -687,9 +687,8 @@ fn an_edit_of_a_tall_unit_puts_its_first_row_at_the_top_by_either_path() {
             press(&mut harness, "e");
             reader(&mut harness, |reader, ctx| {
                 let editor = reader.block_editor().unwrap();
-                ctx.with_widget_mut(editor, |editor: &mut Editor, _| {
-                    editor.set_text(replacement.clone());
-                    Ok(())
+                ctx.update(editor, |editor: &mut Editor| {
+                    editor.set_text(replacement.clone())
                 })?;
                 reader.commit_block(ctx)
             });
@@ -750,10 +749,7 @@ fn commit_edit(text: &str, steps: usize, replacement: &str) -> String {
     press(&mut harness, "e");
     reader(&mut harness, |reader, ctx| {
         let editor = reader.block_editor().unwrap();
-        ctx.with_widget_mut(editor, |editor: &mut Editor, _| {
-            editor.set_text(replacement);
-            Ok(())
-        })
+        ctx.update(editor, |editor: &mut Editor| editor.set_text(replacement))
     });
     press(&mut harness, "Escape");
     settle(&mut harness, &manual);

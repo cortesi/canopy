@@ -53,10 +53,7 @@ impl ToastLayer {
             context.set_hidden(toast.into(), true)?;
             boxes.push(toast);
         }
-        context.with_widget_mut(layer, |layer: &mut Self, _| {
-            layer.boxes = boxes;
-            Ok(())
-        })?;
+        context.update(layer, |layer: &mut Self| layer.boxes = boxes)?;
         Ok(layer.into())
     }
 
@@ -111,10 +108,7 @@ impl ToastLayer {
         for (index, toast) in self.boxes.iter().enumerate() {
             let shown = live.get(index).cloned();
             let hidden = shown.is_none();
-            context.with_widget_mut(*toast, |toast: &mut ToastBox, _| {
-                toast.shown = shown;
-                Ok(())
-            })?;
+            context.update(*toast, |toast: &mut ToastBox| toast.shown = shown)?;
             context.set_hidden((*toast).into(), hidden)?;
         }
         Ok(next)

@@ -48,9 +48,8 @@ mod tests {
                 assert!(matches!(error, Err(Error::Invalid(_))));
                 assert!(ctx.children_of(ctx.node_id()).is_empty());
                 assert!(ctx.type_id_of(child.into()).is_some());
-                ctx.with_widget_mut(child, |widget: &mut MountCounter, _| {
-                    assert_eq!(widget.attempts, expected_attempts);
-                    Ok(())
+                ctx.update(child, |widget: &mut MountCounter| {
+                    assert_eq!(widget.attempts, expected_attempts)
                 })?;
             }
             Ok(())
@@ -66,9 +65,8 @@ mod tests {
             ctx.edit_structure(&mut |ctx| {
                 ctx.attach(root, child.into())?;
                 let error = ctx.edit_structure(&mut |ctx| {
-                    ctx.with_widget_mut(child, |widget: &mut TreeWidget, _| {
-                        widget.name = "changed".into();
-                        Ok(())
+                    ctx.update(child, |widget: &mut TreeWidget| {
+                        widget.name = "changed".into()
                     })?;
                     ctx.detach(child.into())?;
                     Err(Error::Invalid("nested edit rejected".into()))
@@ -78,9 +76,8 @@ mod tests {
                 // The node's captured metadata and the widget's own state
                 // differ.
                 assert_eq!(node_name(ctx, root, child.into()), "original");
-                ctx.with_widget_mut(child, |widget: &mut TreeWidget, _| {
-                    assert_eq!(widget.name, "changed");
-                    Ok(())
+                ctx.update(child, |widget: &mut TreeWidget| {
+                    assert_eq!(widget.name, "changed")
                 })?;
                 Ok(())
             })?;

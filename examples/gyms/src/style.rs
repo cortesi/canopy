@@ -912,10 +912,7 @@ impl Stylegym {
         let palette = builder();
         let map = palette.style_map();
         if let Some(rules) = self.rules {
-            c.with_widget_mut(rules, |sheet: &mut StyleSheet, _ctx| {
-                sheet.set_rules(&map);
-                Ok(())
-            })?;
+            c.update(rules, |sheet: &mut StyleSheet| sheet.set_rules(&map))?;
         }
         c.set_theme(palette);
         Ok(())

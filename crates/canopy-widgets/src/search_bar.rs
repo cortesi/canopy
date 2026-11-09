@@ -146,10 +146,7 @@ impl SearchBar {
     /// Put `query` in the field without posting a change, as an owner does
     /// when the query comes from elsewhere.
     pub fn set_query(&mut self, ctx: &mut dyn Context, query: &str) -> Result<()> {
-        ctx.with_widget_mut(self.field()?, |field: &mut Input, _| {
-            field.set_value(query);
-            Ok(())
-        })
+        ctx.update(self.field()?, |field: &mut Input| field.set_value(query))
     }
 
     /// Show the bar with `query` in the field, and give the field the
@@ -193,10 +190,9 @@ impl SearchBar {
     ) -> Result<()> {
         let status = self.parts.mounted()?.status;
         let text = text.into();
-        ctx.with_widget_mut(status, |status: &mut Status, _| {
+        ctx.update(status, |status: &mut Status| {
             status.text = text;
             status.found = found;
-            Ok(())
         })
     }
 }

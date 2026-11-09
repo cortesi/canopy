@@ -119,7 +119,9 @@ impl Mailbox {
     fn push(&mut self, event: InspectorEvent) -> Result<()> {
         let bytes = event_bytes(&event);
         if !self.has_capacity(bytes) {
-            return Err(Error::app(IoError::other("inspector request queue is full")));
+            return Err(Error::app(IoError::other(
+                "inspector request queue is full",
+            )));
         }
         self.bytes += bytes;
         self.events.push_back(event);
@@ -220,8 +222,8 @@ impl InspectorHandle {
                 events.push(InspectorEvent::CopyText(text));
             }
             if let Some(table) = inspector.stage.table() {
-                let pending = ctx.with_widget_mut(table, |table: &mut TableView, _| {
-                    Ok(table.take_events(EVENT_COUNT))
+                let pending = ctx.update(table, |table: &mut TableView| {
+                    table.take_events(EVENT_COUNT)
                 })?;
                 for event in pending {
                     if let TableEvent::Copy { text, .. } = event
@@ -251,10 +253,9 @@ impl InspectorHandle {
     ) -> Result<()> {
         ctx.with_widget_mut(self.node, |inspector: &mut Inspector, ctx| {
             if let Some(table) = inspector.stage.table() {
-                ctx.with_widget_mut(table, |table: &mut TableView, _| {
+                ctx.update(table, |table: &mut TableView| {
                     table.set_copy_enabled(allow_copy);
                     table.set_copy_limit(copy_limit.min(EVENT_BYTES));
-                    Ok(())
                 })?;
             }
             inspector.allow_copy = allow_copy;
@@ -291,10 +292,7 @@ impl InspectorHandle {
     pub fn set_table_overlay(&self, ctx: &mut dyn Context, overlay: TableOverlay) -> Result<()> {
         ctx.with_widget_mut(self.node, |inspector: &mut Inspector, ctx| {
             if let Some(table) = inspector.stage.table() {
-                ctx.with_widget_mut(table, |table: &mut TableView, _| {
-                    table.set_overlay(overlay);
-                    Ok(())
-                })?;
+                ctx.update(table, |table: &mut TableView| table.set_overlay(overlay))?;
             }
             Ok(())
         })
@@ -725,10 +723,7 @@ impl MarkdownInspector {
         if let Some(status) = self.status {
             let value = value.into();
             ctx.set_hidden(status.into(), value.is_empty())?;
-            ctx.with_widget_mut(status, |text: &mut Text, _| {
-                text.set_text(value);
-                Ok(())
-            })?;
+            ctx.update(status, |text: &mut Text| text.set_text(value))?;
         }
         Ok(())
     }
@@ -755,10 +750,7 @@ impl MarkdownInspector {
     fn set_row_numbers(&mut self, ctx: &mut dyn Context, show: bool) -> Result<()> {
         self.row_numbers = show;
         if let Some(table) = self.stage.table() {
-            ctx.with_widget_mut(table, |table: &mut TableView, _| {
-                table.set_row_numbers(show);
-                Ok(())
-            })?;
+            ctx.update(table, |table: &mut TableView| table.set_row_numbers(show))?;
         }
         Ok(())
     }
@@ -987,9 +979,7 @@ impl MarkdownInspector {
             return Ok(());
         };
         for _ in 0..EVENT_COUNT {
-            let event = ctx.with_widget_mut(table, |table: &mut TableView, _| {
-                Ok(table.take_events(1).pop())
-            })?;
+            let event = ctx.update(table, |table: &mut TableView| table.take_events(1).pop())?;
             let Some(event) = event else { break };
             match event {
                 TableEvent::Copy { text, .. } => {
@@ -1206,11 +1196,10 @@ impl Widget for Inspector {
                         },
                     ),
                 )?;
-                ctx.with_widget_mut(table, |table: &mut TableView, _| {
+                ctx.update(table, |table: &mut TableView| {
                     table.set_event_wake(self.wake.clone().expect("mounted wake"));
                     table.set_copy_enabled(self.allow_copy);
                     table.set_row_numbers(self.row_numbers);
-                    Ok(())
                 })?;
                 self.stage = Stage::Table {
                     table,
@@ -1367,10 +1356,7 @@ impl Widget for Inspector {
                     match &mut self.stage {
                         Stage::Preparing { text, .. } => {
                             let text = *text;
-                            ctx.with_widget_mut(text, |text: &mut Text, _| {
-                                text.set_text(message.clone());
-                                Ok(())
-                            })?;
+                            ctx.update(text, |text: &mut Text| text.set_text(message.clone()))?;
                             self.stage = Stage::Failed { text };
                         }
                         Stage::Table { detail, .. } => *detail = Detail::None,

@@ -232,10 +232,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         if !changed {
             return Ok(());
         }
-        ctx.with_widget_mut(id, |widget: &mut W, _| {
-            widget.set_checked(checked);
-            Ok(())
-        })?;
+        ctx.update(id, |widget: &mut W| widget.set_checked(checked))?;
         debug_assert!(self.checks_invariant_holds());
         Ok(())
     }
@@ -374,12 +371,11 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         let desired_checks = checks.map(|_| desired.iter().cloned().collect::<HashSet<K>>());
         let ordered = self.items.reconcile(ctx, desired, create, |key, id, ctx| {
             update(key, id, ctx)?;
-            ctx.with_widget_mut(id, |widget: &mut W, _| {
+            ctx.update(id, |widget: &mut W| {
                 widget.set_selected(selected.as_ref() == Some(key));
                 if let Some(checks) = checks {
                     widget.set_checked(checks.contains(key));
                 }
-                Ok(())
             })
         })?;
         self.selected = selected;
@@ -475,10 +471,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         self.checks = Some(self.items.keys().iter().cloned().collect());
         let ids = self.items.iter_ids().collect::<Vec<_>>();
         for id in ids {
-            ctx.with_widget_mut(id, |widget: &mut W, _| {
-                widget.set_checked(true);
-                Ok(())
-            })?;
+            ctx.update(id, |widget: &mut W| widget.set_checked(true))?;
         }
         Ok(())
     }
@@ -492,10 +485,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         self.checks = Some(HashSet::new());
         let ids = self.items.iter_ids().collect::<Vec<_>>();
         for id in ids {
-            ctx.with_widget_mut(id, |widget: &mut W, _| {
-                widget.set_checked(false);
-                Ok(())
-            })?;
+            ctx.update(id, |widget: &mut W| widget.set_checked(false))?;
         }
         Ok(())
     }
@@ -517,15 +507,9 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
             .ok_or_else(|| Error::Internal("new list selection points at a missing item".into()))?;
         if old_id != Some(new_id) {
             if let Some(old_id) = old_id {
-                ctx.with_widget_mut(old_id, |w: &mut W, _| {
-                    w.set_selected(false);
-                    Ok(())
-                })?;
+                ctx.update(old_id, |w: &mut W| w.set_selected(false))?;
             }
-            ctx.with_widget_mut(new_id, |w: &mut W, _| {
-                w.set_selected(true);
-                Ok(())
-            })?;
+            ctx.update(new_id, |w: &mut W| w.set_selected(true))?;
         }
 
         self.selected = Some(self.items.keys()[index].clone());

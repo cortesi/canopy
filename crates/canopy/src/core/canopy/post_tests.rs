@@ -188,10 +188,7 @@ impl Host {
     /// Mark the notifier at `node` as touched.
     #[command]
     fn touch(&self, ctx: &mut dyn Context, node: NodeId) -> Result<()> {
-        ctx.with_widget_mut(node, |notifier: &mut Notifier, _| {
-            notifier.touched = true;
-            Ok(())
-        })
+        ctx.update(node, |notifier: &mut Notifier| notifier.touched = true)
     }
 
     /// Fail with an application error.

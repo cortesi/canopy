@@ -322,9 +322,8 @@ mod tests {
             .map(|cursor| cursor.location);
         assert_eq!(caret, Some(point(&harness, first.into(), 10)));
         harness.with_root_widget_context(|_: &mut SnapshotRoot<crate::Input>, ctx| {
-            ctx.with_widget_mut(first, |input: &mut crate::Input, _| {
-                assert_eq!(input.value(), "hello");
-                Ok(())
+            ctx.update(first, |input: &mut crate::Input| {
+                assert_eq!(input.value(), "hello")
             })?;
             ctx.set_focus(second.into()).map(|_| ())
         })?;

@@ -457,6 +457,20 @@ pub trait ContextExt: Context + ViewContextExt {
     ) -> crate::error::Result<TypedId<<K as ChildSlot>::Widget>> {
     }
 
+    /// Change a widget with a closure that needs no context and cannot fail.
+    ///
+    /// This is [`Self::with_widget_mut`] for a setter. It invalidates layout
+    /// as that call does, and fails only when the node is missing or holds
+    /// another widget type.
+    fn update<W, R>(
+        &mut self,
+        node: impl Into<NodeId>,
+        f: impl FnOnce(&mut W) -> R,
+    ) -> crate::error::Result<R>
+    where
+        W: 'static + Widget, {
+    }
+
     /// Execute a closure with the typed keyed child `K` of `parent`.
     fn with_slot<K: ChildSlot, R>(
         &mut self,

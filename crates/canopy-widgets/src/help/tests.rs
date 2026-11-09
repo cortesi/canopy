@@ -717,9 +717,8 @@ impl Widget for FramedList {
         let frame = context.add_child(root, Frame::new())?;
         let list = context.add_child(frame, BindingList::new())?;
         let bindings = mem::take(&mut self.0);
-        context.with_widget_mut(list, |list: &mut BindingList, _| {
-            drop(list.replace_tree(Some(HelpTree::flat(snapshot(root, bindings)))));
-            Ok(())
+        context.update(list, |list: &mut BindingList| {
+            drop(list.replace_tree(Some(HelpTree::flat(snapshot(root, bindings)))))
         })
     }
 }

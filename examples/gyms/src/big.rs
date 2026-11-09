@@ -702,11 +702,10 @@ impl BigGym {
         let preview = state.view == View::Preview;
         c.set_hidden(nodes.frame.into(), !preview)?;
         c.set_hidden(nodes.ladder, preview)?;
-        c.with_widget_mut(nodes.preview, |big: &mut BigText, _| {
+        c.update(nodes.preview, |big: &mut BigText| {
             state.configure(big);
             big.set_size(state.size());
             big.set_wrap(state.wrap);
-            Ok(())
         })?;
         // The frame takes two columns and two rows around the area. A set
         // extent takes no share of the flexible space.
@@ -732,10 +731,9 @@ impl BigGym {
                 scale: state.scale,
             };
             let drawn = state.big(size).size_in(Size::new(u32::MAX, u32::MAX));
-            c.with_widget_mut(step.big, |big: &mut BigText, _| {
+            c.update(step.big, |big: &mut BigText| {
                 state.configure(big);
                 big.set_size(size);
-                Ok(())
             })?;
             c.set_layout_override(step.big.into(), fixed_row(drawn.h.max(1)))?;
             let heading = format!(
@@ -746,17 +744,13 @@ impl BigGym {
                 drawn.w,
                 drawn.h
             );
-            c.with_widget_mut(step.heading, |text: &mut Text, _| {
-                text.set_text(heading);
-                Ok(())
-            })?;
+            c.update(step.heading, |text: &mut Text| text.set_text(heading))?;
         }
         let selected = self.selected;
         let state = state.clone();
-        c.with_widget_mut(nodes.settings, |settings: &mut Settings, _| {
+        c.update(nodes.settings, |settings: &mut Settings| {
             settings.state = state;
             settings.selected = selected;
-            Ok(())
         })
     }
 }
@@ -853,9 +847,8 @@ impl Widget for BigGym {
             let big = c.add_child(page, BigText::new(""))?;
             steps.push(Step { heading, big });
         }
-        c.with_widget_mut(settings, |settings: &mut Settings, _| {
-            settings.preview = Some(preview);
-            Ok(())
+        c.update(settings, |settings: &mut Settings| {
+            settings.preview = Some(preview)
         })?;
         self.nodes = Some(Nodes {
             input,
@@ -883,10 +876,7 @@ impl Widget for BigGym {
         self.state.text = count_up(&self.state.text);
         let input = self.nodes()?.input;
         let text = self.state.text.clone();
-        c.with_widget_mut(input, |input: &mut Input, _| {
-            input.set_value(text);
-            Ok(())
-        })?;
+        c.update(input, |input: &mut Input| input.set_value(text))?;
         self.apply(c)?;
         Ok(Some(TICK))
     }
