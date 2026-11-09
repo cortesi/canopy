@@ -1,0 +1,19 @@
+error[E0277]: `min`, `max`, and `step` need an integer option, not `String`
+ --> tests/ui/limits_on_text.rs:8:11
+  |
+8 |     name: String,
+  |           ^^^^^^ the trait `canopy_options::IntLeaf` is not implemented for `String`
+  |
+  = help: the following other types implement trait `canopy_options::IntLeaf`:
+            Option<T>
+            i32
+            i64
+            u16
+            u32
+            u8
+            usize
+note: required by a bound in `canopy_options::assert_int`
+ --> src/model.rs
+  |
+  | pub const fn assert_int<T: IntLeaf>() {}
+  |                            ^^^^^^^ required by this bound in `assert_int`

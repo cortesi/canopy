@@ -1,0 +1,11 @@
+error[E0277]: the trait bound `Order: Default` is not satisfied
+  --> tests/ui/default_at_type.rs:16:12
+   |
+16 |     order: Order,
+   |            ^^^^^ the trait `Default` is not implemented for `Order`
+   |
+help: consider annotating `Order` with `#[derive(Default)]`
+   |
+ 5 + #[derive(Default)]
+ 6 | enum Order {
+   |

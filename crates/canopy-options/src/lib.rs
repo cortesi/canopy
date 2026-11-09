@@ -29,9 +29,10 @@ pub use file::default_document;
 pub use follow::Follower;
 pub use layout::{Layout, OPTIONS_FILE};
 pub use model::{
-    FieldMeta, Group, Item, Kind, Leaf, LeafValue, Limits, OptionEnum, OptionField, OptionGroup,
-    Order, RESERVED_KEYS, Schema, Set, SetError, Value, Variant, assert_leaf, check_range,
-    enum_from_value, group_item, join_path, leaf_changed, leaf_get, leaf_item, leaf_set,
+    FieldMeta, Group, IntLeaf, Item, Kind, Leaf, LeafValue, Limits, OptionEnum, OptionField,
+    OptionGroup, Order, RESERVED_KEYS, Schema, Set, SetError, Value, Variant, assert_group,
+    assert_int, assert_leaf, check_range, enum_from_value, group_item, join_path, leaf_changed,
+    leaf_get, leaf_item, leaf_set,
 };
 pub use store::{Changes, OptionsHandle, Snapshot, Store};
 pub use widget::Options;

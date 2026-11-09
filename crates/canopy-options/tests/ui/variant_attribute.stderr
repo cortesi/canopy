@@ -1,0 +1,5 @@
+error: a variant takes only `key` and `label`
+ --> tests/ui/variant_attribute.rs:7:25
+  |
+7 |     #[option(key = 'n', global)]
+  |                         ^^^^^^

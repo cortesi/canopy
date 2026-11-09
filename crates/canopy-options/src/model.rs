@@ -673,6 +673,25 @@ fn mark_global(items: &mut [Item]) {
 pub const fn assert_leaf<T: LeafValue>() {}
 
 #[doc(hidden)]
+/// A leaf type that holds an integer, which takes `min`, `max`, and `step`.
+#[diagnostic::on_unimplemented(
+    message = "`min`, `max`, and `step` need an integer option, not `{Self}`"
+)]
+pub trait IntLeaf: LeafValue {}
+
+impl<T: IntLeaf> IntLeaf for Option<T> {}
+
+#[doc(hidden)]
+/// Fail to compile unless `T` is an integer leaf. The derive calls it for a
+/// field with limits.
+pub const fn assert_int<T: IntLeaf>() {}
+
+#[doc(hidden)]
+/// Fail to compile unless `T` is a group. The derive calls it for an
+/// `inline` field.
+pub const fn assert_group<T: OptionGroup>() {}
+
+#[doc(hidden)]
 /// Return the value of a leaf field, which takes no further path.
 pub fn leaf_get<T: LeafValue>(value: &T, path: &[&str]) -> Option<Value> {
     path.is_empty().then(|| value.to_value())
@@ -814,6 +833,8 @@ macro_rules! int_leaf {
                     }
                 }
             }
+
+            impl IntLeaf for $ty {}
         )*
     };
 }

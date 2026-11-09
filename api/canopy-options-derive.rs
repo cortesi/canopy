@@ -33,7 +33,7 @@ pub fn OptionEnum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {}
 /// - `key = 'c'`: the accelerator of the field in its panel.
 /// - `label = "text"`: the text that the panel shows.
 /// - `default = expr`: the default value.
-/// - `min = n`, `max = n`, `step = n`: the limits of an integer.
+/// - `min = n`, `max = n`, `step = n`: the limits of an integer leaf.
 /// - `global`: the option never reads from a local file.
 /// - `skip`: the field is not an option. A skipped field takes no other
 ///   attribute but `default`.
@@ -41,7 +41,7 @@ pub fn OptionEnum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {}
 ///   items of the parent. A flattened field takes no other attribute but
 ///   `default`.
 /// - `inline`: the panel shows the items of a group field in its parent, while
-///   their paths keep the group's name.
+///   their paths keep the group's name. An inline group takes no `key`.
 /// - `validate = path`: a `fn(&T) -> Result<(), String>` check of a leaf.
 #[proc_macro_derive(OptionGroup, attributes(option))]
 pub fn OptionGroup(input: proc_macro::TokenStream) -> proc_macro::TokenStream {}

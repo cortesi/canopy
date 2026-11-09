@@ -1,0 +1,17 @@
+error[E0277]: the trait bound `bool: OptionGroup` is not satisfied
+ --> tests/ui/inline_on_leaf.rs:8:13
+  |
+8 |     hidden: bool,
+  |             ^^^^ the trait `OptionGroup` is not implemented for `bool`
+  |
+help: the trait `OptionGroup` is implemented for `Root`
+ --> tests/ui/inline_on_leaf.rs:4:10
+  |
+4 | #[derive(OptionGroup, Clone, Debug, PartialEq)]
+  |          ^^^^^^^^^^^
+note: required by a bound in `canopy_options::assert_group`
+ --> src/model.rs
+  |
+  | pub const fn assert_group<T: OptionGroup>() {}
+  |                              ^^^^^^^^^^^ required by this bound in `assert_group`
+  = note: this error originates in the derive macro `OptionGroup` (in Nightly builds, run with -Z macro-backtrace for more info)

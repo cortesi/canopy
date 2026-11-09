@@ -46,6 +46,25 @@ pub const OPTIONS_FILE: &str = "options.toml";
 /// in its level. An accelerator is a visible character, never a space.
 pub const RESERVED_KEYS: [char; 7] = _;
 
+/// A leaf type that holds an integer, which takes `min`, `max`, and `step`.
+// Not dyn-compatible.
+#[doc(hidden)]
+pub trait IntLeaf: LeafValue {}
+
+impl IntLeaf for i32 {}
+
+impl IntLeaf for i64 {}
+
+impl IntLeaf for u16 {}
+
+impl IntLeaf for u32 {}
+
+impl IntLeaf for u8 {}
+
+impl IntLeaf for usize {}
+
+impl<T: IntLeaf> IntLeaf for Option<T> {}
+
 /// A type that one leaf holds.
 // Not dyn-compatible.
 pub trait LeafValue: Clone + PartialEq + Sized {
@@ -861,6 +880,16 @@ pub struct Variant {
     /// The accelerator of the variant in a choice's or set's submenu.
     pub key: Option<char>,
 }
+
+/// Fail to compile unless `T` is a group. The derive calls it for an
+/// `inline` field.
+#[doc(hidden)]
+pub const fn assert_group<T: crate::OptionGroup>();
+
+/// Fail to compile unless `T` is an integer leaf. The derive calls it for a
+/// field with limits.
+#[doc(hidden)]
+pub const fn assert_int<T: IntLeaf>();
 
 /// Fail to compile unless `T` is a leaf type. The derive calls it for a
 /// field with a `validate` function, which checks leaves only.

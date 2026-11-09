@@ -1,0 +1,5 @@
+error: an inline group takes no key, because its items join the parent's level
+  --> tests/ui/inline_with_key.rs:14:28
+   |
+14 |     #[option(inline, key = 'i')]
+   |                            ^^^

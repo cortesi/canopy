@@ -34,7 +34,7 @@ const RESERVED_KEYS: [char; 7] = ['h', 'j', 'k', 'l', 'q', 'R', 'S'];
 /// - `key = 'c'`: the accelerator of the field in its panel.
 /// - `label = "text"`: the text that the panel shows.
 /// - `default = expr`: the default value.
-/// - `min = n`, `max = n`, `step = n`: the limits of an integer.
+/// - `min = n`, `max = n`, `step = n`: the limits of an integer leaf.
 /// - `global`: the option never reads from a local file.
 /// - `skip`: the field is not an option. A skipped field takes no other
 ///   attribute but `default`.
@@ -42,7 +42,7 @@ const RESERVED_KEYS: [char; 7] = ['h', 'j', 'k', 'l', 'q', 'R', 'S'];
 ///   items of the parent. A flattened field takes no other attribute but
 ///   `default`.
 /// - `inline`: the panel shows the items of a group field in its parent, while
-///   their paths keep the group's name.
+///   their paths keep the group's name. An inline group takes no `key`.
 /// - `validate = path`: a `fn(&T) -> Result<(), String>` check of a leaf.
 #[proc_macro_derive(OptionGroup, attributes(option))]
 pub fn derive_option_group(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -89,12 +89,12 @@ struct OptionAttrs {
     label: Option<String>,
     /// Default value expression.
     default: Option<Expr>,
-    /// Integer lower limit.
-    min: Option<i64>,
-    /// Integer upper limit.
-    max: Option<i64>,
-    /// Integer step.
-    step: Option<i64>,
+    /// Integer lower limit, and the span of its value.
+    min: Option<(i64, Span)>,
+    /// Integer upper limit, and the span of its value.
+    max: Option<(i64, Span)>,
+    /// Integer step, and the span of its value.
+    step: Option<(i64, Span)>,
     /// Whether local files may not set the option.
     global: bool,
     /// What the field is to its group.
@@ -105,8 +105,17 @@ struct OptionAttrs {
     validate: Option<syn::Path>,
 }
 
-/// Parse the `#[option(...)]` attributes in `attrs`.
-fn parse_attrs(attrs: &[Attribute]) -> Result<OptionAttrs> {
+/// What carries a set of `#[option(...)]` attributes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Owner {
+    /// A field of a group.
+    Field,
+    /// A variant of an enum, which takes only `key` and `label`.
+    Variant,
+}
+
+/// Parse the `#[option(...)]` attributes in `attrs`, which `owner` carries.
+fn parse_attrs(attrs: &[Attribute], owner: Owner) -> Result<OptionAttrs> {
     let mut out = OptionAttrs::default();
     for attr in attrs {
         if !attr.path().is_ident("option") {
@@ -114,6 +123,9 @@ fn parse_attrs(attrs: &[Attribute]) -> Result<OptionAttrs> {
         }
         attr.parse_nested_meta(|meta| {
             let path = &meta.path;
+            if owner == Owner::Variant && !path.is_ident("key") && !path.is_ident("label") {
+                return Err(meta.error("a variant takes only `key` and `label`"));
+            }
             if path.is_ident("key") {
                 let lit: syn::LitChar = meta.value()?.parse()?;
                 out.key = Some((lit.value(), lit.span()));
@@ -144,13 +156,23 @@ fn parse_attrs(attrs: &[Attribute]) -> Result<OptionAttrs> {
             Ok(())
         })?;
     }
-    if let (Some(min), Some(max)) = (out.min, out.max)
+    if let (Some((min, _)), Some((max, span))) = (out.min, out.max)
         && min > max
     {
-        return Err(syn::Error::new(Span::call_site(), "min is above max"));
+        return Err(syn::Error::new(span, "min is above max"));
     }
-    if out.step.is_some_and(|step| step <= 0) {
-        return Err(syn::Error::new(Span::call_site(), "step must be positive"));
+    if let Some((step, span)) = out.step
+        && step <= 0
+    {
+        return Err(syn::Error::new(span, "step must be positive"));
+    }
+    if let Some((_, span)) = out.key
+        && out.inline
+    {
+        return Err(syn::Error::new(
+            span,
+            "an inline group takes no key, because its items join the parent's level",
+        ));
     }
     Ok(out)
 }
@@ -178,15 +200,15 @@ impl OptionAttrs {
     }
 }
 
-/// Read an integer literal, which may be negative.
-fn int_value(expr: &Expr) -> Result<i64> {
+/// Read an integer literal, which may be negative, with its span.
+fn int_value(expr: &Expr) -> Result<(i64, Span)> {
     match expr {
         Expr::Lit(lit) => match &lit.lit {
-            Lit::Int(int) => int.base10_parse(),
+            Lit::Int(int) => Ok((int.base10_parse()?, expr.span())),
             other => Err(syn::Error::new_spanned(other, "expected an integer")),
         },
         Expr::Unary(unary) if matches!(unary.op, UnOp::Neg(_)) => {
-            int_value(&unary.expr).map(|value| -value)
+            int_value(&unary.expr).map(|(value, _)| (-value, expr.span()))
         }
         other => Err(syn::Error::new_spanned(other, "expected an integer")),
     }
@@ -265,10 +287,6 @@ fn key_tokens(key: Option<(char, Span)>) -> TokenStream {
 }
 
 /// Expand `#[derive(OptionGroup)]`.
-#[allow(
-    clippy::too_many_lines,
-    reason = "one pass emits each part of the impl"
-)]
 fn expand_group(input: &DeriveInput) -> Result<TokenStream> {
     let ident = &input.ident;
     if !input.generics.params.is_empty() {
@@ -302,9 +320,10 @@ fn expand_group(input: &DeriveInput) -> Result<TokenStream> {
     for field in &fields.named {
         let name = field.ident.as_ref().expect("named fields have identifiers");
         let ty = &field.ty;
-        let attrs = parse_attrs(&field.attrs)?;
+        let attrs = parse_attrs(&field.attrs, Owner::Field)?;
+        // A field without a default reports a missing `Default` at its type.
         let default = attrs.default.as_ref().map_or_else(
-            || quote! { ::core::default::Default::default() },
+            || quote_spanned! { ty.span() => <#ty as ::core::default::Default>::default() },
             ToTokens::to_token_stream,
         );
         defaults.push(quote! { #name: #default });
@@ -357,16 +376,34 @@ fn expand_group(input: &DeriveInput) -> Result<TokenStream> {
         let key = key_tokens(attrs.key);
         let global = attrs.global;
         let inline = attrs.inline;
-        let limits = if attrs.min.is_some() || attrs.max.is_some() || attrs.step.is_some() {
-            let min = attrs.min.map_or_else(
+        let (min, max, step) = (
+            attrs.min.map(|(min, _)| min),
+            attrs.max.map(|(max, _)| max),
+            attrs.step.map(|(step, _)| step),
+        );
+        // Limits apply to an integer, and `inline` to a group, so another
+        // type fails to compile at the field's type.
+        let mut checks = TokenStream::new();
+        if min.is_some() || max.is_some() || step.is_some() {
+            checks.extend(quote_spanned! { ty.span() =>
+                const _: () = ::canopy_options::assert_int::<#ty>();
+            });
+        }
+        if inline {
+            checks.extend(quote_spanned! { ty.span() =>
+                const _: () = ::canopy_options::assert_group::<#ty>();
+            });
+        }
+        let limits = if min.is_some() || max.is_some() || step.is_some() {
+            let min = min.map_or_else(
                 || quote! { ::core::option::Option::None },
                 |min| quote! { ::core::option::Option::Some(#min) },
             );
-            let max = attrs.max.map_or_else(
+            let max = max.map_or_else(
                 || quote! { ::core::option::Option::None },
                 |max| quote! { ::core::option::Option::Some(#max) },
             );
-            let step = attrs.step.unwrap_or(1);
+            let step = step.unwrap_or(1);
             quote! {
                 ::core::option::Option::Some(::canopy_options::Limits {
                     min: #min,
@@ -378,6 +415,7 @@ fn expand_group(input: &DeriveInput) -> Result<TokenStream> {
             quote! { ::core::option::Option::None }
         };
         items.push(quote! {
+            #checks
             items.push(<#ty as ::canopy_options::OptionField>::describe(
                 ::canopy_options::FieldMeta {
                     name: #name_lit,
@@ -395,9 +433,9 @@ fn expand_group(input: &DeriveInput) -> Result<TokenStream> {
         read_arms.push(quote! {
             #patterns => return ::canopy_options::OptionField::get_path(&self.#name, rest),
         });
-        let limit_check = if attrs.min.is_some() || attrs.max.is_some() {
-            let min = attrs.min.unwrap_or(i64::MIN);
-            let max = attrs.max.unwrap_or(i64::MAX);
+        let limit_check = if min.is_some() || max.is_some() {
+            let min = min.unwrap_or(i64::MIN);
+            let max = max.unwrap_or(i64::MAX);
             quote! {
                 if rest.is_empty() {
                     ::canopy_options::check_range(value, #min, #max)?;
@@ -555,7 +593,7 @@ fn expand_enum(input: &DeriveInput) -> Result<TokenStream> {
                 "OptionEnum only supports fieldless variants",
             ));
         }
-        let attrs = parse_attrs(&variant.attrs)?;
+        let attrs = parse_attrs(&variant.attrs, Owner::Variant)?;
         let raw = variant.ident.to_string();
         let name = raw.to_case(Case::Snake);
         if names.contains(&name) {
