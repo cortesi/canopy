@@ -10,7 +10,10 @@ use std::{
     mem::{size_of, take},
     ops::Range,
     panic::{AssertUnwindSafe, catch_unwind},
-    sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError},
+    sync::{
+        Arc, Condvar, Mutex, MutexGuard, PoisonError,
+        atomic::{AtomicBool, Ordering},
+    },
     thread::{self, JoinHandle},
 };
 
@@ -596,6 +599,8 @@ struct Service {
     shared: Arc<Shared>,
     /// Join handles reserved for explicit host teardown.
     workers: Mutex<Vec<JoinHandle<()>>>,
+    /// Whether the first registration starts the workers.
+    deferred: AtomicBool,
 }
 
 impl Drop for Service {
@@ -622,8 +627,13 @@ impl fmt::Debug for MarkdownExecutor {
 }
 
 impl Default for MarkdownExecutor {
+    /// A pool with the default options that starts its workers at its first
+    /// registration, so a default that no reader registers with costs no
+    /// threads.
     fn default() -> Self {
-        Self::new(ExecutorOptions::default())
+        let executor = Self::without_workers(ExecutorOptions::default());
+        executor.service.deferred.store(true, Ordering::Release);
+        executor
     }
 }
 
@@ -636,8 +646,14 @@ impl MarkdownExecutor {
     /// Start a host-owned worker pool and report thread creation failures.
     pub fn try_new(options: ExecutorOptions) -> io::Result<Self> {
         let executor = Self::without_workers(options);
-        for index in 0..executor.service.shared.options.worker_count {
-            let shared = executor.service.shared.clone();
+        executor.start_workers()?;
+        Ok(executor)
+    }
+
+    /// Start the configured number of worker threads.
+    fn start_workers(&self) -> io::Result<()> {
+        for index in 0..self.service.shared.options.worker_count {
+            let shared = self.service.shared.clone();
             let worker = thread::Builder::new()
                 .name(format!("markdown-{index}"))
                 .spawn(move || {
@@ -660,14 +676,13 @@ impl MarkdownExecutor {
                         work.finish();
                     }
                 })?;
-            executor
-                .service
+            self.service
                 .workers
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .push(worker);
         }
-        Ok(executor)
+        Ok(())
     }
 
     /// Create the production bookkeeping without starting physical threads.
@@ -691,6 +706,7 @@ impl MarkdownExecutor {
             service: Arc::new(Service {
                 shared,
                 workers: Mutex::new(Vec::new()),
+                deferred: AtomicBool::new(false),
             }),
         }
     }
@@ -704,8 +720,22 @@ impl MarkdownExecutor {
         (executor, manual)
     }
 
-    /// Reserve one reader lane, optionally attaching its runtime wake.
+    /// Reserve one reader lane, optionally attaching its runtime wake. The
+    /// first registration with a default executor starts its workers.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a default executor cannot start a worker thread.
     pub fn register(&self, wake: Option<NodeWakeHandle>) -> Result<WorkHandle, SubmitError> {
+        let handle = self.reserve(wake)?;
+        if self.service.deferred.swap(false, Ordering::AcqRel) {
+            self.start_workers().expect("start Markdown worker threads");
+        }
+        Ok(handle)
+    }
+
+    /// Insert one reader lane into the shared state.
+    fn reserve(&self, wake: Option<NodeWakeHandle>) -> Result<WorkHandle, SubmitError> {
         let shared = &self.service.shared;
         let mut state = shared.lock();
         if state.stopped {
@@ -1812,6 +1842,26 @@ mod tests {
         executor.join();
         assert_eq!(handle.submit(request(2)), Err(SubmitError::Shutdown));
         assert!(executor.stats().stopped);
+    }
+
+    #[test]
+    fn a_default_executor_starts_its_workers_at_its_first_registration() {
+        let executor = MarkdownExecutor::default();
+        let workers = |executor: &MarkdownExecutor| {
+            executor
+                .service
+                .workers
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .len()
+        };
+        assert_eq!(workers(&executor), 0);
+        let first = executor.register(None).unwrap();
+        assert_eq!(workers(&executor), ExecutorOptions::default().worker_count);
+        let second = executor.register(None).unwrap();
+        assert_eq!(workers(&executor), ExecutorOptions::default().worker_count);
+        drop((first, second));
+        executor.join();
     }
 
     /// A failed result of `request(generation)`.

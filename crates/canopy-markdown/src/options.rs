@@ -48,7 +48,8 @@ pub enum Follow {
 /// Resource bounds and presentation policy for one Markdown reader.
 #[derive(Clone)]
 pub struct MarkdownOptions {
-    /// Shared preparation service. Clone this option across readers.
+    /// Shared preparation service. Clone this option across readers. The
+    /// default starts its workers when the first reader registers with it.
     pub executor: MarkdownExecutor,
     /// Optional host wake after an accepted publication changes displayed
     /// content, search, view, or preparation failure, and whenever a host
