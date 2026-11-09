@@ -14,7 +14,7 @@ use canopy::{
     input::{Event, key, mouse},
     layout::{Edges, Layout, ScrollAxis, ScrollMark, ScrollOp},
     style::{AttrSet, Color, Paint, PartialStyle, Style, effects, themes},
-    testing::harness::Harness,
+    testing::{ManualClock, harness::Harness},
     tree::{FocusDirection, FocusScope},
 };
 
@@ -23,6 +23,7 @@ use super::{
     vi::ViMode,
 };
 use crate::{
+    click::DEFAULT_THRESHOLD,
     editor::{EditMode, Editor, EditorConfig, Interaction, LineNumbers, MARK_STYLE, WrapMode},
     highlight::{HighlightSpan, Highlighter},
     regex_search::{match_ranges, smart_matcher},
@@ -96,12 +97,25 @@ impl Register for EditorHost {
 }
 
 fn build_harness(text: &str, config: EditorConfig, width: u32, height: u32) -> Harness {
+    build_harness_on(text, config, width, height, None)
+}
+
+/// Build the harness of [`build_harness`], on `clock` if one is given.
+fn build_harness_on(
+    text: &str,
+    config: EditorConfig,
+    width: u32,
+    height: u32,
+    clock: Option<Arc<ManualClock>>,
+) -> Harness {
     let host = EditorHost::new(text, config);
-    let mut harness = Harness::builder(host)
+    let mut builder = Harness::builder(host)
         .register::<EditorHost>()
-        .size(width, height)
-        .build()
-        .expect("Failed to build harness");
+        .size(width, height);
+    if let Some(clock) = clock {
+        builder = builder.clock(clock);
+    }
+    let mut harness = builder.build().expect("Failed to build harness");
     harness.render().expect("Failed to render");
     harness
         .with_root_widget_context(|_root: &mut EditorHost, ctx| {
@@ -1272,6 +1286,26 @@ fn mouse_double_click_selects_word() {
     assert_eq!(
         selection.range(),
         TextRange::new(TextPosition::new(0, 0), TextPosition::new(0, 5))
+    );
+}
+
+#[test]
+fn mouse_clicks_slower_than_the_threshold_stay_single() {
+    let clock = Arc::new(ManualClock::new());
+    let config = EditorConfig::new().with_mode(EditMode::Text);
+    let mut harness = build_harness_on("hello", config, 10, 1, Some(Arc::clone(&clock)));
+    harness
+        .mouse(mouse_event(mouse::Action::Down, 1, 0))
+        .unwrap();
+    clock.advance(DEFAULT_THRESHOLD * 2).unwrap();
+    harness
+        .mouse(mouse_event(mouse::Action::Down, 1, 0))
+        .unwrap();
+    let selection = editor_selection(&mut harness);
+    assert_eq!(
+        selection.range(),
+        TextRange::new(TextPosition::new(0, 1), TextPosition::new(0, 1)),
+        "the driver clock dates the clicks"
     );
 }
 

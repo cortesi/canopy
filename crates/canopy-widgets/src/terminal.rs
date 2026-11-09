@@ -2,7 +2,7 @@ use std::{
     mem,
     path::PathBuf,
     sync::{Arc, Mutex, PoisonError},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use canopy::{
@@ -467,13 +467,13 @@ impl Terminal {
         )
     }
 
-    /// Begin a selection at the provided location.
-    fn handle_selection_start(&mut self, location: geom::Point) -> bool {
+    /// Begin a selection at the provided location, for a click at `now`.
+    fn handle_selection_start(&mut self, location: geom::Point, now: Instant) -> bool {
         let Some(point) = self.selection_point(location) else {
             return false;
         };
 
-        match self.last_click.count(point) {
+        match self.last_click.count(point, now) {
             2 => {
                 self.selection_drag = None;
                 self.select_word(point)
@@ -721,7 +721,9 @@ impl Widget for Terminal {
                         EventOutcome::Handle
                     }
                     mouse::Action::Down if mouse_event.button == mouse::Button::Left => {
-                        if self.handle_selection_start(mouse_event.location.clamped_point()) {
+                        if self
+                            .handle_selection_start(mouse_event.location.clamped_point(), ctx.now())
+                        {
                             EventOutcome::Handle
                         } else {
                             EventOutcome::Ignore
@@ -1871,9 +1873,10 @@ mod tests {
             .expect("seed lines");
 
         let point = geom::Point { x: 1, y: 0 };
-        assert!(terminal.handle_selection_start(point));
+        let now = Instant::now();
+        assert!(terminal.handle_selection_start(point, now));
         assert!(terminal.handle_selection_end());
-        assert!(terminal.handle_selection_start(point));
+        assert!(terminal.handle_selection_start(point, now));
 
         let selected = terminal
             .session()

@@ -1034,7 +1034,7 @@ impl Editor {
                     self.transition(Target::Normal);
                 }
                 self.end_entry();
-                let (anchor, head) = match self.mouse.click_state.count(content_point) {
+                let (anchor, head) = match self.mouse.click_state.count(content_point, ctx.now()) {
                     2 => {
                         let range = word_range(&self.buffer, pos);
                         (range.start, range.end)
