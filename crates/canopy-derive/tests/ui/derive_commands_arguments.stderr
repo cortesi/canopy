@@ -1,0 +1,5 @@
+error: #[derive_commands] takes no arguments
+ --> tests/ui/derive_commands_arguments.rs:5:19
+  |
+5 | #[derive_commands(anything)]
+  |                   ^^^^^^^^

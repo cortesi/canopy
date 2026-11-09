@@ -176,6 +176,12 @@ fn parse_command_macro_args(attrs: &[Attribute]) -> Result<Option<MacroArgs>> {
         if !attr.path().is_ident("command") {
             continue;
         }
+        if macro_args.is_some() {
+            return Err(syn::Error::new_spanned(
+                attr,
+                "a method takes one #[command] attribute",
+            ));
+        }
 
         let mut args = MacroArgs::default();
         match &attr.meta {

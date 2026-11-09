@@ -145,23 +145,23 @@ impl ParamMeta {
     fn spec_tokens(&self) -> Option<proc_macro2::TokenStream> {
         let (kind_tokens, ty_tokens, decls_tokens) = match self.kind {
             ParamKind::Injected => (
-                quote! { canopy::commands::CommandParamKind::Injected },
-                quote! { <canopy::commands::ArgValue as canopy::commands::CommandType>::luau_ty },
-                quote! { <canopy::commands::ArgValue as canopy::commands::CommandType>::luau_decls },
+                quote! { ::canopy::commands::CommandParamKind::Injected },
+                quote! { <::canopy::commands::ArgValue as ::canopy::commands::CommandType>::luau_ty },
+                quote! { <::canopy::commands::ArgValue as ::canopy::commands::CommandType>::luau_decls },
             ),
             ParamKind::User => {
                 let ty = &self.ty;
                 (
-                    quote! { canopy::commands::CommandParamKind::User },
-                    quote! { <#ty as canopy::commands::CommandType>::luau_ty },
-                    quote! { <#ty as canopy::commands::CommandType>::luau_decls },
+                    quote! { ::canopy::commands::CommandParamKind::User },
+                    quote! { <#ty as ::canopy::commands::CommandType>::luau_ty },
+                    quote! { <#ty as ::canopy::commands::CommandType>::luau_decls },
                 )
             }
             ParamKind::Context { .. } => return None,
         };
         let requirement = if self.kind == ParamKind::Injected {
             let ty = &self.ty;
-            quote! { Some(<#ty as canopy::commands::Inject>::requirement) }
+            quote! { Some(<#ty as ::canopy::commands::Inject>::requirement) }
         } else {
             quote! { None }
         };
@@ -171,10 +171,10 @@ impl ParamMeta {
         let doc = opt_str_tokens(self.doc.as_deref());
 
         Some(quote! {
-            canopy::commands::CommandParamSpec {
+            ::canopy::commands::CommandParamSpec {
                 name: #name,
                 kind: #kind_tokens,
-                ty: canopy::commands::CommandTypeSpec {
+                ty: ::canopy::commands::CommandTypeSpec {
                     rust: #ty,
                     ty: #ty_tokens,
                     decls: #decls_tokens,
@@ -199,8 +199,8 @@ impl ParamMeta {
                 let name = self.name_lit();
                 let ty_name = self.ty_lit();
                 Some(quote! {
-                    let #ident: #ty = <#ty as canopy::commands::Inject>::inject(&*ctx).ok_or(
-                        canopy::commands::CommandError::MissingInjected {
+                    let #ident: #ty = <#ty as ::canopy::commands::Inject>::inject(&*ctx).ok_or(
+                        ::canopy::commands::CommandError::MissingInjected {
                             param: #name.to_string(),
                             expected: #ty_name,
                         },
@@ -231,13 +231,13 @@ impl ParamMeta {
         let name = self.name_lit();
         match source {
             UserBindingSource::Positional(_) => quote! {
-                return Err(canopy::commands::CommandError::ArityMismatch {
+                return Err(::canopy::commands::CommandError::ArityMismatch {
                     expected: expected_min,
                     got,
                 })
             },
             UserBindingSource::Named => quote! {
-                return Err(canopy::commands::CommandError::MissingNamedArg {
+                return Err(::canopy::commands::CommandError::MissingNamedArg {
                     name: #name.to_string(),
                 })
             },
@@ -255,16 +255,16 @@ impl ParamMeta {
             UserBindingSource::Positional(index) => quote! {
                 let #ident: #ty = match values.get(#index) {
                     Some(value) => {
-                        <#ty as canopy::commands::FromArgValue>::from_arg_value(value)
+                        <#ty as ::canopy::commands::FromArgValue>::from_arg_value(value)
                             .map_err(|err| err.with_param(#name))?
                     }
                     None => #missing,
                 };
             },
             UserBindingSource::Named => quote! {
-                let #ident: #ty = match normalized.get(&canopy::commands::normalize_key(#name)) {
+                let #ident: #ty = match normalized.get(&::canopy::commands::normalize_key(#name)) {
                     Some(value) => {
-                        <#ty as canopy::commands::FromArgValue>::from_arg_value(value)
+                        <#ty as ::canopy::commands::FromArgValue>::from_arg_value(value)
                             .map_err(|err| err.with_param(#name))?
                     }
                     None => #missing,
@@ -278,20 +278,20 @@ impl ReturnMeta {
     /// Render command metadata for this return type.
     fn spec_tokens(&self, ignore_result: bool) -> proc_macro2::TokenStream {
         if ignore_result {
-            return quote! { canopy::commands::CommandReturnSpec::Unit };
+            return quote! { ::canopy::commands::CommandReturnSpec::Unit };
         }
 
         match &self.kind {
-            ReturnKind::Unit => quote! { canopy::commands::CommandReturnSpec::Unit },
+            ReturnKind::Unit => quote! { ::canopy::commands::CommandReturnSpec::Unit },
             ReturnKind::Value { ty, ty_str } => {
                 let ty_lit = syn::LitStr::new(ty_str, proc_macro2::Span::call_site());
                 let doc = opt_str_tokens(self.doc.as_deref());
                 quote! {
-                    canopy::commands::CommandReturnSpec::Value(
-                        canopy::commands::CommandTypeSpec {
+                    ::canopy::commands::CommandReturnSpec::Value(
+                        ::canopy::commands::CommandTypeSpec {
                             rust: #ty_lit,
-                            ty: <#ty as canopy::commands::CommandType>::luau_ty,
-                            decls: <#ty as canopy::commands::CommandType>::luau_decls,
+                            ty: <#ty as ::canopy::commands::CommandType>::luau_ty,
+                            decls: <#ty as ::canopy::commands::CommandType>::luau_decls,
                             doc: #doc,
                         }
                     )
@@ -314,25 +314,25 @@ impl ReturnMeta {
             if self.is_result {
                 quote! {
                     let _ = #call
-                        .map_err(canopy::commands::CommandError::execution)?;
-                    return Ok(canopy::commands::ArgValue::Null);
+                        .map_err(::canopy::commands::CommandError::execution)?;
+                    return Ok(::canopy::commands::ArgValue::Null);
                 }
             } else {
                 quote! {
                     let _ = #call;
-                    return Ok(canopy::commands::ArgValue::Null);
+                    return Ok(::canopy::commands::ArgValue::Null);
                 }
             }
         } else if self.is_result {
             quote! {
                 let value = #call
-                    .map_err(canopy::commands::CommandError::execution)?;
-                return Ok(canopy::commands::ToArgValue::to_arg_value(value));
+                    .map_err(::canopy::commands::CommandError::execution)?;
+                return Ok(::canopy::commands::ToArgValue::to_arg_value(value));
             }
         } else {
             quote! {
                 let value = #call;
-                return Ok(canopy::commands::ToArgValue::to_arg_value(value));
+                return Ok(::canopy::commands::ToArgValue::to_arg_value(value));
             }
         }
     }
@@ -511,7 +511,7 @@ impl CommandMeta {
                 } else {
                     expected_max
                 };
-                return Err(canopy::commands::CommandError::ArityMismatch {
+                return Err(::canopy::commands::CommandError::ArityMismatch {
                     expected,
                     got,
                 });
@@ -533,19 +533,19 @@ impl CommandMeta {
         quote! {
             #[allow(unused_variables)]
             fn #check_ident(
-                args: &canopy::commands::CommandArgs,
-            ) -> ::std::result::Result<(), canopy::commands::CommandError>
+                args: &::canopy::commands::CommandArgs,
+            ) -> ::std::result::Result<(), ::canopy::commands::CommandError>
             where
                 Self: 'static,
             {
                 match args {
-                    canopy::commands::CommandArgs::Positional(values) => {
+                    ::canopy::commands::CommandArgs::Positional(values) => {
                         #arity_check
                         #(#positional_bindings)*
                         Ok(())
                     }
-                    canopy::commands::CommandArgs::Named(values) => {
-                        let normalized = canopy::commands::normalize_named_args(
+                    ::canopy::commands::CommandArgs::Named(values) => {
+                        let normalized = ::canopy::commands::normalize_named_args(
                             values,
                             Self::#names_const_ident,
                         )?;
@@ -576,28 +576,28 @@ impl CommandMeta {
         quote! {
             fn #invoke_ident(
                 target: &mut dyn ::std::any::Any,
-                ctx: &mut dyn canopy::Context,
-                args: &canopy::commands::CommandArgs,
+                ctx: &mut dyn ::canopy::Context,
+                args: &::canopy::commands::CommandArgs,
             ) -> ::std::result::Result<
-                canopy::commands::ArgValue,
-                canopy::commands::CommandError,
+                ::canopy::commands::ArgValue,
+                ::canopy::commands::CommandError,
             >
             where
                 Self: 'static,
             {
                 let #target_ident = target
                     .downcast_mut::<Self>()
-                    .ok_or(canopy::commands::CommandError::TargetTypeMismatch)?;
+                    .ok_or(::canopy::commands::CommandError::TargetTypeMismatch)?;
                 #(#shared_bindings)*
                 match args {
-                    canopy::commands::CommandArgs::Positional(values) => {
+                    ::canopy::commands::CommandArgs::Positional(values) => {
                         #arity_check
                         #(#positional_bindings)*
                         #(#mutable_context_bindings)*
                         #call_tokens
                     }
-                    canopy::commands::CommandArgs::Named(values) => {
-                        let normalized = canopy::commands::normalize_named_args(
+                    ::canopy::commands::CommandArgs::Named(values) => {
+                        let normalized = ::canopy::commands::normalize_named_args(
                             values,
                             Self::#names_const_ident,
                         )?;
@@ -626,7 +626,7 @@ impl CommandMeta {
         let params_const_ident = self.params_const_ident();
         let param_specs = self.param_specs();
         quote! {
-            const #params_const_ident: &'static [canopy::commands::CommandParamSpec] = &[
+            const #params_const_ident: &'static [::canopy::commands::CommandParamSpec] = &[
                 #(#param_specs),*
             ];
         }
@@ -651,8 +651,8 @@ impl CommandMeta {
         };
 
         quote! {
-            const #spec_const_ident: canopy::commands::CommandSpec = canopy::commands::CommandSpec {
-                id: canopy::commands::CommandId(#id),
+            const #spec_const_ident: ::canopy::commands::CommandSpec = ::canopy::commands::CommandSpec {
+                id: ::canopy::commands::CommandId(#id),
                 name: #name,
                 owner: #owner,
                 params: Self::#params_const_ident,
@@ -672,7 +672,7 @@ impl CommandMeta {
         let vis = self.generated_vis();
         quote! {
             #[doc = "Return the command spec for this command."]
-            #vis fn #accessor_ident() -> &'static canopy::commands::CommandSpec {
+            #vis fn #accessor_ident() -> &'static ::canopy::commands::CommandSpec {
                 &Self::#spec_const_ident
             }
         }
@@ -691,9 +691,9 @@ impl CommandMeta {
         let vis = self.generated_vis();
         quote! {
             #[doc = "Build a positional call with typed user arguments."]
-            #vis fn #builder_ident(#(#names: #types),*) -> canopy::commands::CommandCall {
-                Self::#accessor().call_with(canopy::commands::CommandArgs::Positional(vec![
-                    #(canopy::commands::ToArgValue::to_arg_value(#names)),*
+            #vis fn #builder_ident(#(#names: #types),*) -> ::canopy::commands::CommandCall {
+                Self::#accessor().call_with(::canopy::commands::CommandArgs::Positional(vec![
+                    #(::canopy::commands::ToArgValue::to_arg_value(#names)),*
                 ]))
             }
         }
@@ -720,16 +720,16 @@ impl CommandMeta {
             quote! {
                 let decoded = (|| -> ::std::result::Result<
                     (#(#types,)*),
-                    canopy::commands::CommandError,
+                    ::canopy::commands::CommandError,
                 > {
                     match args {
-                        canopy::commands::CommandArgs::Positional(values) => {
+                        ::canopy::commands::CommandArgs::Positional(values) => {
                             #arity_check
                             #(#positional_bindings)*
                             Ok((#(#idents,)*))
                         }
-                        canopy::commands::CommandArgs::Named(values) => {
-                            let normalized = canopy::commands::normalize_named_args(
+                        ::canopy::commands::CommandArgs::Named(values) => {
+                            let normalized = ::canopy::commands::normalize_named_args(
                                 values,
                                 Self::#names_const_ident,
                             )?;
@@ -740,7 +740,7 @@ impl CommandMeta {
                 })();
                 match decoded {
                     Ok((#(#idents,)*)) => target.#method(ctx, #(#idents),*),
-                    Err(error) => Ok(canopy::commands::CommandStatus::Disabled(error.to_string())),
+                    Err(error) => Ok(::canopy::commands::CommandStatus::Disabled(error.to_string())),
                 }
             }
         } else {
@@ -752,14 +752,14 @@ impl CommandMeta {
         quote! {
             fn #status_ident(
                 target: &dyn ::std::any::Any,
-                ctx: &dyn canopy::ViewContext,
-                args: &canopy::commands::CommandArgs,
-            ) -> canopy::error::Result<canopy::commands::CommandStatus>
+                ctx: &dyn ::canopy::ViewContext,
+                args: &::canopy::commands::CommandArgs,
+            ) -> ::canopy::error::Result<::canopy::commands::CommandStatus>
             where
                 Self: 'static,
             {
                 let target = target.downcast_ref::<Self>().ok_or_else(|| {
-                    canopy::error::Error::Invalid("command status target type mismatch".into())
+                    ::canopy::error::Error::Invalid("command status target type mismatch".into())
                 })?;
                 #call
             }
@@ -821,7 +821,7 @@ pub fn expand_derive_commands(input: &ItemImpl) -> syn::Result<proc_macro2::Toke
 
     let commands_const_ident = syn::Ident::new("__CANOPY_COMMANDS", proc_macro2::Span::call_site());
     generated.extend(quote! {
-        const #commands_const_ident: &'static [&'static canopy::commands::CommandSpec] = &[
+        const #commands_const_ident: &'static [&'static ::canopy::commands::CommandSpec] = &[
             #(#spec_refs),*
         ];
     });
@@ -835,8 +835,8 @@ pub fn expand_derive_commands(input: &ItemImpl) -> syn::Result<proc_macro2::Toke
         }
 
         #(#cfg_attrs)*
-        impl #impl_generics canopy::commands::CommandNode for #name #where_clause {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {
+        impl #impl_generics ::canopy::commands::CommandNode for #name #where_clause {
+            fn commands() -> &'static [&'static ::canopy::commands::CommandSpec] {
                 Self::#commands_const_ident
             }
         }

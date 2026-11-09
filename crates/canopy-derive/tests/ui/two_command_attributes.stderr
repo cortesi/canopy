@@ -1,0 +1,5 @@
+error: a method takes one #[command] attribute
+ --> tests/ui/two_command_attributes.rs:8:5
+  |
+8 |     #[command(ignore_result)]
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^

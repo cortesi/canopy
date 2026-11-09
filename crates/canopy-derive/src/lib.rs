@@ -34,9 +34,17 @@ use syn::{Attribute, Fields, ItemImpl, Result, parse_macro_input, parse_quote};
 /// lines are removed from the command's main documentation.
 #[proc_macro_attribute]
 pub fn derive_commands(
-    _attr: proc_macro::TokenStream,
+    attr: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
+    if !attr.is_empty() {
+        return syn::Error::new_spanned(
+            proc_macro2::TokenStream::from(attr),
+            "#[derive_commands] takes no arguments",
+        )
+        .to_compile_error()
+        .into();
+    }
     let input = parse_macro_input!(input as ItemImpl);
     match codegen::expand_derive_commands(&input) {
         Ok(tokens) => tokens.into(),
@@ -113,14 +121,14 @@ fn expand_command_arg(input: &syn::DeriveInput) -> Result<proc_macro2::TokenStre
         let ty = &field.ty;
         let doc = doc_tokens(&field.attrs);
         field_tokens.push(quote! {
-            canopy::commands::declaration::Field::new(
+            ::canopy::commands::declaration::Field::new(
                 #name,
-                <#ty as canopy::commands::CommandType>::luau_ty(),
+                <#ty as ::canopy::commands::CommandType>::luau_ty(),
             )
             #doc
         });
-        command_bounds.push(parse_quote!(#ty: canopy::commands::CommandType));
-        value_bounds.push(parse_quote!(#ty: canopy::commands::ToArgValue));
+        command_bounds.push(parse_quote!(#ty: ::canopy::commands::CommandType));
+        value_bounds.push(parse_quote!(#ty: ::canopy::commands::ToArgValue));
     }
     let generics = bounded_generics(&input.generics, command_bounds);
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
@@ -130,39 +138,39 @@ fn expand_command_arg(input: &syn::DeriveInput) -> Result<proc_macro2::TokenStre
     let value_fields = fields.iter().map(|field| {
         let ident = field.ident.as_ref().expect("named struct field");
         let name = ident.to_string();
-        quote! { (#name.to_string(), canopy::commands::ToArgValue::to_arg_value(self.#ident)) }
+        quote! { (#name.to_string(), ::canopy::commands::ToArgValue::to_arg_value(self.#ident)) }
     });
 
     let field_decl_regs = fields.iter().map(|field| {
         let ty = &field.ty;
-        quote! { <#ty as canopy::commands::CommandType>::luau_decls(registry); }
+        quote! { <#ty as ::canopy::commands::CommandType>::luau_decls(registry); }
     });
 
     Ok(quote! {
-        impl #value_impl_generics canopy::commands::ToArgValue for #ident #value_ty_generics #value_where_clause {
-            fn to_arg_value(self) -> canopy::commands::ArgValue {
-                canopy::commands::ArgValue::Map(::std::collections::BTreeMap::from([
+        impl #value_impl_generics ::canopy::commands::ToArgValue for #ident #value_ty_generics #value_where_clause {
+            fn to_arg_value(self) -> ::canopy::commands::ArgValue {
+                ::canopy::commands::ArgValue::Map(::std::collections::BTreeMap::from([
                     #(#value_fields),*
                 ]))
             }
         }
 
-        impl #impl_generics canopy::commands::CommandArg for #ident #ty_generics #where_clause {}
+        impl #impl_generics ::canopy::commands::CommandArg for #ident #ty_generics #where_clause {}
 
-        impl #impl_generics canopy::commands::CommandType for #ident #ty_generics #where_clause {
-            fn luau_ty() -> canopy::commands::declaration::Type {
-                canopy::commands::declaration::Type::named(#type_name)
+        impl #impl_generics ::canopy::commands::CommandType for #ident #ty_generics #where_clause {
+            fn luau_ty() -> ::canopy::commands::declaration::Type {
+                ::canopy::commands::declaration::Type::named(#type_name)
             }
 
-            fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {
+            fn luau_decls(registry: &mut ::canopy::commands::DeclRegistry<'_>) {
                 if !registry.begin(#type_name) {
                     return;
                 }
                 #(#field_decl_regs)*
                 registry.alias(
-                    canopy::commands::declaration::Alias::new(
+                    ::canopy::commands::declaration::Alias::new(
                         #type_name,
-                        canopy::commands::declaration::Type::table([#(#field_tokens),*]),
+                        ::canopy::commands::declaration::Type::table([#(#field_tokens),*]),
                     )
                     #type_doc,
                 );
@@ -257,41 +265,41 @@ fn expand_command_enum(input: syn::DeriveInput) -> Result<proc_macro2::TokenStre
         .map(|name| syn::LitStr::new(name, proc_macro2::Span::call_site()));
 
     Ok(quote! {
-        impl #impl_generics canopy::commands::ToArgValue for #ident #ty_generics #where_clause {
-            fn to_arg_value(self) -> canopy::commands::ArgValue {
+        impl #impl_generics ::canopy::commands::ToArgValue for #ident #ty_generics #where_clause {
+            fn to_arg_value(self) -> ::canopy::commands::ArgValue {
                 let name = match self {
                     #(#to_match_arms,)*
                 };
-                canopy::commands::ArgValue::String(name.to_string())
+                ::canopy::commands::ArgValue::String(name.to_string())
             }
         }
 
-        impl #impl_generics canopy::commands::FromArgValue for #ident #ty_generics #where_clause {
+        impl #impl_generics ::canopy::commands::FromArgValue for #ident #ty_generics #where_clause {
             fn from_arg_value(
-                v: &canopy::commands::ArgValue,
-            ) -> ::std::result::Result<Self, canopy::commands::CommandError> {
-                let canopy::commands::ArgValue::String(value) = v else {
-                    return Err(canopy::commands::CommandError::type_mismatch("String", v));
+                v: &::canopy::commands::ArgValue,
+            ) -> ::std::result::Result<Self, ::canopy::commands::CommandError> {
+                let ::canopy::commands::ArgValue::String(value) = v else {
+                    return Err(::canopy::commands::CommandError::type_mismatch("String", v));
                 };
                 #(#from_match_arms)*
-                Err(canopy::commands::CommandError::conversion(format!(
+                Err(::canopy::commands::CommandError::conversion(format!(
                     "unknown enum variant: {value}"
                 )))
             }
         }
 
-        impl #impl_generics canopy::commands::CommandType for #ident #ty_generics #where_clause {
-            fn luau_ty() -> canopy::commands::declaration::Type {
-                canopy::commands::declaration::Type::named(#type_name)
+        impl #impl_generics ::canopy::commands::CommandType for #ident #ty_generics #where_clause {
+            fn luau_ty() -> ::canopy::commands::declaration::Type {
+                ::canopy::commands::declaration::Type::named(#type_name)
             }
 
-            fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {
+            fn luau_decls(registry: &mut ::canopy::commands::DeclRegistry<'_>) {
                 if !registry.begin(#type_name) {
                     return;
                 }
-                registry.alias(canopy::commands::declaration::Alias::new(
+                registry.alias(::canopy::commands::declaration::Alias::new(
                     #type_name,
-                    canopy::commands::declaration::Type::literals([#(#luau_values),*]),
+                    ::canopy::commands::declaration::Type::literals([#(#luau_values),*]),
                 ));
             }
         }

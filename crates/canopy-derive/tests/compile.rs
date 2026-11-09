@@ -12,5 +12,8 @@ mod tests {
         cases.compile_fail("tests/ui/bare_command.rs");
         cases.compile_fail("tests/ui/inject_sealed.rs");
         cases.compile_fail("tests/ui/private_command_builders.rs");
+        cases.compile_fail("tests/ui/derive_commands_arguments.rs");
+        cases.compile_fail("tests/ui/two_command_attributes.rs");
+        cases.pass("tests/ui/shadowed_canopy.rs");
     }
 }
