@@ -9,7 +9,8 @@ use canopy::{
     Context, ContextExt, NodeId, NodeName, ViewContext, ViewContextExt, Widget,
     commands::CommandStatus,
     error::{Error, Result},
-    layout::Layout,
+    geom::Point,
+    layout::{Layout, ScrollOp},
     render::Render,
 };
 
@@ -92,11 +93,13 @@ impl ModeHelp {
             list.set_rows(rows);
             Ok(())
         })?;
-        Ok(if context.set_hidden(overlay, false)?.changed() {
-            Shown::Opened
-        } else {
-            Shown::Kept
-        })
+        if !context.set_hidden(overlay, false)?.changed() {
+            return Ok(Shown::Kept);
+        }
+        // More keys than rows scroll under the wheel, and each mode opens at
+        // the top of its keys.
+        context.scroll_node(list.into(), ScrollOp::To(Point::ZERO))?;
+        Ok(Shown::Opened)
     }
 }
 

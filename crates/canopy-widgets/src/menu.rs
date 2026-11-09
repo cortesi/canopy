@@ -24,13 +24,13 @@ use canopy::{
     commands::CommandCall,
     derive_commands,
     error::Result,
-    geom::{Line, Rect, Size},
+    geom::{Line, Point, Rect, Size},
     input::{
         BindingAction, BindingOptions, BindingPhase, BindingTier, Event, FrameworkBindingGroup,
         IntentName, NavIntent,
         key::{Key, KeyCode},
     },
-    layout::{CanvasContext, Direction, Edges, Layout, MeasureConstraints, Measurement},
+    layout::{CanvasContext, Direction, Edges, Layout, MeasureConstraints, Measurement, ScrollOp},
     render::Render,
     style::{PartialStyle, StyleRules, roles, themes::Palette},
     text,
@@ -39,7 +39,7 @@ use canopy::{
 use crate::{
     Dialog,
     frame::Frame,
-    row_cursor::{CursorMove, RowCursor},
+    row_cursor::{CursorMove, RowCursor, label_rows},
 };
 
 /// Columns of the mark gutter after a row, for a list that shows marks. `●`
@@ -320,9 +320,13 @@ impl Menu {
             frame.set_title(title);
             Ok(())
         })?;
-        context.with_widget_mut(list, |list: &mut MenuList, _| {
+        context.with_widget_mut(list, |list: &mut MenuList, context| {
             list.set_items(items, Some(selected));
             list.set_close(Some(close));
+            // New rows open at the top, scrolled only as far as the
+            // selection needs.
+            context.scroll(ScrollOp::To(Point::ZERO));
+            list.cursor.reveal(context);
             Ok(())
         })
     }
@@ -559,7 +563,10 @@ impl Widget for MenuList {
     }
 
     fn canvas(&self, view: Size, _context: &CanvasContext) -> Size {
-        view
+        // Rows are trimmed to the view rather than scrolled sideways, so only
+        // the row count can exceed it.
+        let rows = u32::try_from(self.items.len()).unwrap_or(u32::MAX);
+        Size::new(view.w, rows.max(view.h))
     }
 
     fn accept_focus(&self, _context: &dyn ViewContext) -> bool {
@@ -612,12 +619,11 @@ impl Widget for MenuList {
             return Ok(());
         }
         let selected = self.selected();
-        let end = rect.tl.y.saturating_add(rect.h);
-        for ((y, index), item) in (rect.tl.y..end).zip(0..).zip(&self.items) {
+        for (offset, index) in label_rows(self.items.len(), view.scroll.y, rect.h) {
             render_row(
                 render,
-                Rect::new(rect.tl.x, y, rect.w, 1),
-                &item.row,
+                Rect::new(rect.tl.x, rect.tl.y.saturating_add(offset), rect.w, 1),
+                &self.items[index].row,
                 self.layout,
                 selected == Some(index),
                 None,
@@ -678,13 +684,13 @@ mod tests {
     /// Build a host whose menu shows rows `a` and `b`, and a note, with `b`
     /// selected. Return the harness and the list.
     fn hosting() -> Result<(Harness, NodeId)> {
-        hosting_keys(['a', 'b'])
+        hosting_keys(&['a', 'b'])
     }
 
     /// Build a host whose menu shows a row for each of `keys`, named by its
     /// key, and a note, with the second row selected. Return the harness and
     /// the list.
-    fn hosting_keys(keys: [char; 2]) -> Result<(Harness, NodeId)> {
+    fn hosting_keys(keys: &[char]) -> Result<(Harness, NodeId)> {
         let mut harness = Harness::builder(MenuHost::default())
             .configure(|setup| setup.add_commands::<MenuHost>())
             .register::<MenuList>()
@@ -736,6 +742,15 @@ mod tests {
         Ok((harness, list))
     }
 
+    /// Return the first row the list shows, and how many rows it shows.
+    fn shown_rows(harness: &Harness, list: NodeId) -> (u32, u32) {
+        let view = harness
+            .canopy
+            .with_root_view(|ctx| ctx.view_of(list))
+            .expect("the list has a view");
+        (view.scroll.y, view.view_rect().h)
+    }
+
     /// Return what the host recorded.
     fn posted(harness: &mut Harness) -> Vec<String> {
         harness.with_root_widget(|host: &mut MenuHost| host.posted.clone())
@@ -777,9 +792,62 @@ mod tests {
         harness.key(Key::parse_spec("q")?)?;
         assert_eq!(posted(&mut harness), ["closed"]);
 
-        let (mut harness, _) = hosting_keys(['a', 'q'])?;
+        let (mut harness, _) = hosting_keys(&['a', 'q'])?;
         harness.key(Key::parse_spec("q")?)?;
         assert_eq!(posted(&mut harness), ["q", "closed"], "the row's key wins");
+        Ok(())
+    }
+
+    #[test]
+    fn a_menu_taller_than_its_dialog_scrolls_to_its_selection() -> Result<()> {
+        // Twenty-six rows and a note, in a dialog that shows eight.
+        let keys: Vec<char> = ('a'..='z').collect();
+        let (mut harness, list) = hosting_keys(&keys)?;
+        assert!(
+            !harness.tbuf().contains_text("a note"),
+            "the note is past the view"
+        );
+
+        harness.key(Key::parse_spec("End")?)?;
+        let selected = harness.with_widget(list, |list: &mut MenuList| list.selected());
+        assert_eq!(selected, Some(26), "the selection reaches the last row");
+        assert!(
+            harness.tbuf().contains_text("a note"),
+            "the last row scrolls into view"
+        );
+        let (top, height) = shown_rows(&harness, list);
+        assert_eq!(top + height, 27, "the view ends at the last row");
+
+        harness.key(Key::parse_spec("Home")?)?;
+        assert_eq!(shown_rows(&harness, list).0, 0, "the list scrolls back");
+        assert!(!harness.tbuf().contains_text("a note"));
+        Ok(())
+    }
+
+    #[test]
+    fn a_menu_opens_with_its_selection_in_view() -> Result<()> {
+        let keys: Vec<char> = ('a'..='z').collect();
+        let (mut harness, list) = hosting_keys(&keys)?;
+        harness.key(Key::parse_spec("End")?)?;
+        let menu = harness
+            .with_root_widget(|host: &mut MenuHost| host.menu)
+            .expect("the menu mounted");
+        harness.canopy.with_context(menu, |ctx| {
+            ctx.with_widget_mut(menu, |menu: &mut Menu, ctx| {
+                let rows = (0..30)
+                    .map(|row| MenuItem::note(MenuRow::new(None, format!("row {row}"))))
+                    .collect();
+                menu.set_items(ctx, "Again", rows, 20, MenuHost::call_closed())
+            })
+        })?;
+        harness.render()?;
+        let (top, height) = shown_rows(&harness, list);
+        assert!(
+            (top..top + height).contains(&20),
+            "row 20 shows in rows {top}..{}",
+            top + height
+        );
+        assert!(harness.tbuf().contains_text("row 20"));
         Ok(())
     }
 

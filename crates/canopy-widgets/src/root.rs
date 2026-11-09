@@ -1449,6 +1449,47 @@ mod tests {
     }
 
     #[test]
+    fn a_transient_mode_with_more_keys_than_rows_scrolls() -> Result<()> {
+        let (mut canopy, _backend, _left, _right) = setup_root_tree()?;
+        run_script(
+            &mut canopy,
+            r#"
+            canopy.bind("p", { description = "Pane keys" }, canopy.menu("panes"))
+            local keys: any = { mode = "panes" }
+            for key in ("abcdefghijklmnop"):gmatch(".") do
+                table.insert(keys, { key = key, description = "Action " .. key, action = function() end })
+            end
+            canopy.keymap(keys)
+
+            local function wheel_down()
+                local panel = assert(canopy.node_info(assert(canopy.find_node("**/mode_help/**/menu_list"))).rect)
+                for _ = 1, 10 do
+                    canopy.send_scroll("down", panel.x + 2, panel.y + 2)
+                end
+                canopy.prepare()
+            end
+
+            canopy.send_key("p")
+            canopy.prepare()
+            canopy.assert(canopy.screen_text():find("Action a") ~= nil, "the panel opens at its top")
+            canopy.assert(canopy.screen_text():find("Action p") == nil, "the last key is past the view")
+            wheel_down()
+            canopy.assert(canopy.mode() == "panes", "the wheel leaves the mode waiting")
+            canopy.assert(canopy.screen_text():find("Action p") ~= nil, "the wheel scrolls to the last key")
+            canopy.assert(canopy.screen_text():find("Action a") == nil, "the first key scrolls away")
+
+            canopy.send_key("x")
+            canopy.prepare()
+            canopy.assert(canopy.mode() == "", "any other key ends the mode")
+            canopy.send_key("p")
+            canopy.prepare()
+            canopy.assert(canopy.screen_text():find("Action a") ~= nil, "the panel opens again at its top")
+            canopy.send_key("x")
+            "#,
+        )
+    }
+
+    #[test]
     fn help_search_finds_keys_inside_menus_and_names_their_chains() -> Result<()> {
         let (mut canopy, _backend, _left, _right) = setup_root_tree()?;
         install_help_trigger(&mut canopy)?;
