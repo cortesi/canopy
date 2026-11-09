@@ -1213,14 +1213,9 @@ mod tests {
             ] {
                 setup.bind(
                     input,
-                    BindingOptions {
-                        show_in_help: true,
-                        path: Some("**/dialog/**/".parse()?),
-                        tier: BindingTier::Framework(GUARDED),
-                        description: description.to_string(),
-                        source: None,
-                        phase: Some(BindingPhase::AfterWidget),
-                    },
+                    BindingOptions::new(BindingTier::Framework(GUARDED), description)
+                        .with_path("**/dialog/**/".parse()?)
+                        .with_phase(BindingPhase::AfterWidget),
                     BindingAction::Command(Button::call_press()),
                 )?;
             }

@@ -183,14 +183,9 @@ impl Register for DemoShell {
         setup.add_commands::<Self>()?;
         setup.bind(
             Key::parse_spec("Ctrl+l")?,
-            BindingOptions {
-                path: Some("/root/**/".parse()?),
-                phase: Some(BindingPhase::BeforeWidget),
-                tier: BindingTier::Global,
-                description: "Choose gym view".into(),
-                source: None,
-                show_in_help: true,
-            },
+            BindingOptions::new(BindingTier::Global, "Choose gym view")
+                .with_path("/root/**/".parse()?)
+                .with_phase(BindingPhase::BeforeWidget),
             BindingAction::Command(Self::call_choose_view()),
         )?;
         let nav = |intent: NavIntent| IntentName::new(intent.name()).map(BindingAction::Intent);
@@ -220,14 +215,9 @@ impl Register for DemoShell {
         for (key, description, action) in keys {
             setup.bind(
                 Key::parse_spec(key)?,
-                BindingOptions {
-                    path: Some("**/".parse()?),
-                    phase: Some(BindingPhase::BeforeWidget),
-                    tier: BindingTier::Framework(VIEW_BINDINGS),
-                    description: description.into(),
-                    source: None,
-                    show_in_help: true,
-                },
+                BindingOptions::new(BindingTier::Framework(VIEW_BINDINGS), description)
+                    .with_path("**/".parse()?)
+                    .with_phase(BindingPhase::BeforeWidget),
                 action,
             )?;
         }

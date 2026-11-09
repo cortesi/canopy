@@ -134,14 +134,8 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         for (key, description, intent) in keys {
             setup.bind(
                 Key::parse_spec(key)?,
-                BindingOptions {
-                    show_in_help: true,
-                    path: Some("**/list/**/".parse()?),
-                    tier: BindingTier::Framework(Self::BINDINGS),
-                    description: description.to_string(),
-                    source: None,
-                    phase: None,
-                },
+                BindingOptions::new(BindingTier::Framework(Self::BINDINGS), description)
+                    .with_path("**/list/**/".parse()?),
                 BindingAction::Intent(IntentName::new(intent.name())?),
             )?;
         }

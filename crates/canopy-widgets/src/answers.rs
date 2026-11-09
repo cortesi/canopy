@@ -411,14 +411,9 @@ impl Register for Answers {
             };
             setup.bind(
                 input,
-                BindingOptions {
-                    path: Some(path.parse()?),
-                    tier: BindingTier::Framework(Self::BINDINGS),
-                    description: description.to_owned(),
-                    show_in_help: true,
-                    source: None,
-                    phase: Some(BindingPhase::AfterWidget),
-                },
+                BindingOptions::new(BindingTier::Framework(Self::BINDINGS), description)
+                    .with_path(path.parse()?)
+                    .with_phase(BindingPhase::AfterWidget),
                 BindingAction::Command(command),
             )?;
         }

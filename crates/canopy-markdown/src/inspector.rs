@@ -1125,14 +1125,9 @@ impl Register for Inspector {
         ] {
             setup.bind(
                 InputSpec::Key(Key::parse_spec(key)?),
-                BindingOptions {
-                    tier: BindingTier::Framework(Self::BINDINGS),
-                    description: description.into(),
-                    path: Some("**/markdown_inspector/**/".parse()?),
-                    phase: Some(phase),
-                    show_in_help: true,
-                    source: None,
-                },
+                BindingOptions::new(BindingTier::Framework(Self::BINDINGS), description)
+                    .with_path("**/markdown_inspector/**/".parse()?)
+                    .with_phase(phase),
                 BindingAction::Command(call),
             )?;
         }

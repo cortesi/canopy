@@ -1028,22 +1028,13 @@ where
         for (key, description, action) in bindings {
             // Intents always run before the widget; commands run after it, so
             // typed filter text reaches the list first.
-            let phase = match action {
-                BindingAction::Intent(_) => None,
-                _ => Some(BindingPhase::AfterWidget),
-            };
-            setup.bind(
-                Key::parse_spec(key)?,
-                BindingOptions {
-                    show_in_help: true,
-                    path: Some("**/picker/**/".parse()?),
-                    tier: BindingTier::Framework(Picker::<T>::BINDINGS),
-                    description: description.to_string(),
-                    source: None,
-                    phase,
-                },
-                action,
-            )?;
+            let mut options =
+                BindingOptions::new(BindingTier::Framework(Picker::<T>::BINDINGS), description)
+                    .with_path("**/picker/**/".parse()?);
+            if !matches!(action, BindingAction::Intent(_)) {
+                options = options.with_phase(BindingPhase::AfterWidget);
+            }
+            setup.bind(Key::parse_spec(key)?, options, action)?;
         }
         Ok(())
     }

@@ -318,14 +318,8 @@ pub fn register(setup: &mut Setup) -> Result<()> {
     for (group, key, intent, description) in KEYS {
         setup.bind(
             Key::parse_spec(key)?,
-            BindingOptions {
-                show_in_help: true,
-                path: Some("**/options_panel/**/".parse()?),
-                tier: BindingTier::Framework(group),
-                description: description.to_string(),
-                source: None,
-                phase: None,
-            },
+            BindingOptions::new(BindingTier::Framework(group), description)
+                .with_path("**/options_panel/**/".parse()?),
             BindingAction::Intent(IntentName::new(intent.name())?),
         )?;
     }

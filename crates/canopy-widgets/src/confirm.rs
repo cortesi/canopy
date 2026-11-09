@@ -488,14 +488,9 @@ impl Register for Confirm {
         for (input, description, command) in bindings {
             setup.bind(
                 InputSpec::Key(Key::parse_spec(input)?),
-                BindingOptions {
-                    show_in_help: true,
-                    path: Some("**/confirm/**/".parse()?),
-                    tier: BindingTier::Framework(Self::BINDINGS),
-                    description: description.to_string(),
-                    source: None,
-                    phase: Some(BindingPhase::AfterWidget),
-                },
+                BindingOptions::new(BindingTier::Framework(Self::BINDINGS), description)
+                    .with_path("**/confirm/**/".parse()?)
+                    .with_phase(BindingPhase::AfterWidget),
                 BindingAction::Command(command),
             )?;
         }

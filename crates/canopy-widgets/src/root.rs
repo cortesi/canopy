@@ -567,18 +567,13 @@ fn bind_panel_keys(
     keys: Vec<PanelKey>,
 ) -> Result<()> {
     for (key, description, action, show_in_help) in keys {
-        setup.bind(
-            Key::parse_spec(key)?,
-            BindingOptions {
-                show_in_help,
-                path: Some(path.parse()?),
-                tier: BindingTier::Framework(group),
-                description,
-                source: None,
-                phase: Some(BindingPhase::BeforeWidget),
-            },
-            action,
-        )?;
+        let mut options = BindingOptions::new(BindingTier::Framework(group), description)
+            .with_path(path.parse()?)
+            .with_phase(BindingPhase::BeforeWidget);
+        if !show_in_help {
+            options = options.hidden();
+        }
+        setup.bind(Key::parse_spec(key)?, options, action)?;
     }
     Ok(())
 }
@@ -650,14 +645,9 @@ fn bind_help_key(
 ) -> Result<()> {
     setup.bind(
         Key::parse_spec(key)?,
-        BindingOptions {
-            show_in_help: true,
-            path: Some(path.parse()?),
-            tier: BindingTier::Framework(HELP_BINDINGS),
-            description: description.to_string(),
-            source: None,
-            phase: Some(phase),
-        },
+        BindingOptions::new(BindingTier::Framework(HELP_BINDINGS), description)
+            .with_path(path.parse()?)
+            .with_phase(phase),
         action,
     )?;
     Ok(())

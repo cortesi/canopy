@@ -2745,6 +2745,24 @@ pub mod input {
         pub phase: Option<BindingPhase>,
     }
 
+    impl BindingOptions {
+        /// Leave the binding out of shortcut help. Routing is unaffected.
+        #[must_use]
+        pub fn hidden(self) -> Self;
+
+        /// Options for a binding in `tier`, shown in help, with no path, phase,
+        /// or source.
+        pub fn new(tier: BindingTier, description: impl Into<String>) -> Self;
+
+        /// Match only routes that `path` selects.
+        #[must_use]
+        pub fn with_path(self, path: PathFilter) -> Self;
+
+        /// Run in `phase` relative to the widget.
+        #[must_use]
+        pub fn with_phase(self, phase: BindingPhase) -> Self;
+    }
+
     /// Binding phase relative to widget input handling.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub enum BindingPhase {

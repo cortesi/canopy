@@ -137,6 +137,42 @@ pub struct BindingOptions {
     pub phase: Option<BindingPhase>,
 }
 
+impl BindingOptions {
+    /// Options for a binding in `tier`, shown in help, with no path, phase,
+    /// or source.
+    pub fn new(tier: BindingTier, description: impl Into<String>) -> Self {
+        Self {
+            path: None,
+            tier,
+            description: description.into(),
+            show_in_help: true,
+            source: None,
+            phase: None,
+        }
+    }
+
+    /// Match only routes that `path` selects.
+    #[must_use]
+    pub fn with_path(mut self, path: PathFilter) -> Self {
+        self.path = Some(path);
+        self
+    }
+
+    /// Run in `phase` relative to the widget.
+    #[must_use]
+    pub fn with_phase(mut self, phase: BindingPhase) -> Self {
+        self.phase = Some(phase);
+        self
+    }
+
+    /// Leave the binding out of shortcut help. Routing is unaffected.
+    #[must_use]
+    pub fn hidden(mut self) -> Self {
+        self.show_in_help = false;
+        self
+    }
+}
+
 /// Action executed by a binding.
 #[derive(Clone, Debug, PartialEq)]
 pub enum BindingAction {
