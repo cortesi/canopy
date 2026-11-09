@@ -64,7 +64,8 @@ mod tests {
     use canopy_widgets::editor::LineNumbers;
 
     use crate::{
-        Kind, Layout, LeafValue, OptionEnum, OptionGroup, Schema, Store, Value, default_document,
+        Kind, LeafValue, OptionEnum, OptionFiles, OptionGroup, Schema, Store, Value,
+        default_document,
     };
 
     /// A group with a field of each enum, shaped as fh declares them.
@@ -120,11 +121,11 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let file = root.path().join("options.toml");
         fs::write(&file, "glyphs = \"blocks\"\nline_numbers = \"absolute\"\n").unwrap();
-        let layout = Layout {
+        let files = OptionFiles {
             global: Some(file),
-            ..Layout::default()
+            ..OptionFiles::default()
         };
-        let shown = Store::<Shown>::load(&layout).current();
+        let shown = Store::<Shown>::load(&files).current();
         assert_eq!(shown.glyphs, Glyphs::Blocks);
         assert_eq!(shown.line_numbers, LineNumbers::Absolute);
         let document = default_document::<Shown>();

@@ -25,7 +25,8 @@ use proptest::{
 };
 
 use crate::{
-    Changes, Follower, Kind, Layout, OptionEnum, OptionGroup, Options, Set, SetError, Store, Value,
+    Changes, Follower, Kind, OptionEnum, OptionFiles, OptionGroup, Options, Set, SetError, Store,
+    Value,
     file::{Scope, display_path},
     model,
     store::{Cleared, Saved, Source},
@@ -244,7 +245,7 @@ fn layers_merge_and_report_their_sources() {
         &root.path().join("local"),
         "# mine\n[listing]\nhidden = false\n[diff]\ncontext = 5\nbogus = 1\n[programs]\neditor = [\"evil\"]\n",
     );
-    let store: Store<Root> = Store::load(&Layout {
+    let store: Store<Root> = Store::load(&OptionFiles {
         global: Some(global),
         locals: vec![local.clone()],
         local_target: Some(local.clone()),
@@ -280,7 +281,7 @@ fn saves_clears_and_reverts_write_the_right_files() {
         &root.path().join("local"),
         "# keep this comment\n[listing]\nhidden = false\n[diff]\ncontext = 5\n",
     );
-    let store: Store<Root> = Store::load(&Layout {
+    let store: Store<Root> = Store::load(&OptionFiles {
         global: Some(global.clone()),
         locals: vec![local.clone()],
         local_target: Some(local.clone()),
@@ -345,9 +346,9 @@ fn saves_clears_and_reverts_write_the_right_files() {
 fn saves_refuse_to_write_over_a_broken_file() {
     let root = tempfile::tempdir().unwrap();
     let global = options_file(&root.path().join("global"), "[unclosed");
-    let store: Store<Root> = Store::load(&Layout {
+    let store: Store<Root> = Store::load(&OptionFiles {
         global: Some(global.clone()),
-        ..Layout::default()
+        ..OptionFiles::default()
     });
     assert_eq!(store.backend().take_warnings().len(), 1);
     let backend = store.backend();
@@ -980,9 +981,9 @@ fn quick_mode_closes_after_one_change() {
 fn the_panel_edits_lists_and_saves() {
     let root = tempfile::tempdir().unwrap();
     let global = root.path().join("global").join("options.toml");
-    let store: Store<Root> = Store::load(&Layout {
+    let store: Store<Root> = Store::load(&OptionFiles {
         global: Some(global.clone()),
-        ..Layout::default()
+        ..OptionFiles::default()
     });
     let mut harness = options_harness(&store);
     harness.script("options.open()").unwrap();
@@ -1282,9 +1283,9 @@ fn regression_a_subscriber_update_then_revert_ends_reverted() {
 fn regression_a_save_in_a_round_writes_the_queued_writes() {
     let directory = tempfile::tempdir().unwrap();
     let global = options_file(directory.path(), "");
-    let store: Store<Root> = Store::load(&Layout {
+    let store: Store<Root> = Store::load(&OptionFiles {
         global: Some(global.clone()),
-        ..Layout::default()
+        ..OptionFiles::default()
     });
     let root = store.handle();
     let writer = root.clone();
@@ -1340,9 +1341,9 @@ fn a_save_that_fails_in_a_round_posts_its_error() {
 fn a_deferred_clear_follows_a_queued_save() {
     let directory = tempfile::tempdir().unwrap();
     let global = options_file(directory.path(), "");
-    let store: Store<Root> = Store::load(&Layout {
+    let store: Store<Root> = Store::load(&OptionFiles {
         global: Some(global.clone()),
-        ..Layout::default()
+        ..OptionFiles::default()
     });
     let root = store.handle();
     let backend = store.backend();
@@ -1374,9 +1375,9 @@ fn a_deferred_clear_follows_a_queued_save() {
 fn the_save_and_clear_commands_in_a_round_defer_and_post_their_notices() {
     let directory = tempfile::tempdir().unwrap();
     let global = options_file(directory.path(), "[diff]\ncontext = 2\n");
-    let store: Store<Root> = Store::load(&Layout {
+    let store: Store<Root> = Store::load(&OptionFiles {
         global: Some(global.clone()),
-        ..Layout::default()
+        ..OptionFiles::default()
     });
     let mut harness = options_harness(&store);
     let root = store.handle();
@@ -1445,7 +1446,7 @@ fn saves_write_only_what_changed() {
     let root = tempfile::tempdir().unwrap();
     let global = options_file(&root.path().join("global"), "[diff]\ntab_width = 8\n");
     let local = root.path().join("local").join("options.toml");
-    let store: Store<Root> = Store::load(&Layout {
+    let store: Store<Root> = Store::load(&OptionFiles {
         global: Some(global.clone()),
         locals: Vec::new(),
         local_target: Some(local.clone()),
@@ -1472,7 +1473,7 @@ fn saves_write_only_what_changed() {
         &root.path().join("programs"),
         "[programs]\neditor = [\"vi\"]\n",
     );
-    let store: Store<Root> = Store::load(&Layout {
+    let store: Store<Root> = Store::load(&OptionFiles {
         global: Some(programs.clone()),
         locals: Vec::new(),
         local_target: Some(local),
@@ -1553,9 +1554,9 @@ fn a_file_set_or_order_keeps_the_names_it_knows() {
         // A known name matches in any case, as a choice does.
         "rank = [\"bogus\", \"Size\"]\nshown = [\"bogus\", \"git\"]\n",
     );
-    let store: Store<Ranked> = Store::load(&Layout {
+    let store: Store<Ranked> = Store::load(&OptionFiles {
         global: Some(global),
-        ..Layout::default()
+        ..OptionFiles::default()
     });
     let warnings = store.backend().take_warnings();
     assert_eq!(warnings.len(), 2, "{warnings:?}");

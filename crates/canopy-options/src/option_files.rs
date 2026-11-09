@@ -9,7 +9,7 @@ pub const OPTIONS_FILE: &str = "options.toml";
 /// The option files of one run. The default has no files, for runs that
 /// keep no options.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Layout {
+pub struct OptionFiles {
     /// The global file, if the run has a config home.
     pub global: Option<PathBuf>,
     /// The local files that exist, from the outermost directory to the start
@@ -19,23 +19,39 @@ pub struct Layout {
     pub local_target: Option<PathBuf>,
 }
 
-impl Layout {
+/// The places that [`OptionFiles::discover`] looks for the option files of
+/// a run.
+#[derive(Clone, Copy, Debug)]
+pub struct FileSearch<'a> {
+    /// The name of the directory that holds a local file, such as `.fh`.
+    pub app_dir: &'a str,
+    /// The directory that holds the global file, if the run has one.
+    pub config_home: Option<&'a Path>,
+    /// The directory where the search for local files starts.
+    pub start: &'a Path,
+    /// The home directory, below which local files are. Without one, a run
+    /// has no local files.
+    pub home: Option<&'a Path>,
+    /// The root of the project that holds `start`, if there is one.
+    pub project_root: Option<&'a Path>,
+}
+
+impl OptionFiles {
     /// Find the option files of a run.
     ///
-    /// `app_dir` is the name of the directory that holds a local file, such
-    /// as `.fh`, and `config_home` is the directory that holds the global
-    /// file. Local files are in `start` and in each of its ancestors below
-    /// `home`. A start directory that is `home`, or that is outside it, has
-    /// no local files. A local save writes the nearer of the nearest local
-    /// file and the file in `project_root`, or else the file in `start`.
+    /// Local files are in `start` and in each of its ancestors below `home`.
+    /// A start directory that is `home`, or that is outside it, has no local
+    /// files. A local save writes the nearer of the nearest local file and
+    /// the file in `project_root`, or else the file in `start`.
     #[must_use]
-    pub fn discover(
-        app_dir: &str,
-        config_home: Option<&Path>,
-        start: &Path,
-        home: Option<&Path>,
-        project_root: Option<&Path>,
-    ) -> Self {
+    pub fn discover(search: FileSearch<'_>) -> Self {
+        let FileSearch {
+            app_dir,
+            config_home,
+            start,
+            home,
+            project_root,
+        } = search;
         let global = config_home.map(|home| home.join(OPTIONS_FILE));
         let Some(home) = home.map(canonical) else {
             return Self {
@@ -109,6 +125,17 @@ mod tests {
 
     use super::*;
 
+    /// Return a search for the `.fh` files below `home`, from `start`.
+    fn fh<'a>(start: &'a Path, home: &'a Path) -> FileSearch<'a> {
+        FileSearch {
+            app_dir: ".fh",
+            config_home: None,
+            start,
+            home: Some(home),
+            project_root: None,
+        }
+    }
+
     /// Make an option file in `directory`.
     fn options_in(directory: &Path) -> PathBuf {
         let file = directory.join(".fh").join(OPTIONS_FILE);
@@ -129,10 +156,13 @@ mod tests {
         let outer = options_in(&work);
         let inner = options_in(&repo);
         let config = home.join(".fh");
-        let layout = Layout::discover(".fh", Some(&config), &start, Some(&home), None);
-        assert_eq!(layout.locals, vec![outer, inner.clone()]);
-        assert_eq!(layout.global, Some(config.join(OPTIONS_FILE)));
-        assert_eq!(layout.local_target, Some(inner));
+        let files = OptionFiles::discover(FileSearch {
+            config_home: Some(&config),
+            ..fh(&start, &home)
+        });
+        assert_eq!(files.locals, vec![outer, inner.clone()]);
+        assert_eq!(files.global, Some(config.join(OPTIONS_FILE)));
+        assert_eq!(files.local_target, Some(inner));
     }
 
     #[test]
@@ -144,9 +174,9 @@ mod tests {
         fs::create_dir_all(&outside).unwrap();
         options_in(&outside);
         for start in [&home, &outside] {
-            let layout = Layout::discover(".fh", None, start, Some(&home), None);
-            assert_eq!(layout.locals, Vec::<PathBuf>::new());
-            assert_eq!(layout.local_target, None);
+            let files = OptionFiles::discover(fh(start, &home));
+            assert_eq!(files.locals, Vec::<PathBuf>::new());
+            assert_eq!(files.local_target, None);
         }
     }
 
@@ -158,19 +188,25 @@ mod tests {
         let repo = work.join("repo");
         fs::create_dir_all(&repo).unwrap();
         let outer = options_in(&work);
-        let layout = Layout::discover(".fh", None, &repo, Some(&home), Some(&repo));
-        assert_eq!(layout.locals, vec![outer.clone()]);
+        let files = OptionFiles::discover(FileSearch {
+            project_root: Some(&repo),
+            ..fh(&repo, &home)
+        });
+        assert_eq!(files.locals, vec![outer.clone()]);
         assert_eq!(
-            layout.local_target,
+            files.local_target,
             Some(repo.join(".fh").join(OPTIONS_FILE))
         );
-        let layout = Layout::discover(".fh", None, &repo, Some(&home), Some(&home));
-        assert_eq!(layout.local_target, Some(outer));
+        let files = OptionFiles::discover(FileSearch {
+            project_root: Some(&home),
+            ..fh(&repo, &home)
+        });
+        assert_eq!(files.local_target, Some(outer));
         let start = repo.join("deep");
         fs::create_dir_all(&start).unwrap();
-        let layout = Layout::discover(".fh", None, &start, Some(&home), None);
+        let files = OptionFiles::discover(fh(&start, &home));
         assert_eq!(
-            layout.local_target,
+            files.local_target,
             Some(work.join(".fh").join(OPTIONS_FILE))
         );
     }
@@ -184,8 +220,8 @@ mod tests {
         let file = options_in(&repo);
         let link = root.path().join("link");
         symlink(&repo, &link).unwrap();
-        let layout = Layout::discover(".fh", None, &link, Some(&home), None);
-        assert_eq!(layout.locals, vec![file]);
+        let files = OptionFiles::discover(fh(&link, &home));
+        assert_eq!(files.locals, vec![file]);
     }
 
     #[test]
@@ -195,16 +231,13 @@ mod tests {
         let work = home.join("work");
         fs::create_dir_all(&work).unwrap();
         let file = options_in(&work);
-        let layout = Layout::discover(
-            ".fh",
-            Some(file.parent().unwrap()),
-            &work,
-            Some(&home),
-            None,
-        );
-        assert_eq!(layout.locals, Vec::<PathBuf>::new());
+        let files = OptionFiles::discover(FileSearch {
+            config_home: Some(file.parent().unwrap()),
+            ..fh(&work, &home)
+        });
+        assert_eq!(files.locals, Vec::<PathBuf>::new());
         assert_eq!(
-            layout.local_target, None,
+            files.local_target, None,
             "a local save never writes the global file"
         );
     }

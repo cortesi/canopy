@@ -15,8 +15,8 @@ extern crate self as canopy_options;
 
 mod file;
 mod follow;
-mod layout;
 mod model;
+mod option_files;
 mod panel;
 mod stock;
 mod store;
@@ -27,12 +27,12 @@ mod widget;
 pub use canopy_options_derive::{OptionEnum, OptionGroup};
 pub use file::default_document;
 pub use follow::Follower;
-pub use layout::{Layout, OPTIONS_FILE};
 pub use model::{
     FieldMeta, Group, IntLeaf, Item, Kind, Leaf, LeafValue, Limits, OptionEnum, OptionField,
     OptionGroup, Order, RESERVED_KEYS, Schema, Set, SetError, Value, Variant, assert_group,
     assert_int, assert_leaf, check_range, enum_from_value, group_item, join_path, leaf_changed,
     leaf_get, leaf_item, leaf_set,
 };
+pub use option_files::{FileSearch, OPTIONS_FILE, OptionFiles};
 pub use store::{Changes, OptionsHandle, Snapshot, Store};
 pub use widget::Options;

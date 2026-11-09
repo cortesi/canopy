@@ -90,20 +90,23 @@ layers, from the lowest precedence to the highest:
 3. The local files, from the outermost directory to the nearest.
 4. The live values of the run, which the panel, scripts, and widgets set.
 
-A `Layout` names the files. An application with only a global file builds
-one by hand:
+An `OptionFiles` names the files. An application with only a global file
+builds one by hand:
 
 ```rust
-Store::<TodoOptions>::load(&Layout {
+Store::<TodoOptions>::load(&OptionFiles {
     global: config_home.map(|home| home.join(OPTIONS_FILE)),
-    ..Layout::default()
+    ..OptionFiles::default()
 })
 ```
 
-`Layout::discover` also finds local files. Each is an `options.toml` in the
-application's directory, such as `.fh`, in the start directory or in an
-ancestor below the home directory. `Layout::default()` has no files, for a run that keeps none,
-such as headless MCP.
+`OptionFiles::discover` also finds local files. It takes a `FileSearch`,
+which names the application's directory, the config home, the start
+directory, the home directory, and the project root. Each local file is an
+`options.toml` in the application's directory, such as `.fh`, in the start
+directory or in an ancestor below the home directory.
+`OptionFiles::default()` has no files, for a run that keeps none, such as
+headless MCP.
 
 An option file is TOML, with a table for each group:
 

@@ -243,6 +243,23 @@ pub struct FieldMeta {
     pub limits: Option<Limits>,
 }
 
+/// The places that [`OptionFiles::discover`] looks for the option files of
+/// a run.
+#[derive(Clone, Copy, Debug)]
+pub struct FileSearch<'a> {
+    /// The name of the directory that holds a local file, such as `.fh`.
+    pub app_dir: &'a str,
+    /// The directory that holds the global file, if the run has one.
+    pub config_home: Option<&'a Path>,
+    /// The directory where the search for local files starts.
+    pub start: &'a Path,
+    /// The home directory, below which local files are. Without one, a run
+    /// has no local files.
+    pub home: Option<&'a Path>,
+    /// The root of the project that holds `start`, if there is one.
+    pub project_root: Option<&'a Path>,
+}
+
 /// A widget's link to its group of a store.
 ///
 /// The widget keeps the values it shows in fields of its own, and applies a
@@ -391,38 +408,6 @@ impl Kind {
     pub fn variants(&self) -> &[Variant];
 }
 
-/// The option files of one run. The default has no files, for runs that
-/// keep no options.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct Layout {
-    /// The global file, if the run has a config home.
-    pub global: Option<PathBuf>,
-    /// The local files that exist, from the outermost directory to the start
-    /// directory.
-    pub locals: Vec<PathBuf>,
-    /// The file that a local save writes, if the run has one.
-    pub local_target: Option<PathBuf>,
-}
-
-impl Layout {
-    /// Find the option files of a run.
-    ///
-    /// `app_dir` is the name of the directory that holds a local file, such
-    /// as `.fh`, and `config_home` is the directory that holds the global
-    /// file. Local files are in `start` and in each of its ancestors below
-    /// `home`. A start directory that is `home`, or that is outside it, has
-    /// no local files. A local save writes the nearer of the nearest local
-    /// file and the file in `project_root`, or else the file in `start`.
-    #[must_use]
-    pub fn discover(
-        app_dir: &str,
-        config_home: Option<&Path>,
-        start: &Path,
-        home: Option<&Path>,
-        project_root: Option<&Path>,
-    ) -> Self;
-}
-
 /// One leaf of the schema.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Leaf {
@@ -451,6 +436,30 @@ pub struct Limits {
     pub max: Option<i64>,
     /// The change of one step.
     pub step: i64,
+}
+
+/// The option files of one run. The default has no files, for runs that
+/// keep no options.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct OptionFiles {
+    /// The global file, if the run has a config home.
+    pub global: Option<PathBuf>,
+    /// The local files that exist, from the outermost directory to the start
+    /// directory.
+    pub locals: Vec<PathBuf>,
+    /// The file that a local save writes, if the run has one.
+    pub local_target: Option<PathBuf>,
+}
+
+impl OptionFiles {
+    /// Find the option files of a run.
+    ///
+    /// Local files are in `start` and in each of its ancestors below `home`.
+    /// A start directory that is `home`, or that is outside it, has no local
+    /// files. A local save writes the nearer of the nearest local file and
+    /// the file in `project_root`, or else the file in `start`.
+    #[must_use]
+    pub fn discover(search: FileSearch<'_>) -> Self;
 }
 
 /// The `options` command owner.
@@ -840,12 +849,12 @@ impl<T: crate::OptionGroup + Send + Sync> Store<T> {
     #[must_use]
     pub fn handle(&self) -> OptionsHandle<T>;
 
-    /// Load a store from the files of `layout`.
+    /// Load a store from `files`.
     ///
     /// Entries that do not load become warnings, which the options widget
     /// shows once it mounts.
     #[must_use]
-    pub fn load(layout: &Layout) -> Self;
+    pub fn load(files: &OptionFiles) -> Self;
 }
 
 impl !Send for Store {}

@@ -21,8 +21,8 @@ use canopy::{
 
 use crate::{
     file::{self, FileLayer, Scope, display_path},
-    layout::Layout,
     model::{OptionGroup, Schema, SetError, Value, join_path},
+    option_files::OptionFiles,
 };
 
 /// The root value as the handles see it.
@@ -451,29 +451,29 @@ impl<T> Clone for Store<T> {
 
 impl<T: OptionGroup + Send + Sync> Default for Store<T> {
     fn default() -> Self {
-        Self::load(&Layout::default())
+        Self::load(&OptionFiles::default())
     }
 }
 
 impl<T: OptionGroup + Send + Sync> Store<T> {
-    /// Load a store from the files of `layout`.
+    /// Load a store from `files`.
     ///
     /// Entries that do not load become warnings, which the options widget
     /// shows once it mounts.
     #[must_use]
-    pub fn load(layout: &Layout) -> Self {
+    pub fn load(files: &OptionFiles) -> Self {
         let schema = Rc::new(Schema::of::<T>());
         let mut warnings: Vec<String> = schema
             .key_problems()
             .into_iter()
             .map(|problem| format!("options schema: {problem}"))
             .collect();
-        let global = layout.global.as_deref().map(|path| {
+        let global = files.global.as_deref().map(|path| {
             let (layer, mut problems) = file::load_layer::<T>(&schema, path, Scope::Global);
             warnings.append(&mut problems);
             layer
         });
-        let locals = layout
+        let locals = files
             .locals
             .iter()
             .map(|path| {
@@ -487,7 +487,7 @@ impl<T: OptionGroup + Send + Sync> Store<T> {
             script_defaults: BTreeMap::new(),
             global,
             locals,
-            local_target: layout.local_target.clone(),
+            local_target: files.local_target.clone(),
             live: BTreeMap::new(),
             saved: Arc::new(T::default()),
             current: Arc::new(T::default()),

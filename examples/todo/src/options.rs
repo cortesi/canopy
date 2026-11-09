@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use canopy_options::{Layout, OPTIONS_FILE, OptionEnum, OptionGroup, Store};
+use canopy_options::{OPTIONS_FILE, OptionEnum, OptionFiles, OptionGroup, Store};
 
 /// Every option of the todo.
 #[derive(OptionGroup, Clone, Debug, PartialEq)]
@@ -38,8 +38,8 @@ pub enum TodoOrder {
 /// without a config home keeps no files.
 #[must_use]
 pub fn load(config_home: Option<&Path>) -> Store<TodoOptions> {
-    Store::load(&Layout {
+    Store::load(&OptionFiles {
         global: config_home.map(|home| home.join(OPTIONS_FILE)),
-        ..Layout::default()
+        ..OptionFiles::default()
     })
 }
