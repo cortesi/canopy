@@ -139,7 +139,7 @@ impl SearchBar {
     }
 
     /// Return the query.
-    pub fn query(&self, ctx: &dyn Context) -> Result<String> {
+    pub fn query(&self, ctx: &dyn ViewContext) -> Result<String> {
         ctx.with_widget(self.field()?, |field: &Input| Ok(field.value().to_owned()))
     }
 

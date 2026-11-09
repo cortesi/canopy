@@ -179,7 +179,7 @@ where
     /// # Errors
     ///
     /// Returns an error before the picker mounts.
-    pub fn selected(&self, context: &dyn Context) -> Result<Option<T>>
+    pub fn selected(&self, context: &dyn ViewContext) -> Result<Option<T>>
     where
         T: Clone,
     {

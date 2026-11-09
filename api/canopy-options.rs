@@ -27,7 +27,7 @@ use std::{
 };
 
 use canopy::{
-    Context, Register, Widget,
+    Context, Register, ViewContext, Widget,
     commands::{ArgValue, CommandCall, CommandNode, CommandSpec},
     render::Glyphs,
     runtime::NodeWakeHandle,
@@ -581,7 +581,7 @@ impl Options {
 
     /// Return whether the options panel is open.
     #[must_use]
-    pub fn is_open(&self, context: &dyn Context) -> bool;
+    pub fn is_open(&self, context: &dyn ViewContext) -> bool;
 
     /// Wrap `app`, and own the options of `store`.
     pub fn new<T, W>(store: &Store<T>, app: W) -> Self

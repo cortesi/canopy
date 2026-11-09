@@ -683,26 +683,6 @@ impl ImageView {
         Ok(())
     }
 
-    /// Load a thumbnail within `bounds`, preserving its aspect ratio.
-    ///
-    /// Small images keep their original pixels, and a drawing renders to
-    /// fit `bounds`, as [`DecodedImage::fit`] does. Larger images are
-    /// averaged with premultiplied colors, so transparency does not bleed.
-    /// Zooming uses the thumbnail; use [`Self::set_path`] to zoom a raster
-    /// image at its full resolution instead.
-    ///
-    /// The source is limited to 32 * 1024 * 1024 pixels and the decoder has a
-    /// 128 MiB allocation budget. Conversion can allocate one additional RGBA
-    /// source buffer. Each thumbnail edge is capped at 1024 pixels, even when
-    /// `bounds` is larger, and the view keeps the thumbnail at 4 bytes for
-    /// each pixel. Zero bounds are invalid. On failure, the current image is
-    /// preserved. Callers should also bound the encoded file size.
-    pub fn set_preview_path(&mut self, path: impl AsRef<Path>, bounds: Size) -> Result<()> {
-        let bounds = preview_bounds(bounds)?;
-        self.set_preview(DecodedImage::read(path.as_ref())?.fit(bounds)?);
-        Ok(())
-    }
-
     /// Zoom around the view center.
     /// @param dir The zoom direction.
     #[command]
@@ -881,7 +861,7 @@ mod tests {
                 source.save(&path).unwrap();
             }
             let mut view = ImageView::empty();
-            view.set_preview_path(&path, Size::new(64, 64))?;
+            view.set_preview(fitted(&path, Size::new(64, 64))?);
             assert_eq!(view.image_size(), Size::new(64, 32), "{extension}");
             let ([r, g, b], alpha) = average(&view.image, 0, 0, 64, 32);
             assert!((alpha - 1.0).abs() < 0.01, "{extension}: opaque");
@@ -895,6 +875,12 @@ mod tests {
             assert_eq!(full.image_size(), Size::new(512, 256));
         }
         Ok(())
+    }
+
+    /// Decode the image at `path`, and fit it to `bounds`, as a host that
+    /// stages a preview does.
+    fn fitted(path: &Path, bounds: Size) -> Result<ImagePreview> {
+        DecodedImage::read(path)?.fit(bounds)
     }
 
     /// A drawing of `width` by `height` user units: a green left half on a
@@ -942,7 +928,7 @@ mod tests {
         );
 
         let mut view = ImageView::empty();
-        view.set_preview_path(&path, Size::new(64, 64))?;
+        view.set_preview(fitted(&path, Size::new(64, 64))?);
         assert_eq!(view.image_size(), Size::new(64, 32));
         view.set_path(&path)?;
         assert_eq!(view.image_size(), Size::new(40, 20));
@@ -1088,7 +1074,7 @@ mod tests {
     }
 
     #[test]
-    fn failed_preview_load_keeps_the_previous_image_and_zoom() -> Result<()> {
+    fn a_preview_that_fails_to_stage_leaves_the_image_and_zoom() -> Result<()> {
         let directory = tempfile::tempdir().unwrap();
         let valid = directory.path().join("valid.png");
         RgbaImage::new(4, 2).save(&valid).unwrap();
@@ -1102,12 +1088,12 @@ mod tests {
             (valid.clone(), Size::new(0, 16)),
             (valid.clone(), Size::new(16, 0)),
         ] {
-            assert!(view.set_preview_path(path, bounds).is_err());
+            assert!(fitted(&path, bounds).is_err());
             assert_eq!(view.image_size(), Size::new(3, 2));
             assert_eq!(view.image.get_pixel(0, 0), &image::Rgba([255, 0, 0, 255]));
             assert_eq!(view.zoom, Zoom::Manual(3.0));
         }
-        view.set_preview_path(valid, Size::new(16, 16))?;
+        view.set_preview(fitted(&valid, Size::new(16, 16))?);
         assert_eq!(view.zoom, Zoom::Fit);
         Ok(())
     }
@@ -1151,12 +1137,8 @@ mod tests {
         // budget while remaining well within the file-size budget in fh.
         image::GrayImage::new(8192, 4097).save(&path).unwrap();
         assert!(fs::metadata(&path).unwrap().len() < 16 * 1024 * 1024);
-        let mut view = ImageView::empty();
-        let error = view
-            .set_preview_path(&path, Size::new(256, 256))
-            .unwrap_err();
+        let error = fitted(&path, Size::new(256, 256)).unwrap_err();
         assert!(error.to_string().contains("image preview limited to"));
-        assert_eq!(view.image_size(), Size::new(1, 1));
     }
 
     #[test]
@@ -1165,7 +1147,7 @@ mod tests {
         let path = directory.path().join("image.png");
         image::GrayImage::new(2048, 1024).save(&path).unwrap();
         let mut view = ImageView::empty();
-        view.set_preview_path(path, Size::new(u32::MAX, u32::MAX))?;
+        view.set_preview(fitted(&path, Size::new(u32::MAX, u32::MAX))?);
         assert_eq!(view.image_size(), Size::new(1024, 512));
         assert_eq!(view.image.as_raw().len(), 1024 * 512 * 4);
         Ok(())

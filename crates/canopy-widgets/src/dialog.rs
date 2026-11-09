@@ -101,9 +101,19 @@ impl Dialog {
         Ok((dialog, body))
     }
 
-    /// Return the frame of the dialog at `dialog`, to retitle it.
+    /// Return the frame of the dialog at `dialog`.
     pub fn frame(ctx: &dyn Context, dialog: NodeId) -> Result<TypedId<Frame>> {
         ctx.get_slot::<FrameSlot>(dialog)
+    }
+
+    /// Show `title` on the frame of the dialog at `dialog`.
+    pub fn set_title(
+        ctx: &mut dyn Context,
+        dialog: NodeId,
+        title: impl Into<String>,
+    ) -> Result<()> {
+        let frame = Self::frame(ctx, dialog)?;
+        ctx.update(frame, |frame: &mut Frame| frame.set_title(title))
     }
 }
 

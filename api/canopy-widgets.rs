@@ -1180,11 +1180,18 @@ impl Dialog {
         body: W,
     ) -> canopy::error::Result<(TypedId<Self>, TypedId<W>)>;
 
-    /// Return the frame of the dialog at `dialog`, to retitle it.
+    /// Return the frame of the dialog at `dialog`.
     pub fn frame(ctx: &dyn Context, dialog: NodeId) -> canopy::error::Result<TypedId<Frame>>;
 
     /// Construct an untitled dialog with a one-cell margin.
     pub fn new() -> Self;
+
+    /// Show `title` on the frame of the dialog at `dialog`.
+    pub fn set_title(
+        ctx: &mut dyn Context,
+        dialog: NodeId,
+        title: impl Into<String>,
+    ) -> canopy::error::Result<()>;
 
     /// Replace the space kept clear around the frame.
     #[must_use]
@@ -1919,26 +1926,6 @@ impl ImageView {
     /// shares the preview's pixels rather than copying them, and keeps its
     /// focus setting and its tier.
     pub fn set_preview(&mut self, preview: ImagePreview);
-
-    /// Load a thumbnail within `bounds`, preserving its aspect ratio.
-    ///
-    /// Small images keep their original pixels, and a drawing renders to
-    /// fit `bounds`, as [`DecodedImage::fit`] does. Larger images are
-    /// averaged with premultiplied colors, so transparency does not bleed.
-    /// Zooming uses the thumbnail; use [`Self::set_path`] to zoom a raster
-    /// image at its full resolution instead.
-    ///
-    /// The source is limited to 32 * 1024 * 1024 pixels and the decoder has a
-    /// 128 MiB allocation budget. Conversion can allocate one additional RGBA
-    /// source buffer. Each thumbnail edge is capped at 1024 pixels, even when
-    /// `bounds` is larger, and the view keeps the thumbnail at 4 bytes for
-    /// each pixel. Zero bounds are invalid. On failure, the current image is
-    /// preserved. Callers should also bound the encoded file size.
-    pub fn set_preview_path(
-        &mut self,
-        path: impl AsRef<Path>,
-        bounds: Size,
-    ) -> canopy::error::Result<()>;
 
     /// Draw with the symbols of `tier`, or with none, the symbols that the
     /// terminal's glyphs allow.
@@ -2776,7 +2763,7 @@ where
     /// # Errors
     ///
     /// Returns an error before the picker mounts.
-    pub fn selected(&self, context: &dyn Context) -> canopy::error::Result<Option<T>>
+    pub fn selected(&self, context: &dyn ViewContext) -> canopy::error::Result<Option<T>>
     where
         T: Clone;
 
@@ -3267,7 +3254,7 @@ impl SearchBar {
     pub fn open(&mut self, ctx: &mut dyn Context, query: &str) -> canopy::error::Result<()>;
 
     /// Return the query.
-    pub fn query(&self, ctx: &dyn Context) -> canopy::error::Result<String>;
+    pub fn query(&self, ctx: &dyn ViewContext) -> canopy::error::Result<String>;
 
     /// Put `query` in the field without posting a change, as an owner does
     /// when the query comes from elsewhere.

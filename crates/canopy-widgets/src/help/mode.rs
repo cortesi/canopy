@@ -15,7 +15,7 @@ use canopy::{
 };
 
 use super::binding_list::{grouped_keys, key_rows_of};
-use crate::{Dialog, Frame, MenuList, MenuRow};
+use crate::{Dialog, MenuList, MenuRow};
 
 /// Widest frame: the rows and the frame's two borders.
 const MAX_FRAME_WIDTH: u32 = 66;
@@ -80,8 +80,7 @@ impl ModeHelp {
         let list = context
             .unique_descendant::<MenuList>(overlay)?
             .ok_or_else(|| Error::NotFound("mode help bindings".into()))?;
-        let frame = Dialog::frame(context, dialog.into())?;
-        context.update(frame, |frame: &mut Frame| frame.set_title(mode))?;
+        Dialog::set_title(context, dialog.into(), mode)?;
         context.update(list, |list: &mut MenuList| list.set_rows(rows))?;
         if !context.set_hidden(overlay, false)?.changed() {
             return Ok(Shown::Kept);

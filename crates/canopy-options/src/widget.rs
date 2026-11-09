@@ -336,7 +336,7 @@ impl Options {
     /// Return whether the options panel is open.
     #[command]
     #[must_use]
-    pub fn is_open(&self, context: &dyn Context) -> bool {
+    pub fn is_open(&self, context: &dyn ViewContext) -> bool {
         matches!(self.panel, PanelState::Open(token) if context.modal_is_open(token))
     }
 }
