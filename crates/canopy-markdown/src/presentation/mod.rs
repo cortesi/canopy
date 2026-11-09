@@ -27,6 +27,7 @@ use canopy_widgets::highlight::Grammar;
 use canopy_widgets::{
     BigFace, BigSize, BigText,
     highlight::SpanStyle,
+    image::RgbaImage,
     image_cells,
     mosaic::{Cell, Tier, tier_for},
     table::{
@@ -36,7 +37,6 @@ use canopy_widgets::{
     },
     view_search,
 };
-use image::RgbaImage;
 
 use crate::document::{
     AlertTone, Alignment, Block, BlockKind, CellSpan, CodeBlock, DocumentSnapshot, EmbedBlock,

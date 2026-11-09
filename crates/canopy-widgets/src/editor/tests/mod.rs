@@ -23,8 +23,9 @@ use super::{
     vi::ViMode,
 };
 use crate::{
+    Editor,
     click::DEFAULT_THRESHOLD,
-    editor::{EditMode, Editor, EditorConfig, Interaction, LineNumbers, MARK_STYLE, WrapMode},
+    editor::{EditMode, EditorConfig, Interaction, LineNumbers, MARK_STYLE, WrapMode},
     highlight::{HighlightSpan, Highlighter},
     regex_search::{match_ranges, smart_matcher},
     scrollbar::ScrollbarGlyphs,

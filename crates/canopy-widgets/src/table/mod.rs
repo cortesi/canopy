@@ -1530,7 +1530,7 @@ fn push_bounded(out: &mut String, text: &str, limit: usize) -> Result<()> {
 
 /// Copy operation interpreted against the displayed snapshot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TableCopy {
+pub(crate) enum TableCopy {
     /// Current full value, without TSV framing.
     Cell,
     /// Explicit body membership.

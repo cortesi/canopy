@@ -15,11 +15,7 @@ use canopy::{
 };
 
 use super::binding_list::{grouped_keys, key_rows_of};
-use crate::{
-    dialog::Dialog,
-    frame::Frame,
-    menu::{MenuList, MenuRow},
-};
+use crate::{Dialog, Frame, MenuList, MenuRow};
 
 /// Widest frame: the rows and the frame's two borders.
 const MAX_FRAME_WIDTH: u32 = 66;

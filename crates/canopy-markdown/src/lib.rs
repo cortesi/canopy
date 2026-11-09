@@ -34,7 +34,7 @@ pub mod units;
 mod widget;
 
 use canopy::Setup;
-use canopy_widgets::{highlight::palette_style_rules, table};
+use canopy_widgets::{highlight, table};
 pub use options::{Follow, MarkdownOptions, Mode, ViewType};
 pub use widget::{BlockEdit, Markdown, MatchPlace, ReaderPosition};
 
@@ -61,6 +61,6 @@ pub enum FinishOutcome {
 /// itself, without a reader, calls this in place of `Markdown::register`.
 pub fn register_styles(setup: &mut Setup) {
     setup.widget_styles(presentation::style_rules);
-    setup.widget_styles(palette_style_rules);
+    setup.widget_styles(highlight::style_rules);
     setup.widget_styles(table::style_rules);
 }

@@ -8,7 +8,7 @@ use canopy::{
     style::PartialStyle,
     testing::harness::Harness,
 };
-use canopy_widgets::highlight::palette_style_rules;
+use canopy_widgets::highlight;
 
 use super::*;
 use crate::{
@@ -464,7 +464,7 @@ fn mounted(
     })
     .configure(|setup| {
         setup.widget_styles(style_rules);
-        setup.widget_styles(palette_style_rules);
+        setup.widget_styles(highlight::style_rules);
         Ok(())
     })
     .size(width, height)

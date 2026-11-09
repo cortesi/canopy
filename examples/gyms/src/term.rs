@@ -11,8 +11,8 @@ use canopy::{
     tree::FocusScope,
 };
 use canopy_widgets::{
-    Border, BoxGlyphs, Button, Container, Frame, List, Selectable, Text,
-    terminal::{Terminal, TerminalConfig},
+    Border, BoxGlyphs, Button, Container, Frame, List, Selectable, Terminal, Text,
+    terminal::TerminalConfig,
 };
 use unicode_width::UnicodeWidthStr;
 

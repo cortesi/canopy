@@ -6,7 +6,7 @@
 //! sets one to compare tiers side by side.
 
 use canopy::render::Glyphs;
-pub use canopy_mosaic::*;
+pub use canopy_mosaic::{Cell, Family, Tier};
 
 /// The richest tier that the terminal's glyphs allow.
 pub fn tier_for(glyphs: Glyphs) -> Tier {

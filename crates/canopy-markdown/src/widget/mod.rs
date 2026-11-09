@@ -28,8 +28,8 @@ use canopy::{
     status::StatusItem,
 };
 use canopy_widgets::{
-    Confirm, Container, SearchBar, TableView,
-    editor::{Editor, LineNumbers, WrapMode},
+    Confirm, Container, Editor, SearchBar, TableView,
+    editor::{LineNumbers, WrapMode},
     mosaic::{Tier, tier_for},
     scrollbar::Scrollbar,
     table::{self, CellKey, PreparedTable, TableLayoutOptions, TableOverlay},

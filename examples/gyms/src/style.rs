@@ -23,9 +23,9 @@ use canopy::{
     tree::ChildSlot,
 };
 use canopy_widgets::{
-    BoxGlyphs, Button, ButtonLook, Container, Dropdown, Frame, Input, ItemLabel, Root, Scroll,
-    Selector, Tabs,
-    editor::{Editor, EditorConfig, Interaction, LineNumbers, WrapMode},
+    BoxGlyphs, Button, ButtonLook, Container, Dropdown, Editor, Frame, Input, ItemLabel, Root,
+    Scroll, Selector, Tabs,
+    editor::{EditorConfig, Interaction, LineNumbers, WrapMode},
     highlight::SyntectHighlighter,
 };
 

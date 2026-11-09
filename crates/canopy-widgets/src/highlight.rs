@@ -68,7 +68,7 @@ const PALETTE_PATHS: [[&str; 8]; 11] = [
 
 /// Install palette-aware syntax roles. Register with `Setup::widget_styles` so
 /// already prepared spans follow theme switches without syntax work.
-pub fn palette_style_rules(palette: &Palette, mut rules: StyleRules<'_>) {
+pub fn style_rules(palette: &Palette, mut rules: StyleRules<'_>) {
     let colors = [
         palette.fg,
         palette.magenta,
@@ -1004,7 +1004,7 @@ mod syntect_highlighter {
         }
 
         /// Prepare borrowed semantic style paths using the built-in Canopy
-        /// classifier. Colors resolve through `palette_style_rules` when
+        /// classifier. Colors resolve through `style_rules` when
         /// painted; bold, italic, and underline survive without
         /// reparsing on theme changes. A later `with_theme` call
         /// restores fixed named-theme colors.
@@ -1193,7 +1193,7 @@ mod syntect_highlighter {
         use std::borrow::Cow;
 
         use super::*;
-        use crate::highlight::{SpanStyle, palette_style_rules};
+        use crate::highlight::{SpanStyle, style_rules};
 
         /// Return the foreground colors of a line's spans.
         fn colors(highlighter: &SyntectHighlighter, line: usize, text: &str) -> Vec<Paint> {
@@ -1215,7 +1215,7 @@ mod syntect_highlighter {
             fixed.prepare(text);
             roles.prepare(text);
             let mut map = themes::solarized_light().style_map();
-            palette_style_rules(&themes::solarized_light(), map.rules());
+            style_rules(&themes::solarized_light(), map.rules());
             for (line, text) in text.lines().enumerate() {
                 let fixed = fixed.highlight_line(line, text);
                 let roles = roles.highlight_line(line, text);
@@ -1665,7 +1665,7 @@ mod palette_tests {
     fn every_syntax_role_has_readable_contrast_on_dark_and_light_code_grounds() {
         for palette in [themes::default_dark(), themes::solarized_light()] {
             let mut map = palette.style_map();
-            palette_style_rules(&palette, map.rules());
+            style_rules(&palette, map.rules());
             for path in PALETTE_PATHS.iter().flatten() {
                 let foreground = map.resolve(path).fg.solid_color().unwrap();
                 for ground in [palette.bg, palette.panel_bg, palette.focus_bg()] {

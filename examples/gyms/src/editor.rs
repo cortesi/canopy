@@ -5,8 +5,8 @@ use canopy::{
     layout::{CanvasContext, Direction, Edges, Layout, MeasureOverflow},
 };
 use canopy_widgets::{
-    Frame,
-    editor::{EditMode, Editor, EditorConfig, Interaction, LineNumbers, WrapMode},
+    Editor, Frame,
+    editor::{EditMode, EditorConfig, Interaction, LineNumbers, WrapMode},
     highlight::SyntectHighlighter,
 };
 

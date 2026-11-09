@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeMap, mem, sync::Arc};
 
-use image::RgbaImage;
+use canopy_widgets::image::RgbaImage;
 
 use crate::document::LocalLink;
 

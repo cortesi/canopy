@@ -20,8 +20,8 @@ use canopy::{
 #[cfg(feature = "syntax")]
 use canopy_widgets::highlight::SyntectHighlighter;
 use canopy_widgets::{
-    Answer, Closing, Confirm, ConfirmRequest, Container,
-    editor::{Editor, EditorConfig, Interaction, ViMode, WrapMode},
+    Answer, Closing, Confirm, ConfirmRequest, Container, Editor,
+    editor::{EditorConfig, Interaction, ViMode, WrapMode},
 };
 
 use super::{BlockEdit, Markdown, invalid};

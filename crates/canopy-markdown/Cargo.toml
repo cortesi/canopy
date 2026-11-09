@@ -19,7 +19,6 @@ testing = ["dep:proptest", "canopy/testing"]
 canopy-xmark.workspace = true
 canopy.workspace = true
 canopy-widgets = { workspace = true, features = ["graphics"] }
-image = { version = "0.25.10", default-features = false }
 url = "2.5"
 grep-matcher = "0.1.9"
 grep-regex = "0.1.14"

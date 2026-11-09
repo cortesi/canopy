@@ -6,8 +6,8 @@ use canopy::{
     layout::{Edges, Layout},
 };
 use canopy_widgets::{
-    Container, Frame,
-    editor::{EditMode, Editor, EditorConfig, WrapMode},
+    Container, Editor, Frame,
+    editor::{EditMode, EditorConfig, WrapMode},
     highlight::SyntectHighlighter,
 };
 

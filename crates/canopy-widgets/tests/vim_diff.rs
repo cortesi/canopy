@@ -18,8 +18,9 @@ use std::{
 };
 
 use canopy::{input::key, testing::harness::Harness, text};
-use canopy_widgets::editor::{
-    EditMode, Editor, EditorConfig, TextPosition, TextRange, ViMode, VisualMode,
+use canopy_widgets::{
+    Editor,
+    editor::{EditMode, EditorConfig, TextPosition, TextRange, ViMode, VisualMode},
 };
 use serde_json::{Value, json};
 

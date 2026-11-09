@@ -32,12 +32,13 @@ use canopy::{
     runtime::NodeWakeHandle,
 };
 use canopy_widgets::{
-    Tier,
-    editor::{Editor, EditorConfig, LineNumbers, TextPosition, WrapMode},
+    Editor,
+    editor::{EditorConfig, LineNumbers, TextPosition, WrapMode},
+    image::RgbaImage,
+    mosaic::Tier,
     table::PreparedTable,
 };
 use canopy_xmark::BlockQuoteKind;
-use image::RgbaImage;
 
 /// One edit of the reader's text, for the host to apply to its own copy of
 /// the text in order.

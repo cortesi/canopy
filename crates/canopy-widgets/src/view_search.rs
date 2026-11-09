@@ -1,7 +1,7 @@
 //! What every searchable view shares, so a search reads the same in each.
 //!
 //! A view that highlights search matches, such as the
-//! [`Editor`](crate::editor::Editor), the [`DiffView`](crate::DiffView), or a
+//! [`Editor`](crate::Editor), the [`DiffView`](crate::DiffView), or a
 //! rendered Markdown document, follows four conventions:
 //!
 //! - It paints the current match with [`CURRENT`] and every other match with

@@ -10,7 +10,8 @@ use canopy::{
     testing::harness::Harness,
 };
 use canopy_widgets::{
-    editor::{EditMode, Editor, EditorConfig, Interaction, LineNumbers, WrapMode},
+    Editor,
+    editor::{EditMode, EditorConfig, Interaction, LineNumbers, WrapMode},
     highlight::{Highlighter, SyntectHighlighter},
 };
 use criterion::{Criterion, criterion_group, criterion_main};

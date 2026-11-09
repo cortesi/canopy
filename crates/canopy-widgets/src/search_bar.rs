@@ -22,7 +22,7 @@ const LABEL: &str = "Search";
 /// the right what the search found, such as `3 of 12`.
 ///
 /// The bar runs no search. Its owner runs the query on what it searches, such
-/// as the text of an [`Editor`](crate::editor::Editor) or the rows of a list,
+/// as the text of an [`Editor`](crate::Editor) or the rows of a list,
 /// and says what it found with [`SearchBar::set_status`]. The bar posts the
 /// query after each edit through [`SearchBar::with_on_change`]. Enter and Esc
 /// post the calls set by [`SearchBar::with_on_submit`] and

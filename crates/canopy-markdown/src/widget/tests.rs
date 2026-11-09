@@ -8,6 +8,7 @@ use canopy::{
     testing::harness::Harness,
     tree::{FocusDirection, FocusScope},
 };
+use canopy_widgets::image;
 
 use super::{
     test_support::{builder, service, settle},

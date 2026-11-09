@@ -488,7 +488,7 @@ impl Register for Root {
         Inspector::register(setup)?;
         Button::register(setup)?;
         // A transient mode's menu takes the menu styles.
-        setup.widget_styles(menu::styles);
+        setup.widget_styles(menu::style_rules);
         setup.add_commands::<Help>()?;
         register_help_bindings(setup)?;
         register_notice_bindings(setup)?;

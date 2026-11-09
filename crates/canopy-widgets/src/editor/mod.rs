@@ -18,7 +18,7 @@ mod vi;
 pub(crate) mod widget;
 
 pub use vi::{ViMode, VisualMode};
-pub use widget::{Editor, MARK_STYLE, PreparedEditorView};
+pub use widget::{MARK_STYLE, PreparedEditorView};
 
 pub use crate::text_buffer::{Selection, TextPosition, TextRange};
 

@@ -136,18 +136,23 @@ pub use container::Container;
 pub use dialog::Dialog;
 pub use diff_view::DiffView;
 pub use dropdown::Dropdown;
+pub use editor::widget::Editor;
 #[cfg(feature = "graphics")]
 pub use font_banner::FontBanner;
 pub use frame::Frame;
+/// The image types that image views draw, so a caller needs no `image`
+/// dependency of its own.
+#[cfg(feature = "graphics")]
+pub use image;
 #[cfg(feature = "graphics")]
 pub use image_view::{
-    DecodedImage, ImagePreview, ImageView, image_cells, is_svg_path, read_preview,
+    DecodedImage, ImagePreview, ImageView, ZoomDirection, image_cells, is_svg_path, read_preview,
 };
 pub use input::{CLEAR_INTENT, Input, ValueExposure, register_clear_intent};
 pub use keyed::KeyedChildren;
 pub use label::{ItemLabel, ItemVisibility};
 pub use list_view::{List, Selectable};
-pub use menu::{Menu, MenuItem, MenuList, MenuRow};
+pub use menu::widget::{Menu, MenuItem, MenuList, MenuRow};
 pub use meter::Meter;
 pub use pane::{Pane, PaneKeys, pane_has_keys};
 pub use picker::{Picker, PickerList};
@@ -163,6 +168,8 @@ pub use status_line::StatusLine;
 pub use table_reader::TableReader;
 pub use table_view::TableView;
 pub use tabs::{TabBar, Tabs, TabsLook};
+#[cfg(feature = "terminal-widget")]
+pub use terminal::widget::Terminal;
 pub use text::{CanvasWidth, Text};
 
 /// List's supporting types.

@@ -5,7 +5,6 @@
 // Declared features: default, devtools, graphics, syntax, terminal-widget
 // Workspace dependencies: canopy, canopy-mosaic, canopy-xmark (optional)
 // Workspace dependents: canopy-markdown, canopy-options, canopyctl, gyms, hello, todo
-// Unnameable: crate::image_view::ZoomDirection
 
 //! Built-in widgets for canopy applications.
 //!
@@ -14,7 +13,7 @@
 
 use std::{
     borrow::Cow,
-    fmt::Debug,
+    fmt::{Debug, Display},
     hash::Hash,
     ops::Range,
     path::{Path, PathBuf},
@@ -25,7 +24,7 @@ use std::{
 use canopy::{
     Canopy, ChangeOutcome, Context, EventOutcome, Line, NodeId, Point, Rect, Register, Setup, Size,
     TypedId, ViewContext, Widget,
-    commands::{CommandCall, CommandNode, CommandSpec, ToArgValue},
+    commands::{CommandCall, CommandNode, CommandSpec, CommandType, FromArgValue, ToArgValue},
     input::{FrameworkBindingGroup, IntentName, ModalToken, NavIntent, mouse::MouseEvent},
     layout::{
         Align, Edges, Layout, RevealAlign, ScrollAxis, ScrollDirection, ScrollMark, ScrollOp,
@@ -37,10 +36,11 @@ use canopy::{
     text::{Truncate, WrapOptions},
     tree::FocusDirection,
 };
-use canopy_mosaic::{Cell, Tier};
+/// The image types that image views draw, so a caller needs no `image`
+/// dependency of its own.
+pub use image;
 use image::RgbaImage;
 use syntect::{SyntaxReference, SyntaxSet};
-
 /// Intent that clears the focused field, or resets what the focused widget
 /// shows.
 ///
@@ -1451,6 +1451,285 @@ impl<T> CommandNode for Dropdown<T> where T: 'static + ItemLabel {}
 
 impl<T> Widget for Dropdown<T> where T: 'static + ItemLabel {}
 
+/// Editor widget implementation.
+///
+/// An editable editor consumes [`CLEAR_INTENT`]: it clears the field of an
+/// open search or replace prompt, or else the whole text, as one edit that
+/// undo reverses. A read-only editor leaves the intent to its ancestors.
+pub struct Editor {/* private fields */}
+
+impl Editor {
+    /// Build a positional call with typed user arguments.
+    pub fn call_clear_search() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_insert(text: String) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_move_cursor(dir: FocusDirection) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_redo() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_search(query: String) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_search_matches() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_search_next(delta: i32) -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_search_position() -> CommandCall;
+
+    /// Build a positional call with typed user arguments.
+    pub fn call_undo() -> CommandCall;
+
+    /// Return the command spec for this command.
+    pub fn spec_clear_search() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_insert() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_move_cursor() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_redo() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_search() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_search_matches() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_search_next() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_search_position() -> &'static CommandSpec;
+
+    /// Return the command spec for this command.
+    pub fn spec_undo() -> &'static CommandSpec;
+}
+
+impl Editor {
+    /// Remove the search and its highlights.
+    pub fn clear_search(&mut self, _ctx: &mut dyn Context);
+
+    /// Return the current editor configuration.
+    pub fn config(&self) -> &EditorConfig;
+
+    /// Return the current search match.
+    pub fn current_match(&self) -> Option<TextRange>;
+
+    /// Return the cursor position.
+    pub fn cursor(&self) -> TextPosition;
+
+    /// End an unfinished pointer gesture, retaining its selected text.
+    /// The host that owns pointer capture must release it separately.
+    pub fn end_selection_drag(&mut self);
+
+    /// Insert `text` at the cursor, as a paste does. A vi editor takes the
+    /// text only in insert mode, and a read-only editor never takes it.
+    /// @param text Text to insert.
+    pub fn insert(&mut self, ctx: &mut dyn Context, text: String);
+
+    /// Return the ranges that the host marks, or none once the marks end.
+    pub fn marks(&self) -> &[TextRange];
+
+    /// Move the cursor. The typing before the move commits as one undo
+    /// step, and a vi insert repeats only the typing after it.
+    /// @param dir The direction to move the cursor.
+    pub fn move_cursor(&mut self, ctx: &mut dyn Context, dir: FocusDirection);
+
+    /// Return the width that shows every line without wrapping: the widest
+    /// line's display width, with tabs expanded, plus the line-number gutter
+    /// and the caret column of a soft-wrapped editor that accepts focus.
+    ///
+    /// A host that sizes the editor to this width shows the text as one
+    /// unbroken block, such as a column centred in a wider pane.
+    pub fn natural_width(&self) -> u32;
+
+    /// Return the UTF-8 byte offset of `position` in the text, clamped to
+    /// the text.
+    pub fn offset_of_position(&self, position: TextPosition) -> usize;
+
+    /// Map a logical text position to its prepared content point.
+    pub fn point_at(&self, position: TextPosition) -> Point;
+
+    /// Map a prepared content point to a logical text position.
+    ///
+    /// The point includes the line-number gutter. Prepare or render a view
+    /// before using this mapping.
+    pub fn position_at(&self, point: Point) -> TextPosition;
+
+    /// Return the position of the character that holds UTF-8 byte `offset`
+    /// of the text. An offset past the end clamps to the end, and an offset
+    /// in a line's separator clamps to the end of that line.
+    pub fn position_of_offset(&self, offset: usize) -> TextPosition;
+
+    /// Prepare text and wrapping without a mounted editor or UI context.
+    pub fn prepare_view(
+        text: impl Into<String>,
+        config: EditorConfig,
+        width: u32,
+    ) -> PreparedEditorView;
+
+    /// Publish prepared text without requesting focus or revealing the cursor.
+    ///
+    /// With `preserve`, selection and interaction state survive. The caller
+    /// must preserve the selected prefix or remap the selection afterwards.
+    /// Undo history belongs to the replaced buffer and is discarded. An open
+    /// prompt closes either way.
+    pub fn publish_view(&mut self, prepared: PreparedEditorView, preserve: bool);
+
+    /// Redo the last undone edit, as [`Self::undo`] undoes.
+    pub fn redo(&mut self, _ctx: &mut dyn Context);
+
+    /// Replace `range` with `text` as one undo step, and put the cursor after
+    /// the new text.
+    ///
+    /// The edit stands alone in the undo history: an open entry ends first, and
+    /// text typed later starts a new step. The call works in both edit modes,
+    /// leaves the vi mode unchanged, and records nothing for vi repetition. A
+    /// read-only editor ignores it. An open prompt closes.
+    pub fn replace(&mut self, ctx: &mut dyn Context, range: TextRange, text: &str);
+
+    /// Highlight precomputed match ranges without moving the view, as when
+    /// the text reloads beneath a held search.
+    ///
+    /// The first match at or after `current`, the match that was current
+    /// before, becomes current, or the first match when none follows; with
+    /// no `current`, no match is. Ranges arrive as for [`Self::set_matches`].
+    pub fn restore_matches(&mut self, matches: Vec<TextRange>, current: Option<TextRange>);
+
+    /// Search the text and highlight every match.
+    ///
+    /// The first match at or below the top of the view becomes current, and
+    /// the view scrolls to it. A query without uppercase letters ignores ASCII
+    /// case. An empty query clears the search.
+    /// @param query Text to find.
+    pub fn search(&mut self, ctx: &mut dyn Context, query: String);
+
+    /// Return the number of search matches.
+    pub fn search_matches(&self) -> usize;
+
+    /// Make another search match current and scroll to it.
+    /// @param delta Matches to move; negative values move backward.
+    pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32);
+
+    /// Return the one-based position of the current search match.
+    /// @return The position, or 0 when there is no current match.
+    pub fn search_position(&self) -> usize;
+
+    /// Return the selection endpoints in logical character coordinates.
+    ///
+    /// The range of the selection is half-open. In vi visual mode it holds
+    /// what Vim's inclusive selection holds: a character selection holds
+    /// the characters at both ends, so a new selection holds the character
+    /// at the cursor. An end on the end of a line holds the line break, if
+    /// one follows. A line selection runs from the start of its first line
+    /// to the end of its last line, without the line break after it. The
+    /// head is the end at the cursor, so it lies after the cursor when the
+    /// cursor follows the anchor.
+    pub fn selection(&self) -> Selection;
+
+    /// Return whether the pointer currently owns an unfinished selection.
+    pub fn selection_drag_active(&self) -> bool;
+
+    /// Replace the editor configuration.
+    ///
+    /// A change of edit mode ends the entry of the old mode: an open prompt
+    /// closes, text mode commits its typing, and a vi editor leaves for
+    /// normal mode. A configuration that keeps the mode keeps the prompt.
+    pub fn set_config(&mut self, config: EditorConfig);
+
+    /// Move the cursor to `position`, and scroll it into view. A position
+    /// past the end of its line or of the text clamps to that end. The
+    /// typing before the move commits as one undo step, and a vi insert
+    /// repeats only the typing after it.
+    pub fn set_cursor(&mut self, ctx: &mut dyn Context, position: TextPosition);
+
+    /// Install already prepared highlighting without a whole-source render
+    /// scan.
+    pub fn set_highlight_spans(&mut self, lines: Vec<Vec<HighlightSpan>>);
+
+    /// Install a syntax highlighter.
+    ///
+    /// Preparation is deferred until the next render, using the latest buffer
+    /// contents. Repeated changes before rendering prepare only the final
+    /// state.
+    pub fn set_highlighter(&mut self, highlighter: Option<Box<dyn Highlighter>>);
+
+    /// Mark `ranges` of the text with [`MARK_STYLE`], under the selection
+    /// and the search matches. A host marks text that it put in place, or
+    /// text that it is about to change. The marks last until the editor takes
+    /// a key, its text changes, or the host marks other ranges. A range may
+    /// span lines.
+    pub fn set_marks(&mut self, ranges: Vec<TextRange>);
+
+    /// Highlight precomputed match ranges.
+    ///
+    /// The first match at or below the top of the view becomes current, and
+    /// the view scrolls to it. Ranges must arrive in ascending order without
+    /// spanning lines. An empty set clears the search. Unlike [`Self::search`],
+    /// the ranges need not come from a literal query, so callers can
+    /// highlight regular-expression matches.
+    pub fn set_matches(&mut self, ctx: &mut dyn Context, matches: Vec<TextRange>);
+
+    /// Install matches without revealing them or moving the selection.
+    pub fn set_matches_preserving_position(&mut self, matches: Vec<TextRange>);
+
+    /// Replace selection endpoints without scrolling or taking focus.
+    ///
+    /// In vi visual mode, the selection names the range to select, in the
+    /// form that [`Self::selection`] returns, so the two round-trip. A
+    /// character selection then holds the characters of the range, or the
+    /// character at an empty range. A line selection holds the lines of the
+    /// range, and its ends keep their columns.
+    ///
+    /// The typing before the call commits as one undo step, and a vi insert
+    /// repeats only the typing after it.
+    pub fn set_selection(&mut self, selection: Selection);
+
+    /// Replace the buffer contents.
+    ///
+    /// An open prompt closes and a pointer drag ends. The mode stays, and
+    /// the typing of an insert ends.
+    pub fn set_text(&mut self, text: impl Into<String>);
+
+    /// Switch a vi editor to `mode`, as its keys would. Leaving insert mode
+    /// records the insert for repetition. Leaving visual mode moves a
+    /// cursor on the end of a line to its last character, and a switch
+    /// between the kinds of visual selection keeps both ends. A text editor
+    /// ignores the call.
+    pub fn set_vi_mode(&mut self, mode: ViMode);
+
+    /// Return the buffer contents.
+    pub fn text(&self) -> String;
+
+    /// Undo the last edit. Visual mode ends first. An undo that reverts an
+    /// edit closes an open prompt, and insert mode stays.
+    pub fn undo(&mut self, _ctx: &mut dyn Context);
+
+    /// Return the vi mode, or `None` for a text editor.
+    pub fn vi_mode(&self) -> Option<ViMode>;
+
+    /// Construct an editor with a configuration.
+    pub fn with_config(text: impl Into<String>, config: EditorConfig) -> Self;
+}
+
+impl CommandNode for Editor {}
+
+impl Register for Editor {}
+
+impl Widget for Editor {}
+
+impl !Send for Editor {}
+impl !Sync for Editor {}
+
 /// Render large ASCII-font text into a bounded region.
 ///
 /// The text scales to the height of the banner. A banner fills its area, and
@@ -1568,7 +1847,7 @@ impl ImageView {
     pub fn call_pan(dir: ScrollDirection) -> CommandCall;
 
     /// Build a positional call with typed user arguments.
-    pub fn call_zoom(dir: crate::image_view::ZoomDirection) -> CommandCall;
+    pub fn call_zoom(dir: ZoomDirection) -> CommandCall;
 
     /// Return the command spec for this command.
     pub fn spec_cycle_tier() -> &'static CommandSpec;
@@ -1675,11 +1954,7 @@ impl ImageView {
 
     /// Zoom around the view center.
     /// @param dir The zoom direction.
-    pub fn zoom(
-        &mut self,
-        ctx: &mut dyn Context,
-        dir: crate::image_view::ZoomDirection,
-    ) -> canopy::error::Result<()>;
+    pub fn zoom(&mut self, ctx: &mut dyn Context, dir: ZoomDirection) -> canopy::error::Result<()>;
 }
 
 impl CommandNode for ImageView {}
@@ -2949,7 +3224,7 @@ impl Widget for Scroll {}
 /// the right what the search found, such as `3 of 12`.
 ///
 /// The bar runs no search. Its owner runs the query on what it searches, such
-/// as the text of an [`Editor`](crate::editor::Editor) or the rows of a list,
+/// as the text of an [`Editor`](crate::Editor) or the rows of a list,
 /// and says what it found with [`SearchBar::set_status`]. The bar posts the
 /// query after each edit through [`SearchBar::with_on_change`]. Enter and Esc
 /// post the calls set by [`SearchBar::with_on_submit`] and
@@ -3867,6 +4142,31 @@ impl TabsLook {
     pub const fn rows(self) -> u32;
 }
 
+/// Terminal widget backed by `itty`.
+pub struct Terminal {/* private fields */}
+
+impl Terminal {
+    /// Return whether the terminal's process has exited.
+    ///
+    /// A terminal without a session, before it mounts, reports false.
+    pub fn exited(&self) -> bool;
+
+    /// Construct a new terminal widget with the provided configuration.
+    pub fn new(config: TerminalConfig) -> Self;
+
+    /// Return whether a program other than the terminal's own process runs
+    /// in its foreground, as when a shell runs a command. A shell at its
+    /// prompt, a process that has exited, and a terminal without a session
+    /// report false.
+    pub fn runs_program(&self) -> bool;
+}
+
+impl CommandNode for Terminal {}
+
+impl Widget for Terminal {}
+
+impl !Sync for Terminal {}
+
 /// Multiline text widget with wrapping and scrolling.
 pub struct Text {/* private fields */}
 
@@ -3949,6 +4249,21 @@ pub enum ValueExposure {
     /// a dot in place of each character on screen.
     Sensitive,
 }
+
+/// Direction for zoom commands.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ZoomDirection {
+    /// Zoom in.
+    In,
+    /// Zoom out.
+    Out,
+}
+
+impl CommandType for ZoomDirection {}
+
+impl FromArgValue for ZoomDirection {}
+
+impl ToArgValue for ZoomDirection {}
 
 /// Match `image` to a box of `size` cells in `tier`, fitted and centred, over
 /// a `ground` that shows through its transparent pixels and around it. Cells
@@ -4371,285 +4686,6 @@ pub mod editor {
         /// [`Editor::selection`] gives the selected range.
         Vi,
     }
-
-    /// Editor widget implementation.
-    ///
-    /// An editable editor consumes [`CLEAR_INTENT`]: it clears the field of an
-    /// open search or replace prompt, or else the whole text, as one edit that
-    /// undo reverses. A read-only editor leaves the intent to its ancestors.
-    pub struct Editor {/* private fields */}
-
-    impl Editor {
-        /// Build a positional call with typed user arguments.
-        pub fn call_clear_search() -> CommandCall;
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_insert(text: String) -> CommandCall;
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_move_cursor(dir: FocusDirection) -> CommandCall;
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_redo() -> CommandCall;
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_search(query: String) -> CommandCall;
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_search_matches() -> CommandCall;
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_search_next(delta: i32) -> CommandCall;
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_search_position() -> CommandCall;
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_undo() -> CommandCall;
-
-        /// Return the command spec for this command.
-        pub fn spec_clear_search() -> &'static CommandSpec;
-
-        /// Return the command spec for this command.
-        pub fn spec_insert() -> &'static CommandSpec;
-
-        /// Return the command spec for this command.
-        pub fn spec_move_cursor() -> &'static CommandSpec;
-
-        /// Return the command spec for this command.
-        pub fn spec_redo() -> &'static CommandSpec;
-
-        /// Return the command spec for this command.
-        pub fn spec_search() -> &'static CommandSpec;
-
-        /// Return the command spec for this command.
-        pub fn spec_search_matches() -> &'static CommandSpec;
-
-        /// Return the command spec for this command.
-        pub fn spec_search_next() -> &'static CommandSpec;
-
-        /// Return the command spec for this command.
-        pub fn spec_search_position() -> &'static CommandSpec;
-
-        /// Return the command spec for this command.
-        pub fn spec_undo() -> &'static CommandSpec;
-    }
-
-    impl Editor {
-        /// Remove the search and its highlights.
-        pub fn clear_search(&mut self, _ctx: &mut dyn Context);
-
-        /// Return the current editor configuration.
-        pub fn config(&self) -> &EditorConfig;
-
-        /// Return the current search match.
-        pub fn current_match(&self) -> Option<TextRange>;
-
-        /// Return the cursor position.
-        pub fn cursor(&self) -> TextPosition;
-
-        /// End an unfinished pointer gesture, retaining its selected text.
-        /// The host that owns pointer capture must release it separately.
-        pub fn end_selection_drag(&mut self);
-
-        /// Insert `text` at the cursor, as a paste does. A vi editor takes the
-        /// text only in insert mode, and a read-only editor never takes it.
-        /// @param text Text to insert.
-        pub fn insert(&mut self, ctx: &mut dyn Context, text: String);
-
-        /// Return the ranges that the host marks, or none once the marks end.
-        pub fn marks(&self) -> &[TextRange];
-
-        /// Move the cursor. The typing before the move commits as one undo
-        /// step, and a vi insert repeats only the typing after it.
-        /// @param dir The direction to move the cursor.
-        pub fn move_cursor(&mut self, ctx: &mut dyn Context, dir: FocusDirection);
-
-        /// Return the width that shows every line without wrapping: the widest
-        /// line's display width, with tabs expanded, plus the line-number gutter
-        /// and the caret column of a soft-wrapped editor that accepts focus.
-        ///
-        /// A host that sizes the editor to this width shows the text as one
-        /// unbroken block, such as a column centred in a wider pane.
-        pub fn natural_width(&self) -> u32;
-
-        /// Return the UTF-8 byte offset of `position` in the text, clamped to
-        /// the text.
-        pub fn offset_of_position(&self, position: TextPosition) -> usize;
-
-        /// Map a logical text position to its prepared content point.
-        pub fn point_at(&self, position: TextPosition) -> Point;
-
-        /// Map a prepared content point to a logical text position.
-        ///
-        /// The point includes the line-number gutter. Prepare or render a view
-        /// before using this mapping.
-        pub fn position_at(&self, point: Point) -> TextPosition;
-
-        /// Return the position of the character that holds UTF-8 byte `offset`
-        /// of the text. An offset past the end clamps to the end, and an offset
-        /// in a line's separator clamps to the end of that line.
-        pub fn position_of_offset(&self, offset: usize) -> TextPosition;
-
-        /// Prepare text and wrapping without a mounted editor or UI context.
-        pub fn prepare_view(
-            text: impl Into<String>,
-            config: EditorConfig,
-            width: u32,
-        ) -> PreparedEditorView;
-
-        /// Publish prepared text without requesting focus or revealing the cursor.
-        ///
-        /// With `preserve`, selection and interaction state survive. The caller
-        /// must preserve the selected prefix or remap the selection afterwards.
-        /// Undo history belongs to the replaced buffer and is discarded. An open
-        /// prompt closes either way.
-        pub fn publish_view(&mut self, prepared: PreparedEditorView, preserve: bool);
-
-        /// Redo the last undone edit, as [`Self::undo`] undoes.
-        pub fn redo(&mut self, _ctx: &mut dyn Context);
-
-        /// Replace `range` with `text` as one undo step, and put the cursor after
-        /// the new text.
-        ///
-        /// The edit stands alone in the undo history: an open entry ends first, and
-        /// text typed later starts a new step. The call works in both edit modes,
-        /// leaves the vi mode unchanged, and records nothing for vi repetition. A
-        /// read-only editor ignores it. An open prompt closes.
-        pub fn replace(&mut self, ctx: &mut dyn Context, range: TextRange, text: &str);
-
-        /// Highlight precomputed match ranges without moving the view, as when
-        /// the text reloads beneath a held search.
-        ///
-        /// The first match at or after `current`, the match that was current
-        /// before, becomes current, or the first match when none follows; with
-        /// no `current`, no match is. Ranges arrive as for [`Self::set_matches`].
-        pub fn restore_matches(&mut self, matches: Vec<TextRange>, current: Option<TextRange>);
-
-        /// Search the text and highlight every match.
-        ///
-        /// The first match at or below the top of the view becomes current, and
-        /// the view scrolls to it. A query without uppercase letters ignores ASCII
-        /// case. An empty query clears the search.
-        /// @param query Text to find.
-        pub fn search(&mut self, ctx: &mut dyn Context, query: String);
-
-        /// Return the number of search matches.
-        pub fn search_matches(&self) -> usize;
-
-        /// Make another search match current and scroll to it.
-        /// @param delta Matches to move; negative values move backward.
-        pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32);
-
-        /// Return the one-based position of the current search match.
-        /// @return The position, or 0 when there is no current match.
-        pub fn search_position(&self) -> usize;
-
-        /// Return the selection endpoints in logical character coordinates.
-        ///
-        /// The range of the selection is half-open. In vi visual mode it holds
-        /// what Vim's inclusive selection holds: a character selection holds
-        /// the characters at both ends, so a new selection holds the character
-        /// at the cursor. An end on the end of a line holds the line break, if
-        /// one follows. A line selection runs from the start of its first line
-        /// to the end of its last line, without the line break after it. The
-        /// head is the end at the cursor, so it lies after the cursor when the
-        /// cursor follows the anchor.
-        pub fn selection(&self) -> Selection;
-
-        /// Return whether the pointer currently owns an unfinished selection.
-        pub fn selection_drag_active(&self) -> bool;
-
-        /// Replace the editor configuration.
-        ///
-        /// A change of edit mode ends the entry of the old mode: an open prompt
-        /// closes, text mode commits its typing, and a vi editor leaves for
-        /// normal mode. A configuration that keeps the mode keeps the prompt.
-        pub fn set_config(&mut self, config: EditorConfig);
-
-        /// Move the cursor to `position`, and scroll it into view. A position
-        /// past the end of its line or of the text clamps to that end. The
-        /// typing before the move commits as one undo step, and a vi insert
-        /// repeats only the typing after it.
-        pub fn set_cursor(&mut self, ctx: &mut dyn Context, position: TextPosition);
-
-        /// Install already prepared highlighting without a whole-source render
-        /// scan.
-        pub fn set_highlight_spans(&mut self, lines: Vec<Vec<HighlightSpan>>);
-
-        /// Install a syntax highlighter.
-        ///
-        /// Preparation is deferred until the next render, using the latest buffer
-        /// contents. Repeated changes before rendering prepare only the final
-        /// state.
-        pub fn set_highlighter(&mut self, highlighter: Option<Box<dyn Highlighter>>);
-
-        /// Mark `ranges` of the text with [`MARK_STYLE`], under the selection
-        /// and the search matches. A host marks text that it put in place, or
-        /// text that it is about to change. The marks last until the editor takes
-        /// a key, its text changes, or the host marks other ranges. A range may
-        /// span lines.
-        pub fn set_marks(&mut self, ranges: Vec<TextRange>);
-
-        /// Highlight precomputed match ranges.
-        ///
-        /// The first match at or below the top of the view becomes current, and
-        /// the view scrolls to it. Ranges must arrive in ascending order without
-        /// spanning lines. An empty set clears the search. Unlike [`Self::search`],
-        /// the ranges need not come from a literal query, so callers can
-        /// highlight regular-expression matches.
-        pub fn set_matches(&mut self, ctx: &mut dyn Context, matches: Vec<TextRange>);
-
-        /// Install matches without revealing them or moving the selection.
-        pub fn set_matches_preserving_position(&mut self, matches: Vec<TextRange>);
-
-        /// Replace selection endpoints without scrolling or taking focus.
-        ///
-        /// In vi visual mode, the selection names the range to select, in the
-        /// form that [`Self::selection`] returns, so the two round-trip. A
-        /// character selection then holds the characters of the range, or the
-        /// character at an empty range. A line selection holds the lines of the
-        /// range, and its ends keep their columns.
-        ///
-        /// The typing before the call commits as one undo step, and a vi insert
-        /// repeats only the typing after it.
-        pub fn set_selection(&mut self, selection: Selection);
-
-        /// Replace the buffer contents.
-        ///
-        /// An open prompt closes and a pointer drag ends. The mode stays, and
-        /// the typing of an insert ends.
-        pub fn set_text(&mut self, text: impl Into<String>);
-
-        /// Switch a vi editor to `mode`, as its keys would. Leaving insert mode
-        /// records the insert for repetition. Leaving visual mode moves a
-        /// cursor on the end of a line to its last character, and a switch
-        /// between the kinds of visual selection keeps both ends. A text editor
-        /// ignores the call.
-        pub fn set_vi_mode(&mut self, mode: ViMode);
-
-        /// Return the buffer contents.
-        pub fn text(&self) -> String;
-
-        /// Undo the last edit. Visual mode ends first. An undo that reverts an
-        /// edit closes an open prompt, and insert mode stays.
-        pub fn undo(&mut self, _ctx: &mut dyn Context);
-
-        /// Return the vi mode, or `None` for a text editor.
-        pub fn vi_mode(&self) -> Option<ViMode>;
-
-        /// Construct an editor with a configuration.
-        pub fn with_config(text: impl Into<String>, config: EditorConfig) -> Self;
-    }
-
-    impl CommandNode for Editor {}
-
-    impl Register for Editor {}
-
-    impl Widget for Editor {}
-
-    impl !Send for Editor {}
-    impl !Sync for Editor {}
 
     /// Configuration for the editor widget.
     #[derive(Clone, Debug, Default)]
@@ -5292,7 +5328,7 @@ pub mod highlight {
         pub fn syntax_name(&self) -> String;
 
         /// Prepare borrowed semantic style paths using the built-in Canopy
-        /// classifier. Colors resolve through `palette_style_rules` when
+        /// classifier. Colors resolve through `style_rules` when
         /// painted; bold, italic, and underline survive without
         /// reparsing on theme changes. A later `with_theme` call
         /// restores fixed named-theme colors.
@@ -5311,7 +5347,7 @@ pub mod highlight {
 
     /// Install palette-aware syntax roles. Register with `Setup::widget_styles` so
     /// already prepared spans follow theme switches without syntax work.
-    pub fn palette_style_rules(palette: &Palette, rules: StyleRules<'_>);
+    pub fn style_rules(palette: &Palette, rules: StyleRules<'_>);
 }
 
 pub mod list {
@@ -5336,17 +5372,16 @@ pub mod menu {
     //! A menu without selection only lists its rows, as the menu of a transient
     //! mode does while the mode waits for its key.
     //!
-    //! [`Menu`] is the modal: it centres a titled frame over whatever it covers
-    //! and holds a [`MenuList`] of rows. A host opens it with Canopy's modal, as
-    //! it opens a [`Picker`](crate::Picker). A panel that keeps rows of its own,
-    //! such as an options panel with levels and inline edits, draws them with
+    //! [`Menu`](crate::Menu) is the modal: it centres a titled frame over
+    //! whatever it covers and holds a [`MenuList`](crate::MenuList) of rows. A
+    //! host opens it with Canopy's modal, as it opens a
+    //! [`Picker`](crate::Picker). A panel that keeps rows of its own, such as an
+    //! options panel with levels and inline edits, draws them with
     //! [`render_row`] and the same styles, so every menu reads the same.
     //!
     //! The rows draw under the `menu` style layer: `row`, `row/key`,
-    //! `row/value`, `row/muted`, `row/mark`, `selection`, and `edit`. [`styles`]
-    //! derives them from the palette.
-
-    pub use crate::{Menu, MenuItem, MenuList, MenuRow};
+    //! `row/value`, `row/muted`, `row/mark`, `selection`, and `edit`.
+    //! [`style_rules`] derives them from the palette.
 
     /// The columns that every row of one menu shares.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -5378,7 +5413,7 @@ pub mod menu {
     ) -> canopy::error::Result<()>;
 
     /// Install the styles of the `menu` layer, from the palette.
-    pub fn styles(palette: &Palette, rules: StyleRules<'_>);
+    pub fn style_rules(palette: &Palette, rules: StyleRules<'_>);
 }
 
 pub mod mosaic {
@@ -5390,7 +5425,7 @@ pub mod mosaic {
     //! application set them, unless the widget has a tier of its own. A gym
     //! sets one to compare tiers side by side.
 
-    pub use canopy_mosaic::*;
+    pub use canopy_mosaic::{Cell, Family, Tier};
     /// Step a widget's own tier: from following the terminal's glyphs, through
     /// each tier from half blocks to the full tier, and back. A gym toggles
     /// with it to compare tiers.
@@ -5451,7 +5486,7 @@ pub mod paged {
     }
 
     /// A reply violated the bounded, unique-key page contract.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    #[derive(Clone, Copy, Debug, Display, Eq, PartialEq, std::error::Error)]
     pub enum PageError {
         /// A page contained more items than its request permitted.
         TooLarge,
@@ -5508,6 +5543,11 @@ pub mod paged {
         /// Capacity and page size must be positive, and page size must fit
         /// capacity. The key function must return a stable identity for each
         /// provider item.
+        ///
+        /// # Panics
+        ///
+        /// Panics when `page_size` is zero or larger than `capacity`, or when
+        /// the process has made `u64::MAX` controllers.
         pub fn new(
             capacity: usize,
             page_size: usize,
@@ -5643,12 +5683,12 @@ pub mod regex_search {
     //! they highlight.
     //!
     //! An application that searches files or documents with a typed expression,
-    //! and then highlights what it found in an [`Editor`](crate::editor::Editor)
+    //! and then highlights what it found in an [`Editor`](crate::Editor)
     //! or a [`DiffView`](crate::DiffView), compiles the expression once with
     //! [`smart_matcher`]. The same matcher can drive `grep-searcher` over files,
     //! so a result list and the text that shows a result match alike.
     //! [`match_ranges`] turns its matches in shown text into the ranges that
-    //! [`Editor::set_matches`](crate::editor::Editor::set_matches) takes.
+    //! [`Editor::set_matches`](crate::Editor::set_matches) takes.
 
     pub use grep_regex::{Error, RegexMatcher};
     /// Return the matches of `matcher` in the cells of `data`, in reading order:
@@ -6089,19 +6129,6 @@ pub mod table {
         pub fn new(key: impl Into<TableKey>, label: impl Into<TableCell>) -> Self;
     }
 
-    /// Copy operation interpreted against the displayed snapshot.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum TableCopy {
-        /// Current full value, without TSV framing.
-        Cell,
-        /// Explicit body membership.
-        Selection,
-        /// Rows intersecting the selection, or the cursor row.
-        Rows,
-        /// All rows, with labels exactly once.
-        All,
-    }
-
     /// A validated immutable snapshot. Construction indexes each axis once.
     #[derive(Debug)]
     pub struct TableData {/* private fields */}
@@ -6379,31 +6406,7 @@ pub mod table {
 
 pub mod terminal {
     //! Terminal emulation widget.
-
-    /// Terminal widget backed by `itty`.
-    pub struct Terminal {/* private fields */}
-
-    impl Terminal {
-        /// Return whether the terminal's process has exited.
-        ///
-        /// A terminal without a session, before it mounts, reports false.
-        pub fn exited(&self) -> bool;
-
-        /// Construct a new terminal widget with the provided configuration.
-        pub fn new(config: TerminalConfig) -> Self;
-
-        /// Return whether a program other than the terminal's own process runs
-        /// in its foreground, as when a shell runs a command. A shell at its
-        /// prompt, a process that has exited, and a terminal without a session
-        /// report false.
-        pub fn runs_program(&self) -> bool;
-    }
-
-    impl CommandNode for Terminal {}
-
-    impl Widget for Terminal {}
-
-    impl !Sync for Terminal {}
+    //! The configuration of the [`Terminal`](crate::Terminal) widget.
 
     /// Terminal widget configuration.
     #[derive(Default)]
@@ -6441,7 +6444,7 @@ pub mod view_search {
     //! What every searchable view shares, so a search reads the same in each.
     //!
     //! A view that highlights search matches, such as the
-    //! [`Editor`](crate::editor::Editor), the [`DiffView`](crate::DiffView), or a
+    //! [`Editor`](crate::Editor), the [`DiffView`](crate::DiffView), or a
     //! rendered Markdown document, follows four conventions:
     //!
     //! - It paints the current match with [`CURRENT`] and every other match with

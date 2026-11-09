@@ -2,12 +2,12 @@
 //! they highlight.
 //!
 //! An application that searches files or documents with a typed expression,
-//! and then highlights what it found in an [`Editor`](crate::editor::Editor)
+//! and then highlights what it found in an [`Editor`](crate::Editor)
 //! or a [`DiffView`](crate::DiffView), compiles the expression once with
 //! [`smart_matcher`]. The same matcher can drive `grep-searcher` over files,
 //! so a result list and the text that shows a result match alike.
 //! [`match_ranges`] turns its matches in shown text into the ranges that
-//! [`Editor::set_matches`](crate::editor::Editor::set_matches) takes.
+//! [`Editor::set_matches`](crate::Editor::set_matches) takes.
 
 use std::{iter, ops::Range};
 

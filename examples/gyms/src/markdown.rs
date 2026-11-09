@@ -11,7 +11,7 @@ use canopy_markdown::{
     host::{HostAction, HostOutcome, HostReply, HostRequest, Resource, ResourceKind},
     presentation::GlyphPreset,
 };
-use canopy_widgets::Text;
+use canopy_widgets::{Text, image};
 
 use crate::{fixed_row, flex_row};
 

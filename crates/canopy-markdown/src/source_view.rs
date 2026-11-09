@@ -16,11 +16,12 @@ use canopy::{
 #[cfg(feature = "syntax")]
 use canopy_widgets::highlight::{Grammar, Highlighter, SyntectHighlighter};
 use canopy_widgets::{
+    Editor,
     editor::{
-        EditMode, Editor, EditorConfig, Interaction, LineNumbers, PreparedEditorView, Selection,
+        EditMode, EditorConfig, Interaction, LineNumbers, PreparedEditorView, Selection,
         TextPosition, TextRange, ViMode, WrapMode,
     },
-    highlight::{HighlightSpan, palette_style_rules},
+    highlight::{self, HighlightSpan},
 };
 
 use crate::search::{CompiledQuery, SearchLimits, SearchQuery};
@@ -957,7 +958,7 @@ impl Widget for MarkdownSource {
 
 impl Register for MarkdownSource {
     fn register(setup: &mut Setup) -> UiResult<()> {
-        setup.widget_styles(palette_style_rules);
+        setup.widget_styles(highlight::style_rules);
         Ok(())
     }
 }

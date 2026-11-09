@@ -6,7 +6,7 @@ use canopy::{
     path::Path,
     testing::harness::Harness,
 };
-use canopy_widgets::terminal::Terminal;
+use canopy_widgets::Terminal;
 
 use super::{Mount, root_harness};
 use crate::term::{TermGym, binding_setup};

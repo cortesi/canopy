@@ -19,8 +19,8 @@ use canopy::{
     text,
 };
 use canopy_widgets::{
-    Dialog, Frame,
-    menu::{self, MenuRow, RowLayout},
+    Dialog, Frame, MenuRow,
+    menu::{self, RowLayout},
 };
 
 use crate::{

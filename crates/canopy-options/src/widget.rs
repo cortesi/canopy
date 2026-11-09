@@ -395,7 +395,7 @@ impl Widget for Options {
 impl Register for Options {
     fn register(setup: &mut Setup) -> Result<()> {
         setup.add_commands::<Self>()?;
-        setup.widget_styles(menu::styles);
+        setup.widget_styles(menu::style_rules);
         panel::register(setup)
     }
 }
