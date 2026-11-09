@@ -13,7 +13,7 @@
 
 use std::{
     collections::VecDeque,
-    mem,
+    error, fmt, mem,
     sync::atomic::{AtomicU64, Ordering},
 };
 
@@ -111,6 +111,17 @@ pub enum PageError {
     /// A key was repeated within the page or overlapped an adjacent page.
     DuplicateKey,
 }
+
+impl fmt::Display for PageError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::TooLarge => "a page held more items than its request allowed",
+            Self::DuplicateKey => "a page repeated a key",
+        })
+    }
+}
+
+impl error::Error for PageError {}
 
 /// How the renderer should position the resident row.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -270,6 +281,11 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
     /// Capacity and page size must be positive, and page size must fit
     /// capacity. The key function must return a stable identity for each
     /// provider item.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `page_size` is zero or larger than `capacity`, or when
+    /// the process has made `u64::MAX` controllers.
     pub fn new(
         capacity: usize,
         page_size: usize,

@@ -1,3 +1,4 @@
+use canopy::error::Error;
 use proptest::{collection, prelude::*};
 
 use super::*;
@@ -712,4 +713,10 @@ proptest! {
             assert_eq!(model.items.len(), model.keys.len());
         }
     }
+}
+
+#[test]
+fn a_page_error_carries_into_a_canopy_error() {
+    let error = Error::app(PageError::DuplicateKey);
+    assert_eq!(error.to_string(), "a page repeated a key");
 }
