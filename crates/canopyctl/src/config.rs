@@ -8,11 +8,9 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow, bail};
-use canopy_term::TermCommand;
+use canopy_term::{TermCommand, is_cargo_package_var};
 use serde::Deserialize;
 use tokio::process::Command;
-
-use crate::cargo_env;
 
 /// Parsed `.canopyctl.toml` contents.
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -305,18 +303,17 @@ impl ResolvedCommand {
         command
     }
 
-    /// Convert the resolved command into a `tokio::process::Command`.
+    /// Convert the resolved command into a `tokio::process::Command`. The
+    /// child inherits the environment without the launching package's Cargo
+    /// identity, as a hosted terminal's does, so a Cargo command under any
+    /// wrapper keeps its own.
     pub fn to_command(&self) -> Command {
-        let mut command = if Path::new(&self.argv[0]).file_stem().is_some_and(|name| {
-            matches!(
-                name.to_str(),
-                Some("cargo" | "ncode" | "edev" | "canopyctl")
-            )
-        }) {
-            Command::from(cargo_env::command(&self.argv[0]))
-        } else {
-            Command::new(&self.argv[0])
-        };
+        let mut command = Command::new(&self.argv[0]);
+        for (name, _) in env::vars_os() {
+            if name.to_str().is_some_and(is_cargo_package_var) {
+                command.env_remove(name);
+            }
+        }
         command.args(&self.argv[1..]);
         command.current_dir(&self.cwd);
         command.envs(&self.env);
@@ -345,4 +342,37 @@ fn find_repo_root(start: &Path) -> Option<PathBuf> {
         .ancestors()
         .find(|ancestor| ancestor.join(".git").exists())
         .map(Path::to_path_buf)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsStr;
+
+    use super::*;
+
+    #[test]
+    fn a_command_of_any_program_drops_the_launching_package_identity() {
+        // Cargo and Nextest set the package variables for a test process.
+        assert!(env::var_os("CARGO_PKG_NAME").is_some());
+        let command = ResolvedCommand::new(
+            vec!["sh".into(), "-c".into(), "true".into()],
+            PathBuf::from("."),
+            HashMap::new(),
+        )
+        .unwrap()
+        .to_command();
+        let removed: Vec<&OsStr> = command
+            .as_std()
+            .get_envs()
+            .filter_map(|(name, value)| value.is_none().then_some(name))
+            .collect();
+        assert!(
+            removed.contains(&OsStr::new("CARGO_PKG_NAME")),
+            "{removed:?}"
+        );
+        assert!(
+            removed.contains(&OsStr::new("CARGO_MANIFEST_DIR")),
+            "{removed:?}"
+        );
+    }
 }

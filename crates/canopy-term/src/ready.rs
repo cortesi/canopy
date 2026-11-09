@@ -19,11 +19,12 @@ use tokio::{
 ///
 /// Pass [`ReadySignal::path`] to the app in
 /// [`canopy_mcp::READY_SOCKET_ENV`], start the app, and wait. The wait ends
-/// on the app's signal, so nothing retries the automation socket.
+/// on the app's signal, so nothing retries the automation socket. The socket
+/// file goes when the signal drops, whether or not a wait ran.
 pub struct ReadySignal {
     /// The listening socket.
     listener: UnixListener,
-    /// Where the socket lives, removed once the wait ends.
+    /// Where the socket lives, removed when the signal drops.
     path: PathBuf,
 }
 
@@ -51,7 +52,6 @@ impl ReadySignal {
             anyhow::Ok(line)
         };
         let line = timeout(limit, signal).await;
-        drop(fs::remove_file(&self.path));
         let Ok(line) = line else {
             bail!(
                 "the app did not report ready within {limit:?}; does it launch through \
@@ -62,5 +62,11 @@ impl ReadySignal {
             bail!("the app sent no ready line");
         }
         Ok(())
+    }
+}
+
+impl Drop for ReadySignal {
+    fn drop(&mut self) {
+        drop(fs::remove_file(&self.path));
     }
 }

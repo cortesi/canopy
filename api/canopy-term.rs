@@ -43,7 +43,8 @@ use tmcp::Client;
 ///
 /// Pass [`ReadySignal::path`] to the app in
 /// [`canopy_mcp::READY_SOCKET_ENV`], start the app, and wait. The wait ends
-/// on the app's signal, so nothing retries the automation socket.
+/// on the app's signal, so nothing retries the automation socket. The socket
+/// file goes when the signal drops, whether or not a wait ran.
 pub struct ReadySignal {/* private fields */}
 
 impl ReadySignal {
@@ -57,6 +58,8 @@ impl ReadySignal {
     /// into an error.
     pub async fn wait(self, limit: Duration) -> anyhow::Result<()>;
 }
+
+impl Drop for ReadySignal {}
 
 /// A command to run in a hosted terminal.
 #[derive(Clone, Debug)]
@@ -132,3 +135,11 @@ impl TermHost {
     /// Stop the app, forcing it after a grace period, and the terminal.
     pub async fn stop(self) -> anyhow::Result<()>;
 }
+
+/// Return whether `name` is a Cargo variable that names the launching
+/// package. `cargo run` and `cargo test` set these for their child, and a
+/// child Cargo command that inherits them can rebuild its dependencies, so
+/// a launcher removes them.
+///
+/// `xtask/src/cargo_env.rs` keeps its own copy, because an xtask is a leaf.
+pub fn is_cargo_package_var(name: &str) -> bool;

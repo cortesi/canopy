@@ -399,20 +399,26 @@ fn parse_input(input: &[impl AsRef<str>]) -> Result<Vec<Key>> {
     Ok(keys)
 }
 
+/// Return whether `name` is a Cargo variable that names the launching
+/// package. `cargo run` and `cargo test` set these for their child, and a
+/// child Cargo command that inherits them can rebuild its dependencies, so
+/// a launcher removes them.
+///
+/// `xtask/src/cargo_env.rs` keeps its own copy, because an xtask is a leaf.
+pub fn is_cargo_package_var(name: &str) -> bool {
+    name.starts_with("CARGO_PKG_")
+        || matches!(
+            name,
+            "CARGO_MANIFEST_DIR" | "CARGO_MANIFEST_PATH" | "CARGO_MANIFEST_LINKS"
+        )
+}
+
 /// Build the terminal request for `command`. The child inherits the
 /// environment without the launching package's Cargo identity, so a Cargo
 /// command keeps its own.
 fn terminal_request(command: &TermCommand, size: ScreenSize) -> HeadlessRequest {
     let mut environment: BTreeMap<OsString, OsString> = env::vars_os()
-        .filter(|(name, _)| {
-            name.to_str().is_none_or(|key| {
-                !key.starts_with("CARGO_PKG_")
-                    && !matches!(
-                        key,
-                        "CARGO_MANIFEST_DIR" | "CARGO_MANIFEST_PATH" | "CARGO_MANIFEST_LINKS"
-                    )
-            })
-        })
+        .filter(|(name, _)| !name.to_str().is_some_and(is_cargo_package_var))
         .collect();
     environment.extend(command.env.clone());
     let mut request = HeadlessRequest::new(&command.program)
@@ -468,5 +474,35 @@ mod tests {
         wait.await??;
         assert!(!path.exists(), "the wait removes its socket");
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_ready_signal_removes_its_socket_when_it_drops_unawaited() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let signal = ReadySignal::bind(dir.path().join("app.ready"))?;
+        let path = signal.path().to_path_buf();
+        assert!(path.exists());
+        drop(signal);
+        assert!(
+            !path.exists(),
+            "a signal that never waited removes its socket"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_cargo_package_variables_are_the_launching_package_identity() {
+        for name in [
+            "CARGO_PKG_NAME",
+            "CARGO_PKG_VERSION",
+            "CARGO_MANIFEST_DIR",
+            "CARGO_MANIFEST_PATH",
+            "CARGO_MANIFEST_LINKS",
+        ] {
+            assert!(is_cargo_package_var(name), "{name}");
+        }
+        for name in ["CARGO_HOME", "CARGO_TARGET_DIR", "RUSTFLAGS", "PATH"] {
+            assert!(!is_cargo_package_var(name), "{name}");
+        }
     }
 }

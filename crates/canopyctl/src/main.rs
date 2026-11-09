@@ -1,8 +1,6 @@
 #![deny(unsafe_code)]
 //! Command-line tooling for running and automating canopy apps.
 
-mod cargo_env;
-
 /// CLI configuration and `.canopyctl.toml` resolution.
 mod config;
 /// Screenshot galleries.
@@ -353,9 +351,10 @@ impl CanopyctlMcpServer {
         let command = config
             .run_command(&params.command, &socket)
             .map_err(tool_error)?;
+        let default = ScreenSize::default();
         let size = ScreenSize {
-            width: params.width.unwrap_or(120),
-            height: params.height.unwrap_or(40),
+            width: params.width.unwrap_or(default.width),
+            height: params.height.unwrap_or(default.height),
         };
         self.sessions
             .launch(&command, socket, size, LAUNCH_TIMEOUT)
@@ -468,11 +467,18 @@ async fn run_command(config: LoadedConfig, args: RunArgs) -> Result<()> {
         };
     }
     let socket_path = temp_socket_path(&config.config_dir)?;
-    let ready = ReadySignal::bind(socket_path.with_extension("ready"))?;
     let mut command = config
         .run_command(&args.command, &socket_path)?
         .to_command();
-    command.env(READY_SOCKET_ENV, ready.path());
+    // Only a fixture waits for the app to serve automation.
+    let ready = match &args.fixture {
+        Some(_) => {
+            let ready = ReadySignal::bind(socket_path.with_extension("ready"))?;
+            command.env(READY_SOCKET_ENV, ready.path());
+            Some(ready)
+        }
+        None => None,
+    };
     command.stdin(Stdio::inherit());
     command.stdout(Stdio::inherit());
     command.stderr(Stdio::inherit());
@@ -480,7 +486,7 @@ async fn run_command(config: LoadedConfig, args: RunArgs) -> Result<()> {
     eprintln!("{}", socket_path.display());
     let mut child = command.spawn().context("spawn interactive app")?;
 
-    if let Some(fixture) = args.fixture {
+    if let (Some(fixture), Some(ready)) = (args.fixture, ready) {
         // The app signals once its socket accepts connections.
         tokio::select! {
             ready = ready.wait(Duration::from_secs(args.ready_timeout)) => ready?,

@@ -1,6 +1,6 @@
 //! Child Cargo commands without inherited package identity.
 //!
-//! Kept in sync by hand with `crates/canopyctl/src/cargo_env.rs`: the xtask
+//! Kept in sync by hand with `canopy_term::is_cargo_package_var`: the xtask
 //! leaf rule forbids sharing it.
 
 use std::{env, ffi::OsStr, process::Command};

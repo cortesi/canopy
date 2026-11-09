@@ -74,7 +74,7 @@ Host an interactive Canopy app in a terminal and drive it as a person does.
 - Publish: crates.io
 - Workspace dependencies: canopy-mcp
 - Workspace dependents: canopyctl, gyms (dev)
-- Items: 21
+- Items: 22
 - Exposes: anyhow, canopy-mcp, serde_json, tmcp
 
 ## canopy-xmark
