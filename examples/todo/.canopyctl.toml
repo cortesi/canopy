@@ -1,3 +1,8 @@
 [app]
 headless = ["cargo", "run", "-p", "todo", "--", "mcp", ":memory:"]
 run = ["cargo", "run", "-p", "todo", "--", "./tmp/dev.db"]
+
+[smoke]
+suite = "smoke"
+fail_fast = true
+timeout_ms = 5000

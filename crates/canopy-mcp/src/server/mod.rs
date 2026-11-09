@@ -631,7 +631,11 @@ mod tests {
         assert!(outcome.success(), "{outcome:?}");
         assert_eq!(
             outcome.value(),
-            Some(&contracts::expected().to_external_json_value()?)
+            Some(
+                &contracts::expected()
+                    .to_external_json_value()
+                    .expect("the expected value is JSON")
+            )
         );
         assert_eq!(outcome.metadata.app, "contract");
         Ok(())

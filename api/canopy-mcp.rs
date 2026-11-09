@@ -15,7 +15,6 @@ use std::{
 
 use canopy::{
     Canopy, CanopyBuilder,
-    commands::CommandError,
     error::ScriptErrorKind,
     geom::Size,
     runtime::TurnError,
@@ -224,9 +223,6 @@ pub enum Error {
     /// A canopy runtime error.
     #[error(transparent)]
     Canopy(canopy::error::Error),
-    /// A canopy command conversion error.
-    #[error(transparent)]
-    Command(CommandError),
     /// An I/O error.
     #[error(transparent)]
     Io(std::io::Error),
@@ -254,8 +250,6 @@ impl Error {
     /// Wrap an application-specific setup error.
     pub fn app(error: impl Into<Box<dyn Send + std::error::Error + Sync>>) -> Self;
 }
-
-impl From<CommandError> for Error {}
 
 impl From<TurnError> for Error {}
 

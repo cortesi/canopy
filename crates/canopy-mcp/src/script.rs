@@ -793,8 +793,15 @@ fn outcome_from(completion: EvalOutcome, timing: ScriptTiming) -> EvalReport {
                 diagnostics,
                 timing,
             },
-            Err(error) => failure_with_logs(
-                &crate::Error::from(error),
+            // The value has no JSON form, which is a runtime failure.
+            Err(error) => failed_info(
+                ScriptErrorInfo {
+                    error_type: ScriptErrorType::Runtime,
+                    kind: None,
+                    command: None,
+                    owner: None,
+                    message: error.to_string(),
+                },
                 logs,
                 assertions,
                 diagnostics,
@@ -846,23 +853,6 @@ fn eval_request(request: &ScriptEvalRequest) -> EvalRequest {
     }
 }
 
-/// Build a failed outcome while preserving logs, assertions, and diagnostics.
-fn failure_with_logs(
-    error: &crate::Error,
-    logs: Vec<String>,
-    assertions: Vec<ScriptAssertion>,
-    diagnostics: Vec<ScriptCheckDiagnostic>,
-    timing: ScriptTiming,
-) -> EvalReport {
-    failed_info(
-        script_error_info(error),
-        logs,
-        assertions,
-        diagnostics,
-        timing,
-    )
-}
-
 /// Build a failed outcome from owned structured error fields.
 fn failed_info(
     info: ScriptErrorInfo,
@@ -878,20 +868,6 @@ fn failed_info(
         assertions,
         diagnostics,
         timing,
-    }
-}
-
-/// Build structured script error information from a canopy or automation error.
-fn script_error_info(error: &crate::Error) -> ScriptErrorInfo {
-    if let crate::Error::Canopy(error) = error {
-        return canopy_error_info(error);
-    }
-    ScriptErrorInfo {
-        error_type: ScriptErrorType::Runtime,
-        kind: None,
-        command: None,
-        owner: None,
-        message: error.to_string(),
     }
 }
 
@@ -1174,7 +1150,11 @@ mod tests {
         assert!(result.success(), "{result:?}");
         assert_eq!(
             result.value(),
-            Some(&contracts::expected().to_external_json_value()?)
+            Some(
+                &contracts::expected()
+                    .to_external_json_value()
+                    .expect("the expected value is JSON")
+            )
         );
         Ok(())
     }
@@ -1403,8 +1383,8 @@ declare command: {
     }
     #[test]
     fn cancellation_has_a_distinct_task_state() {
-        let outcome = failure_with_logs(
-            &crate::Error::Canopy(CanopyError::ScriptCancelled),
+        let outcome = failed_info(
+            canopy_error_info(&CanopyError::ScriptCancelled),
             vec!["before cancellation".to_string()],
             Vec::new(),
             Vec::new(),

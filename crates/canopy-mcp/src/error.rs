@@ -1,6 +1,6 @@
 use std::{error::Error as StdError, io, path::PathBuf, result::Result as StdResult};
 
-use canopy::{commands::CommandError, error::Error as CanopyError, runtime::TurnError};
+use canopy::{error::Error as CanopyError, runtime::TurnError};
 use thiserror::Error;
 
 /// Result type used by `canopy-mcp`.
@@ -12,9 +12,6 @@ pub enum Error {
     /// A canopy runtime error.
     #[error(transparent)]
     Canopy(#[from] CanopyError),
-    /// A canopy command conversion error.
-    #[error(transparent)]
-    Command(#[from] CommandError),
     /// An I/O error.
     #[error(transparent)]
     Io(#[from] io::Error),

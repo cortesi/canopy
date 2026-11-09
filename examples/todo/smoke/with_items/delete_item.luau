@@ -1,19 +1,4 @@
-local function published_text(): string
-    canopy.prepare()
-    local frame = canopy.snapshot()
-    if frame == nil then error("missing completed frame") end
-    local lines: {string} = {}
-    for _, row in frame.cells do
-        local cells: {string} = {}
-        for _, cell in row do
-            table.insert(cells, cell.text)
-        end
-        table.insert(lines, table.concat(cells))
-    end
-    return table.concat(lines, "\n")
-end
-
-local before = published_text()
+local before = canopy.screen_text()
 canopy.assert(string.find(before, "Buy milk") ~= nil, "fixture should render the first item")
 canopy.assert(
     string.find(before, "Ship fixture%-driven smoke tests") ~= nil,
@@ -22,7 +7,7 @@ canopy.assert(
 
 canopy.send_key("d")
 
-local after = published_text()
+local after = canopy.screen_text()
 canopy.assert(
     string.find(after, "Buy milk") == nil,
     "delete should remove the selected item from the rendered buffer"
