@@ -1,7 +1,7 @@
 //! Selector widget for choosing one value from a visible list.
 
 use canopy::{
-    Context, EventOutcome, NodeName, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeName, Register, Setup, ViewContext, Widget, derive_commands,
     error::Result,
     geom::Size,
     input::{Event, mouse},
@@ -203,6 +203,15 @@ where
                 None => self.items.is_empty(),
             };
         selection_valid && self.chosen.is_none_or(|index| index < self.items.len())
+    }
+}
+
+impl<T> Register for Selector<T>
+where
+    T: ItemLabel + 'static,
+{
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()
     }
 }
 

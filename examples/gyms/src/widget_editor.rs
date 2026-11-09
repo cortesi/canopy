@@ -72,7 +72,7 @@ impl Widget for WidgetEditor {
 
 impl Register for WidgetEditor {
     fn register(setup: &mut Setup) -> Result<()> {
-        setup.add_commands::<Editor>()?;
+        Editor::register(setup)?;
         Ok(())
     }
 }

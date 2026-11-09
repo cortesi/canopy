@@ -279,7 +279,7 @@ impl Widget for EditorGym {
 impl Register for EditorGym {
     fn register(setup: &mut Setup) -> Result<()> {
         setup.add_commands::<Self>()?;
-        setup.add_commands::<Editor>()?;
+        Editor::register(setup)?;
         Ok(())
     }
 }

@@ -2,7 +2,8 @@
 //! an optional frame that marks the pane with focus.
 
 use canopy::{
-    Context, EventOutcome, NodeId, NodeName, ViewContext, ViewContextExt, Widget, derive_commands,
+    Context, EventOutcome, NodeId, NodeName, Register, Setup, ViewContext, ViewContextExt, Widget,
+    derive_commands,
     error::Result,
     geom::{Line, Rect},
     input::Event,
@@ -331,6 +332,12 @@ fn junctions(glyphs: BoxGlyphs, left: Option<bool>, right: Option<bool>) -> (cha
 impl Default for Columns {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Register for Columns {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()
     }
 }
 

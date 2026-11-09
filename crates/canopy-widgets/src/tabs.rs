@@ -2,7 +2,8 @@
 //! shows its own pages.
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, TypedId, ViewContext, Widget,
+    Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
+    Widget,
     commands::CommandCall,
     derive_commands,
     error::Result,
@@ -327,6 +328,12 @@ impl Default for Tabs {
     }
 }
 
+impl Register for Tabs {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()
+    }
+}
+
 impl Widget for Tabs {
     fn layout(&self) -> Layout {
         Layout::fill().padding(Edges::new(self.look.rows(), 0, 0, 0))
@@ -644,7 +651,7 @@ mod tests {
 
     impl Register for Owner {
         fn register(setup: &mut Setup) -> Result<()> {
-            setup.add_commands::<Tabs>()?;
+            Tabs::register(setup)?;
             setup.add_commands::<Self>()
         }
     }

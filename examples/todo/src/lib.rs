@@ -468,7 +468,7 @@ impl Widget for Todo {
 impl Register for Todo {
     fn register(setup: &mut Setup) -> Result<()> {
         setup.add_commands::<Self>()?;
-        setup.add_commands::<List<TodoEntry, i64>>()?;
+        <List<TodoEntry, i64>>::register(setup)?;
         Input::register(setup)?;
         Ok(())
     }

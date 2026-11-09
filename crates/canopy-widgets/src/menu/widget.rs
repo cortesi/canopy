@@ -258,7 +258,6 @@ struct Parts {
     list: TypedId<MenuList>,
 }
 
-#[derive_commands]
 impl Menu {
     /// The framework group a menu's modal admits.
     ///
@@ -468,7 +467,6 @@ impl Default for MenuList {
 impl Register for MenuList {
     fn register(setup: &mut Setup) -> Result<()> {
         setup.add_commands::<Self>()?;
-        setup.add_commands::<Menu>()?;
         setup.widget_styles(style_rules);
         let nav = |intent: NavIntent| -> Result<BindingAction> {
             Ok(BindingAction::Intent(IntentName::new(intent.name())?))

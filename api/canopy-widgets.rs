@@ -902,6 +902,8 @@ impl Columns {
 
 impl CommandNode for Columns {}
 
+impl Register for Columns {}
+
 impl Widget for Columns {}
 
 /// A centred modal that asks a question and offers labelled answers.
@@ -1448,6 +1450,8 @@ where
 }
 
 impl<T> CommandNode for Dropdown<T> where T: 'static + ItemLabel {}
+
+impl<T> Register for Dropdown<T> where T: 'static + ItemLabel {}
 
 impl<T> Widget for Dropdown<T> where T: 'static + ItemLabel {}
 
@@ -2454,6 +2458,8 @@ impl<W: Selectable> List<W, AutoKey> {
 
 impl<W: Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> CommandNode for List<W, K> {}
 
+impl<W: 'static + Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> Register for List<W, K> {}
+
 impl<W: 'static + Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> Widget for List<W, K> {}
 
 /// A modal menu: a titled frame that holds a [`MenuList`].
@@ -2492,8 +2498,6 @@ impl Menu {
         close: CommandCall,
     ) -> canopy::error::Result<()>;
 }
-
-impl CommandNode for Menu {}
 
 impl Widget for Menu {}
 
@@ -3458,6 +3462,8 @@ where
 
 impl<T> CommandNode for Selector<T> where T: 'static + ItemLabel {}
 
+impl<T> Register for Selector<T> where T: 'static + ItemLabel {}
+
 impl<T> Widget for Selector<T> where T: 'static + ItemLabel {}
 
 /// A series of values drawn small: bars of eighth blocks, or a braille line.
@@ -4124,6 +4130,8 @@ impl Tabs {
 
 impl CommandNode for Tabs {}
 
+impl Register for Tabs {}
+
 impl Widget for Tabs {}
 
 /// How the tab bar draws.
@@ -4160,8 +4168,6 @@ impl Terminal {
     /// report false.
     pub fn runs_program(&self) -> bool;
 }
-
-impl CommandNode for Terminal {}
 
 impl Widget for Terminal {}
 

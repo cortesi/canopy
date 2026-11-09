@@ -7,7 +7,7 @@
 use std::{collections::HashSet, hash::Hash};
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeName, Setup, TypedId, ViewContext, Widget,
+    Context, ContextExt, EventOutcome, NodeName, Register, Setup, TypedId, ViewContext, Widget,
     commands::{ArgValue, CommandCall, CommandStatus, ToArgValue},
     derive_commands,
     error::{Error, Result},
@@ -757,6 +757,12 @@ impl<W: Selectable> List<W, AutoKey> {
     }
 }
 
+impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Register for List<W, K> {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()
+    }
+}
+
 impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Widget for List<W, K> {
     fn accepts_intent(&self, intent: &str, _ctx: &dyn ViewContext) -> bool {
         !self.items.is_empty() && CursorMove::of(intent).is_some()
@@ -1029,26 +1035,6 @@ mod tests {
 
         fn name(&self) -> NodeName {
             NodeName::convert("row")
-        }
-    }
-
-    impl Register for List<Text> {
-        fn register(setup: &mut Setup) -> Result<()> {
-            setup.add_commands::<Self>()?;
-            Ok(())
-        }
-    }
-
-    impl Register for List<Row> {
-        fn register(setup: &mut Setup) -> Result<()> {
-            setup.add_commands::<Self>()?;
-            Ok(())
-        }
-    }
-
-    impl Register for List<Row, i64> {
-        fn register(setup: &mut Setup) -> Result<()> {
-            setup.add_commands::<Self>()
         }
     }
 

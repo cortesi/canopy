@@ -242,7 +242,7 @@ impl Widget for Intervals {
 impl Register for Intervals {
     fn register(setup: &mut Setup) -> Result<()> {
         setup.add_commands::<Self>()?;
-        setup.add_commands::<List<CounterItem>>()?;
+        <List<CounterItem>>::register(setup)?;
         Ok(())
     }
 }

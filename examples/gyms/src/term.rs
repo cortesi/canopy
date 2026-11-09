@@ -444,7 +444,7 @@ impl Widget for TermGym {
 impl Register for TermGym {
     fn register(setup: &mut Setup) -> Result<()> {
         setup.add_commands::<Self>()?;
-        setup.add_commands::<List<TermEntry>>()?;
+        <List<TermEntry>>::register(setup)?;
         Ok(())
     }
 }

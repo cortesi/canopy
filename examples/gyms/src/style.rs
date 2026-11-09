@@ -1097,13 +1097,13 @@ impl Register for Stylegym {
     fn register(setup: &mut Setup) -> Result<()> {
         Root::register(setup)?;
         setup.add_commands::<Self>()?;
-        setup.add_commands::<Dropdown<ThemeOption>>()?;
-        setup.add_commands::<Selector<EffectOption>>()?;
-        setup.add_commands::<Tabs>()?;
+        <Dropdown<ThemeOption>>::register(setup)?;
+        <Selector<EffectOption>>::register(setup)?;
+        Tabs::register(setup)?;
         setup.add_commands::<StyleSheet>()?;
         setup.add_commands::<TextSamples>()?;
         Input::register(setup)?;
-        setup.add_commands::<Editor>()?;
+        Editor::register(setup)?;
         Ok(())
     }
 }

@@ -8,7 +8,6 @@ use std::{
 use canopy::{
     Context, EventOutcome, NodeName, ViewContext, Widget,
     commands::CommandCall,
-    derive_commands,
     error::{Error, Result},
     geom,
     geom::Size,
@@ -267,7 +266,6 @@ pub struct Terminal {
     wake: WakeSlot,
 }
 
-#[derive_commands]
 impl Terminal {
     /// Construct a new terminal widget with the provided configuration.
     pub fn new(config: TerminalConfig) -> Self {
@@ -1525,7 +1523,7 @@ mod tests {
         exited: Vec<canopy::NodeId>,
     }
 
-    #[derive_commands]
+    #[canopy::derive_commands]
     impl ExitHost {
         /// Record an exit.
         #[command]
@@ -1579,7 +1577,7 @@ mod tests {
         reaped: Vec<(canopy::NodeId, bool)>,
     }
 
-    #[derive_commands]
+    #[canopy::derive_commands]
     impl ReapHost {
         /// Remove the terminal that ended.
         #[command]

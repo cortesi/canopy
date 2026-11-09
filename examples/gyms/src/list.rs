@@ -243,8 +243,8 @@ impl Widget for ListGym {
 
 impl Register for ListGym {
     fn register(setup: &mut Setup) -> Result<()> {
-        setup.add_commands::<List<ListEntry>>()?;
-        setup.add_commands::<Columns>()?;
+        <List<ListEntry>>::register(setup)?;
+        Columns::register(setup)?;
         setup.add_commands::<Self>()?;
         Ok(())
     }

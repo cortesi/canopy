@@ -1,7 +1,7 @@
 //! Dropdown widget for single-value selection with expand/collapse behavior.
 
 use canopy::{
-    Context, EventOutcome, NodeName, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeName, Register, Setup, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     geom::Size,
     input::{Event, mouse},
@@ -189,6 +189,15 @@ where
     }
 }
 
+impl<T> Register for Dropdown<T>
+where
+    T: ItemLabel + 'static,
+{
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()
+    }
+}
+
 impl<T> Widget for Dropdown<T>
 where
     T: ItemLabel + 'static,
@@ -274,16 +283,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use canopy::{Register, Setup, testing::harness::Harness};
+    use canopy::testing::harness::Harness;
 
     use super::*;
-
-    impl Register for Dropdown<String> {
-        fn register(setup: &mut Setup) -> Result<()> {
-            setup.add_commands::<Self>()?;
-            Ok(())
-        }
-    }
 
     #[test]
     fn test_dropdown_creation() {
