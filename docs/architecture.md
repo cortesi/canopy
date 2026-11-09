@@ -102,7 +102,7 @@ tables are optional.
 | --- | --- |
 | `syntax` | `SyntectHighlighter` and its Syntect dependencies |
 | `terminal-widget` | Terminal and `itty-core` |
-| `graphics` | `ImageView` (crate-root re-export), fonts, screenshots, `image`, and `fontdue` |
+| `graphics` | `ImageView` (crate-root re-export), fonts, `image`, and `fontdue` |
 | `devtools` | Inspector and tracing subscriber support |
 
 Without `devtools`, Root creates no Inspector nodes or Inspector commands.

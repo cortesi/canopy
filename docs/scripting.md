@@ -651,7 +651,7 @@ of text of each row. A run names its style by index, from 0, and counts the
 cells it covers. A capture is compact, so a script can return many of them.
 Like a snapshot, a capture shows every cell at rest: an animation shows its
 rest color, and a drifting gradient its rest position. `TermBuf::capture` makes the same
-record in Rust, and `canopy_widgets::screenshot` draws one as a PNG image.
+record in Rust, and `canopyctl gallery` draws captures as PNG images.
 
 `canopy.snapshot().cursors` holds the cursors the frame painted, the primary
 cursor first. Each record has the declaring node, the screen location, the

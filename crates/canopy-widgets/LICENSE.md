@@ -5,7 +5,6 @@ embeds third-party material under its own terms:
 
 | Material | Path | Terms |
 | --- | --- | --- |
-| JetBrains Mono NL, which draws screenshots | `assets/fonts/JetBrainsMonoNL-*.ttf` | SIL Open Font License 1.1, in `assets/fonts/OFL-JetBrainsMono.txt` |
 | Tamzen, which draws `BigText` | `assets/fonts/tamzen/`, converted into `src/big_text/faces.rs` | The Tamsyn and Tamzen terms, in `assets/fonts/tamzen/LICENSE` |
 | The Luau grammar, which highlights Luau | `syntaxes/Luau.sublime-syntax` | MIT, in `syntaxes/Luau.LICENSE.md` |
 

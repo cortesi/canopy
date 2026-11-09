@@ -20,11 +20,15 @@ use std::{
 use anyhow::{Context, Result, anyhow, bail};
 use canopy::render::ScreenCapture;
 use canopy_mcp::{ScreenSize, SuiteConfig, plan_suite};
-use canopy_widgets::screenshot::{Screenshot, ScreenshotOptions};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{config::GallerySettings, parse_screen, session::Session};
+use crate::{
+    config::GallerySettings,
+    parse_screen,
+    screenshot::{Screenshot, ScreenshotOptions},
+    session::Session,
+};
 
 /// The viewer page. The manifest takes the place of [`PLACEHOLDER`].
 const VIEWER: &str = include_str!("gallery.html");

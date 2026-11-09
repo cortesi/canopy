@@ -41,12 +41,24 @@ const BANNER: &str = "Canopy";
 /// sets the word at another offset.
 const BANNER_PHASES: [[f32; 2]; 4] = [[0.0, 0.0], [0.25, 0.125], [0.5, 0.25], [0.75, 0.375]];
 
-/// The fonts of the text items, by name and file.
+/// The fonts of the text items, by name and path from the workspace root.
 const FONTS: [(&str, &str); 4] = [
-    ("bungee", "Bungee-Regular.ttf"),
-    ("fira-mono", "FiraMono-Regular.ttf"),
-    ("tangerine", "Tangerine-Regular.ttf"),
-    ("jetbrains-bold", "JetBrainsMonoNL-Bold.ttf"),
+    (
+        "bungee",
+        "crates/canopy-widgets/assets/fonts/Bungee-Regular.ttf",
+    ),
+    (
+        "fira-mono",
+        "crates/canopy-widgets/assets/fonts/FiraMono-Regular.ttf",
+    ),
+    (
+        "tangerine",
+        "crates/canopy-widgets/assets/fonts/Tangerine-Regular.ttf",
+    ),
+    (
+        "jetbrains-bold",
+        "crates/canopyctl/assets/fonts/JetBrainsMonoNL-Bold.ttf",
+    ),
 ];
 
 /// The heights of the text items, in cell rows.
@@ -209,7 +221,7 @@ enum Build {
 struct Text {
     /// The words.
     words: &'static str,
-    /// The font file in the fonts of canopy-widgets.
+    /// The font file, from the workspace root.
     font: &'static str,
     /// The height of the line box in cell rows.
     rows: usize,
@@ -321,7 +333,7 @@ pub fn suite() -> Vec<Spec> {
         group: Group::Text,
         build: Build::Text(Text {
             words: BANNER,
-            font: "Bungee-Regular.ttf",
+            font: "crates/canopy-widgets/assets/fonts/Bungee-Regular.ttf",
             rows: 16,
             colors: LIGHT,
             crisp: false,
@@ -475,7 +487,7 @@ fn text(spec: &Text) -> Item {
         square,
         phases,
     } = *spec;
-    let path = root().join("crates/canopy-widgets/assets/fonts").join(font);
+    let path = root().join(font);
     let bytes = fs::read(&path).expect("font");
     let font = fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default()).expect("font");
     // Square text rasterizes on cells as tall as they are wide, then
@@ -752,7 +764,12 @@ mod tests {
     fn each_phase_draws_a_line_and_moves_its_ink() {
         let phases = text(&Text {
             phases: &BANNER_PHASES,
-            ..line(BANNER, "Bungee-Regular.ttf", 4, true)
+            ..line(
+                BANNER,
+                "crates/canopy-widgets/assets/fonts/Bungee-Regular.ttf",
+                4,
+                true,
+            )
         });
         assert_eq!(phases.rows, 4 * 5 + 1);
         // The first ink of each line moves right with its phase.
@@ -771,7 +788,12 @@ mod tests {
 
     #[test]
     fn text_fills_its_rows_and_its_matrix_matches_its_reference() {
-        let item = text(&line(TEXT, "FiraMono-Regular.ttf", 3, false));
+        let item = text(&line(
+            TEXT,
+            "crates/canopy-widgets/assets/fonts/FiraMono-Regular.ttf",
+            3,
+            false,
+        ));
         assert_eq!(item.rows, 5);
         assert_eq!(item.reference.len(), item.width() * item.rows * CELL_H);
         let Input::Coverage { matrix, .. } = &item.input else {
@@ -789,8 +811,18 @@ mod tests {
 
     #[test]
     fn square_text_draws_at_twice_its_height() {
-        let tall = text(&line(TEXT, "Bungee-Regular.ttf", 4, false));
-        let square = text(&line(TEXT, "Bungee-Regular.ttf", 8, true));
+        let tall = text(&line(
+            TEXT,
+            "crates/canopy-widgets/assets/fonts/Bungee-Regular.ttf",
+            4,
+            false,
+        ));
+        let square = text(&line(
+            TEXT,
+            "crates/canopy-widgets/assets/fonts/Bungee-Regular.ttf",
+            8,
+            true,
+        ));
         // On square cells, eight rows hold the glyphs of four tall rows, at
         // about the same width.
         assert_eq!(square.rows, 10);

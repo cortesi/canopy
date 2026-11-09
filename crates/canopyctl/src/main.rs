@@ -7,6 +7,8 @@ mod config;
 mod gallery;
 /// Replay journal types and their file IO.
 mod replay;
+/// Frames drawn as images.
+mod screenshot;
 /// MCP client sessions and the manager shared by the CLI and the proxy server.
 mod session;
 /// Interactive apps hosted in a terminal that canopyctl owns.

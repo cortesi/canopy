@@ -3,16 +3,18 @@ name = "canopyctl"
 version = "0.1.0"
 authors.workspace = true
 edition.workspace = true
-license.workspace = true
+license-file = "LICENSE.md"
 description = "Run, automate, and smoke-test Canopy applications"
 
 [dependencies]
 anyhow.workspace = true
 canopy.workspace = true
 canopy-mcp.workspace = true
+canopy-mosaic.workspace = true
 canopy-term.workspace = true
-canopy-widgets = { workspace = true, features = ["graphics"] }
 clap.workspace = true
+fontdue.workspace = true
+image = { workspace = true, features = ["png"] }
 ruau-script-api = { workspace = true, features = ["schema"] }
 serde.workspace = true
 serde_json.workspace = true
@@ -26,5 +28,6 @@ workspace = true
 [dev-dependencies]
 canopy = { workspace = true, features = ["testing"] }
 futures.workspace = true
+image = { workspace = true, features = ["jpeg"] }
 tempfile.workspace = true
 tokio = { workspace = true, features = ["io-util", "test-util"] }

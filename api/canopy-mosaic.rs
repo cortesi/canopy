@@ -3,7 +3,7 @@
 // Package: canopy-mosaic
 // Publish: crates.io
 // Workspace dependencies: none
-// Workspace dependents: canopy-widgets, mosaic-score
+// Workspace dependents: canopy-widgets, canopyctl, mosaic-score
 
 //! Draw pictures and large text with block mosaic characters.
 //!

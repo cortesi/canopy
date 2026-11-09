@@ -53,7 +53,7 @@ Draw pictures and large text with block mosaic characters.
 
 - Publish: crates.io
 - Workspace dependencies: none
-- Workspace dependents: canopy-widgets, mosaic-score
+- Workspace dependents: canopy-widgets, canopyctl, mosaic-score
 - Items: 59
 - Exposes: none
 
@@ -95,8 +95,8 @@ Built-in widgets for canopy applications.
 - Publish: crates.io
 - Declared features: default, devtools, graphics, syntax, terminal-widget
 - Workspace dependencies: canopy, canopy-mosaic, canopy-xmark (optional)
-- Workspace dependents: canopy-markdown, canopy-options, canopyctl, gyms, hello, todo
-- Items: 1123
+- Workspace dependents: canopy-markdown, canopy-options, gyms, hello, todo
+- Items: 1118
 - Exposes: canopy, canopy-mosaic, grep-regex, image, syntect
 
 ## canopy-markdown
@@ -144,7 +144,7 @@ Todo application used as Canopy's end-to-end example and smoke-test target.
 
 ## Binary-only packages
 
-- canopyctl: workspace dependencies: canopy, canopy-mcp, canopy-term, canopy-widgets
+- canopyctl: workspace dependencies: canopy, canopy-mcp, canopy-mosaic, canopy-term
 
 - gyms: workspace dependencies: canopy, canopy-markdown, canopy-mcp, canopy-widgets
 
