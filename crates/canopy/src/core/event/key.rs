@@ -474,6 +474,8 @@ impl fmt::Display for Key {
 
 #[cfg(test)]
 mod tests {
+    use proptest::{prelude::*, test_runner::TestCaseResult};
+
     use crate::{error::Result, input::key::*};
 
     #[test]
@@ -539,5 +541,67 @@ mod tests {
         assert_eq!(Key::parse_spec("-"), Ok('-'.into()));
         assert!(Key::parse_spec("ctrl-what").is_err());
         Ok(())
+    }
+
+    /// A key spec in the shape a keymap writes: modifiers, separators, and a
+    /// key name, a function key, or any one character.
+    fn key_spec() -> impl Strategy<Value = String> {
+        let modifier = prop::sample::select(vec!["ctrl", "Control", "alt", "Shift", "meta", ""]);
+        let separator = prop::sample::select(vec!["-", "+", "--", " "]);
+        let body = prop_oneof![
+            prop::sample::select(vec![
+                "Enter",
+                "esc",
+                "PageDown",
+                "BackTab",
+                "space",
+                "F12",
+                "f0",
+                "f300",
+                "Left",
+                "ArrowUp",
+                "KeypadBegin",
+                "nope",
+            ])
+            .prop_map(str::to_owned),
+            any::<char>().prop_map(String::from),
+            "[a-z]{0,3}",
+        ];
+        (prop::collection::vec((modifier, separator), 0..3), body).prop_map(|(mods, body)| {
+            let mut spec = String::new();
+            for (modifier, separator) in mods {
+                spec.push_str(modifier);
+                spec.push_str(separator);
+            }
+            spec + &body
+        })
+    }
+
+    /// `spec` parses without a panic, and a key it parses to prints a spec
+    /// that parses back to the same key.
+    fn round_trips(spec: &str) -> TestCaseResult {
+        if let Ok(key) = Key::parse_spec(spec) {
+            let printed = key.to_string();
+            prop_assert_eq!(
+                Key::parse_spec(&printed).ok(),
+                Some(key),
+                "{:?} printed {:?}",
+                spec,
+                printed
+            );
+        }
+        Ok(())
+    }
+
+    proptest! {
+        #[test]
+        fn an_arbitrary_key_spec_parses_or_fails_and_prints_back(spec in any::<String>()) {
+            round_trips(&spec)?;
+        }
+
+        #[test]
+        fn a_keymap_shaped_key_spec_parses_or_fails_and_prints_back(spec in key_spec()) {
+            round_trips(&spec)?;
+        }
     }
 }

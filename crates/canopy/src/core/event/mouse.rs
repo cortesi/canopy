@@ -195,6 +195,8 @@ pub struct MouseEvent {
 
 #[cfg(test)]
 mod tests {
+    use proptest::{prelude::*, test_runner::TestCaseResult};
+
     use crate::{error::Result, input::mouse::*};
 
     fn spec(action: Action, button: Button, modifiers: key::Mods) -> Mouse {
@@ -271,5 +273,67 @@ mod tests {
             "ScrollDown"
         );
         Ok(())
+    }
+
+    /// A mouse spec in the shape a keymap writes: modifiers, separators, a
+    /// button, and an action.
+    fn mouse_spec() -> impl Strategy<Value = String> {
+        let modifier = prop::sample::select(vec!["ctrl", "Alt", "shift", "hyper", ""]);
+        let separator = prop::sample::select(vec!["-", "+", " "]);
+        let button = prop::sample::select(vec!["", "Left", "right", "Middle", "None", "x"]);
+        let action = prop::sample::select(vec![
+            "Down",
+            "up",
+            "Drag",
+            "Moved",
+            "ScrollUp",
+            "scrolldown",
+            "ScrollLeft",
+            "ScrollRight",
+            "Leave",
+            "Click",
+            "",
+        ]);
+        (
+            prop::collection::vec((modifier, separator), 0..3),
+            button,
+            action,
+        )
+            .prop_map(|(mods, button, action)| {
+                let mut spec = String::new();
+                for (modifier, separator) in mods {
+                    spec.push_str(modifier);
+                    spec.push_str(separator);
+                }
+                spec + button + action
+            })
+    }
+
+    /// `spec` parses without a panic, and a mouse spec it parses to prints a
+    /// spec that parses back to the same value.
+    fn round_trips(spec: &str) -> TestCaseResult {
+        if let Ok(mouse) = Mouse::parse_spec(spec) {
+            let printed = mouse.to_string();
+            prop_assert_eq!(
+                Mouse::parse_spec(&printed).ok(),
+                Some(mouse),
+                "{:?} printed {:?}",
+                spec,
+                printed
+            );
+        }
+        Ok(())
+    }
+
+    proptest! {
+        #[test]
+        fn an_arbitrary_mouse_spec_parses_or_fails_and_prints_back(spec in any::<String>()) {
+            round_trips(&spec)?;
+        }
+
+        #[test]
+        fn a_keymap_shaped_mouse_spec_parses_or_fails_and_prints_back(spec in mouse_spec()) {
+            round_trips(&spec)?;
+        }
     }
 }
