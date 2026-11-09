@@ -231,6 +231,21 @@ pub struct PreparedRun {
     syntax: Option<SpanStyle>,
 }
 
+impl PreparedRun {
+    /// The reading bytes of the grapheme of `len` bytes at byte `byte` of the
+    /// display text, or `None` for decoration. A run whose sanitized text
+    /// differs in length from its reading range maps each grapheme to the
+    /// whole range.
+    pub(crate) fn reading_range(&self, byte: usize, len: usize) -> Option<Range<usize>> {
+        let range = self.reading.as_ref()?;
+        Some(if self.text.len() == range.len() {
+            range.start + byte..range.start + byte + len
+        } else {
+            range.clone()
+        })
+    }
+}
+
 /// One document row. Decoration has no reading range and never enters copy.
 #[derive(Clone, Debug)]
 pub struct PreparedRow {
@@ -904,33 +919,28 @@ impl PresentationSnapshot {
         }
         let mut nearest = None;
         for run in &row.runs {
-            let Some(range) = &run.reading else {
-                continue;
-            };
             let mut x = run.x;
             for (byte, g) in text::grapheme_indices(&run.text) {
+                // Decoration has no reading bytes.
+                let Some(bytes) = run.reading_range(byte, g.len()) else {
+                    break;
+                };
                 let width = text::grapheme_width(g) as u32;
-                // Sanitized control glyphs may have a different byte length.
-                let offset = if run.text.len() == range.len() {
-                    range.start + byte
-                } else {
-                    range.start
-                };
-                let reading = ReadingPosition {
-                    unit_id: row.unit_id,
-                    offset,
-                };
                 if point.x < x.saturating_add(width.max(1)) {
                     return Some(Hit {
-                        reading: Some(reading),
+                        reading: Some(ReadingPosition {
+                            unit_id: row.unit_id,
+                            offset: bytes.start,
+                        }),
                         object: run.object,
                         source: row.source.clone(),
                     });
                 }
+                // Past the last grapheme, a hit lands at the run's end.
                 nearest = Some(Hit {
                     reading: Some(ReadingPosition {
                         unit_id: row.unit_id,
-                        offset: range.end,
+                        offset: bytes.end,
                     }),
                     object: run.object,
                     source: row.source.clone(),
@@ -1068,13 +1078,7 @@ impl PresentationSnapshot {
                         continue;
                     }
                     stats.graphemes += 1;
-                    let bytes = run.reading.as_ref().map(|r| {
-                        if run.text.len() == r.len() {
-                            r.start + byte..r.start + byte + g.len()
-                        } else {
-                            r.clone()
-                        }
-                    });
+                    let bytes = run.reading_range(byte, g.len());
                     let covered =
                         |s: &Range<ReadingKey>| bytes.as_ref().is_some_and(|r| marks(s, r));
                     let selected = whole_selected || row_selection.is_some_and(covered);

@@ -252,6 +252,14 @@ pub struct BlockEdit {
     pub text: String,
 }
 
+/// What the status shows of the reader's actions.
+enum ActionNote {
+    /// The progress of a running action.
+    Progress(&'static str),
+    /// Where the selected link leads.
+    Link(String),
+}
+
 /// Convert an application-facing error into the common Canopy error type.
 pub fn invalid(error: impl Display) -> Error {
     Error::app(error.to_string())
@@ -2902,17 +2910,7 @@ impl Markdown {
             }
             Lifecycle::Complete(FinishOutcome::Completed) => {}
         }
-        let partial = (self.active == ViewType::Rendered)
-            .then(|| self.shared.borrow().presentation.clone())
-            .flatten()
-            .and_then(|shown| {
-                shown
-                    .document
-                    .degraded
-                    .clone()
-                    .or_else(|| shown.truncated.then(|| "layout limit".to_owned()))
-            });
-        if let Some(reason) = partial {
+        if let Some(reason) = self.partial_reason() {
             items.push(item(
                 "markdown.partial",
                 55,
@@ -2920,8 +2918,7 @@ impl Markdown {
                 format!("partial: {reason}"),
             ));
         }
-        let new_bytes = snapshot.len().saturating_sub(self.acknowledged);
-        if new_bytes > 0 && self.shared.borrow().follow == Follow::Paused {
+        if let Some(new_bytes) = self.unseen_bytes(&snapshot) {
             items.push(item(
                 "markdown.new",
                 20,
@@ -2932,17 +2929,47 @@ impl Markdown {
         if let Some(status) = &self.options.status {
             items.push(item("markdown.host", 20, "label", status.clone()));
         }
-        if let Some(progress) = self.action_progress() {
-            items.push(item("markdown.action", 35, "text", progress.to_owned()));
-        } else if let Some(destination) = self.selected_destination() {
-            items.push(item(
-                "markdown.link",
-                15,
-                "label",
-                format!("→ {destination}"),
-            ));
+        match self.action_note() {
+            Some(ActionNote::Progress(progress)) => {
+                items.push(item("markdown.action", 35, "text", progress.to_owned()));
+            }
+            Some(ActionNote::Link(destination)) => {
+                items.push(item(
+                    "markdown.link",
+                    15,
+                    "label",
+                    format!("→ {destination}"),
+                ));
+            }
+            None => {}
         }
         items
+    }
+    /// What the rendered view leaves out, so a reader knows to look at the
+    /// source.
+    fn partial_reason(&self) -> Option<String> {
+        if self.active != ViewType::Rendered {
+            return None;
+        }
+        let shared = self.shared.borrow();
+        let shown = shared.presentation.as_ref()?;
+        shown
+            .document
+            .degraded
+            .clone()
+            .or_else(|| shown.truncated.then(|| "layout limit".to_owned()))
+    }
+    /// The accepted bytes that a paused reader has not shown, if any.
+    fn unseen_bytes(&self, snapshot: &SourceSnapshot) -> Option<usize> {
+        let new_bytes = snapshot.len().saturating_sub(self.acknowledged);
+        (new_bytes > 0 && self.shared.borrow().follow == Follow::Paused).then_some(new_bytes)
+    }
+    /// The progress of a running action, or else where the selected link
+    /// leads.
+    fn action_note(&self) -> Option<ActionNote> {
+        self.action_progress()
+            .map(ActionNote::Progress)
+            .or_else(|| self.selected_destination().map(ActionNote::Link))
     }
     /// Refresh fixed status and query chrome without changing document state.
     fn update_chrome(&self, ctx: &mut dyn Context) -> Result<()> {
@@ -2955,18 +2982,8 @@ impl Markdown {
             Lifecycle::Complete(FinishOutcome::Completed) => "Complete".into(),
             Lifecycle::Complete(FinishOutcome::Aborted(reason)) => format!("Aborted: {reason}"),
         };
-        // What the rendered view leaves out, so a reader knows to look at
-        // the source.
-        let partial = (self.active == ViewType::Rendered)
-            .then(|| self.shared.borrow().presentation.clone())
-            .flatten()
-            .and_then(|shown| {
-                shown
-                    .document
-                    .degraded
-                    .clone()
-                    .or_else(|| shown.truncated.then(|| "layout limit".to_owned()))
-            })
+        let partial = self
+            .partial_reason()
             .map_or(String::new(), |reason| format!(" · Partial: {reason}"));
         let label = if self.active == ViewType::Source {
             "Rendered | [Source]"
@@ -2994,24 +3011,22 @@ impl Markdown {
         } else {
             "Scroll"
         };
-        let new_bytes = snapshot.len().saturating_sub(self.acknowledged);
-        let new = if new_bytes > 0 && self.shared.borrow().follow == Follow::Paused {
-            format!(" · {new_bytes} new bytes")
-        } else {
-            String::new()
-        };
+        let new = self
+            .unseen_bytes(&snapshot)
+            .map_or(String::new(), |new_bytes| {
+                format!(" · {new_bytes} new bytes")
+            });
         let text = format!(
             "{label}  {mode} · {lifecycle}{partial} · {follow}{update}{new}{}{}",
             self.options
                 .status
                 .as_ref()
                 .map_or(String::new(), |s| format!(" · {s}")),
-            self.action_progress().map_or_else(
-                || self
-                    .selected_destination()
-                    .map_or(String::new(), |shown| format!(" · → {shown}")),
-                |progress| format!(" · {progress}"),
-            )
+            match self.action_note() {
+                Some(ActionNote::Progress(progress)) => format!(" · {progress}"),
+                Some(ActionNote::Link(destination)) => format!(" · → {destination}"),
+                None => String::new(),
+            }
         );
         let enabled = self.can_toggle_view_type(ctx)?;
         *self.chrome.borrow_mut() = ChromeState {

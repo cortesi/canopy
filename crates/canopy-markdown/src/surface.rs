@@ -1614,17 +1614,15 @@ fn display_position(presentation: &PresentationSnapshot, position: ReadingPositi
     };
     let mut end = 0;
     for run in &row.runs {
-        let Some(range) = &run.reading else {
+        if run.reading.is_none() {
             continue;
-        };
+        }
         let mut x = run.x;
         for (byte, grapheme) in text::grapheme_indices(&run.text) {
-            let offset = if run.text.len() == range.len() {
-                range.start + byte
-            } else {
-                range.start
-            };
-            if offset >= position.offset {
+            if run
+                .reading_range(byte, grapheme.len())
+                .is_some_and(|bytes| bytes.start >= position.offset)
+            {
                 return (y, x);
             }
             x = x.saturating_add(grapheme_width(grapheme) as u32);
