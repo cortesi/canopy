@@ -131,7 +131,7 @@ impl Widget for Hello {
         context.add_child(
             context.node_id(),
             StatusBar::new()
-                .with_left(Text::new("hello").with_style("status_bar/text"))
+                .with_left(Text::new("hello"))
                 .with_right(KeyHint::for_command(Root::call_toggle_help(), "help")),
         )?;
         context.set_focus(context.node_id()).map(|_| ())
@@ -314,8 +314,9 @@ fixture to return the application to a known state between evaluations.
 
 The command line chooses a `LaunchMode`, and nothing else changes between modes.
 `Run` starts the interactive terminal UI, and an optional socket path adds live
-MCP automation. `HeadlessMcp` serves automation over stdio. `Api` prints the
-generated Luau API and exits.
+MCP automation, and its `RunOptions` set the terminal input behavior.
+`HeadlessMcp` serves automation over stdio. The binary prints the generated
+Luau API itself, for `--api`, before it chooses a mode.
 
 At this point `cargo run -p hello` renders the application.
 
