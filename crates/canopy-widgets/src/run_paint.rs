@@ -98,3 +98,105 @@ pub fn paint_run(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
+    use canopy::{ViewContext, Widget, testing::harness::Harness};
+
+    use super::*;
+
+    /// Paints one run on row 0, and records the char range of each grapheme
+    /// it styles.
+    struct Run {
+        /// The text of the run.
+        text: &'static str,
+        /// First visible screen column.
+        window_start: u32,
+        /// Visible screen columns.
+        window_width: u32,
+        /// Cell the window starts at.
+        screen_x: u32,
+        /// The char ranges `style_at` received, shared with the test.
+        styled: Rc<RefCell<Vec<(usize, usize)>>>,
+    }
+
+    impl Widget for Run {
+        fn render(&mut self, render: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+            let styled = Rc::clone(&self.styled);
+            paint_run(
+                render,
+                self.text,
+                0,
+                0,
+                0,
+                4,
+                self.window_start,
+                self.window_width,
+                self.screen_x,
+                0,
+                Rect::new(0, 0, 12, 1),
+                move |render, start, end| {
+                    styled.borrow_mut().push((start, end));
+                    render.resolve_style("text")
+                },
+            )
+        }
+    }
+
+    /// The first row a `Run` paints, and the ranges it styles.
+    fn painted(
+        text: &'static str,
+        window_start: u32,
+        window_width: u32,
+        screen_x: u32,
+    ) -> Result<(String, Vec<(usize, usize)>)> {
+        let styled = Rc::default();
+        let mut harness = Harness::builder(Run {
+            text,
+            window_start,
+            window_width,
+            screen_x,
+            styled: Rc::clone(&styled),
+        })
+        .size(12, 1)
+        .build()?;
+        styled.borrow_mut().clear();
+        harness.render()?;
+        let row = harness.tbuf().lines().remove(0);
+        Ok((row, styled.take()))
+    }
+
+    #[test]
+    fn a_run_expands_tabs_to_the_next_stop() -> Result<()> {
+        let (row, styled) = painted("a\tb", 0, 12, 1)?;
+        assert_eq!(row, " a   b      ");
+        assert_eq!(styled, [(0, 1), (1, 2), (2, 3)]);
+        Ok(())
+    }
+
+    #[test]
+    fn a_run_paints_only_the_graphemes_in_its_window() -> Result<()> {
+        let (row, styled) = painted("abcdef", 2, 3, 0)?;
+        assert_eq!(row, "cde         ");
+        assert_eq!(styled, [(2, 3), (3, 4), (4, 5)]);
+        Ok(())
+    }
+
+    #[test]
+    fn a_tab_stops_at_the_window_edge() -> Result<()> {
+        let (row, _) = painted("\tz", 0, 2, 0)?;
+        // The tab takes four cells, and the window shows two of them.
+        assert_eq!(row, "            ");
+        let (row, _) = painted("\tz", 0, 5, 0)?;
+        assert_eq!(row, "    z       ");
+        Ok(())
+    }
+
+    #[test]
+    fn column_saturates() {
+        assert_eq!(column(7), 7);
+        assert_eq!(column(usize::MAX), u32::MAX);
+    }
+}

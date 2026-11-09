@@ -153,3 +153,36 @@ impl Widget for Border {
         NodeName::convert("border")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use canopy::testing::harness::Harness;
+
+    use super::*;
+
+    /// The screen of a 6 by 3 harness over `border`.
+    fn drawn(border: Border) -> Result<Vec<String>> {
+        let mut harness = Harness::builder(border).size(6, 3).build()?;
+        harness.render()?;
+        Ok(harness.tbuf().lines())
+    }
+
+    #[test]
+    fn a_border_draws_its_frame_with_its_glyphs() -> Result<()> {
+        assert_eq!(drawn(Border::new())?, ["┌────┐", "│    │", "└────┘"]);
+        assert_eq!(
+            drawn(Border::new().with_glyphs(BoxGlyphs::ROUND))?,
+            ["╭────╮", "│    │", "╰────╯"]
+        );
+        assert_eq!(
+            drawn(Border::new().with_glyphs(BoxGlyphs::DOUBLE).with_fill())?,
+            ["╔════╗", "║    ║", "╚════╝"]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_border_pads_its_children_by_one_cell() {
+        assert_eq!(Border::new().layout().padding, Edges::all(1));
+    }
+}

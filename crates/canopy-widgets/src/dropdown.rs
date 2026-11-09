@@ -360,6 +360,44 @@ mod tests {
         Ok(())
     }
 
+    /// A left or right press at `(x, y)` of the screen.
+    fn press(button: mouse::Button, x: i32, y: i32) -> mouse::MouseEvent {
+        mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button,
+            modifiers: canopy::input::key::Empty,
+            location: canopy::geom::PointI32 { x, y },
+        }
+    }
+
+    #[test]
+    fn a_click_expands_and_a_click_on_a_row_confirms_it() -> Result<()> {
+        let items = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let mut harness = Harness::builder(Dropdown::new(items)?)
+            .register::<Dropdown<String>>()
+            .size(20, 6)
+            .build()?;
+        let state = |harness: &mut Harness| {
+            harness.with_root_widget(|dropdown: &mut Dropdown<String>| {
+                (dropdown.expanded(), dropdown.selected_index())
+            })
+        };
+        harness.mouse(press(mouse::Button::Right, 0, 0))?;
+        assert_eq!(
+            state(&mut harness),
+            (false, 0),
+            "a right press does nothing"
+        );
+        harness.mouse(press(mouse::Button::Left, 0, 0))?;
+        assert_eq!(state(&mut harness), (true, 0), "a click expands");
+        harness.render()?;
+        harness.mouse(press(mouse::Button::Left, 0, 5))?;
+        assert_eq!(state(&mut harness), (true, 0), "a click below the rows");
+        harness.mouse(press(mouse::Button::Left, 0, 2))?;
+        assert_eq!(state(&mut harness), (false, 2), "a click confirms its row");
+        Ok(())
+    }
+
     #[test]
     fn test_dropdown_rejects_empty_items() {
         let items: Vec<String> = vec![];
