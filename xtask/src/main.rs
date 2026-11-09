@@ -422,26 +422,12 @@ fn discover_smoke_suites(workspace_root: &Path) -> Result<Vec<PathBuf>, String> 
 
 /// Run a cargo command from the given directory.
 fn run_cargo_command(directory: &Path, args: &[&str]) -> bool {
-    match cargo_env::command("cargo")
-        .args(args)
-        .current_dir(directory)
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-    {
-        Ok(status) if status.success() => true,
-        Ok(status) => {
-            eprintln!(
-                "Command `cargo {}` failed with status {status}",
-                args.join(" ")
-            );
-            false
-        }
-        Err(error) => {
-            eprintln!("Failed to run `cargo {}`: {error}", args.join(" "));
-            false
-        }
-    }
+    run_command(
+        cargo_env::command("cargo")
+            .args(args)
+            .current_dir(directory),
+        &format!("cargo {}", args.join(" ")),
+    )
 }
 
 /// Write `generated` to `output` under the workspace root, or with `check`,
