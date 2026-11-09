@@ -29,7 +29,7 @@ impl Path {
         self.path.pop()
     }
 
-    /// Construct a path from a slice of components.
+    /// Construct a path from its components.
     pub fn new<I>(v: I) -> Self
     where
         I: IntoIterator,

@@ -4305,7 +4305,6 @@ pub fn read_preview(path: &Path, bounds: Size) -> canopy::error::Result<RgbaImag
 pub fn register_clear_intent(setup: &mut Setup) -> canopy::error::Result<()>;
 
 pub mod chart {
-    //! Chart primitives: scales, stacked bars and columns, and a braille canvas.
     //! Chart primitives: value scales, stacked bars and columns drawn to an eighth
     //! of a cell, and a braille dot canvas.
     //!
@@ -4521,7 +4520,6 @@ pub mod chart {
 }
 
 pub mod diff {
-    //! Line diffs of two full texts, and DiffView's supporting types.
     //! Line diffs of two full texts and the rows a diff view shows.
     //!
     //! A [`Diff`](crate::diff::Diff) holds both versions and the changed line
@@ -4673,7 +4671,6 @@ pub mod diff {
 }
 
 pub mod editor {
-    //! Multiline text editor.
     //! Editor widget and supporting types.
     //!
     //! Editing policy, such as vi modes, search, and selection behavior, belongs on
@@ -5126,7 +5123,6 @@ pub mod format {
 }
 
 pub mod fuzzy {
-    //! Fuzzy label ranking for lists that jump or filter as the operator types.
     //! Fuzzy ranking of text against a typed query.
     //!
     //! Scoring is `nucleo-matcher`'s, which applies fzf's algorithm: a match that
@@ -5220,7 +5216,6 @@ pub mod fuzzy {
 }
 
 pub mod highlight {
-    //! Syntax highlighting shared by the Editor and DiffView.
     //! Syntax highlighting helpers.
     //!
     //! [`Highlighter`](crate::highlight::Highlighter) and
@@ -5383,7 +5378,6 @@ pub mod list {
 }
 
 pub mod menu {
-    //! A modal menu of keyed rows, and the row drawing that every menu shares.
     //! A menu of keyed rows, chosen with the keyboard.
     //!
     //! Each row names one action: its key, a label, and a value at the right,
@@ -5439,7 +5433,6 @@ pub mod menu {
 }
 
 pub mod mosaic {
-    //! Block mosaics: the symbols of image views, font banners, and big text.
     //! Block mosaics: the symbols that image views, font banners, and big text
     //! draw with, from `canopy-mosaic`.
     //!
@@ -5475,7 +5468,6 @@ pub mod mosaic {
 }
 
 pub mod paged {
-    //! Provider-ordered paging and selection state for custom list renderers.
     //! Bounded, provider-ordered list state without I/O or a rendering runtime.
     //!
     //! A provider executes requests from [`Paged::take_request`] and returns a page
@@ -5713,7 +5705,6 @@ pub mod paged {
 }
 
 pub mod regex_search {
-    //! Regular expressions that match as ripgrep does, and their ranges in text.
     //! Regular expressions that match text as ripgrep does, and the ranges that
     //! they highlight.
     //!
@@ -5875,7 +5866,6 @@ pub mod scrollbar {
 }
 
 pub mod table {
-    //! Immutable keyed tables, grid preparation, and viewer events.
     //! Immutable keyed table snapshots and their shared, clipped grid renderer.
 
     /// A body cell's stable keys.
@@ -6394,7 +6384,6 @@ pub mod table {
 }
 
 pub mod terminal {
-    //! Terminal emulation widget.
     //! The configuration of the [`Terminal`](crate::Terminal) widget.
 
     /// Terminal widget configuration.
@@ -6429,7 +6418,6 @@ pub mod terminal {
 }
 
 pub mod view_search {
-    //! Conventions every searchable view shares: roles, steps, reveal, and marks.
     //! What every searchable view shares, so a search reads the same in each.
     //!
     //! A view that highlights search matches, such as the

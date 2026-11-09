@@ -645,8 +645,8 @@ pub(super) fn register(builder: &mut module::Builder, action_type: &Type) {
     builder.borrowed_function(
         "bind",
         Binding::library("canopy", Type::func(bind_signature(action_type))).doc(
-            "Bind a key spec to a CommandCall, a function, or a registered intent name, \
-             with required discovery metadata.",
+            "Bind a key spec to a CommandCall, a MenuAction, a function, or a registered \
+             intent name, with required discovery metadata.",
         ),
         host_bind,
     );
@@ -1750,7 +1750,7 @@ fn host_menu<'s>(
 /// host stores when the binding installs.
 #[derive(Clone)]
 enum ScriptAction<'s> {
-    /// A command call or a registered intent name.
+    /// A command call, a menu, or a registered intent name.
     Target(inputmap::BindingAction),
     /// A Luau function.
     Function(Function<'s>),
@@ -1801,8 +1801,8 @@ fn action_from_value<'s>(
     }
 }
 
-/// Read a binding action argument: a `CommandCall`, a function, or a widget
-/// action name.
+/// Read a binding action argument: a `CommandCall`, a `MenuAction`, a
+/// function, or an intent name.
 fn read_action<'s>(
     scope: &Scope<'s>,
     args: &mut HostArgCursor<'_, 's>,
@@ -1828,8 +1828,8 @@ fn install_action_binding<'s>(
     }
 }
 
-/// `canopy.bind`: bind a key spec to a command value, a Luau callback, or a
-/// intent.
+/// `canopy.bind`: bind a key spec to a command value, a menu, a Luau
+/// callback, or an intent.
 fn host_bind<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
@@ -2140,7 +2140,8 @@ fn host_capture<'s>(
     host_value(scope, |canopy, _| screen_capture(canopy))
 }
 
-/// `canopy.flush`: explicitly prepare pending changes at a host-call boundary.
+/// `canopy.prepare`: explicitly prepare pending changes at a host-call
+/// boundary.
 fn host_prepare<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,

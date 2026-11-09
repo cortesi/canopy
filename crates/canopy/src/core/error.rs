@@ -265,10 +265,14 @@ pub enum Error {
         #[source]
         source: Box<Self>,
     },
-    /// Invalid input or operation.
+    /// Invalid input or operation. This is a fatal runtime error: a poll or
+    /// a handler that returns it ends the run. An application's own failure
+    /// is [`Error::app`], which the runtime reports as a notice.
     #[error("invalid: {0}")]
     Invalid(String),
-    /// Requested item was not found.
+    /// Requested item was not found. This is a fatal runtime error: a poll or
+    /// a handler that returns it ends the run. An application's own failure
+    /// is [`Error::app`], which the runtime reports as a notice.
     #[error("not found: {0}")]
     NotFound(String),
     /// A live node stores a different widget type than requested.
@@ -323,8 +327,8 @@ pub enum Error {
     #[error("checked key dispatch diverged from the analyzed route")]
     KeyDispatchDivergence(Box<KeyDispatchDivergence>),
 
-    #[error("parse error: {0}")]
     /// Parsing failure.
+    #[error("parse error: {0}")]
     Parse(#[from] ParseError),
 
     /// Script execution failure with stable host category fields.

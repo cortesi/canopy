@@ -2,10 +2,8 @@
 
 /// Backend implementations.
 pub mod backend;
-/// Keyed child collection helpers.
 /// Command definition and dispatch.
 pub mod commands;
-/// Cursor and position helpers.
 pub mod cursor;
 /// Debug dump utilities.
 pub mod dump;
@@ -27,7 +25,6 @@ pub mod render;
 pub mod script;
 /// Immutable frame observations.
 pub mod snapshot;
-/// Status items a widget exposes for a status line.
 pub mod status;
 /// Styling and color helpers.
 pub mod style;

@@ -28,6 +28,13 @@
 //! - [`render`] - The widget renderer, frame buffers, and backends
 //! - [`runtime`] - Turns, published frames, polls, wakes, and notices
 //! - [`script`] - Luau evaluation, automation, and fixtures
+//! - [`commands`] - Command definition, arguments, and dispatch
+//! - [`error`] - The error and result types
+//! - [`path`] - Node names and path matching
+//! - [`status`] - Status items that a widget exposes for a status line
+//! - [`style`] - Styles, palettes, themes, and effects
+//! - [`terminal`] - The Crossterm run loop
+//! - [`text`] - Text measurement, wrapping, and segmentation
 //! - [`geom`] - Geometry primitives (Rect, Point, Size, etc.)
 
 use std::{
@@ -113,9 +120,9 @@ pub trait Context: ViewContext + Context {
     /// Run immediate mutations with structural rollback on error.
     ///
     /// Rollback restores arena metadata, topology, slots, layouts, views,
-    /// lifecycle flags, root, focus, mouse capture, focus recovery hints, exit
-    /// requests, pending styles, and diagnostic requests. Each failed nested
-    /// edit restores its own structural checkpoint.
+    /// lifecycle flags, scoped identities, modals, root, focus, mouse capture,
+    /// focus recovery hints, exit requests, and the pending theme switch.
+    /// Each failed nested edit restores its own structural checkpoint.
     ///
     /// Widget cells are shared with the checkpoint: widget-owned mutations
     /// survive. Binding registration and external effects also survive and
@@ -238,12 +245,12 @@ pub trait Context: ViewContext + Context {
     /// Release mouse capture if held by the current node.
     fn release_mouse(&mut self) -> crate::error::Result<ChangeOutcome>;
 
-    /// Remove the current widget incarnation after the outer dispatch succeeds.
-    /// Failed dispatches discard their requests. Missing or replaced targets
-    /// are harmless. Lifecycle hooks run after active widget cells are
-    /// restored. The shared batch accepts at most 1024 requests. Overflow
-    /// returns an error without running removals or discarding previously
-    /// accepted requests.
+    /// Remove the current incarnation of `node` after the outer dispatch
+    /// succeeds. Failed dispatches discard their requests. Missing or
+    /// replaced targets are harmless. Lifecycle hooks run after active widget
+    /// cells are restored. The shared batch accepts at most 1024 requests.
+    /// Overflow returns an error without running removals or discarding
+    /// previously accepted requests.
     fn remove_after_dispatch(&mut self, node: NodeId) -> crate::error::Result<()>;
 
     /// Remove a node and all descendants from the arena.
@@ -544,7 +551,8 @@ pub trait Register {
     fn register(setup: &mut Setup) -> crate::error::Result<()>;
 }
 
-/// Read-only context available to widgets during render and measure.
+/// Read-only context that Canopy gives a widget, such as during render, a
+/// read-only command, or a poll.
 ///
 /// Applications consume contexts supplied by Canopy and cannot implement this
 /// trait themselves.
@@ -629,7 +637,8 @@ pub trait ViewContext: ViewContext {
     /// that animates by itself shows its state at rest when this is false.
     fn motion_active(&self) -> bool;
 
-    /// The node currently being rendered.
+    /// The node that the context serves: the widget being rendered, or the
+    /// one whose event, command, or poll runs.
     fn node_id(&self) -> NodeId;
 
     /// Return the notice log, which also answers which notices show: each as
@@ -1531,12 +1540,12 @@ impl WidgetStamp {
 macro_rules! rgb {
     ($hex:literal) => { ... };
 }
-/// Define a typed slot for slots.
+/// Define a typed key for a keyed child.
 ///
 /// # Examples
 ///
 /// ```
-/// use canopy::{ChildSlot, Widget, slot};
+/// use canopy::{Widget, slot, tree::ChildSlot};
 ///
 /// slot!(Editor);
 /// impl Widget for Editor {}
@@ -1554,7 +1563,6 @@ macro_rules! slot {
     ($vis:vis $name:ident : $widget:ty) => { ... };
 }
 pub mod commands {
-    //! Keyed child collection helpers.
     //! Command definition and dispatch.
 
     pub use ruau::declaration;
@@ -2260,10 +2268,14 @@ pub mod error {
             #[source]
             source: Box<Self>,
         },
-        /// Invalid input or operation.
+        /// Invalid input or operation. This is a fatal runtime error: a poll or
+        /// a handler that returns it ends the run. An application's own failure
+        /// is [`Error::app`], which the runtime reports as a notice.
         #[error("invalid: {0}")]
         Invalid(String),
-        /// Requested item was not found.
+        /// Requested item was not found. This is a fatal runtime error: a poll or
+        /// a handler that returns it ends the run. An application's own failure
+        /// is [`Error::app`], which the runtime reports as a notice.
         #[error("not found: {0}")]
         NotFound(String),
         /// A live node stores a different widget type than requested.
@@ -3143,7 +3155,6 @@ pub mod input {
     }
 
     pub mod key {
-        //! Keyboard event types.
         //! This module contains the core primitives to represent keyboard input.
 
         /// Alt-only modifier state.
@@ -4098,7 +4109,7 @@ pub mod path {
         /// Construct an empty path.
         pub fn empty() -> Self;
 
-        /// Construct a path from a slice of components.
+        /// Construct a path from its components.
         pub fn new<I>(v: I) -> Self
         where
             I: IntoIterator,
@@ -4504,7 +4515,6 @@ pub mod render {
     }
 
     pub mod cursor {
-        //! Cursor and position helpers.
         //! Soft cursors: roles, looks, and the declarations widgets make while they
         //! render.
         //!
@@ -5133,10 +5143,10 @@ pub mod runtime {
 pub mod script {
     //! Scripting support.
 
-    /// Base `canopy` scripting API declarations and native registration.
+    /// Callback marshalled onto the UI thread for live automation.
     pub type AutomationCallback = Box<dyn FnOnce(&mut Canopy) + Send + 'static>;
 
-    /// Base `canopy` scripting API declarations and native registration.
+    /// Handle for submitting automation work to a live canopy runloop.
     #[derive(Clone)]
     pub struct AutomationHandle {/* private fields */}
 
@@ -5156,11 +5166,11 @@ pub mod script {
         pub fn submit_eval(&self, request: EvalRequest) -> crate::error::Result<EvalTicket>;
     }
 
-    /// Base `canopy` scripting API declarations and native registration.
+    /// Globally unique evaluation identifier, never reused by another application.
     #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub struct EvalId(pub u64);
 
-    /// Base `canopy` scripting API declarations and native registration.
+    /// Completed script value or failure.
     pub struct EvalOutcome {
         /// Evaluation that completed.
         pub id: EvalId,
@@ -5180,7 +5190,7 @@ pub mod script {
         pub fn into_result(self) -> crate::error::Result<ArgValue>;
     }
 
-    /// Base `canopy` scripting API declarations and native registration.
+    /// One top-level script request. An evaluation's origin is always the root.
     #[derive(Clone, Debug)]
     pub struct EvalRequest {
         /// Owned Luau source.
@@ -5198,7 +5208,12 @@ pub mod script {
         pub fn timeout(self, timeout: Duration) -> Self;
     }
 
-    /// Base `canopy` scripting API declarations and native registration.
+    /// Completion receiver that is awaited outside the UI thread.
+    ///
+    /// The public receiver is intentionally the futures oneshot type: evaluation
+    /// completion is a single-consumer event, and wrapping it would duplicate the
+    /// same polling and cancellation contract. Dropping the completion receiver
+    /// cancels queued or active evaluation work on its next driver turn.
     pub struct EvalTicket {
         /// Accepted queue identity, including failed admission results.
         pub id: EvalId,
@@ -5206,7 +5221,7 @@ pub mod script {
         pub completion: futures_channel::oneshot::Receiver<EvalOutcome>,
     }
 
-    /// Base `canopy` scripting API declarations and native registration.
+    /// A named, reproducible application state.
     #[derive(Clone)]
     pub struct Fixture {
         /// Fixture name.
@@ -5228,7 +5243,7 @@ pub mod script {
         ) -> Self;
     }
 
-    /// Base `canopy` scripting API declarations and native registration.
+    /// Serializable metadata about a registered fixture.
 #[derive(Clone, Debug, Deserialize<'de>, Eq, PartialEq, Serialize)]
     pub struct FixtureInfo {
         /// Fixture name.
@@ -5304,7 +5319,7 @@ pub mod script {
 
     impl JsonSchema for ScriptCheckSeverity {}
 
-    /// Base `canopy` scripting API declarations and native registration.
+    /// Record of one script evaluation.
     #[derive(Clone, Debug)]
     pub struct ScriptJournalEntry {
         /// Monotonic journal id.
@@ -5325,7 +5340,7 @@ pub mod script {
         pub duration_ms: u64,
     }
 
-    /// Base `canopy` scripting API declarations and native registration.
+    /// Typed source of one script-journal entry.
     #[derive(Clone, Debug, Display, Eq, PartialEq)]
     pub enum ScriptOrigin {
         /// Top-level application evaluation.
@@ -5340,7 +5355,7 @@ pub mod script {
         DefaultBindings(String),
     }
 
-    /// Base `canopy` scripting API declarations and native registration.
+    /// Authority granted to scripts loaded from an application-declared root.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub enum ScriptTrust {
         /// Do not mount, inspect, require, or execute this root.
@@ -5352,7 +5367,6 @@ pub mod script {
 }
 
 pub mod status {
-    //! Status items a widget exposes for a status line.
     //! Status items: the styled runs a widget exposes for a status line.
     //!
     //! A widget describes its status with
@@ -5955,7 +5969,7 @@ pub mod style {
         /// # Example
         ///
         /// ```
-        /// use canopy::style::{StyleMap, solarized};
+        /// use canopy::style::{Color, StyleMap};
         ///
         /// let mut style_map = StyleMap::new();
         /// style_map
@@ -6046,7 +6060,6 @@ pub mod style {
     pub const fn hex_byte(high: u8, low: u8) -> u8;
 
     pub mod effects {
-        //! Style effects system.
         //! Style effects system for transforming styles during rendering.
         //!
         //! Effects are transformations applied to styles that inherit through the node
@@ -6407,7 +6420,7 @@ pub mod text {
 pub mod tree {
     //! Tree structure: slots, identities, and focus traversal.
 
-    /// A typed slot for slots.
+    /// A typed key for a keyed child.
     ///
     /// This trait associates a string key with a specific widget type, providing
     /// compile-time type safety for keyed child access.
@@ -6415,7 +6428,7 @@ pub mod tree {
     /// Use the [`crate::slot!`] macro to define keys:
     ///
     /// ```
-    /// use canopy::{ChildSlot, Widget, slot};
+    /// use canopy::{Widget, slot, tree::ChildSlot};
     ///
     /// pub struct Modal;
     /// impl Widget for Modal {}

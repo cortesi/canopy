@@ -32,7 +32,6 @@ use ruau::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// Base `canopy` scripting API declarations and native registration.
 pub use super::{
     canopy::{
         AutomationCallback, AutomationHandle, EvalId, EvalOutcome, EvalRequest, EvalTicket,

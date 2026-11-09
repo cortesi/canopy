@@ -1,7 +1,6 @@
 mod animation;
 /// Color helpers.
 mod color;
-/// Style effects system.
 pub mod effects;
 pub mod themes;
 
@@ -729,7 +728,7 @@ impl StyleMap {
     /// # Example
     ///
     /// ```
-    /// use canopy::style::{StyleMap, solarized};
+    /// use canopy::style::{Color, StyleMap};
     ///
     /// let mut style_map = StyleMap::new();
     /// style_map

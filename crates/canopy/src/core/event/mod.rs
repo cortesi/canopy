@@ -1,4 +1,3 @@
-/// Keyboard event types.
 pub mod key;
 /// Mouse event types.
 pub mod mouse;

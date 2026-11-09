@@ -30,7 +30,7 @@ use crate::{
     widget::Widget,
 };
 
-/// A typed slot for slots.
+/// A typed key for a keyed child.
 ///
 /// This trait associates a string key with a specific widget type, providing
 /// compile-time type safety for keyed child access.
@@ -38,7 +38,7 @@ use crate::{
 /// Use the [`crate::slot!`] macro to define keys:
 ///
 /// ```
-/// use canopy::{ChildSlot, Widget, slot};
+/// use canopy::{Widget, slot, tree::ChildSlot};
 ///
 /// pub struct Modal;
 /// impl Widget for Modal {}
@@ -53,12 +53,12 @@ pub trait ChildSlot {
     const KEY: &'static str;
 }
 
-/// Define a typed slot for slots.
+/// Define a typed key for a keyed child.
 ///
 /// # Examples
 ///
 /// ```
-/// use canopy::{ChildSlot, Widget, slot};
+/// use canopy::{Widget, slot, tree::ChildSlot};
 ///
 /// slot!(Editor);
 /// impl Widget for Editor {}
@@ -103,12 +103,14 @@ pub mod sealed {
     pub trait Context {}
 }
 
-/// Read-only context available to widgets during render and measure.
+/// Read-only context that Canopy gives a widget, such as during render, a
+/// read-only command, or a poll.
 ///
 /// Applications consume contexts supplied by Canopy and cannot implement this
 /// trait themselves.
 pub trait ViewContext: sealed::ViewContext {
-    /// The node currently being rendered.
+    /// The node that the context serves: the widget being rendered, or the
+    /// one whose event, command, or poll runs.
     fn node_id(&self) -> NodeId;
 
     /// Return the time of the driver clock. A test that installs a
@@ -710,9 +712,9 @@ pub trait Context: ViewContext + sealed::Context {
     /// Run immediate mutations with structural rollback on error.
     ///
     /// Rollback restores arena metadata, topology, slots, layouts, views,
-    /// lifecycle flags, root, focus, mouse capture, focus recovery hints, exit
-    /// requests, pending styles, and diagnostic requests. Each failed nested
-    /// edit restores its own structural checkpoint.
+    /// lifecycle flags, scoped identities, modals, root, focus, mouse capture,
+    /// focus recovery hints, exit requests, and the pending theme switch.
+    /// Each failed nested edit restores its own structural checkpoint.
     ///
     /// Widget cells are shared with the checkpoint: widget-owned mutations
     /// survive. Binding registration and external effects also survive and
@@ -782,12 +784,12 @@ pub trait Context: ViewContext + sealed::Context {
     /// Remove a node and all descendants from the arena.
     fn remove_subtree(&mut self, node: NodeId) -> Result<()>;
 
-    /// Remove the current widget incarnation after the outer dispatch succeeds.
-    /// Failed dispatches discard their requests. Missing or replaced targets
-    /// are harmless. Lifecycle hooks run after active widget cells are
-    /// restored. The shared batch accepts at most 1024 requests. Overflow
-    /// returns an error without running removals or discarding previously
-    /// accepted requests.
+    /// Remove the current incarnation of `node` after the outer dispatch
+    /// succeeds. Failed dispatches discard their requests. Missing or
+    /// replaced targets are harmless. Lifecycle hooks run after active widget
+    /// cells are restored. The shared batch accepts at most 1024 requests.
+    /// Overflow returns an error without running removals or discarding
+    /// previously accepted requests.
     fn remove_after_dispatch(&mut self, node: NodeId) -> Result<()>;
 
     /// Run `call` when the outermost dispatch completes, after every callback

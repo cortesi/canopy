@@ -19,6 +19,13 @@
 //! - [`render`] - The widget renderer, frame buffers, and backends
 //! - [`runtime`] - Turns, published frames, polls, wakes, and notices
 //! - [`script`] - Luau evaluation, automation, and fixtures
+//! - [`commands`] - Command definition, arguments, and dispatch
+//! - [`error`] - The error and result types
+//! - [`path`] - Node names and path matching
+//! - [`status`] - Status items that a widget exposes for a status line
+//! - [`style`] - Styles, palettes, themes, and effects
+//! - [`terminal`] - The Crossterm run loop
+//! - [`text`] - Text measurement, wrapping, and segmentation
 //! - [`geom`] - Geometry primitives (Rect, Point, Size, etc.)
 
 // Allow derive macros to reference `canopy::` from within this crate

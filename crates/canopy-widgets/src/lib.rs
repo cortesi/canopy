@@ -11,7 +11,6 @@ mod big_text;
 mod border;
 /// Button widget with command dispatch.
 mod button;
-/// Chart primitives: scales, stacked bars and columns, and a braille canvas.
 pub mod chart;
 /// Multi-click tracker shared by editor and terminal.
 mod click;
@@ -25,13 +24,11 @@ mod confirm;
 mod container;
 /// Framed panel centred over the view.
 mod dialog;
-/// Line diffs of two full texts, and DiffView's supporting types.
 pub mod diff;
 /// Diff view widget over the line-diff row model.
 mod diff_view;
 /// Dropdown selection widget.
 mod dropdown;
-/// Multiline text editor.
 pub mod editor;
 /// ASCII font rasterization helpers.
 #[cfg(feature = "graphics")]
@@ -42,11 +39,9 @@ mod font_banner;
 pub mod format;
 /// Scrollable frame container.
 mod frame;
-/// Fuzzy label ranking for lists that jump or filter as the operator types.
 pub mod fuzzy;
 /// Contextual key-binding help widgets.
 mod help;
-/// Syntax highlighting shared by the Editor and DiffView.
 pub mod highlight;
 /// Image rendering widget.
 #[cfg(feature = "graphics")]
@@ -61,24 +56,20 @@ mod keyed;
 mod label;
 /// Typed list container with selection.
 mod list_view;
-/// A modal menu of keyed rows, and the row drawing that every menu shares.
 pub mod menu;
 /// One-row gauge over a track.
 mod meter;
-/// Block mosaics: the symbols of image views, font banners, and big text.
 pub mod mosaic;
 /// The notice log panel that the root opens for review.
 mod notice_log;
 /// A small application under the root, for notice tests.
 #[cfg(test)]
 mod notice_test_support;
-/// Provider-ordered paging and selection state for custom list renderers.
 pub mod paged;
 /// A column that paints the ground of a pane.
 mod pane;
 /// Modal filtered list of items.
 mod picker;
-/// Regular expressions that match as ripgrep does, and their ranges in text.
 pub mod regex_search;
 /// Application root widget.
 mod root;
@@ -102,7 +93,6 @@ mod spinner;
 /// Single-line status bar.
 mod status_bar;
 mod status_line;
-/// Immutable keyed tables, grid preparation, and viewer events.
 pub mod table;
 /// Read-only searchable table that flows into its width.
 mod table_reader;
@@ -110,7 +100,6 @@ mod table_reader;
 mod table_view;
 /// Tabbed pages beneath a tab bar.
 mod tabs;
-/// Terminal emulation widget.
 #[cfg(feature = "terminal-widget")]
 pub mod terminal;
 /// Multiline text widget.
@@ -119,7 +108,6 @@ mod text;
 mod text_buffer;
 /// The toast stack that the root draws over the application.
 mod toast;
-/// Conventions every searchable view shares: roles, steps, reveal, and marks.
 pub mod view_search;
 
 pub use answers::{Answer, Answers};
