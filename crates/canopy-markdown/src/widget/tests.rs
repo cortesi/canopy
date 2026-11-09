@@ -265,6 +265,34 @@ fn source_only_cancels_an_in_flight_rendered_switch() {
 }
 
 #[test]
+fn the_source_view_disables_the_block_cursor_and_text_selection() {
+    let (mut harness, manual) =
+        fixture("# Heading\n\nText\n", ViewType::Source, false, false, false);
+    settle(&mut harness, &manual);
+    harness.key('i').unwrap();
+    harness.key('v').unwrap();
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_mode(ctx, Mode::Interact)?;
+            assert!(matches!(
+                reader.interact_status(ctx)?,
+                CommandStatus::Disabled(_)
+            ));
+            assert!(matches!(
+                reader.rendered_action_status(ctx)?,
+                CommandStatus::Disabled(_)
+            ));
+            assert!(reader.shared.borrow().selection().is_none());
+            let ArgValue::Map(state) = reader.state(ctx)? else {
+                panic!("state is a map");
+            };
+            assert_eq!(state["rendered_mode"], ArgValue::String("scroll".into()));
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
 fn rejected_source_only_switch_preserves_policy_and_status() {
     let (mut harness, manual) = fixture("# Heading\n", ViewType::Rendered, false, false, false);
     settle(&mut harness, &manual);

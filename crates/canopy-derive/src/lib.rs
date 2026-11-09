@@ -17,7 +17,9 @@ use syn::{Attribute, Fields, ItemImpl, Result, parse_macro_input, parse_quote};
 ///
 /// Each command gets a `spec_*` accessor for its `CommandSpec` and a `call_*`
 /// builder with typed user parameters. Both have the method's visibility.
-/// Builders omit context and injected parameters.
+/// Builders omit context and injected parameters. A context parameter is
+/// `&dyn canopy::Context`, `&mut dyn canopy::Context`, or, for a read,
+/// `&dyn canopy::ViewContext`.
 /// `#[command(enabled = "method")]` adds a read-only eligibility hook. The
 /// method takes `&self` and `&dyn canopy::ViewContext`, then either nothing or
 /// every user parameter of the command in order, and returns

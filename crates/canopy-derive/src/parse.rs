@@ -267,7 +267,9 @@ fn parse_command_param(pat: &syn::PatType, index: usize) -> Result<ParamMeta> {
     let ty = (*pat.ty).clone();
     let ty_str = type_to_string(&ty);
 
-    let (kind, is_option) = match is_context_ref(&ty, "Context") {
+    // A read takes `&dyn ViewContext`, which the shared context coerces to.
+    let context = is_context_ref(&ty, "Context").or_else(|| is_context_ref(&ty, "ViewContext"));
+    let (kind, is_option) = match context {
         Some(mutable) => (ParamKind::Context { mutable }, false),
         None => classify_value_param(&ty)?,
     };

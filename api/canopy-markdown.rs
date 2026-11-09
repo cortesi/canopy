@@ -443,7 +443,9 @@ impl Markdown {
         centered: bool,
     ) -> canopy::error::Result<()>;
 
-    /// Enter or leave the block cursor of the rendered view.
+    /// Enter or leave the block cursor of the rendered view. In the Source
+    /// view, with a block editor open, or with an inspector over the reader
+    /// for `Interact`, it changes nothing.
     pub fn set_mode(&mut self, ctx: &mut dyn Context, mode: Mode) -> canopy::error::Result<()>;
 
     /// Retain a literal or fh-compatible smart-case regex query.
@@ -489,7 +491,7 @@ impl Markdown {
     pub fn start_search(&mut self, ctx: &mut dyn Context) -> canopy::error::Result<()>;
 
     /// Read bounded reader state without exposing the document payload.
-    pub fn state(&self, ctx: &mut dyn Context) -> canopy::error::Result<ArgValue>;
+    pub fn state(&self, ctx: &dyn ViewContext) -> canopy::error::Result<ArgValue>;
 
     /// Construct a receiving document that initially follows its tail.
     pub fn streaming(options: MarkdownOptions) -> canopy::error::Result<Self>;

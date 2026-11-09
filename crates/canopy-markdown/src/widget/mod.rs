@@ -777,10 +777,15 @@ impl Markdown {
         self.generation += 1;
         self.schedule(ctx, true)
     }
-    /// Enter or leave the block cursor of the rendered view.
+    /// Enter or leave the block cursor of the rendered view. In the Source
+    /// view, with a block editor open, or with an inspector over the reader
+    /// for `Interact`, it changes nothing.
     #[command]
     pub fn set_mode(&mut self, ctx: &mut dyn Context, mode: Mode) -> Result<()> {
-        if mode == Mode::Interact && self.inspector.is_some() || self.slot.is_open() {
+        if self.active == ViewType::Source
+            || self.slot.is_open()
+            || (mode == Mode::Interact && self.inspector.is_some())
+        {
             return Ok(());
         }
         if mode == Mode::Interact {
@@ -1090,13 +1095,10 @@ impl Markdown {
         self.wake_publication_host()
     }
     /// Extend or start rendered text selection at the reading position.
-    #[command]
+    #[command(enabled = "rendered_action_status")]
     pub fn select_text(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.inspector.is_some() || self.slot.is_open() {
+        if self.active != ViewType::Rendered || self.inspector.is_some() || self.slot.is_open() {
             return Ok(());
-        }
-        if self.active != ViewType::Rendered {
-            return Err(invalid("Text selection command belongs to Rendered"));
         }
         if let Some(nodes) = &self.nodes {
             ctx.with_widget_mut(nodes.rendered, |surface: &mut RenderedSurface, ctx| {
@@ -2205,9 +2207,11 @@ impl Markdown {
             CommandStatus::Enabled
         })
     }
-    /// Admit `interact` outside the block cursor.
+    /// Admit `interact` in the rendered view, outside the block cursor.
     fn interact_status(&self, _: &dyn ViewContext) -> Result<CommandStatus> {
-        Ok(if self.shared.borrow().mode() == Mode::Interact {
+        Ok(if self.active == ViewType::Source {
+            CommandStatus::Disabled("The block cursor belongs to Rendered".into())
+        } else if self.shared.borrow().mode() == Mode::Interact {
             CommandStatus::Disabled("The block cursor is on".into())
         } else {
             CommandStatus::Enabled
@@ -2341,7 +2345,7 @@ impl Markdown {
     }
     /// Read bounded reader state without exposing the document payload.
     #[command]
-    pub fn state(&self, ctx: &mut dyn Context) -> Result<ArgValue> {
+    pub fn state(&self, ctx: &dyn ViewContext) -> Result<ArgValue> {
         queries::state(self, ctx)
     }
     /// Read a bounded page of rendered objects with its snapshot revision.

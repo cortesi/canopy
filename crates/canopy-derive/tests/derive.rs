@@ -218,6 +218,28 @@ mod tests {
         );
     }
 
+    struct Reader;
+
+    #[derive_commands]
+    impl Reader {
+        /// Read through a view context.
+        #[command]
+        fn read(&self, ctx: &dyn ViewContext) -> bool {
+            ctx.is_focused()
+        }
+    }
+
+    #[test]
+    fn a_command_reads_through_a_view_context() {
+        let mut target = Reader;
+        let spec = Reader::spec_read();
+        assert!(spec.params.is_empty());
+        assert_eq!(
+            with_ctx(|ctx| (spec.invoke)(&mut target, ctx, &CommandArgs::default())).unwrap(),
+            ArgValue::Bool(with_ctx(|ctx| ctx.is_focused())),
+        );
+    }
+
     #[test]
     fn explicit_result_dispatch_preserves_errors_and_values() {
         let mut target = Collision;
