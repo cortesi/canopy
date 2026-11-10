@@ -6398,6 +6398,12 @@ pub mod terminal {
         #[must_use]
         pub fn with_cwd(self, cwd: impl Into<PathBuf>) -> Self;
 
+        /// Set the variable `key` to `value` in the terminal process's
+        /// environment, over the value it inherits. A later setting of the same
+        /// key wins.
+        #[must_use]
+        pub fn with_env(self, key: impl Into<String>, value: impl Into<String>) -> Self;
+
         /// Post `call` once when the process exits, with the terminal's node
         /// appended as the last argument (or as `node` among named ones).
         ///

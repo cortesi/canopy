@@ -112,6 +112,9 @@ pub struct TerminalConfig {
     command: Option<Vec<String>>,
     /// Working directory for the terminal process.
     cwd: Option<PathBuf>,
+    /// Variables set in the terminal process's environment, over those it
+    /// inherits.
+    env: Vec<(String, String)>,
     /// Call posted once when the process exits.
     on_exit: Option<CommandCall>,
 }
@@ -137,6 +140,15 @@ impl TerminalConfig {
     #[must_use]
     pub fn with_cwd(mut self, cwd: impl Into<PathBuf>) -> Self {
         self.cwd = Some(cwd.into());
+        self
+    }
+
+    /// Set the variable `key` to `value` in the terminal process's
+    /// environment, over the value it inherits. A later setting of the same
+    /// key wins.
+    #[must_use]
+    pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.env.push((key.into(), value.into()));
         self
     }
 
@@ -824,6 +836,9 @@ fn terminal_config(config: &TerminalConfig, size: TerminalSize) -> EguiTTYConfig
     if let Some(cwd) = &config.cwd {
         builder = builder.pty_working_dir(cwd.display().to_string());
     }
+    for (key, value) in &config.env {
+        builder = builder.pty_env_var(key.clone(), value.clone());
+    }
     builder.build()
 }
 
@@ -1096,6 +1111,25 @@ mod tests {
     use itty_core::{colors::Rgba8, palette::builtin};
 
     use super::*;
+
+    #[test]
+    fn the_environment_reaches_the_process_config() {
+        let config = TerminalConfig::new()
+            .with_cwd("/work")
+            .with_env("PWD", "/old")
+            .with_env("PWD", "/work")
+            .with_env("OTHER", "1");
+        let built = terminal_config(
+            &config,
+            TerminalSize {
+                columns: 80,
+                rows: 24,
+            },
+        );
+        assert_eq!(built.pty.working_dir.as_deref(), Some("/work"));
+        assert_eq!(built.pty.env.get("PWD").map(String::as_str), Some("/work"));
+        assert_eq!(built.pty.env.get("OTHER").map(String::as_str), Some("1"));
+    }
 
     #[test]
     fn key_capture_matches_event_handling() -> Result<()> {
