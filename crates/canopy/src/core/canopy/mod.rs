@@ -583,22 +583,29 @@ impl Canopy {
         self.core.input_map.mode()
     }
 
-    /// Make `mode` the newest active mode. A mode that is already active
-    /// moves to the top. A menu that waits for its key stays newer, and the
-    /// mode is the newest once the menu takes its key.
+    /// Make `mode` the newest active mode, held for the root, so it is
+    /// active wherever the focus is. A mode that is already active moves to
+    /// the top. A menu that waits for its key stays newer, and the mode is
+    /// the newest once the menu takes its key.
     ///
     /// An empty name is an error, and so is the name of the waiting menu. A
     /// failed call changes nothing.
     pub fn enter_mode(&mut self, mode: &str) -> Result<()> {
-        self.core.input_map.enter_mode(mode)
+        self.core
+            .input_map
+            .enter_mode(mode, inputmap::ModeHolder::Root)
     }
 
-    /// Remove `mode` from the active modes, wherever it is in the stack.
+    /// Drop the root's hold on `mode`, which removes it wherever it is in the
+    /// stack unless a widget also holds it.
     ///
-    /// Leaving a mode that is not active changes nothing. An empty name is an
-    /// error, and so is the name of a menu that waits for its key.
+    /// Leaving a mode that the root does not hold changes nothing. An empty
+    /// name is an error, and so is the name of a menu that waits for its
+    /// key.
     pub fn leave_mode(&mut self, mode: &str) -> Result<()> {
-        self.core.input_map.leave_mode(mode)
+        self.core
+            .input_map
+            .leave_mode(mode, inputmap::ModeHolder::Root)
     }
 
     /// Return the active modes, newest first. The default mode is not listed.

@@ -59,6 +59,7 @@ impl TreeStateSnapshot {
         core.pending_theme = self.pending_theme;
         core.mouse_capture = self.mouse_capture;
         core.deferred_focus_repair = self.deferred_focus_repair;
+        core.sync_mode_holders();
     }
 }
 
@@ -258,6 +259,9 @@ impl Core {
                 self.sync_work_stamps()?;
                 self.retire_invalid_modals()?;
                 self.wake_ended_modals()?;
+                // The holds of the nodes that the edit removed go now that
+                // it cannot roll back.
+                self.sync_mode_holders();
                 Ok(value)
             }
             Err(err) => {

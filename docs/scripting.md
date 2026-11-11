@@ -288,9 +288,16 @@ newest active mode, or the empty string for the default mode, and
 newest mode does not bind falls through to the older modes and then to the
 default tier. No call clears every mode, so a script changes only the modes it
 names. Rust uses the same words: `Canopy::mode`, `enter_mode`, `leave_mode`,
-and `active_modes`. A widget enters and leaves modes through
-`Context::enter_mode` and `Context::leave_mode`, so a key can have a meaning
-only while the widget is in some state.
+and `active_modes`.
+
+A widget enters and leaves modes through `Context::enter_mode` and
+`Context::leave_mode`, so a key can have a meaning only while the widget is in
+some state. The widget then holds the mode, and the mode is active only while
+the widget is on the focus path. Its leave drops only its own hold, so two
+widgets can hold one mode, and the mode stays while either holds it. A removed
+widget drops its holds. A script, and a call from the root's context, hold for
+the root, which holds a mode everywhere. A held mode that is not active still
+keeps its name from a menu.
 
 A menu is a mode that takes only the next key: it offers a choice of keys. Bind
 the key that opens one to `canopy.menu(mode)`:
@@ -319,7 +326,7 @@ for its key enters the mode under the menu: the menu still takes the next key,
 and the mode is the newest once the menu closes. `canopy.enter_mode` and
 `canopy.leave_mode` with the menu's own name are errors.
 A mouse binding cannot open another menu while one waits for its key.
-Opening a menu whose name is an active mode is an error, and the key that opens
+Opening a menu whose name is a held mode is an error, and the key that opens
 it reports the error as a notice. An empty name is an error for all three
 calls. A call that fails changes nothing, and mode hooks run only when the
 stack changes.
@@ -332,7 +339,7 @@ in `menu`, and `canopy.available_bindings()` reports the same field.
 
 `canopy.menu_bindings(menu)` returns the keys that a menu would offer from the
 focus if it opened now, as its panel would list them. A menu that could not
-open now, because the open modal suspends menus or the name is an active mode,
+open now, because the open modal suspends menus or the name is a held mode,
 offers none. Help search reads each menu this way.
 
 Native Rust installs bindings during setup with `Setup::bind(input, options,

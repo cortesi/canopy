@@ -868,11 +868,15 @@ pub trait Context: ViewContext + sealed::Context {
     /// Request a cooperative shutdown with the provided status code.
     fn exit(&mut self, code: i32);
 
-    /// Make `mode` the newest active keymap mode, as `canopy.enter_mode`
-    /// does. A mode that is already active moves to the top. A widget uses
-    /// this to give keys a meaning in one state only: a key that the newest
-    /// mode does not bind falls through to the older modes, then to the
-    /// default bindings, then to the widgets.
+    /// Hold the keymap `mode` for this node, and make it the newest held
+    /// mode. A mode that is already held moves to the top. A widget uses this
+    /// to give keys a meaning in one state only: a key that the newest mode
+    /// does not bind falls through to the older modes, then to the default
+    /// bindings, then to the widgets.
+    ///
+    /// The mode is active while one of its holders is on the focus path. The
+    /// root's context holds a mode everywhere, as `canopy.enter_mode` does.
+    /// A removed node drops its holds.
     ///
     /// # Errors
     ///
@@ -880,8 +884,8 @@ pub trait Context: ViewContext + sealed::Context {
     /// key. A failed call changes nothing.
     fn enter_mode(&mut self, mode: &str) -> Result<()>;
 
-    /// Remove `mode` from the active keymap modes, wherever it is in the
-    /// stack, as `canopy.leave_mode` does. Leaving a mode that is not active
+    /// Drop this node's hold on the keymap `mode`. The mode stays held while
+    /// another node holds it. Leaving a mode that this node does not hold
     /// changes nothing.
     ///
     /// # Errors
@@ -1491,11 +1495,11 @@ impl Context for NodeCtx<&mut Core> {
     }
 
     fn enter_mode(&mut self, mode: &str) -> Result<()> {
-        self.core.input_map.enter_mode(mode)
+        self.core.enter_mode(mode, self.node_id)
     }
 
     fn leave_mode(&mut self, mode: &str) -> Result<()> {
-        self.core.input_map.leave_mode(mode)
+        self.core.leave_mode(mode, self.node_id)
     }
 
     fn exit(&mut self, code: i32) {

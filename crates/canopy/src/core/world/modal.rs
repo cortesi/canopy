@@ -449,6 +449,7 @@ impl Core {
             self.sync_modal_bindings();
             self.nodes[options.modal].hidden = hidden;
             self.focus = focus;
+            self.sync_mode_holders();
             self.mouse_capture = capture;
             return Err(error);
         }

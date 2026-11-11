@@ -15,7 +15,7 @@ use futures::{StreamExt, executor::block_on};
 
 use super::*;
 use crate::{
-    Context, NodeName, ViewContext,
+    Context, ContextExt, NodeName, ViewContext,
     commands::{CommandNode, CommandSpec, CommandStatus},
     core::{
         context::CoreViewContext, keyroute::BindingVerdict,
@@ -3206,6 +3206,45 @@ impl Widget for DisabledLeaf {
     fn name(&self) -> NodeName {
         NodeName::convert("disabled_leaf")
     }
+}
+
+#[test]
+fn a_mode_follows_the_focus_of_its_holders() -> Result<()> {
+    let mut canopy = app();
+    let root = canopy.core.root;
+    let (a, b) = canopy.with_root_context(|context| {
+        let a: NodeId = context.add_child(root, DisabledLeaf)?.into();
+        let b: NodeId = context.add_child(root, DisabledLeaf)?.into();
+        Ok((a, b))
+    })?;
+    canopy.core.set_focus(a)?;
+    canopy.core.enter_mode("voice", a)?;
+    // Another holder enters and leaves the same mode, as a second editor
+    // does when it starts and ends its own run.
+    canopy.core.enter_mode("voice", b)?;
+    canopy.core.leave_mode("voice", b)?;
+    assert_eq!(
+        canopy.mode(),
+        "voice",
+        "another holder's leave keeps the hold"
+    );
+
+    canopy.core.set_focus(b)?;
+    assert_eq!(
+        canopy.mode(),
+        "",
+        "a holder off the focus path holds nothing"
+    );
+    canopy.core.set_focus(a)?;
+    assert_eq!(canopy.mode(), "voice", "the mode comes back with the focus");
+
+    canopy.with_root_context(|context| context.remove_subtree(a))?;
+    assert_eq!(canopy.mode(), "", "a removed holder holds nothing");
+    assert!(
+        canopy.core.input_map.menu_stack("voice").is_some(),
+        "the removed holder's hold is gone, so the name is free"
+    );
+    Ok(())
 }
 
 /// Build binding options for an action or command in the default tier.

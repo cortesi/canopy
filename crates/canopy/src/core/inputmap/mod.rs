@@ -3,6 +3,7 @@ use std::mem;
 use std::{cmp::Ordering, collections::HashSet, fmt, hash::Hash};
 
 use crate::{
+    NodeId,
     commands::CommandCall,
     error::{Error, Result},
     input::{ModalBindings, key::Key, mouse::Mouse},
@@ -532,22 +533,14 @@ impl ModeStack {
             .chain(self.modes.iter().rev().map(String::as_str))
     }
 
-    /// Make `mode` the newest mode, moving it if it is active. The menu stays
-    /// newer. Return whether the stack changed.
-    fn enter(&mut self, mode: &str) -> bool {
-        if self.modes.last().is_some_and(|last| last == mode) {
+    /// Make `modes`, oldest first, the active modes. The menu stays newer.
+    /// Return whether the stack changed.
+    fn set_modes(&mut self, modes: Vec<String>) -> bool {
+        if self.modes == modes {
             return false;
         }
-        self.modes.retain(|active| active != mode);
-        self.modes.push(mode.to_string());
+        self.modes = modes;
         true
-    }
-
-    /// Remove `mode` from the modes. Return whether it was active.
-    fn leave(&mut self, mode: &str) -> bool {
-        let before = self.modes.len();
-        self.modes.retain(|active| active != mode);
-        self.modes.len() != before
     }
 
     /// Open `menu`, replacing any menu that waits.
@@ -567,6 +560,25 @@ impl ModeStack {
     }
 }
 
+/// What holds a keymap mode: the root, which holds a mode everywhere, or a
+/// node, which holds it while it is on the focus path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModeHolder {
+    /// The root, for a script and for the root's own context.
+    Root,
+    /// A node below the root.
+    Node(NodeId),
+}
+
+/// One held mode and the holders that hold it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ModeHold {
+    /// The mode.
+    mode: String,
+    /// Its holders, in the order they entered it.
+    holders: Vec<ModeHolder>,
+}
+
 /// Application-owned state restored after a failed startup script.
 #[derive(Clone, Debug)]
 pub struct ApplicationBindingSnapshot {
@@ -574,6 +586,8 @@ pub struct ApplicationBindingSnapshot {
     records: Vec<BindingRecord>,
     /// Application mode stack captured at the start of an attempt.
     mode_stack: ModeStack,
+    /// Held modes captured at the start of an attempt.
+    holds: Vec<ModeHold>,
 }
 
 /// Registry for application bindings, framework controls, and active modes.
@@ -583,8 +597,13 @@ pub struct InputMap {
     records: Vec<BindingRecord>,
     /// Bindable intents the application registered.
     intents: IntentCatalog,
-    /// Active application modes and the waiting menu.
+    /// Active application modes and the waiting menu. The modes are the
+    /// held modes that have a live holder.
     mode_stack: ModeStack,
+    /// Held modes, oldest first.
+    holds: Vec<ModeHold>,
+    /// The focus path, root first, which decides the live holders.
+    focus_path: Vec<NodeId>,
     /// Number of mode stack updates, so observers can tell when to resync.
     mode_generation: u64,
     /// Number of binding record updates, so observers can tell when to resync.
@@ -613,6 +632,8 @@ impl InputMap {
             records: Vec::new(),
             intents: IntentCatalog::default(),
             mode_stack: ModeStack::default(),
+            holds: Vec::new(),
+            focus_path: Vec::new(),
             mode_generation: 0,
             binding_generation: 0,
             modal_bindings: None,
@@ -772,6 +793,7 @@ impl InputMap {
     pub fn clear_application(&mut self) -> Vec<(BindingId, BindingAction)> {
         let removed = self.remove_application_records(|_| true);
         self.mode_stack.clear();
+        self.holds.clear();
         self.touch_modes();
         removed
     }
@@ -998,7 +1020,7 @@ impl InputMap {
     /// before a binding opens the next. A modal that suspends menus admits no
     /// menu, and a name that is also an active mode never opens as a menu.
     pub(crate) fn menu_stack(&self, menu: &str) -> Option<ModeStack> {
-        if menu.is_empty() || self.modal_suspends_menus() || self.mode_stack.has_mode(menu) {
+        if menu.is_empty() || self.modal_suspends_menus() || self.is_held(menu) {
             return None;
         }
         let mut stack = self.mode_stack.clone();
@@ -1145,42 +1167,97 @@ impl InputMap {
         matches!(self.modal_bindings, Some(ModalBindings::Framework { .. }))
     }
 
-    /// Make `mode` the newest active mode. A mode that is already active
-    /// moves to the top.
+    /// Hold `mode` for `holder`, and make it the newest held mode. A mode
+    /// that is already held moves to the top, and keeps its other holders.
+    /// The mode is active while one of its holders is live: the root, or a
+    /// node on the focus path.
     ///
     /// A menu that waits for its key stays the newest entry: the mode enters
     /// under it, and is the newest mode once the menu takes its key. An empty
     /// name is an error, and so is the name of the waiting menu, because one
     /// name never names both a mode and a menu. A failed call changes nothing.
-    pub fn enter_mode(&mut self, mode: &str) -> Result<()> {
+    pub(crate) fn enter_mode(&mut self, mode: &str, holder: ModeHolder) -> Result<()> {
         check_mode_name(mode)?;
         if self.transient_mode() == Some(mode) {
             return Err(Error::Invalid(format!(
                 "mode {mode} cannot enter while menu {mode} waits for its key"
             )));
         }
-        if self.mode_stack.enter(mode) {
-            self.touch_modes();
+        let mut hold = match self.holds.iter().position(|hold| hold.mode == mode) {
+            Some(index) => self.holds.remove(index),
+            None => ModeHold {
+                mode: mode.to_string(),
+                holders: Vec::new(),
+            },
+        };
+        if !hold.holders.contains(&holder) {
+            hold.holders.push(holder);
         }
+        self.holds.push(hold);
+        self.derive_modes();
         Ok(())
     }
 
-    /// Remove `mode` from the active modes, wherever it is in the stack. A
-    /// mode that is not active stays that way, and the call changes nothing.
+    /// Drop the hold of `holder` on `mode`. The mode stays held while it has
+    /// another holder. Leaving a mode that `holder` does not hold changes
+    /// nothing.
     ///
     /// An empty name is an error, and so is the name of a menu that waits for
     /// its key: the menu closes when its key arrives.
-    pub fn leave_mode(&mut self, mode: &str) -> Result<()> {
+    pub(crate) fn leave_mode(&mut self, mode: &str, holder: ModeHolder) -> Result<()> {
         check_mode_name(mode)?;
         if self.transient_mode() == Some(mode) {
             return Err(Error::Invalid(format!(
                 "menu {mode} waits for its key, so it cannot be left"
             )));
         }
-        if self.mode_stack.leave(mode) {
+        if let Some(hold) = self.holds.iter_mut().find(|hold| hold.mode == mode) {
+            hold.holders.retain(|held| *held != holder);
+        }
+        self.holds.retain(|hold| !hold.holders.is_empty());
+        self.derive_modes();
+        Ok(())
+    }
+
+    /// Take `focus_path`, root first, as the path that decides the live
+    /// holders, and drop the holds of nodes that `exists` no longer finds.
+    pub(crate) fn sync_mode_holders(
+        &mut self,
+        focus_path: Vec<NodeId>,
+        exists: impl Fn(NodeId) -> bool,
+    ) {
+        for hold in &mut self.holds {
+            hold.holders.retain(|holder| match holder {
+                ModeHolder::Root => true,
+                ModeHolder::Node(node) => exists(*node),
+            });
+        }
+        self.holds.retain(|hold| !hold.holders.is_empty());
+        self.focus_path = focus_path;
+        self.derive_modes();
+    }
+
+    /// Return whether any holder holds `mode`, live or not.
+    fn is_held(&self, mode: &str) -> bool {
+        self.holds.iter().any(|hold| hold.mode == mode)
+    }
+
+    /// Make the held modes with a live holder the active modes.
+    fn derive_modes(&mut self) {
+        let modes = self
+            .holds
+            .iter()
+            .filter(|hold| {
+                hold.holders.iter().any(|holder| match holder {
+                    ModeHolder::Root => true,
+                    ModeHolder::Node(node) => self.focus_path.contains(node),
+                })
+            })
+            .map(|hold| hold.mode.clone())
+            .collect();
+        if self.mode_stack.set_modes(modes) {
             self.touch_modes();
         }
-        Ok(())
     }
 
     /// Open `mode` as a menu that waits for one key.
@@ -1196,9 +1273,9 @@ impl InputMap {
                 "menu {mode} cannot open while menu {menu} waits for its key"
             )));
         }
-        if self.mode_stack.has_mode(mode) {
+        if self.is_held(mode) {
             return Err(Error::Invalid(format!(
-                "menu {mode} cannot open while {mode} is an active mode"
+                "menu {mode} cannot open while {mode} is a held mode"
             )));
         }
         self.mode_stack.open_menu(mode);
@@ -1271,6 +1348,7 @@ impl InputMap {
                 .cloned()
                 .collect(),
             mode_stack: self.mode_stack.clone(),
+            holds: self.holds.clone(),
         }
     }
 
@@ -1280,6 +1358,8 @@ impl InputMap {
         self.records.extend(snapshot.records);
         self.records.sort_by_key(|record| record.insertion_id);
         self.mode_stack = snapshot.mode_stack;
+        self.holds = snapshot.holds;
+        self.derive_modes();
         self.touch_modes();
         self.touch_bindings();
     }

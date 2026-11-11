@@ -204,7 +204,7 @@ impl Core {
     /// lists them: a global binding on the same key wins the key, so the
     /// menu's binding for it is left out, as routing leaves it out. A menu
     /// that could not open now, because the open modal suspends menus or the
-    /// name is an active mode, offers nothing. The keys a menu offers depend
+    /// name is a held mode, offers nothing. The keys a menu offers depend
     /// on its name alone, never on the menus that led to it, because routing
     /// closes one menu before the binding that opens the next runs.
     pub(crate) fn menu_bindings(
@@ -321,6 +321,7 @@ mod tests {
             CommandArgs, CommandCall, CommandId, CommandNode, CommandResolution, CommandStatus,
             CommandTarget,
         },
+        core::inputmap::ModeHolder,
         error::Error,
         input::{BindingAction, BindingOptions, InputSpec, ModalBindings, key::KeyCode},
         script::LuauFunctionId,
@@ -498,7 +499,7 @@ mod tests {
 
         // A mode contributes its own winner once it is active. Order follows
         // the label, so presentation is stable whatever the insertion order.
-        core.input_map.enter_mode("insert")?;
+        core.input_map.enter_mode("insert", ModeHolder::Root)?;
         let snapshot = core.available_bindings(None)?;
         assert_eq!(
             snapshot
@@ -623,7 +624,7 @@ mod tests {
             "Global",
             3,
         )?;
-        core.input_map.enter_mode("insert")?;
+        core.input_map.enter_mode("insert", ModeHolder::Root)?;
 
         let snapshot = core.available_bindings(None)?;
 
@@ -816,7 +817,7 @@ mod tests {
             1,
         )?;
         core.input_map.open_menu("go")?;
-        core.input_map.enter_mode("insert")?;
+        core.input_map.enter_mode("insert", ModeHolder::Root)?;
 
         let snapshot = core.available_bindings(None)?;
         assert_eq!(snapshot.active_modes, ["go", "insert"]);
@@ -996,12 +997,12 @@ mod tests {
         assert_eq!(core.menu_bindings(None, "go")?.len(), 1);
         assert!(core.menu_bindings(None, "")?.is_empty());
 
-        core.input_map.enter_mode("go")?;
+        core.input_map.enter_mode("go", ModeHolder::Root)?;
         assert!(
             core.menu_bindings(None, "go")?.is_empty(),
             "an active mode never opens as a menu"
         );
-        core.input_map.leave_mode("go")?;
+        core.input_map.leave_mode("go", ModeHolder::Root)?;
 
         core.input_map
             .set_modal_bindings(Some(ModalBindings::Framework {

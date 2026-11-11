@@ -1,7 +1,7 @@
 use super::Core;
 use crate::{
     ChangeOutcome, NodeId,
-    core::{context::CoreViewContext, widget_access::WidgetReadGuard},
+    core::{context::CoreViewContext, inputmap::ModeHolder, widget_access::WidgetReadGuard},
     error::{Error, Result},
     geom::RectI32,
     layout::RevealAlign,
@@ -60,12 +60,54 @@ impl Core {
             Ok(ChangeOutcome::Unchanged)
         } else {
             self.focus = target;
+            self.sync_mode_holders();
             if let Some(node) = target {
                 self.queue_node_reveal(node, RevealAlign::Nearest, None);
             }
             self.invalidate(crate::Invalidation::Paint);
             Ok(ChangeOutcome::Changed)
         }
+    }
+
+    /// Hold the keymap `mode` for `holder`, as [`InputMap::enter_mode`]
+    /// describes. The root holds a mode everywhere.
+    ///
+    /// [`InputMap::enter_mode`]: crate::core::inputmap::InputMap
+    pub(crate) fn enter_mode(&mut self, mode: &str, holder: NodeId) -> Result<()> {
+        let holder = self.mode_holder(holder);
+        self.input_map.enter_mode(mode, holder)
+    }
+
+    /// Drop the hold of `holder` on the keymap `mode`.
+    pub(crate) fn leave_mode(&mut self, mode: &str, holder: NodeId) -> Result<()> {
+        let holder = self.mode_holder(holder);
+        self.input_map.leave_mode(mode, holder)
+    }
+
+    /// Return the mode holder that `node` stands for.
+    fn mode_holder(&self, node: NodeId) -> ModeHolder {
+        if node == self.root {
+            ModeHolder::Root
+        } else {
+            ModeHolder::Node(node)
+        }
+    }
+
+    /// Give the binding registry the focus path, which decides the active
+    /// modes, and drop the holds of removed nodes. A tree edit can still roll
+    /// back, so the holds of the nodes it removes stay until it commits.
+    pub(crate) fn sync_mode_holders(&mut self) {
+        let mut path = Vec::new();
+        let mut current = self.focus;
+        while let Some(node) = current {
+            path.push(node);
+            current = self.nodes.get(node).and_then(|node| node.parent);
+        }
+        path.reverse();
+        let editing = self.tree_edit.is_some();
+        let nodes = &self.nodes;
+        self.input_map
+            .sync_mode_holders(path, |node| editing || nodes.contains_key(node));
     }
 
     /// Validate that a node exists and belongs to the active tree.
@@ -251,6 +293,7 @@ impl Core {
             self.defer_focus_repair(lost)?;
         }
         self.ensure_mouse_capture_valid()?;
+        self.sync_mode_holders();
         self.debug_assert_tree_invariants();
         Ok(())
     }

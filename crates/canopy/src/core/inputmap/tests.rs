@@ -3,7 +3,7 @@ use proptest::{collection, prelude::*};
 use super::*;
 use crate::{
     commands::{CommandArgs, CommandCall, CommandId, CommandTarget},
-    core::id::testing_node_id,
+    core::id::{NodeArena, testing_node_id},
     error::Result,
     input::{key, mouse::Mouse},
 };
@@ -133,8 +133,8 @@ fn resolution_uses_global_then_newest_mode_then_default() -> Result<()> {
     )?;
     bind(&mut map, BindingTier::Global, '?', "/root/**/", "Help", 4)?;
 
-    map.enter_mode("normal")?;
-    map.enter_mode("modal")?;
+    map.enter_mode("normal", ModeHolder::Root)?;
+    map.enter_mode("modal", ModeHolder::Root)?;
     assert_eq!(
         target(&map, "/root/editor", 'a'),
         Some(BindingAction::Script(script(3)))
@@ -145,12 +145,12 @@ fn resolution_uses_global_then_newest_mode_then_default() -> Result<()> {
     );
     assert_eq!(map.active_modes(), vec!["modal", "normal"]);
 
-    map.leave_mode("modal")?;
+    map.leave_mode("modal", ModeHolder::Root)?;
     assert_eq!(
         target(&map, "/root/editor", 'a'),
         Some(BindingAction::Script(script(2)))
     );
-    map.leave_mode("normal")?;
+    map.leave_mode("normal", ModeHolder::Root)?;
     assert_eq!(
         target(&map, "/root/editor", 'a'),
         Some(BindingAction::Script(script(1)))
@@ -398,7 +398,7 @@ fn a_transient_mode_hides_older_modes_and_the_default_tier() -> Result<()> {
     )?;
     bind(&mut map, BindingTier::Global, '?', "/root/**/", "Help", 4)?;
 
-    map.enter_mode("normal")?;
+    map.enter_mode("normal", ModeHolder::Root)?;
     let generation = map.mode_generation();
     map.open_menu("prefix")?;
     assert_ne!(map.mode_generation(), generation);
@@ -1002,40 +1002,88 @@ fn a_framework_modal_suspends_the_transient_cutoff() -> Result<()> {
 }
 
 #[test]
+fn a_mode_is_active_while_a_holder_is_on_the_focus_path() -> Result<()> {
+    let mut arena = NodeArena::new();
+    let (a, b) = (arena.insert(()), arena.insert(()));
+    let mut map = InputMap::new();
+    map.sync_mode_holders(vec![a], |_| true);
+    map.enter_mode("voice", ModeHolder::Node(a))?;
+    map.enter_mode("voice", ModeHolder::Node(b))?;
+    assert_eq!(map.active_modes(), vec!["voice"]);
+
+    map.leave_mode("voice", ModeHolder::Node(b))?;
+    assert_eq!(
+        map.active_modes(),
+        vec!["voice"],
+        "one holder's leave keeps the other's hold"
+    );
+    map.sync_mode_holders(vec![b], |_| true);
+    assert!(
+        map.active_modes().is_empty(),
+        "a holder off the focus path makes no mode active"
+    );
+    assert!(
+        map.menu_stack("voice").is_none(),
+        "a held mode names no menu, live or not"
+    );
+    map.sync_mode_holders(vec![a], |_| true);
+    assert_eq!(
+        map.active_modes(),
+        vec!["voice"],
+        "the hold comes back with the focus"
+    );
+
+    map.enter_mode("global", ModeHolder::Root)?;
+    map.sync_mode_holders(Vec::new(), |node| node != a);
+    assert_eq!(
+        map.active_modes(),
+        vec!["global"],
+        "the root holds everywhere, and a removed node holds nothing"
+    );
+    map.sync_mode_holders(vec![a], |_| true);
+    assert_eq!(
+        map.active_modes(),
+        vec!["global"],
+        "a removed node's hold does not come back"
+    );
+    Ok(())
+}
+
+#[test]
 fn named_modes_enter_move_and_leave_by_name() -> Result<()> {
     let mut map = InputMap::new();
-    map.enter_mode("normal")?;
-    map.enter_mode("insert")?;
+    map.enter_mode("normal", ModeHolder::Root)?;
+    map.enter_mode("insert", ModeHolder::Root)?;
     assert_eq!(map.active_modes(), vec!["insert", "normal"]);
 
     let generation = map.mode_generation();
-    map.enter_mode("insert")?;
+    map.enter_mode("insert", ModeHolder::Root)?;
     assert_eq!(
         map.mode_generation(),
         generation,
         "entering the newest mode changes nothing"
     );
-    map.enter_mode("normal")?;
+    map.enter_mode("normal", ModeHolder::Root)?;
     assert_eq!(
         map.active_modes(),
         vec!["normal", "insert"],
         "an active mode moves to the top, and one name appears once"
     );
 
-    map.leave_mode("insert")?;
+    map.leave_mode("insert", ModeHolder::Root)?;
     assert_eq!(
         map.active_modes(),
         vec!["normal"],
         "a mode leaves from any position"
     );
     let generation = map.mode_generation();
-    map.leave_mode("insert")?;
+    map.leave_mode("insert", ModeHolder::Root)?;
     assert!(
-        map.enter_mode("").is_err(),
+        map.enter_mode("", ModeHolder::Root).is_err(),
         "the default mode has no name to enter"
     );
     assert!(
-        map.leave_mode("").is_err(),
+        map.leave_mode("", ModeHolder::Root).is_err(),
         "the default mode has no name to leave"
     );
     assert_eq!(
@@ -1056,7 +1104,7 @@ fn a_mode_enters_under_a_menu_that_a_framework_modal_suspends() -> Result<()> {
         intents: &[],
     }));
     assert!(map.modal_suspends_menus());
-    map.enter_mode("insert")?;
+    map.enter_mode("insert", ModeHolder::Root)?;
     map.set_modal_bindings(None);
     assert_eq!(map.active_modes(), vec!["go", "insert"]);
     assert_eq!(map.transient_mode(), Some("go"), "the menu still waits");
@@ -1072,16 +1120,19 @@ fn a_mode_enters_under_a_menu_that_a_framework_modal_suspends() -> Result<()> {
 #[test]
 fn a_waiting_menu_stays_the_newest_mode() -> Result<()> {
     let mut map = InputMap::new();
-    map.enter_mode("normal")?;
+    map.enter_mode("normal", ModeHolder::Root)?;
     map.open_menu("go")?;
     let generation = map.mode_generation();
     assert!(
-        map.enter_mode("go").is_err(),
+        map.enter_mode("go", ModeHolder::Root).is_err(),
         "one name never names a mode and a menu at once"
     );
-    assert!(map.enter_mode("").is_err(), "a mode must have a name");
     assert!(
-        map.leave_mode("go").is_err(),
+        map.enter_mode("", ModeHolder::Root).is_err(),
+        "a mode must have a name"
+    );
+    assert!(
+        map.leave_mode("go", ModeHolder::Root).is_err(),
         "the menu closes with its key"
     );
     assert_eq!(map.active_modes(), vec!["go", "normal"]);
@@ -1091,7 +1142,7 @@ fn a_waiting_menu_stays_the_newest_mode() -> Result<()> {
         "the failed calls change nothing"
     );
 
-    map.enter_mode("insert")?;
+    map.enter_mode("insert", ModeHolder::Root)?;
     assert_eq!(
         map.active_modes(),
         vec!["go", "insert", "normal"],
@@ -1099,7 +1150,7 @@ fn a_waiting_menu_stays_the_newest_mode() -> Result<()> {
     );
     assert_eq!(map.transient_mode(), Some("go"));
     assert_eq!(map.mode(), "go");
-    map.leave_mode("normal")?;
+    map.leave_mode("normal", ModeHolder::Root)?;
     assert_eq!(
         map.active_modes(),
         vec!["go", "insert"],
@@ -1112,9 +1163,9 @@ fn a_waiting_menu_stays_the_newest_mode() -> Result<()> {
         "insert",
         "the mode is active once the menu closes"
     );
-    map.leave_mode("insert")?;
+    map.leave_mode("insert", ModeHolder::Root)?;
     assert!(map.open_menu("").is_err(), "a menu must name its mode");
-    map.enter_mode("go")?;
+    map.enter_mode("go", ModeHolder::Root)?;
     assert!(
         map.open_menu("go").is_err(),
         "one name never names a mode and a menu at once"
@@ -1227,8 +1278,8 @@ proptest! {
         let mut saved_model = None;
         for op in &ops {
             let ok = match *op {
-                ModeOp::Enter(name) => map.enter_mode(name).is_ok(),
-                ModeOp::Leave(name) => map.leave_mode(name).is_ok(),
+                ModeOp::Enter(name) => map.enter_mode(name, ModeHolder::Root).is_ok(),
+                ModeOp::Leave(name) => map.leave_mode(name, ModeHolder::Root).is_ok(),
                 ModeOp::Open(name) => map.open_menu(name).is_ok(),
                 ModeOp::Close => {
                     map.close_menu();

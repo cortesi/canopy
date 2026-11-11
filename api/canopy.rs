@@ -137,11 +137,15 @@ pub trait Context: ViewContext + Context {
     /// keeps the notice. Returns whether the toast showed.
     fn end_toast(&mut self, id: NoticeId) -> bool;
 
-    /// Make `mode` the newest active keymap mode, as `canopy.enter_mode`
-    /// does. A mode that is already active moves to the top. A widget uses
-    /// this to give keys a meaning in one state only: a key that the newest
-    /// mode does not bind falls through to the older modes, then to the
-    /// default bindings, then to the widgets.
+    /// Hold the keymap `mode` for this node, and make it the newest held
+    /// mode. A mode that is already held moves to the top. A widget uses this
+    /// to give keys a meaning in one state only: a key that the newest mode
+    /// does not bind falls through to the older modes, then to the default
+    /// bindings, then to the widgets.
+    ///
+    /// The mode is active while one of its holders is on the focus path. The
+    /// root's context holds a mode everywhere, as `canopy.enter_mode` does.
+    /// A removed node drops its holds.
     ///
     /// # Errors
     ///
@@ -162,8 +166,8 @@ pub trait Context: ViewContext + Context {
         direction: FocusDirection,
     ) -> crate::error::Result<ChangeOutcome>;
 
-    /// Remove `mode` from the active keymap modes, wherever it is in the
-    /// stack, as `canopy.leave_mode` does. Leaving a mode that is not active
+    /// Drop this node's hold on the keymap `mode`. The mode stays held while
+    /// another node holds it. Leaving a mode that this node does not hold
     /// changes nothing.
     ///
     /// # Errors
@@ -1023,9 +1027,10 @@ impl Canopy {
     /// Return the look of each cursor role.
     pub fn cursor_looks(&self) -> &CursorLooks;
 
-    /// Make `mode` the newest active mode. A mode that is already active
-    /// moves to the top. A menu that waits for its key stays newer, and the
-    /// mode is the newest once the menu takes its key.
+    /// Make `mode` the newest active mode, held for the root, so it is
+    /// active wherever the focus is. A mode that is already active moves to
+    /// the top. A menu that waits for its key stays newer, and the mode is
+    /// the newest once the menu takes its key.
     ///
     /// An empty name is an error, and so is the name of the waiting menu. A
     /// failed call changes nothing.
@@ -1045,9 +1050,10 @@ impl Canopy {
     /// Return the block mosaic characters that the terminal draws well.
     pub fn glyphs(&self) -> Glyphs;
 
-    /// Remove `mode` from the active modes, wherever it is in the stack.
+    /// Drop the root's hold on `mode`, which removes it wherever it is in the
+    /// stack unless a widget also holds it.
     ///
-    /// Leaving a mode that is not active changes nothing. An empty name is an
+    /// Leaving a mode that the root does not hold changes nothing. An empty name is an
     /// error, and so is the name of a menu that waits for its key.
     pub fn leave_mode(&mut self, mode: &str) -> crate::error::Result<()>;
 
