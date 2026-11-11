@@ -4976,6 +4976,16 @@ pub mod runtime {
         Attachment,
     }
 
+    /// What a poll of a [`Worker`] found.
+    #[derive(Debug)]
+    pub struct Replies<R> {
+        /// The replies that arrived since the last poll, oldest first.
+        pub replies: Vec<R>,
+        /// Whether the thread has gone: it returned or panicked, and sends no
+        /// more replies.
+        pub gone: bool,
+    }
+
     /// The receiver has gone, so the slot takes no request.
     #[derive(Clone, Copy, Debug, Display, Eq, PartialEq, std::error::Error)]
     pub struct SlotClosed;
@@ -5066,6 +5076,12 @@ pub mod runtime {
         pub exit_code: Option<i32>,
     }
 
+    /// Wakes the owner when a worker thread ends, by return or by panic.
+    #[derive(Debug)]
+    pub struct WakeOnExit(pub NodeWakeHandle);
+
+    impl Drop for WakeOnExit {}
+
     /// Result of requesting a poll through a node wake handle.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum WakeOutcome {
@@ -5152,6 +5168,76 @@ pub mod runtime {
         /// Availability of the widget's activation command.
         pub activation_status: Option<CommandStatus>,
     }
+
+    /// One background thread with a request slot and a channel of replies.
+    ///
+    /// A widget keeps the worker and polls it from `Widget::poll`. A request
+    /// replaces a waiting one and cancels a running one. Each reply wakes the
+    /// owner of the worker's wake handle, and so does the end of the thread, by
+    /// return or by panic, so the owner's next poll sees a worker that has gone
+    /// and can start another. Dropping the worker closes its slot, which ends
+    /// the thread once its job returns.
+    #[derive(Debug)]
+    pub struct Worker<Q, R> {/* private fields */}
+
+    impl<Q, R> Worker<Q, R> {
+        /// Cancel the running job and drop the waiting request, and return the
+        /// new generation.
+        pub fn cancel(&self) -> u64;
+
+        /// Make a worker of the two ends that a thread would hold the others
+        /// of, as a test does to stand in for the thread.
+        pub fn from_parts(requests: SlotSender<Q>, replies: std::sync::mpsc::Receiver<R>) -> Self;
+
+        /// Return the generation of the last send or cancel. A reply is current
+        /// while its job's generation equals it.
+        pub fn generation(&self) -> u64;
+
+        /// Take every reply that waits, and say whether the thread has gone.
+        pub fn poll(&self) -> Replies<R>;
+
+        /// Queue `request`, replacing a waiting one and cancelling a running
+        /// one, and return its generation.
+        ///
+        /// # Errors
+        ///
+        /// Fails when the thread has gone.
+        pub fn send(&self, request: Q) -> Result<u64, SlotClosed>;
+    }
+
+    impl<Q: 'static + Send, R: 'static + Send> Worker<Q, R> {
+        /// Start a thread that serves each job with `serve` and sends the reply
+        /// it returns, if any, as [`Self::spawn`] does. The thread ends when the
+        /// worker drops, or when nobody reads its replies.
+        ///
+        /// # Errors
+        ///
+        /// Fails when the thread cannot start.
+        pub fn serve(
+            name: impl Into<String>,
+            wake: NodeWakeHandle,
+            capacity: usize,
+            serve: impl 'static + FnMut(Job<Q>) -> Option<R> + Send,
+        ) -> std::io::Result<Self>;
+
+        /// Start a thread named `name` that runs `run` with the receiving half
+        /// of the request slot and a sender of replies. Each reply wakes the
+        /// owner of `wake`, and at most `capacity` replies wait at once. The
+        /// thread ends when `run` returns, which it should do once
+        /// [`SlotReceiver::recv`] returns `None` or a send fails.
+        ///
+        /// # Errors
+        ///
+        /// Fails when the thread cannot start.
+        pub fn spawn(
+            name: impl Into<String>,
+            wake: NodeWakeHandle,
+            capacity: usize,
+            run: impl 'static + FnOnce(SlotReceiver<Q>, WakeSender<R>) + Send,
+        ) -> std::io::Result<Self>;
+    }
+
+    impl !Sync for Worker {}
 
     /// Create a request box that holds at most one request: a new request
     /// replaces a waiting one and cancels a running one.

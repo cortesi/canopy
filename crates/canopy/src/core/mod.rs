@@ -65,6 +65,8 @@ pub mod wake;
 pub mod watch;
 /// Widget slot borrowing and extraction guards.
 mod widget_access;
+/// Background workers that serve the newest request and wake their owner.
+pub mod worker;
 /// World state and layout integration.
 pub mod world;
 
