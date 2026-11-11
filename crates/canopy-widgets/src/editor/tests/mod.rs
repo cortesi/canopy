@@ -350,6 +350,28 @@ fn a_display_only_editor_marks_no_current_line_number() {
     }
 }
 
+#[test]
+fn the_revision_rises_with_every_change_and_never_repeats() {
+    let mut harness = build_harness("one", EditorConfig::new(), 20, 6);
+    let start = with_editor(&mut harness, |editor| editor.revision());
+    harness.key(key::KeyCode::Char('x')).expect("key dispatch");
+    let typed = with_editor(&mut harness, |editor| editor.revision());
+    assert!(typed > start, "typing raises the revision");
+    let undone = with_editor(&mut harness, |editor| {
+        assert!(editor.undo_edit(), "the typing undoes");
+        editor.revision()
+    });
+    assert!(undone > typed, "an undo raises the revision");
+    let replaced = with_editor(&mut harness, |editor| {
+        editor.set_text("one");
+        editor.revision()
+    });
+    assert!(
+        replaced > undone,
+        "new text continues the revisions of the old, so no revision repeats"
+    );
+}
+
 /// Text that every read-only check must leave untouched.
 const READ_ONLY_TEXT: &str = "alpha\nbeta\ngamma";
 

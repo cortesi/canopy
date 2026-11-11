@@ -21,7 +21,7 @@ pub use vi::{ViMode, VisualMode};
 pub use widget::{MARK_STYLE, PreparedEditorView};
 
 pub use crate::text_buffer::{
-    Selection, TextPosition, TextRange, offset_of_position, position_of_offset,
+    Selection, TextPosition, TextRange, lines, offset_of_position, position_of_offset,
 };
 
 #[cfg(test)]

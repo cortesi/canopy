@@ -1130,10 +1130,11 @@ impl Container {
 
 impl Widget for Container {}
 
-/// An image decoded for a preview, before it is scaled.
+/// An image decoded under limits, before it is scaled for a preview or taken
+/// at full size.
 ///
 /// Reading and scaling are separate stages, so a worker that prepares
-/// previews can give up on a stale request between them. The decode itself
+/// images can give up on a stale request between them. The decode itself
 /// cannot stop part way.
 pub struct DecodedImage {/* private fields */}
 
@@ -1142,7 +1143,11 @@ impl DecodedImage {
     /// grows to fit `bounds`, so it stays sharp in a view that zooms it.
     pub fn fit(self, bounds: Size) -> canopy::error::Result<ImagePreview>;
 
-    /// Decode the image at `path` under the preview limits: at most 32 *
+    /// Return the image at full size, for a view that zooms it. A drawing
+    /// keeps its own size, within 4096 pixels an edge.
+    pub fn full(self) -> canopy::error::Result<ImagePreview>;
+
+    /// Decode the image at `path` under limits: at most 32 *
     /// 1024 * 1024 source pixels and a 128 MiB decoder budget. A file named
     /// `.svg` parses as a drawing: a source of at most 16 MiB, which renders
     /// text with the system fonts, reads no file that it links to, and
@@ -1623,6 +1628,11 @@ impl Editor {
     /// no `current`, no match is. Ranges arrive as for [`Self::set_matches`].
     pub fn restore_matches(&mut self, matches: Vec<TextRange>, current: Option<TextRange>);
 
+    /// Return the revision of the text. It rises with each change, an undo,
+    /// a redo, or [`Self::set_text`], and never repeats, so a caller can
+    /// cache work on the text by its revision.
+    pub fn revision(&self) -> u64;
+
     /// Search the text and highlight every match.
     ///
     /// The first match at or below the top of the view becomes current, and
@@ -1830,9 +1840,9 @@ impl Frame {
 
 impl Widget for Frame {}
 
-/// An image scaled for an image view, which [`ImageView::set_preview`]
-/// shows. Clones share the pixels, so a cache of previews and the view that
-/// shows one hold a single copy.
+/// An image prepared for an image view, scaled or at full size, which
+/// [`ImageView::set_preview`] shows. Clones share the pixels, so a cache of
+/// previews and the view that shows one hold a single copy.
 #[derive(Clone, Debug)]
 pub struct ImagePreview {/* private fields */}
 
@@ -1903,7 +1913,8 @@ impl ImageView {
     /// markup in no raster format parses as an SVG drawing, at its own size.
     pub fn from_bytes(bytes: &[u8]) -> canopy::error::Result<Self>;
 
-    /// Create a new image view widget from a file path.
+    /// Create a new image view widget from a file path, decoded at full size
+    /// under the limits of [`DecodedImage::read`].
     pub fn from_path(path: impl AsRef<Path>) -> canopy::error::Result<Self>;
 
     /// Return the size of the image in pixels.
@@ -1922,6 +1933,9 @@ impl ImageView {
     pub fn set_image(&mut self, image: &RgbaImage);
 
     /// Show the image at `path`, returning the view to its auto-fitted state.
+    /// The decode runs under the limits of [`DecodedImage::read`]. A caller
+    /// on the UI thread should decode on a worker with [`DecodedImage::full`]
+    /// and show the result with [`Self::set_preview`].
     ///
     /// The view keeps its current image when the file cannot be read.
     pub fn set_path(&mut self, path: impl AsRef<Path>) -> canopy::error::Result<()>;
@@ -4925,6 +4939,14 @@ pub mod editor {
         /// Return whether rows break at the view width.
         pub fn wraps(self) -> bool;
     }
+
+    /// Return the lines of `text` without their breaks, as an editor over `text`
+    /// counts them.
+    ///
+    /// Lines break at LF and at CRLF, so the CR of a CRLF is part of the break
+    /// and a lone CR is text. Text that ends with a break has an empty last
+    /// line, and empty text has one empty line.
+    pub fn lines(text: &str) -> impl Iterator<Item = &str>;
 
     /// Return the UTF-8 byte offset in `text` of `position`, as an editor over
     /// `text` counts it, clamped to the text.

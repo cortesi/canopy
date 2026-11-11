@@ -1,3 +1,5 @@
+use std::iter;
+
 /// A position in the text buffer expressed as a logical line and a char index.
 ///
 /// Positions order by line, then by column.
@@ -54,6 +56,30 @@ pub fn offset_of_position(text: &str, position: TextPosition) -> usize {
             .char_indices()
             .nth(position.column)
             .map_or(line.len(), |(index, _)| index)
+}
+
+/// Return the lines of `text` without their breaks, as an editor over `text`
+/// counts them.
+///
+/// Lines break at LF and at CRLF, so the CR of a CRLF is part of the break
+/// and a lone CR is text. Text that ends with a break has an empty last
+/// line, and empty text has one empty line.
+pub fn lines(text: &str) -> impl Iterator<Item = &str> {
+    let mut rest = Some(text);
+    iter::from_fn(move || {
+        let current = rest?;
+        match current.find('\n') {
+            Some(index) => {
+                rest = Some(&current[index + 1..]);
+                let line = &current[..index];
+                Some(line.strip_suffix('\r').unwrap_or(line))
+            }
+            None => {
+                rest = None;
+                Some(current)
+            }
+        }
+    })
 }
 
 /// Return the line of `text` that starts at byte `start`, its break

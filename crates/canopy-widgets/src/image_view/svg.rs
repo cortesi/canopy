@@ -21,7 +21,7 @@ use resvg::{
     usvg::{ImageHrefResolver, ImageKind, Options, Tree, fontdb::Database},
 };
 
-use super::PREVIEW_MAX_PIXELS;
+use super::DECODE_MAX_PIXELS;
 
 /// Largest drawing source read, in bytes.
 const SOURCE_LIMIT: u64 = 16 * 1024 * 1024;
@@ -56,7 +56,7 @@ fn fonts() -> Arc<Database> {
 /// could expand without bound, does not parse.
 pub(super) fn parse(data: &[u8]) -> Result<Tree> {
     let embedded = ImageHrefResolver::default_data_resolver();
-    let budget = AtomicU64::new(PREVIEW_MAX_PIXELS);
+    let budget = AtomicU64::new(DECODE_MAX_PIXELS);
     let options = Options {
         fontdb: fonts(),
         image_href_resolver: ImageHrefResolver {

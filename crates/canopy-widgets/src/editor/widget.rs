@@ -370,6 +370,13 @@ impl Editor {
         self.buffer.text()
     }
 
+    /// Return the revision of the text. It rises with each change, an undo,
+    /// a redo, or [`Self::set_text`], and never repeats, so a caller can
+    /// cache work on the text by its revision.
+    pub fn revision(&self) -> u64 {
+        self.buffer.revision()
+    }
+
     /// Replace the buffer contents.
     ///
     /// An open prompt closes and a pointer drag ends. The mode stays, and
@@ -379,7 +386,9 @@ impl Editor {
         self.mouse.end_drag();
         self.end_entry();
         self.prepared_width = None;
+        let revision = self.buffer.revision();
         self.buffer = TextBuffer::new(text);
+        self.buffer.follow_revision(revision);
         self.buffer.set_cursor(TextPosition::new(0, 0));
         self.update_preferred_column();
         self.highlight_cache.clear();

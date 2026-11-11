@@ -43,9 +43,9 @@ const PAN_STEP_COLUMNS: i32 = 1;
 /// Pan step in terminal rows.
 const PAN_STEP_ROWS: i32 = 1;
 /// Maximum source pixel count for thumbnail previews.
-const PREVIEW_MAX_PIXELS: u64 = 32 * 1024 * 1024;
+const DECODE_MAX_PIXELS: u64 = 32 * 1024 * 1024;
 /// Decoder allocation budget for thumbnail previews, excluding conversion.
-const PREVIEW_DECODE_BYTES: u64 = 128 * 1024 * 1024;
+const DECODE_BUDGET_BYTES: u64 = 128 * 1024 * 1024;
 /// Largest retained thumbnail edge, regardless of caller-provided bounds.
 const PREVIEW_MAX_EDGE: u32 = 1024;
 /// Largest edge of a drawing read at full resolution, which has no pixels of
@@ -59,14 +59,12 @@ fn image_error(err: impl fmt::Display) -> Error {
     Error::Invalid(format!("image error: {err}"))
 }
 
-/// Decode an image file into RGBA pixels. A drawing keeps its own size,
-/// within 4096 pixels an edge.
+/// Decode an image file into RGBA pixels at full size, under the limits of
+/// [`DecodedImage::read`]. A drawing keeps its own size, within 4096 pixels
+/// an edge.
 fn read_rgba(path: &Path) -> Result<RgbaImage> {
-    if svg::is_svg_path(path) {
-        return full_drawing(&svg::read(path)?);
-    }
-    let image = image::open(path).map_err(image_error)?;
-    Ok(image.into_rgba8())
+    let full = DecodedImage::read(path)?.full()?;
+    Ok(Arc::unwrap_or_clone(full.image))
 }
 
 /// Rasterize a drawing at its own size, within 4096 pixels an edge.
@@ -98,10 +96,11 @@ fn preview_bounds(bounds: Size) -> Result<Size> {
     ))
 }
 
-/// An image decoded for a preview, before it is scaled.
+/// An image decoded under limits, before it is scaled for a preview or taken
+/// at full size.
 ///
 /// Reading and scaling are separate stages, so a worker that prepares
-/// previews can give up on a stale request between them. The decode itself
+/// images can give up on a stale request between them. The decode itself
 /// cannot stop part way.
 pub struct DecodedImage {
     /// The decoded source.
@@ -117,7 +116,7 @@ enum Source {
 }
 
 impl DecodedImage {
-    /// Decode the image at `path` under the preview limits: at most 32 *
+    /// Decode the image at `path` under limits: at most 32 *
     /// 1024 * 1024 source pixels and a 128 MiB decoder budget. A file named
     /// `.svg` parses as a drawing: a source of at most 16 MiB, which renders
     /// text with the system fonts, reads no file that it links to, and
@@ -131,13 +130,13 @@ impl DecodedImage {
         }
         let mut reader = image::ImageReader::open(path).map_err(image_error)?;
         let mut limits = image::Limits::default();
-        limits.max_alloc = Some(PREVIEW_DECODE_BYTES);
+        limits.max_alloc = Some(DECODE_BUDGET_BYTES);
         reader.limits(limits.clone());
         let mut decoder = reader.into_decoder().map_err(image_error)?;
         let (width, height) = decoder.dimensions();
-        if u64::from(width) * u64::from(height) > PREVIEW_MAX_PIXELS {
+        if u64::from(width) * u64::from(height) > DECODE_MAX_PIXELS {
             return Err(Error::Invalid(format!(
-                "image preview limited to {PREVIEW_MAX_PIXELS} pixels"
+                "image limited to {DECODE_MAX_PIXELS} pixels"
             )));
         }
         // ImageReader::decode reserves the output buffer before passing the
@@ -165,6 +164,18 @@ impl DecodedImage {
         self.preview(bounds, true)
     }
 
+    /// Return the image at full size, for a view that zooms it. A drawing
+    /// keeps its own size, within 4096 pixels an edge.
+    pub fn full(self) -> Result<ImagePreview> {
+        let image = match self.source {
+            Source::Raster(image) => image.into_rgba8(),
+            Source::Vector(tree) => full_drawing(&tree)?,
+        };
+        Ok(ImagePreview {
+            image: Arc::new(image),
+        })
+    }
+
     /// Scale the image to fit `bounds`, growing a drawing when `grow` is set.
     fn preview(self, bounds: Size, grow: bool) -> Result<ImagePreview> {
         let bounds = preview_bounds(bounds)?;
@@ -178,9 +189,9 @@ impl DecodedImage {
     }
 }
 
-/// An image scaled for an image view, which [`ImageView::set_preview`]
-/// shows. Clones share the pixels, so a cache of previews and the view that
-/// shows one hold a single copy.
+/// An image prepared for an image view, scaled or at full size, which
+/// [`ImageView::set_preview`] shows. Clones share the pixels, so a cache of
+/// previews and the view that shows one hold a single copy.
 #[derive(Clone)]
 pub struct ImagePreview {
     /// The scaled pixels, RGBA8 with unassociated alpha.
@@ -595,7 +606,8 @@ impl ImageView {
         self.tier
     }
 
-    /// Create a new image view widget from a file path.
+    /// Create a new image view widget from a file path, decoded at full size
+    /// under the limits of [`DecodedImage::read`].
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {
         Ok(Self::new(&read_rgba(path.as_ref())?))
     }
@@ -655,6 +667,9 @@ impl ImageView {
     }
 
     /// Show the image at `path`, returning the view to its auto-fitted state.
+    /// The decode runs under the limits of [`DecodedImage::read`]. A caller
+    /// on the UI thread should decode on a worker with [`DecodedImage::full`]
+    /// and show the result with [`Self::set_preview`].
     ///
     /// The view keeps its current image when the file cannot be read.
     pub fn set_path(&mut self, path: impl AsRef<Path>) -> Result<()> {
@@ -1014,6 +1029,57 @@ mod tests {
         Ok(())
     }
 
+    /// Return the CRC-32 of `bytes`, as a PNG chunk records it.
+    fn crc32(bytes: &[u8]) -> u32 {
+        let mut crc = !0u32;
+        for byte in bytes {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                crc = if crc & 1 == 1 {
+                    (crc >> 1) ^ 0xedb8_8320
+                } else {
+                    crc >> 1
+                };
+            }
+        }
+        !crc
+    }
+
+    #[test]
+    fn a_full_size_decode_keeps_the_pixel_limit() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut png = Vec::new();
+        RgbaImage::new(1, 1)
+            .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        // The header claims 8192 * 8192 pixels, over the limit, so the
+        // decode stops before it reads any pixel.
+        png[16..20].copy_from_slice(&8192u32.to_be_bytes());
+        png[20..24].copy_from_slice(&8192u32.to_be_bytes());
+        let crc = crc32(&png[12..29]);
+        png[29..33].copy_from_slice(&crc.to_be_bytes());
+        let path = directory.path().join("huge.png");
+        fs::write(&path, &png).unwrap();
+        for error in [
+            ImageView::from_path(&path).err(),
+            ImageView::empty().set_path(&path).err(),
+        ] {
+            let error = error.expect("a huge image fails");
+            assert!(error.to_string().contains("limited"), "{error}");
+        }
+
+        let small = directory.path().join("small.png");
+        RgbaImage::from_pixel(3, 2, Rgba([1, 2, 3, 255]))
+            .save(&small)
+            .unwrap();
+        let full = DecodedImage::read(&small).unwrap().full().unwrap();
+        assert_eq!(full.size(), Size::new(3, 2));
+        assert_eq!(
+            ImageView::from_path(&small).unwrap().image_size(),
+            Size::new(3, 2)
+        );
+    }
+
     #[test]
     fn thumbnails_preserve_small_images_and_keep_alpha_while_averaging() {
         let source = RgbaImage::from_fn(4, 2, |x, _| match x {
@@ -1117,7 +1183,7 @@ mod tests {
         image::GrayImage::new(8192, 4097).save(&path).unwrap();
         assert!(fs::metadata(&path).unwrap().len() < 16 * 1024 * 1024);
         let error = fitted(&path, Size::new(256, 256)).unwrap_err();
-        assert!(error.to_string().contains("image preview limited to"));
+        assert!(error.to_string().contains("image limited to"));
     }
 
     #[test]

@@ -79,6 +79,12 @@ impl TextBuffer {
         self.revision
     }
 
+    /// Continue the revisions of a buffer that this one replaces: the
+    /// revision becomes one past `previous`.
+    pub(crate) fn follow_revision(&mut self, previous: u64) {
+        self.revision = previous.saturating_add(1);
+    }
+
     /// Estimate retained rope text and tree storage for worker preparation.
     /// Rope capacity scans chunks; the factor covers tree metadata and slack.
     pub(crate) fn storage_bytes(&self) -> usize {
@@ -582,7 +588,7 @@ mod tests {
     use proptest::{char, prelude::*};
 
     use super::*;
-    use crate::text_buffer::{offset_of_position, position_of_offset};
+    use crate::text_buffer::{lines, offset_of_position, position_of_offset};
 
     #[test]
     fn lines_match_each_line_text() {
@@ -873,6 +879,8 @@ mod tests {
             assert_eq!(offset_of_position(text, position), offset, "{position:?}");
             assert_eq!(buffer.offset_of_position(position), offset, "{position:?}");
         }
+        assert_eq!(lines(text).collect::<Vec<_>>(), ["ab", "c界", "d\re", ""]);
+        assert_eq!(lines("").collect::<Vec<_>>(), [""]);
     }
 
     proptest! {
@@ -884,6 +892,10 @@ mod tests {
             column in 0usize..12,
         ) {
             let buffer = TextBuffer::new(text.as_str());
+            prop_assert_eq!(
+                lines(&text).collect::<Vec<_>>(),
+                buffer.lines().collect::<Vec<_>>()
+            );
             prop_assert_eq!(position_of_offset(&text, offset), buffer.position_of_offset(offset));
             let position = TextPosition::new(line, column);
             prop_assert_eq!(
