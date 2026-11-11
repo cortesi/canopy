@@ -23,6 +23,16 @@ pub struct Replies<R> {
     pub gone: bool,
 }
 
+impl<R> Default for Replies<R> {
+    /// No replies, from a worker that has not gone.
+    fn default() -> Self {
+        Self {
+            replies: Vec::new(),
+            gone: false,
+        }
+    }
+}
+
 /// One background thread with a request slot and a channel of replies.
 ///
 /// A widget keeps the worker and polls it from `Widget::poll`. A request

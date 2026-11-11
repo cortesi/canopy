@@ -4977,7 +4977,7 @@ pub mod runtime {
     }
 
     /// What a poll of a [`Worker`] found.
-    #[derive(Debug)]
+    #[derive(Debug, Default)]
     pub struct Replies<R> {
         /// The replies that arrived since the last poll, oldest first.
         pub replies: Vec<R>,
