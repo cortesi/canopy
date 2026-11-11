@@ -156,7 +156,10 @@ impl Drop for WakeOnExit {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use std::{
+        sync::mpsc,
+        time::{Duration, Instant},
+    };
 
     use super::*;
     use crate::core::{
@@ -245,7 +248,7 @@ mod tests {
     #[test]
     fn a_worker_of_parts_reports_its_ends() {
         let (requests, jobs) = request_slot::<u32>();
-        let (replies, receiver) = std::sync::mpsc::channel::<u32>();
+        let (replies, receiver) = mpsc::channel::<u32>();
         let worker = Worker::from_parts(requests, receiver);
         replies.send(7).unwrap();
         drop((jobs, replies));
