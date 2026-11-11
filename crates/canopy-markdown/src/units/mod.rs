@@ -375,6 +375,53 @@ impl NewBlock {
         block.at + block.lead.len()
     }
 
+    /// Return the byte of [`Self::text`] of `text` that byte `byte` of `text`
+    /// becomes: past the lead and the prefixes of the lines before it and
+    /// its own. A byte in a line break, or past the last line, becomes the
+    /// end of its line, and a byte of a blank line its end.
+    pub(crate) fn offset(&self, text: &str, byte: usize) -> usize {
+        if let Some(paragraph) = self.paragraph_of(text) {
+            return paragraph.offset(text, byte);
+        }
+        let body = text.strip_prefix(self.seed.as_str()).unwrap_or(text);
+        if body.trim().is_empty() {
+            return 0;
+        }
+        let trimmed = trim_breaks(text);
+        let mut out = self.lead.len();
+        let mut start = 0;
+        let lines = lines(trimmed);
+        let count = lines.len();
+        for (index, line) in lines.into_iter().enumerate() {
+            let prefix = if index == 0 {
+                &self.first
+            } else {
+                &self.prefix
+            };
+            let end = start + line.len();
+            let next = if trimmed[end..].starts_with("\r\n") {
+                end + 2
+            } else {
+                end + 1
+            };
+            if line.trim().is_empty() {
+                let shown = prefix.trim_end_matches([' ', '\t']).len();
+                if byte < next || index + 1 == count {
+                    return out + shown;
+                }
+                out += shown;
+            } else {
+                if byte < next || index + 1 == count {
+                    return out + prefix.len() + byte.clamp(start, end) - start;
+                }
+                out += prefix.len() + line.len();
+            }
+            out += self.terminator.len();
+            start = next;
+        }
+        out
+    }
+
     /// Return the source text that puts a block of `text` here, or an empty
     /// text when `text` holds nothing past the seed. The first line takes the
     /// first prefix and each other line the prefix, and a blank line takes

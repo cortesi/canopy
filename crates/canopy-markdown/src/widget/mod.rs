@@ -925,6 +925,15 @@ impl Markdown {
     pub fn block_draft(&self, ctx: &dyn ViewContext) -> Option<BlockEdit> {
         slot::draft(self, ctx)
     }
+    /// Return the byte of the reader's text that UTF-8 byte `offset` of the
+    /// block editor's text takes once the edit commits: the start of
+    /// [`Self::block_draft`]'s range, plus the lead and the line prefixes of
+    /// a new block, such as its quote markers. A host uses it to find the
+    /// editor's cursor in its own copy of the text. Return `None` while no
+    /// editor is open.
+    pub fn block_source_offset(&self, ctx: &dyn ViewContext, offset: usize) -> Option<usize> {
+        slot::source_offset(self, ctx, offset)
+    }
     /// Return the block editor while it is open, so a host can put text in
     /// it. A committed editor that still shows while its text's layout
     /// prepares is closed.

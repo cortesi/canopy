@@ -333,6 +333,42 @@ fn appended(text: &str, index: usize, typed: &str) -> String {
 }
 
 #[test]
+fn each_byte_of_a_new_block_maps_to_the_same_byte_of_its_source() {
+    let cases: &[(&str, usize, &str)] = &[
+        ("a\n\nb\n", 0, "new"),
+        ("> a\n> b\n", 0, "x\n\ny"),
+        ("- a\n- b\n", 0, "new\nmore"),
+        ("> - a\n", 0, "one\ntwo"),
+        ("a\r\n\r\nb\r\n", 0, "x\r\ny"),
+    ];
+    for &(text, index, typed) in cases {
+        let document = testing::parse(text);
+        let block = NewBlock::after(&document, &edit_units(&document)[index]);
+        let source = block.text(typed);
+        for (byte, c) in typed.char_indices() {
+            let mapped = block.offset(typed, byte);
+            if c == '\n' || c == '\r' {
+                assert!(
+                    source[mapped..].starts_with(['\n', '\r']),
+                    "a break in {typed:?} at {byte} maps to the end of its line in {source:?}"
+                );
+            } else {
+                assert_eq!(
+                    source[mapped..].chars().next(),
+                    Some(c),
+                    "{typed:?} at {byte} in {source:?}"
+                );
+            }
+        }
+        assert_eq!(
+            block.offset(typed, typed.len()),
+            source.trim_end_matches(['\n', '\r']).len(),
+            "the end of {typed:?} in {source:?}"
+        );
+    }
+}
+
+#[test]
 fn a_new_block_lies_in_the_containers_of_the_unit_before_it() {
     let cases: &[(&str, usize, &str, &str)] = &[
         ("a\n\nb\n", 0, "new", "a\n\nnew\n\nb\n"),

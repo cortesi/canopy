@@ -2,7 +2,7 @@
 //! commands, as a host with no bindings of its own drives it.
 
 use canopy::{render::TermBuf, runtime::NoticeLevel, testing::harness::Harness};
-use canopy_widgets::editor::{EditMode, EditorConfig, TextPosition, ViMode};
+use canopy_widgets::editor::{self, EditMode, EditorConfig, TextPosition, ViMode};
 
 use super::{
     cursor_tests::{bar_rows, marked, view},
@@ -515,6 +515,44 @@ fn the_draft_of_a_new_block_is_its_source() {
     // After a list item, the new block is the next item of the tight list.
     assert_eq!(edit.range, at..at);
     assert_eq!(edit.text, "\n- more");
+}
+
+#[test]
+fn a_byte_of_a_new_block_maps_to_its_byte_in_the_source() {
+    for (document, typed) in [("para\n", "xy\nzw"), ("> quote\n", "xy\nzw")] {
+        let (mut harness, manual) = editing(document, EditMode::Vi, 40, 20);
+        settle(&mut harness, &manual);
+        press(&mut harness, "a");
+        for c in typed.chars() {
+            if c == '\n' {
+                press(&mut harness, "Enter");
+            } else {
+                harness.key(c).unwrap();
+            }
+        }
+        service(&mut harness);
+        let (mapped, summed) = reader(&mut harness, |reader, ctx| {
+            let editor = reader.block_editor().unwrap();
+            let (offset, cursor) = ctx.with_widget(editor, |editor: &Editor| {
+                Ok((editor.offset_of_position(editor.cursor()), editor.cursor()))
+            })?;
+            let edit = reader.block_draft(ctx).unwrap();
+            Ok((
+                reader.block_source_offset(ctx, offset),
+                edit.range.start + editor::offset_of_position(&edit.text, cursor),
+            ))
+        });
+        press(&mut harness, "Escape");
+        press(&mut harness, "Escape");
+        settle(&mut harness, &manual);
+        let source = reader(&mut harness, |reader, _| Ok(reader.accepted_source()));
+        let last = typed.lines().last().unwrap();
+        let expected = source.rfind(last).unwrap() + last.len();
+        assert_eq!(mapped, Some(expected), "{document:?} became {source:?}");
+        // A host that counts the cursor's position in the draft misses the
+        // lead and the prefixes.
+        assert_ne!(summed, expected, "{document:?}");
+    }
 }
 
 #[test]

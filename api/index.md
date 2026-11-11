@@ -107,7 +107,7 @@ Interactive Markdown reading and exact source viewing for Canopy.
 - Declared features: default, syntax, testing
 - Workspace dependencies: canopy, canopy-widgets, canopy-xmark
 - Workspace dependents: gyms
-- Items: 371
+- Items: 372
 - Exposes: canopy, canopy-widgets, canopy-xmark
 
 ## canopy-options

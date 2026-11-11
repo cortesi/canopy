@@ -165,6 +165,23 @@ impl OpenSlot {
         }
     }
 
+    /// Return the source byte that byte `offset` of the editor's `text`
+    /// becomes in the edit: past the start of the range, and for a new
+    /// block, past its lead and the prefixes of its lines.
+    fn source_byte(&self, text: &str, offset: usize) -> usize {
+        let mut offset = offset.min(text.len());
+        while !text.is_char_boundary(offset) {
+            offset -= 1;
+        }
+        let draft = in_terminator(text, self.terminator);
+        let in_draft = in_terminator(&text[..offset], self.terminator).len();
+        self.range.start
+            + self
+                .new_block
+                .as_ref()
+                .map_or(in_draft, |block| block.offset(&draft, in_draft))
+    }
+
     /// Return the source byte where the first unit of an edit of `text`
     /// starts: the start of the range, or of a new block's first line.
     fn first_byte(&self, text: &str) -> usize {
@@ -806,6 +823,20 @@ pub(super) fn draft(reader: &Markdown, ctx: &dyn ViewContext) -> Option<BlockEdi
         .with_widget(slot.editor, |editor: &Editor| Ok(slot.draft(editor)))
         .ok()?;
     Some(slot.edit(&draft))
+}
+
+/// Return the source byte that byte `offset` of the open editor's text
+/// becomes in its edit.
+pub(super) fn source_offset(
+    reader: &Markdown,
+    ctx: &dyn ViewContext,
+    offset: usize,
+) -> Option<usize> {
+    let slot = reader.slot.open()?;
+    ctx.with_widget(slot.editor, |editor: &Editor| {
+        Ok(slot.source_byte(&editor.text(), offset))
+    })
+    .ok()
 }
 
 /// Ask whether to drop the changes in the slot.
