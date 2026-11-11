@@ -248,11 +248,30 @@ impl Core {
         }
         let candidate = match lost {
             Some(hint) => self.recovery_candidate(Some(hint), require_view),
-            None => {
-                find_next_focus(self, self.root, focus).or_else(|| first_focusable(self, self.root))
-            }
+            None => self
+                .named_focus(focus, require_view)
+                .or_else(|| find_next_focus(self, self.root, focus))
+                .or_else(|| first_focusable(self, self.root)),
         };
         self.transition_focus(candidate)
+    }
+
+    /// Return the node that takes the focus of `node`, as the widget's
+    /// `focus_target` names it: the target, or its first descendant that
+    /// takes focus. A target outside the descendants of `node` names
+    /// nothing.
+    fn named_focus(&self, node: NodeId, require_view: bool) -> Option<NodeId> {
+        let target = focus_target(self, node)?;
+        if target == node || !self.is_ancestor_or_self(node, target) {
+            return None;
+        }
+        let accept = Candidates {
+            require_view,
+            admit_taken: false,
+        };
+        self.subtree_pre_order(target)
+            .into_iter()
+            .find(|id| accept.admits(self, *id))
     }
 
     /// Choose where focus goes after it left the tree: the first hint
@@ -554,6 +573,14 @@ fn focus_acceptance(core: &Core, node_id: NodeId) -> Option<bool> {
     let widget = WidgetReadGuard::borrow(node_id, node).ok()?;
     let ctx = CoreViewContext::new(core, node_id);
     Some(widget.widget().accept_focus(&ctx))
+}
+
+/// Return the node that the widget of `node_id` names to take its focus.
+fn focus_target(core: &Core, node_id: NodeId) -> Option<NodeId> {
+    let node = core.nodes.get(node_id)?;
+    let widget = WidgetReadGuard::borrow(node_id, node).ok()?;
+    let ctx = CoreViewContext::new(core, node_id);
+    widget.widget().focus_target(&ctx)
 }
 
 /// Return whether focus may occupy this node apart from widget acceptance: it

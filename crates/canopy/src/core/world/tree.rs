@@ -180,6 +180,8 @@ impl Core {
         widget.layout().validate()?;
 
         let lost = self.delete_subtree(node_id, "replace subtree", true)?;
+        let overlays = self.remove_owned_overlays(Some(node_id))?;
+        let lost = lost.or(overlays);
         self.clear_identity(node_id)?;
         let incarnation = self.next_generation();
         self.nodes[node_id].replace(widget, incarnation);
@@ -862,7 +864,45 @@ impl Core {
         }
         self.nodes.require(root_id)?;
         let lost = self.delete_subtree(root_id, "remove subtree", false)?;
-        self.repair_focus_and_capture(lost)
+        let overlays = self.remove_owned_overlays(None)?;
+        self.repair_focus_and_capture(lost.or(overlays))
+    }
+
+    /// Set the owner of the overlay node `overlay`, whose removal, or the
+    /// replacement of its widget, removes the overlay node too.
+    pub(crate) fn set_overlay_owner(&mut self, overlay: NodeId, owner: NodeId) -> Result<()> {
+        self.nodes.require(owner)?;
+        self.nodes.require_mut(overlay)?.overlay_owner = Some(owner);
+        Ok(())
+    }
+
+    /// Remove the overlay nodes whose owner is gone, or is `replaced`, and
+    /// the overlay nodes that those own in turn. Return the focus recovery
+    /// candidates when a removed node held focus.
+    fn remove_owned_overlays(
+        &mut self,
+        replaced: Option<NodeId>,
+    ) -> Result<Option<FocusRecoveryHint>> {
+        let mut lost = None;
+        loop {
+            let orphan = self.nodes[self.root]
+                .children
+                .iter()
+                .copied()
+                .find(|child| {
+                    self.nodes
+                        .get(*child)
+                        .and_then(|node| node.overlay_owner)
+                        .is_some_and(|owner| {
+                            Some(owner) == replaced || !self.nodes.contains_key(owner)
+                        })
+                });
+            let Some(orphan) = orphan else {
+                return Ok(lost);
+            };
+            let hint = self.delete_subtree(orphan, "remove overlay", false)?;
+            lost = lost.or(hint);
+        }
     }
 
     /// Run removal hooks for the subtree at `root`, then delete its nodes.

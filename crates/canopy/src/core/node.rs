@@ -107,6 +107,8 @@ pub struct Node {
     /// Effects to apply to this node and descendants during rendering.
     /// Empty until an effect is pushed; `Vec::new()` does not allocate.
     pub(crate) effects: Vec<Effect>,
+    /// The node that added this overlay node, whose removal removes it too.
+    pub(crate) overlay_owner: Option<NodeId>,
 }
 
 impl Node {
@@ -172,6 +174,7 @@ impl Node {
             lifecycle: Lifecycle::Unmounted,
             layout_dirty: false,
             effects: Vec::new(),
+            overlay_owner: None,
         }
     }
 
@@ -242,6 +245,7 @@ impl Node {
             hidden: self.hidden,
             layout_dirty: self.layout_dirty,
             effects: mem::take(&mut self.effects),
+            overlay_owner: self.overlay_owner,
             ..fresh
         };
     }

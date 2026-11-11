@@ -219,6 +219,16 @@ pub trait Context: ViewContext + Context {
     /// Open a modal that owns focus, input admission, and visual effects.
     fn open_modal(&mut self, options: ModalOptions) -> crate::error::Result<ModalToken>;
 
+    /// Make this node the owner of the overlay node `overlay`, a child of
+    /// the root. When this node is removed, or its widget replaced, the
+    /// overlay node is removed too. The root owns nothing, since it is never
+    /// removed.
+    ///
+    /// # Errors
+    ///
+    /// Fails when either node does not exist.
+    fn own_overlay(&mut self, overlay: NodeId) -> crate::error::Result<()>;
+
     /// Run `call` when the outermost dispatch completes, after every callback
     /// that led to this one has returned.
     ///
@@ -434,6 +444,9 @@ pub trait ContextExt: Context + ViewContextExt {
     /// owner the current top modal admits, even when the owner is itself a
     /// modal, such as a question over a picker. Opening it shows it, and
     /// closing it hides it again.
+    ///
+    /// The calling node owns the overlay node, as [`Context::own_overlay`]
+    /// describes, so it need not remove the node itself.
     fn add_modal<W: 'static + Widget>(&mut self, widget: W) -> crate::error::Result<TypedId<W>> {}
 
     /// Add `widget` as the keyed child `K` of `parent` and return its typed
@@ -772,6 +785,18 @@ pub trait Widget: Any {
     /// `content` is this node's content size (outer minus padding).
     fn canvas(&self, content: Size, _ctx: &CanvasContext<'_>) -> Size {}
 
+    /// Return the descendant that takes this widget's focus, for a widget
+    /// that takes none itself.
+    ///
+    /// A focus that rests on a widget that refuses it moves on when the
+    /// runtime repairs it. The repair goes to the returned node, or to its
+    /// first descendant that takes focus. With no such node, as by default,
+    /// it goes to the next node in pre-order that takes focus, which is
+    /// usually the widget's first focusable descendant. A container uses this
+    /// to give its keys to the child that has them, wherever a host focuses
+    /// it.
+    fn focus_target(&self, _ctx: &dyn ViewContext) -> Option<NodeId> {}
+
     /// Predict this widget's result for `key` without changing any state.
     ///
     /// `ctx` is a read-only view bound to this widget's node. Its focus
@@ -1053,8 +1078,9 @@ impl Canopy {
     /// Drop the root's hold on `mode`, which removes it wherever it is in the
     /// stack unless a widget also holds it.
     ///
-    /// Leaving a mode that the root does not hold changes nothing. An empty name is an
-    /// error, and so is the name of a menu that waits for its key.
+    /// Leaving a mode that the root does not hold changes nothing. An empty
+    /// name is an error, and so is the name of a menu that waits for its
+    /// key.
     pub fn leave_mode(&mut self, mode: &str) -> crate::error::Result<()>;
 
     /// Return the key bindings `menu` would offer from a node or the

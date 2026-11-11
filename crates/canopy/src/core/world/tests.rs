@@ -1273,6 +1273,103 @@ fn two_focusable_root_children() -> Result<(Core, NodeId, NodeId)> {
     Ok((core, first, second))
 }
 
+/// A container that takes no focus itself, and names the node that takes
+/// its focus, if any.
+struct Keyholder {
+    target: SharedTarget,
+}
+
+impl Widget for Keyholder {
+    fn focus_target(&self, _ctx: &dyn ViewContext) -> Option<NodeId> {
+        self.target.get()
+    }
+}
+
+/// The node that a [`Keyholder`] names, which a test changes.
+type SharedTarget = Rc<Cell<Option<NodeId>>>;
+
+/// Build a laid-out core whose root holds a container that takes no focus,
+/// with two focusable children.
+fn container_of_two() -> Result<(Core, NodeId, [NodeId; 2], SharedTarget)> {
+    let mut core = Core::new();
+    let target = Rc::new(Cell::new(None));
+    let container = core.create_detached(Keyholder {
+        target: Rc::clone(&target),
+    })?;
+    let first = core.create_detached(FocusableWidget)?;
+    let second = core.create_detached(FocusableWidget)?;
+    core.set_children(container, vec![first, second])?;
+    core.set_children(core.root, vec![container])?;
+    for node in [core.root, container, first, second] {
+        core.set_layout_of(node, Layout::fill())?;
+    }
+    core.update_layout(Size::new(10, 10))?;
+    Ok((core, container, [first, second], target))
+}
+
+#[test]
+fn focus_on_a_container_rests_on_the_node_it_names() -> Result<()> {
+    // A container that names no target passes its focus to its first
+    // focusable descendant.
+    let (mut core, container, [first, second], target) = container_of_two()?;
+    core.set_focus(container)?;
+    core.ensure_focus_valid()?;
+    assert_eq!(core.focus, Some(first));
+
+    // A container that names a target passes its focus there.
+    target.set(Some(second));
+    core.set_focus(container)?;
+    core.ensure_focus_valid()?;
+    assert_eq!(core.focus, Some(second));
+
+    // A target that takes no focus passes it on to its own descendants, and
+    // then to the search that follows the container.
+    target.set(Some(container));
+    core.set_focus(container)?;
+    core.ensure_focus_valid()?;
+    assert_eq!(core.focus, Some(first), "a container that names itself");
+    Ok(())
+}
+
+/// Add an overlay node from the context of `owner`, with the overlay node
+/// that it adds in turn, and return both.
+fn owned_overlays(core: &mut Core, owner: NodeId) -> Result<(NodeId, NodeId)> {
+    let mut context = CoreContext::new(core, owner);
+    let overlay: NodeId = context.add_modal(FocusableWidget)?.into();
+    let mut context = CoreContext::new(core, overlay);
+    let inner: NodeId = context.add_modal(FocusableWidget)?.into();
+    Ok((overlay, inner))
+}
+
+#[test]
+fn an_overlay_node_leaves_with_the_node_that_added_it() -> Result<()> {
+    let (mut core, first, second) = two_focusable_root_children()?;
+    let (overlay, inner) = owned_overlays(&mut core, first)?;
+    let (kept, _) = owned_overlays(&mut core, second)?;
+    assert!(core.nodes[overlay].hidden, "an overlay node starts hidden");
+
+    core.remove_subtree(first)?;
+    for node in [first, overlay, inner] {
+        assert!(!core.nodes.contains_key(node), "{node:?} is gone");
+    }
+    assert!(
+        core.nodes.contains_key(kept),
+        "another owner's overlay stays"
+    );
+
+    // A replaced widget's overlays go too, since the new widget did not add
+    // them.
+    core.replace_subtree(second, FocusableWidget)?;
+    assert!(!core.nodes.contains_key(kept));
+    assert!(core.validate_invariants().is_ok());
+
+    // The root owns nothing, since it is never removed.
+    let root = core.root;
+    let (by_root, _) = owned_overlays(&mut core, root)?;
+    assert_eq!(core.nodes[by_root].overlay_owner, None);
+    Ok(())
+}
+
 #[test]
 fn remove_subtree_recovers_focus_to_next() -> Result<()> {
     let (mut core, first, second) = two_focusable_root_children()?;

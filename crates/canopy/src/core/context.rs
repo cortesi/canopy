@@ -884,6 +884,16 @@ pub trait Context: ViewContext + sealed::Context {
     /// key. A failed call changes nothing.
     fn enter_mode(&mut self, mode: &str) -> Result<()>;
 
+    /// Make this node the owner of the overlay node `overlay`, a child of
+    /// the root. When this node is removed, or its widget replaced, the
+    /// overlay node is removed too. The root owns nothing, since it is never
+    /// removed.
+    ///
+    /// # Errors
+    ///
+    /// Fails when either node does not exist.
+    fn own_overlay(&mut self, overlay: NodeId) -> Result<()>;
+
     /// Drop this node's hold on the keymap `mode`. The mode stays held while
     /// another node holds it. Leaving a mode that this node does not hold
     /// changes nothing.
@@ -1003,10 +1013,14 @@ pub trait ContextExt: Context + ViewContextExt {
     /// owner the current top modal admits, even when the owner is itself a
     /// modal, such as a question over a picker. Opening it shows it, and
     /// closing it hides it again.
+    ///
+    /// The calling node owns the overlay node, as [`Context::own_overlay`]
+    /// describes, so it need not remove the node itself.
     fn add_modal<W: Widget + 'static>(&mut self, widget: W) -> Result<TypedId<W>> {
         let root = self.root_id();
         let node = self.add_child(root, widget)?;
         self.set_hidden(node.into(), true)?;
+        self.own_overlay(node.into())?;
         Ok(node)
     }
 
@@ -1496,6 +1510,13 @@ impl Context for NodeCtx<&mut Core> {
 
     fn enter_mode(&mut self, mode: &str) -> Result<()> {
         self.core.enter_mode(mode, self.node_id)
+    }
+
+    fn own_overlay(&mut self, overlay: NodeId) -> Result<()> {
+        if self.node_id == self.core.root {
+            return Ok(());
+        }
+        self.core.set_overlay_owner(overlay, self.node_id)
     }
 
     fn leave_mode(&mut self, mode: &str) -> Result<()> {

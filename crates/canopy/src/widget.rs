@@ -152,6 +152,20 @@ pub trait Widget: Any {
         None
     }
 
+    /// Return the descendant that takes this widget's focus, for a widget
+    /// that takes none itself.
+    ///
+    /// A focus that rests on a widget that refuses it moves on when the
+    /// runtime repairs it. The repair goes to the returned node, or to its
+    /// first descendant that takes focus. With no such node, as by default,
+    /// it goes to the next node in pre-order that takes focus, which is
+    /// usually the widget's first focusable descendant. A container uses this
+    /// to give its keys to the child that has them, wherever a host focuses
+    /// it.
+    fn focus_target(&self, _ctx: &dyn ViewContext) -> Option<NodeId> {
+        None
+    }
+
     /// Attempt to focus this widget.
     ///
     /// Widgets can use the provided context to query their tree state (e.g.,
