@@ -69,6 +69,12 @@ struct GallerySection {
     scale: Option<f32>,
     /// Title of the viewer.
     title: Option<String>,
+    /// Command that builds the fixture of a run in the directory given as
+    /// its last argument, before the app starts.
+    setup: Option<Vec<String>>,
+    /// Command that serves the gallery, in place of `[app].headless`.
+    /// `{fixture}` in an argument stands for the fixture directory.
+    headless: Option<Vec<String>>,
 }
 
 /// Gallery settings after defaults and overrides.
@@ -125,6 +131,15 @@ impl LoadedConfig {
                 file: FileConfig::default(),
                 config_dir: cwd,
             })
+        }
+    }
+
+    /// Return a config of `toml`, resolved against `dir`, for a test.
+    #[cfg(test)]
+    pub(crate) fn from_toml(toml: &str, dir: &Path) -> Self {
+        Self {
+            file: toml::from_str(toml).expect("a test config parses"),
+            config_dir: dir.to_path_buf(),
         }
     }
 
@@ -254,6 +269,47 @@ impl LoadedConfig {
         }
     }
 
+    /// Return the command that builds the gallery's fixture in `fixture`, or
+    /// none when `[gallery].setup` names none. It runs as the app does, with
+    /// the directory as its last argument.
+    pub fn gallery_setup(&self, fixture: &Path) -> Option<Result<ResolvedCommand>> {
+        let setup = self.file.gallery.as_ref()?.setup.clone()?;
+        let argv = setup
+            .into_iter()
+            .chain([fixture.display().to_string()])
+            .collect();
+        Some(ResolvedCommand::new(argv, self.app_cwd(), self.app_env()))
+    }
+
+    /// Build the command that serves the gallery: the override, else
+    /// `[gallery].headless`, else `[app].headless`. With a `fixture`, each
+    /// `{fixture}` in an argument becomes its path.
+    pub fn gallery_command(
+        &self,
+        override_command: &[String],
+        fixture: Option<&Path>,
+    ) -> Result<ResolvedCommand> {
+        let configured = self
+            .file
+            .gallery
+            .as_ref()
+            .and_then(|gallery| gallery.headless.clone());
+        let Some(argv) = (!override_command.is_empty())
+            .then(|| override_command.to_vec())
+            .or(configured)
+        else {
+            return self.headless_command(&[]);
+        };
+        let argv = argv
+            .into_iter()
+            .map(|arg| match fixture {
+                Some(fixture) => arg.replace("{fixture}", &fixture.display().to_string()),
+                None => arg,
+            })
+            .collect();
+        ResolvedCommand::new(argv, self.app_cwd(), self.app_env())
+    }
+
     /// Resolve the idle time after which `canopyctl mcp` shuts down its app.
     pub fn idle_shutdown_after(&self) -> Duration {
         Duration::from_secs(
@@ -349,6 +405,50 @@ mod tests {
     use std::ffi::OsStr;
 
     use super::*;
+
+    /// Return a config of `toml`, resolved against `dir`.
+    fn config(toml: &str, dir: &Path) -> LoadedConfig {
+        LoadedConfig::from_toml(toml, dir)
+    }
+
+    #[test]
+    fn a_gallery_command_names_its_fixture() {
+        let dir = PathBuf::from("/project");
+        let fixture = Path::new("/tmp/fixture");
+        let both = config(
+            r#"
+            [app]
+            headless = ["app", "smoke"]
+            [gallery]
+            setup = ["build"]
+            headless = ["app", "mcp", "{fixture}/tree"]
+            "#,
+            &dir,
+        );
+        let setup = both.gallery_setup(fixture).unwrap().unwrap();
+        assert_eq!(setup.to_string(), "build /tmp/fixture");
+        assert_eq!(
+            both.gallery_command(&[], Some(fixture))
+                .unwrap()
+                .to_string(),
+            "app mcp /tmp/fixture/tree"
+        );
+        assert_eq!(
+            both.gallery_command(&["other".to_owned()], Some(fixture))
+                .unwrap()
+                .to_string(),
+            "other",
+            "the command after -- wins"
+        );
+
+        let plain = config("[app]\nheadless = [\"app\", \"smoke\"]\n", &dir);
+        assert!(plain.gallery_setup(fixture).is_none());
+        assert_eq!(
+            plain.gallery_command(&[], None).unwrap().to_string(),
+            "app smoke",
+            "with no gallery command, the app's serves"
+        );
+    }
 
     #[test]
     fn a_command_of_any_program_drops_the_launching_package_identity() {

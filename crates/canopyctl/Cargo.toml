@@ -18,6 +18,7 @@ image = { workspace = true, features = ["png"] }
 ruau-script-api = { workspace = true, features = ["schema"] }
 serde.workspace = true
 serde_json.workspace = true
+tempfile.workspace = true
 tmcp.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process", "net", "time", "sync", "io-util"] }
 toml = "1.1.6"

@@ -329,6 +329,22 @@ The `[gallery]` section of `.canopyctl.toml` sets the defaults:
 | `font_size` | `14` | Font size in pixels, before the scale. |
 | `scale` | `2` | Image pixels for each pixel of the font size. |
 | `title` | the config directory name | Title of the viewer. |
+| `setup` | none | Command that builds the run's fixture. |
+| `headless` | `[app].headless` | Command that serves the gallery. |
+
+An app whose screens need files on disk builds them with `setup`. Before the
+app starts, `canopyctl` makes a temporary directory, runs `setup` with the
+directory as its last argument, and waits for it to end. `{fixture}` in an
+argument of `headless` stands for the directory, so the app can serve it. The
+directory goes after the run. A failed setup fails the run before the app
+starts. The setup can also build the app, so it serves within the startup
+deadline:
+
+```toml
+[gallery]
+setup = ["cargo", "run", "-p", "xtask", "--", "gallery-fixture"]
+headless = ["cargo", "run", "-p", "app", "--", "mcp", "{fixture}/tree"]
+```
 
 `--size`, `--suite`, and `--out` replace the defaults for one run. Explicit
 script paths run only those scripts, and keep the pages of the other scripts

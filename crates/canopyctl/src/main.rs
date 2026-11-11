@@ -34,6 +34,7 @@ use canopy_mcp::{
 use canopy_term::{ReadySignal, TermHost};
 use clap::{Args, Parser, Subcommand};
 use ruau_script_api::{ScriptApiQuery, ScriptApiResponse};
+use tempfile::TempDir;
 use tmcp::{ToolError, ToolResult, mcp_server, schema::CallToolResult, tool_params};
 
 use crate::{
@@ -690,9 +691,37 @@ async fn gallery_command(config: LoadedConfig, args: GalleryArgs) -> Result<()> 
         settings.sizes = args.sizes;
     }
     settings.timeout_ms = args.timeout_ms.or(settings.timeout_ms);
-    let command = config.headless_command(&args.command)?;
+    let fixture = gallery_fixture(&config).await?;
+    let command = config.gallery_command(&args.command, fixture.as_ref().map(TempDir::path))?;
     let session = Session::spawn_headless(&command).await?;
-    gallery::run(&session, &settings, args.scripts).await
+    let result = gallery::run(&session, &settings, args.scripts).await;
+    // The app goes before its fixture does.
+    drop(session);
+    drop(fixture);
+    result
+}
+
+/// Build the fixture of a gallery run with `[gallery].setup`, in a new
+/// temporary directory that goes when the returned value drops. Return none
+/// when the config names no setup.
+async fn gallery_fixture(config: &LoadedConfig) -> Result<Option<TempDir>> {
+    let directory = tempfile::Builder::new()
+        .prefix("canopyctl-gallery-")
+        .tempdir()
+        .context("create the gallery fixture directory")?;
+    let Some(setup) = config.gallery_setup(directory.path()) else {
+        return Ok(None);
+    };
+    let setup = setup?;
+    let status = setup
+        .to_command()
+        .status()
+        .await
+        .with_context(|| format!("run the gallery setup: {setup}"))?;
+    if !status.success() {
+        bail!("the gallery setup failed ({status}): {setup}");
+    }
+    Ok(Some(directory))
 }
 
 /// Validate a screen size and keep its text.
@@ -1009,6 +1038,34 @@ mod tests {
     use futures::{StreamExt, executor};
     use tmcp::schema::ToolResultMode;
     use tokio::{runtime::Builder, task};
+
+    #[tokio::test]
+    async fn a_gallery_fixture_lives_for_its_run() -> Result<()> {
+        let project = tempfile::tempdir()?;
+        let config = LoadedConfig::from_toml(
+            r#"
+            [gallery]
+            setup = ["sh", "-c", "touch \"$1/made\"", "setup"]
+            "#,
+            project.path(),
+        );
+        let fixture = gallery_fixture(&config)
+            .await?
+            .expect("the setup builds a fixture");
+        let path = fixture.path().to_path_buf();
+        assert!(
+            path.join("made").is_file(),
+            "the setup ran in the directory"
+        );
+        drop(fixture);
+        assert!(!path.exists(), "the directory goes after the run");
+
+        let failing = LoadedConfig::from_toml("[gallery]\nsetup = [\"false\"]\n", project.path());
+        assert!(gallery_fixture(&failing).await.is_err());
+        let none = LoadedConfig::from_toml("", project.path());
+        assert!(gallery_fixture(&none).await?.is_none());
+        Ok(())
+    }
 
     use super::*;
     use crate::{
