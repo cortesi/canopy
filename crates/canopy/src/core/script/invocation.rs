@@ -252,7 +252,7 @@ impl LuauHost {
             origin,
             origin_incarnation: incarnation,
             label,
-            options: invocation_options(None, &print_lines),
+            options: invocation_options(&print_lines),
             reporting_timeout: None,
             print_lines,
             logs: Vec::new(),

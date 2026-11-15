@@ -1,6 +1,6 @@
 //! Command dispatch and call-into-Luau helpers.
 
-use std::{result::Result as StdResult, time::Duration};
+use std::result::Result as StdResult;
 
 use ruau::{
     session::RootHandle,
@@ -116,22 +116,17 @@ pub(super) enum CallTarget {
 
 impl CallTarget {
     /// Resolve the callable inside the given scope.
-    pub(super) fn resolve<'s>(
-        &self,
-        scope: &Scope<'s>,
-        label: &str,
-        timeout: Option<Duration>,
-    ) -> Result<Function<'s>> {
+    pub(super) fn resolve<'s>(&self, scope: &Scope<'s>, label: &str) -> Result<Function<'s>> {
         match self {
             Self::Root(root) => root
                 .resolve(scope)
-                .map_err(|error| retained_runtime_error_to_canopy(&error, label, timeout)),
+                .map_err(|error| retained_runtime_error_to_canopy(&error, label, None)),
             Self::Stored(StoredFunctionTarget::Pending(stashed)) => scope
                 .fetch_function(stashed)
-                .map_err(|error| runtime_error_to_canopy(&error, label, timeout)),
+                .map_err(|error| runtime_error_to_canopy(&error, label, None)),
             Self::Stored(StoredFunctionTarget::Retained(handle)) => handle
                 .resolve(scope)
-                .map_err(|error| retained_runtime_error_to_canopy(&error, label, timeout)),
+                .map_err(|error| retained_runtime_error_to_canopy(&error, label, None)),
         }
     }
 }
@@ -141,7 +136,6 @@ pub(super) fn call_in_scope<'s>(
     scope: &Scope<'s>,
     function: Function<'s>,
     label: &str,
-    timeout: Option<Duration>,
 ) -> Result<ArgValue> {
     match scope.call_protected::<_, MultiValue>(function, ()) {
         Ok(Ok(values)) => {
@@ -153,7 +147,7 @@ pub(super) fn call_in_scope<'s>(
             scoped_to_arg_value(scope, value)
                 .map_err(|message| error::Error::script(format!("{label}: {message}")))
         }
-        Ok(Err(script_error)) => Err(script_error_to_canopy(scope, &script_error, label, timeout)),
-        Err(runtime_error) => Err(runtime_error_to_canopy(&runtime_error, label, timeout)),
+        Ok(Err(script_error)) => Err(script_error_to_canopy(scope, &script_error, label)),
+        Err(runtime_error) => Err(runtime_error_to_canopy(&runtime_error, label, None)),
     }
 }

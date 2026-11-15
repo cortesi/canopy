@@ -525,13 +525,10 @@ fn invocation_limits(timeout: Option<Duration>) -> Limits {
 }
 
 /// Build per-invocation options and capture script output for host diagnostics.
-fn invocation_options(
-    timeout: Option<Duration>,
-    print_lines: &Arc<Mutex<Vec<String>>>,
-) -> CallOptions {
+fn invocation_options(print_lines: &Arc<Mutex<Vec<String>>>) -> CallOptions {
     let sink_lines = Arc::clone(print_lines);
     CallOptions::new()
-        .limits(invocation_limits(timeout))
+        .limits(invocation_limits(None))
         .print_sink_with_quota(
             Box::new(move |bytes: &[u8]| {
                 let line = String::from_utf8_lossy(bytes).trim_end().to_string();
@@ -1108,7 +1105,7 @@ impl LuauHost {
         })?;
         let node_id = node_id.into();
         let label = format!("script {sid} on node {node_id:?}");
-        self.run_target_in_scope(scope, node_id, &CallTarget::Root(root), &label, None)
+        self.run_target_in_scope(scope, node_id, &CallTarget::Root(root), &label)
             .map(|_| ())
     }
 
@@ -1131,18 +1128,17 @@ impl LuauHost {
         node_id: NodeId,
         target: StoredFunctionTarget,
         label: &str,
-        timeout: Option<Duration>,
     ) -> Result<ArgValue> {
         let mut runtime = self.runtime_mut("script VM re-entered without a live scope")?;
         let target = CallTarget::Stored(target);
         let print_lines = Arc::new(Mutex::new(Vec::new()));
-        let options = invocation_options(timeout, &print_lines);
+        let options = invocation_options(&print_lines);
         let mut outcome: Option<Result<ArgValue>> = None;
         let step = runtime.step_with_context(canopy, &options, |scope| {
-            outcome = Some(self.run_target_in_scope(scope, node_id, &target, label, timeout));
+            outcome = Some(self.run_target_in_scope(scope, node_id, &target, label));
             Ok(())
         });
-        let synchronized = self.synchronize_closures(&mut runtime, label, timeout);
+        let synchronized = self.synchronize_closures(&mut runtime, label, None);
         self.push_print_lines(&print_lines);
         match step {
             Ok(()) => {
@@ -1151,7 +1147,7 @@ impl LuauHost {
                     Err(error::Error::script(format!("{label} produced no result")))
                 })
             }
-            Err(error) => Err(retained_runtime_error_to_canopy(&error, label, timeout)),
+            Err(error) => Err(retained_runtime_error_to_canopy(&error, label, None)),
         }
     }
 
@@ -1162,12 +1158,11 @@ impl LuauHost {
         node_id: NodeId,
         target: &CallTarget,
         label: &str,
-        timeout: Option<Duration>,
     ) -> Result<ArgValue> {
         let _guard = ScriptOriginGuard::push(scope, node_id)
-            .map_err(|err| runtime_error_to_canopy(&err, label, timeout))?;
-        let function = target.resolve(scope, label, timeout)?;
-        call_in_scope(scope, function, label, timeout)
+            .map_err(|err| runtime_error_to_canopy(&err, label, None))?;
+        let function = target.resolve(scope, label)?;
+        call_in_scope(scope, function, label)
     }
 
     /// Promote and release callback handles between retained-runtime
@@ -1223,8 +1218,7 @@ impl LuauHost {
     ) -> Result<()> {
         let target = self.function_target(id)?;
         let label = format!("Luau binding on node {node_id:?}");
-        self.run_target(canopy, node_id, target, &label, None)
-            .map(|_| ())
+        self.run_target(canopy, node_id, target, &label).map(|_| ())
     }
 
     /// Execute a stored Luau closure inside an existing live scope.
@@ -1236,7 +1230,7 @@ impl LuauHost {
     ) -> Result<()> {
         let target = self.function_target(id)?;
         let label = format!("Luau binding on node {node_id:?}");
-        self.run_target_in_scope(scope, node_id, &CallTarget::Stored(target), &label, None)
+        self.run_target_in_scope(scope, node_id, &CallTarget::Stored(target), &label)
             .map(|_| ())
     }
 }

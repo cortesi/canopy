@@ -225,9 +225,8 @@ pub(super) fn script_error_to_canopy<'s>(
     scope: &Scope<'s>,
     error: &ScriptError<'s>,
     label: &str,
-    timeout: Option<Duration>,
 ) -> error::Error {
-    vm_error_to_canopy(error, label, timeout, || error.value().display(scope))
+    vm_error_to_canopy(error, label, None, || error.value().display(scope))
 }
 
 /// Convert a fatal VM error into a canopy error.
