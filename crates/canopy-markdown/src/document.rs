@@ -1028,6 +1028,7 @@ fn is_block(node: &Node) -> bool {
                 | Tag::MetadataBlock(_)
                 | Tag::List(_)
                 | Tag::BlockQuote(_)
+                | Tag::Callout(_)
                 | Tag::FootnoteDefinition(_)
         )
     ) || matches!(node.event, Some(Event::Rule))
@@ -2960,6 +2961,15 @@ mod tests {
         assert_eq!(doc.blocks[1].quote_depth, 1);
         assert_eq!(doc.blocks[2].list_marker.as_deref(), Some("3."));
         assert_eq!(doc.blocks[3].list_marker.as_deref(), Some("4."));
+    }
+    #[test]
+    fn a_callout_in_a_list_item_keeps_its_quote() {
+        let doc = complete("- item\n  > [!note]\n  > body\n");
+        assert_eq!(doc.units[0].text, "item");
+        assert_eq!(doc.blocks[0].quote_kind, None);
+        assert_eq!(doc.units[1].text, "body");
+        assert_eq!(doc.blocks[1].quote_kind.as_deref(), Some("NOTE"));
+        assert_eq!(doc.blocks[1].quote_depth, 1);
     }
     #[test]
     fn a_callout_of_only_its_marker_line_keeps_that_line() {
