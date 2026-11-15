@@ -7,7 +7,6 @@
 
 use canopy::{
     Context, ContextExt, NodeId, NodeName, ViewContext, ViewContextExt, Widget,
-    commands::CommandStatus,
     error::{Error, Result},
     geom::Point,
     layout::{Layout, ScrollOp},
@@ -53,19 +52,7 @@ impl ModeHelp {
         };
         // A menu lists only what its keys can do now. Help search reads the
         // menu through the same query, so the two always agree.
-        let bindings = context
-            .menu_bindings(context.focused_node(), &mode)?
-            .into_iter()
-            .filter(|binding| {
-                !binding
-                    .command
-                    .as_ref()
-                    .and_then(|command| command.availability.as_ref())
-                    .is_some_and(|availability| {
-                        matches!(availability.status, Some(CommandStatus::Disabled(_)))
-                    })
-            })
-            .collect::<Vec<_>>();
+        let bindings = context.menu_bindings(context.focused_node(), &mode)?;
         let mut rows: Vec<MenuRow> = grouped_keys(&key_rows_of(&bindings))
             .into_iter()
             .map(|(keys, description)| MenuRow::keyed(keys, description))
