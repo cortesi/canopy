@@ -254,6 +254,22 @@ fn repeating_motion_rests_after_the_idle_pause() -> Result<()> {
 }
 
 #[test]
+fn a_pause_past_the_clocks_range_never_begins() -> Result<()> {
+    let (mut canopy, clock) = live(Spot::new("moving", "x"), 2, Some(blink()))?;
+    canopy.set_motion(MotionSettings {
+        idle_pause: Duration::MAX,
+        blink_pause: Duration::MAX,
+        ..MotionSettings::default()
+    });
+    let mut backend = TestRender::new();
+    let t0 = clock.now();
+    canopy.turn(TurnInput::Prepare)?;
+    canopy.emit_frame(&mut backend)?;
+    assert_eq!(canopy.next_deadline(), Some(t0 + ms(100)));
+    Ok(())
+}
+
+#[test]
 fn decoration_moves_on_while_the_operator_reads() -> Result<()> {
     // A minute without input passes the blink pause, and the loop still moves.
     let (mut canopy, clock) = live(Spot::new("moving", "x"), 2, Some(blink()))?;

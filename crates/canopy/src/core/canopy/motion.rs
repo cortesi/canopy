@@ -202,7 +202,10 @@ impl Canopy {
             ),
         ];
         for (_, pause) in pauses.into_iter().filter(|(ahead, _)| *ahead) {
-            let rest = clocks.last_input + pause;
+            // A pause past the clock's range never begins.
+            let Some(rest) = clocks.last_input.checked_add(pause) else {
+                continue;
+            };
             next = Some(next.map_or(rest, |next| next.min(rest)));
         }
         // A deadline never lands in the past, so the driver cannot spin.
