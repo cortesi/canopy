@@ -431,10 +431,7 @@ impl SurfaceState {
 
     /// Drop the selection and the current object, as an edit does.
     pub fn clear_marks(&mut self) {
-        self.interaction = match self.interaction {
-            Interaction::Scroll { .. } => Interaction::resting(Mode::Scroll),
-            Interaction::Block { .. } => Interaction::resting(Mode::Interact),
-        };
+        self.interaction = Interaction::resting(self.interaction.mode());
     }
 
     /// Select `range` in the block cursor, from the current object.
