@@ -3,10 +3,7 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
 use super::TermBuf;
-use crate::{
-    geom::Point,
-    style::{AttrSet, Color, ResolvedStyle},
-};
+use crate::style::{AttrSet, Color, ResolvedStyle};
 
 /// The cells of a terminal buffer as styled text: each row is a list of runs
 /// of text in one style. A renderer outside the terminal, such as a
@@ -78,10 +75,7 @@ impl TermBuf {
         let mut rows = Vec::with_capacity(self.size.h as usize);
         for y in 0..self.size.h {
             let mut runs: Vec<CaptureRun> = Vec::new();
-            for x in 0..self.size.w {
-                let cell = self
-                    .get(Point { x, y })
-                    .expect("buffer coordinates should always be valid");
+            for cell in self.row(y) {
                 // The base cell of a wide grapheme holds its text and style,
                 // and the run that holds it covers the continuation too.
                 if cell.continuation {

@@ -558,14 +558,7 @@ impl TermBuf {
     pub fn rows(&self) -> Vec<Vec<String>> {
         let mut rows = Vec::with_capacity(self.size.h as usize);
         for y in 0..self.size.h {
-            let mut row = Vec::with_capacity(self.size.w as usize);
-            for x in 0..self.size.w {
-                let cell = self
-                    .get(Point { x, y })
-                    .expect("buffer coordinates should always be valid");
-                row.push(cell.rendered_text());
-            }
-            rows.push(row);
+            rows.push(self.row(y).iter().map(Cell::rendered_text).collect());
         }
         rows
     }
@@ -577,10 +570,7 @@ impl TermBuf {
             if y > 0 {
                 out.push('\n');
             }
-            for x in 0..self.size.w {
-                let cell = self
-                    .get(Point { x, y })
-                    .expect("buffer coordinates should always be valid");
+            for cell in self.row(y) {
                 cell.push_text(&mut out);
             }
         }
@@ -629,9 +619,7 @@ impl TermBuf {
         let can_shift = backend.supports_char_shift();
         let mut out = Emission::default();
         for y in 0..self.size.h {
-            let row_start = y as usize * width;
-            let row_end = row_start + width;
-            let current_row = &self.cells[row_start..row_end];
+            let current_row = self.row(y);
             let source = scroll.map_or(Some(y), |scroll| scroll.source(y));
             let Some(source) = source else {
                 // The scroll exposed the row, so all of it repaints.
@@ -703,10 +691,7 @@ impl TermBuf {
         let width = self.size.w as usize;
         let mut out = Emission::default();
         for y in 0..self.size.h {
-            let row_start = y as usize * width;
-            let row_end = row_start + width;
-            let row = &self.cells[row_start..row_end];
-            render_line_range(backend, row, y, 0, width, &mut out)?;
+            render_line_range(backend, self.row(y), y, 0, width, &mut out)?;
         }
         Ok(())
     }
