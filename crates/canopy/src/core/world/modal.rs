@@ -459,12 +459,7 @@ impl Core {
 
     /// Close the requested scope and all younger scopes after callbacks return.
     pub(crate) fn close_modal_now(&mut self, token: ModalToken) -> Result<()> {
-        let Some(index) = self
-            .modals
-            .scopes
-            .iter()
-            .position(|scope| scope.token == token)
-        else {
+        let Some(index) = self.modal_index(token) else {
             return Ok(());
         };
         let retired: Vec<_> = self.modals.scopes.drain(index..).collect();
@@ -481,33 +476,21 @@ impl Core {
             }
         }
         self.invalidate(Invalidation::Layout);
-        let ancestry = &retired[0].focus_ancestry;
-        let exact = ancestry
-            .first()
-            .filter(|identity| {
-                self.modal_identity_live(**identity)
-                    && self.modal_admits(identity.node)
-                    && is_focus_candidate(self, identity.node, false)
-            })
-            .map(|identity| identity.node);
-        let fallback = || {
-            ancestry
-                .iter()
-                .filter(|identity| self.modal_identity_live(**identity))
-                .find_map(|identity| {
-                    self.subtree_pre_order(identity.node)
-                        .into_iter()
-                        .find(|node| {
-                            self.modal_admits(*node) && is_focus_candidate(self, *node, false)
-                        })
-                })
-        };
-        let focus = exact.or_else(fallback).or_else(|| {
-            let root = self.modal_region().unwrap_or(self.root);
+        // The first focus candidate of a subtree, which is its root when the
+        // root can take focus. A candidate is one that the modals admit.
+        let first_in = |root: NodeId| {
             self.subtree_pre_order(root)
                 .into_iter()
                 .find(|node| is_focus_candidate(self, *node, false))
-        });
+        };
+        // Focus returns to where it was, or else to the nearest ancestor of
+        // that node that still lives, or else to the region left open.
+        let focus = retired[0]
+            .focus_ancestry
+            .iter()
+            .filter(|identity| self.modal_identity_live(**identity))
+            .find_map(|identity| first_in(identity.node))
+            .or_else(|| first_in(self.modal_region().unwrap_or(self.root)));
         let focused = self.transition_focus(focus).map(drop);
         let woken = self.wake_ended_modals();
         focused.and(woken)
