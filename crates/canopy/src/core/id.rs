@@ -15,14 +15,8 @@ new_key_type! {
 }
 
 /// Opaque identifier for a node in an application tree.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(RawNodeId);
-
-impl Debug for NodeId {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.debug_tuple("NodeId").field(&self.0).finish()
-    }
-}
 
 /// A widget node and the incarnation it held when the stamp was taken.
 ///
