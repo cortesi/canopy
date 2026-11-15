@@ -658,8 +658,7 @@ impl Widget for TableReader {
             render.text("table/label", Line::new(area.tl.x, area.tl.y, area.w), text)?;
         }
         // The header stays at the top, and the rows scroll beneath it.
-        let header = laid.pinned().saturating_sub(laid.label_rows());
-        let header = header.min(area.h - label);
+        let header = laid.body_start().min(area.h - label);
         let at = |rows: u32| Rect::new(area.tl.x, area.tl.y + rows, area.w, area.h - rows);
         laid.flow.paint(
             render,
