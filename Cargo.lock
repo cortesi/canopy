@@ -413,7 +413,6 @@ dependencies = [
  "grep-matcher",
  "grep-regex",
  "proptest",
- "thiserror",
  "unicode-segmentation",
  "url",
 ]
