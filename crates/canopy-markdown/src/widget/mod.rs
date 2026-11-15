@@ -21,7 +21,7 @@ use canopy::{
     input::{Event, IntentSpec, NavIntent, key::Key, mouse},
     layout::{
         Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement, RevealAlign,
-        ScrollOp,
+        ScrollOp, View,
     },
     render::Render,
     runtime::{NodeWakeHandle, NoticePost, PollLifetime, WidgetSemantics},
@@ -1243,14 +1243,20 @@ impl Markdown {
         if let Some(view) = ctx.view_of(node)
             && before != Some(view.scroll)
         {
-            let mut state = self.shared.borrow_mut();
-            state.navigation += 1;
-            state.search_reveal = false;
-            if view.scroll.y.saturating_add(view.content.h) < view.canvas.h {
-                state.follow = Follow::Paused;
-            }
+            self.view_moved(&view);
         }
         self.update_chrome(ctx)
+    }
+    /// Record that the reader moved the view. The move is navigation, it
+    /// cancels a search reveal that still waits, and it pauses follow when
+    /// the view leaves the tail.
+    fn view_moved(&self, view: &View) {
+        let mut state = self.shared.borrow_mut();
+        state.navigation += 1;
+        state.search_reveal = false;
+        if view.scroll.y.saturating_add(view.content.h) < view.canvas.h {
+            state.follow = Follow::Paused;
+        }
     }
     /// Keep the block cursor on a unit in view after the rendered view
     /// moved.
@@ -3450,16 +3456,9 @@ impl Widget for Markdown {
             if handled {
                 if before != self.view_offset(ctx) {
                     self.sync_cursor(ctx)?;
-                    if self
-                        .navigation_node()
-                        .and_then(|node| ctx.view_of(node))
-                        .is_some_and(|view| {
-                            view.scroll.y.saturating_add(view.content.h) < view.canvas.h
-                        })
-                    {
-                        self.shared.borrow_mut().follow = Follow::Paused;
+                    if let Some(view) = self.navigation_node().and_then(|node| ctx.view_of(node)) {
+                        self.view_moved(&view);
                     }
-                    self.shared.borrow_mut().navigation += 1;
                 }
                 return Ok(EventOutcome::Handle);
             }

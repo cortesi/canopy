@@ -503,6 +503,43 @@ fn reader_navigation_or_a_kept_position_cancels_the_search_reveal() {
 }
 
 #[test]
+fn a_scroll_on_the_scrollbar_cancels_the_search_reveal() {
+    let text = format!("{}needle\n", "Filler paragraph.\n\n".repeat(40));
+    let (mut harness, manual) = fixture(&text, ViewType::Rendered, false, false, false);
+    settle(&mut harness, &manual);
+    let track = harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            reader.set_search(ctx, "needle".into(), false)?;
+            Ok(reader.tracks(ctx).0[0].1)
+        })
+        .unwrap();
+    harness
+        .mouse(mouse::MouseEvent {
+            action: mouse::Action::ScrollDown,
+            button: mouse::Button::None,
+            modifiers: key::Empty,
+            location: PointI32 {
+                x: track.tl.x as i32,
+                y: track.tl.y as i32,
+            },
+        })
+        .unwrap();
+    let moved = harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| Ok(reader.view_offset(ctx)))
+        .unwrap();
+    assert_ne!(moved, 0);
+    settle(&mut harness, &manual);
+    harness
+        .with_root_widget_context(|reader: &mut Markdown, ctx| {
+            assert_eq!(reader.search_matches(), 1);
+            assert_eq!(reader.search_position(), 0);
+            assert_eq!(reader.view_offset(ctx), moved);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
 fn a_kept_position_keeps_the_current_match_through_a_reload() {
     let text = format!(
         "{}needle first\n\nneedle second\n{}",
