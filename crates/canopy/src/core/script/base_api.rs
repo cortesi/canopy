@@ -21,7 +21,7 @@ use ruau::{
 
 use super::{
     ArgValue, Canopy, ChangeOutcome, CommandSet, Context, CoreContext, CoreViewContext, FocusScope,
-    NodeId, PathFilter, Pin, Point, RectI32, ReentrantCanopyGuard, Result, ScriptCommandCall,
+    NodeId, PathFilter, Point, RectI32, ReentrantCanopyGuard, Result, ScriptCommandCall,
     ScriptMenu, available_bindings_to_arg, base_api, binding_id_arg, binding_info_to_arg,
     command_call_from_value, command_call_type, command_info_to_arg, commands, defs,
     dispatch_command, dispatch_explicit, error, fixtures_to_arg, host_return, host_unit,
@@ -998,11 +998,6 @@ impl<'s> FromLuaMulti<'s> for WaitForArgs {
     }
 }
 
-/// Build a timeout error for an async wait helper.
-fn wait_timeout(timeout_ms: u64) -> RuntimeError {
-    RuntimeError::from(error::Error::ScriptTimeout { timeout_ms })
-}
-
 /// Borrow the active Canopy context from a live scope.
 fn canopy_context<'a, 's>(scope: &'a Scope<'s>) -> StdResult<ContextMut<'a, Canopy>, RuntimeError> {
     scope
@@ -1010,17 +1005,13 @@ fn canopy_context<'a, 's>(scope: &'a Scope<'s>) -> StdResult<ContextMut<'a, Cano
         .ok_or_else(|| RuntimeError::runtime("no active canopy context"))
 }
 
-/// Poll app state and a predicate until it succeeds or times out.
-async fn wait_until<F>(
+/// Async implementation of `canopy.wait_for`: poll app state and the
+/// predicate until it succeeds or times out.
+async fn wait_for_predicate(
     ctx: AsyncHostContext,
-    timeout_ms: Option<u64>,
-    mut ready: F,
-) -> StdResult<HostReturn, RuntimeError>
-where
-    F: FnMut(
-        AsyncHostContext,
-    ) -> Pin<Box<dyn Future<Output = StdResult<bool, RuntimeError>> + Send>>,
-{
+    args: WaitForArgs,
+) -> StdResult<HostReturn, RuntimeError> {
+    let timeout_ms = args.timeout_ms;
     let observed = Arc::new(Mutex::new(None));
     let delivered = Arc::clone(&observed);
     ctx.scope(move |scope| {
@@ -1048,7 +1039,16 @@ where
         // Capture before checking the predicate; poll_changed rechecks before
         // parking.
         let changes = watch.changes();
-        if ready(ctx.clone()).await? {
+        let ready = match ctx.call_protected(&args.predicate, ()).await? {
+            Ok(values) => owned_truthy(values.values.first()),
+            Err(error) => {
+                return Err(RuntimeError::runtime(format!(
+                    "wait predicate failed: {}",
+                    error.value().display_lua()
+                )));
+            }
+        };
+        if ready {
             return Ok(host_return(true));
         }
         if let (Some(deadline), Some(timeout_ms)) = (deadline, timeout_ms) {
@@ -1059,31 +1059,11 @@ where
                 })
                 .await?;
             if expired {
-                return Err(wait_timeout(timeout_ms));
+                return Err(error::Error::ScriptTimeout { timeout_ms }.into());
             }
         }
         poll_fn(|cx| watch.poll_changed(changes, deadline, cx)).await;
     }
-}
-
-/// Async implementation of `canopy.wait_for`.
-async fn wait_for_predicate(
-    ctx: AsyncHostContext,
-    args: WaitForArgs,
-) -> StdResult<HostReturn, RuntimeError> {
-    wait_until(ctx, args.timeout_ms, move |ctx| {
-        let predicate = args.predicate.clone();
-        Box::pin(async move {
-            match ctx.call_protected(&predicate, ()).await? {
-                Ok(values) => Ok(owned_truthy(values.values.first())),
-                Err(error) => Err(RuntimeError::runtime(format!(
-                    "wait predicate failed: {}",
-                    error.value().display_lua()
-                ))),
-            }
-        })
-    })
-    .await
 }
 
 /// A plain-function canopy host handler.

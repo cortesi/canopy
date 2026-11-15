@@ -9,7 +9,6 @@ use std::{
     fmt,
     future::{Future, poll_fn},
     mem,
-    pin::Pin,
     ptr::NonNull,
     rc::Rc,
     result::Result as StdResult,
