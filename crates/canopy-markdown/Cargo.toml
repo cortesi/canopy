@@ -23,7 +23,6 @@ url = "2.5"
 grep-matcher = "0.1.9"
 grep-regex = "0.1.14"
 unicode-segmentation.workspace = true
-thiserror.workspace = true
 proptest = { workspace = true, optional = true }
 
 [dev-dependencies]
