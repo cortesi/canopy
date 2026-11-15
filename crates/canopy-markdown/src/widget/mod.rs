@@ -607,10 +607,7 @@ impl Markdown {
         if !available {
             return Ok(false);
         }
-        let focused = ctx.is_focused()
-            || self
-                .navigation_node()
-                .is_some_and(|node| ctx.is_on_focus_path(node));
+        let focused = self.holds_focus(ctx);
         self.active = view;
         self.switching = None;
         self.displayed = Some(source);
@@ -1246,6 +1243,13 @@ impl Markdown {
             self.view_moved(&view);
         }
         self.update_chrome(ctx)
+    }
+    /// Whether the reader or its active view holds the focus.
+    fn holds_focus(&self, ctx: &dyn ViewContext) -> bool {
+        ctx.is_focused()
+            || self
+                .navigation_node()
+                .is_some_and(|node| ctx.is_on_focus_path(node))
     }
     /// Record that the reader moved the view. The move is navigation, it
     /// cancels a search reveal that still waits, and it pauses follow when
@@ -2520,10 +2524,7 @@ impl Markdown {
             }
         };
         let position = self.position(ctx)?;
-        let was_focused = ctx.is_focused()
-            || self
-                .navigation_node()
-                .is_some_and(|node| ctx.is_on_focus_path(node));
+        let was_focused = self.holds_focus(ctx);
         // A pending mark enters the block cursor as `set_mode` would.
         let may_enter = self.inspector.is_none();
         let Some(nodes) = &mut self.nodes else {
@@ -3489,11 +3490,7 @@ impl Widget for Markdown {
         // A prompt is a sibling of the reading surface. Reader navigation must
         // not claim its ordinary text keys when bubbling through the
         // controller.
-        if !ctx.is_focused()
-            && !self
-                .navigation_node()
-                .is_some_and(|node| ctx.is_on_focus_path(node))
-        {
+        if !self.holds_focus(ctx) {
             return false;
         }
         if matches!(
