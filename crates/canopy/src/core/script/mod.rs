@@ -475,11 +475,6 @@ impl LuauState {
             self.phase = HostPhase::Ready(surfaces);
         }
     }
-
-    /// Drain deferred `on_start` hooks in registration order.
-    fn drain_on_start_hooks(&mut self) -> Vec<LuauFunctionId> {
-        mem::take(&mut self.on_start_hooks)
-    }
 }
 
 /// Luau host state shared by the canopy runtime.
@@ -752,7 +747,7 @@ impl LuauHost {
 
     /// Drain deferred `on_start` hooks in registration order.
     pub fn drain_on_start_hooks(&self) -> Vec<LuauFunctionId> {
-        self.state.borrow_mut().drain_on_start_hooks()
+        mem::take(&mut self.state.borrow_mut().on_start_hooks)
     }
 
     /// Snapshot deferred startup hooks without consuming them.
