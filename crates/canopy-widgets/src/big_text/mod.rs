@@ -65,11 +65,6 @@ impl Geometry {
             below: resolved.laid.below,
         }
     }
-
-    /// Returns the pixel rows of one line box.
-    fn box_height(self) -> u32 {
-        (self.above + self.below).max(1)
-    }
 }
 
 /// The columns of each line at the last render, and their geometry.
@@ -443,7 +438,7 @@ impl BigText {
                     roll.from.lines.get(index).map_or(&[][..], Vec::as_slice),
                     line,
                     progress,
-                    geometry.box_height(),
+                    resolved.laid.box_height(),
                 )
             })
             .collect()
