@@ -262,7 +262,7 @@ pub struct PreparedRow {
 }
 
 /// Reusable geometry and preview data for one semantic block.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct BlockLayout {
     /// Stable semantic block identity.
     id: u64,
@@ -584,17 +584,7 @@ impl PresentationSnapshot {
                 .filter(|old| old.signature == signature)
             {
                 result.stats.reused_blocks += 1;
-                BlockLayout {
-                    id: old.id,
-                    signature,
-                    start: result.height,
-                    rows: old.rows.clone(),
-                    extra: old.extra.clone(),
-                    inset: old.inset,
-                    object: old.object,
-                    source_text_start: old.source_text_start,
-                    content: old.content.clone(),
-                }
+                BlockLayout::clone(old)
             } else {
                 result.stats.prepared_blocks += 1;
                 let mut layout = prepare_block(
