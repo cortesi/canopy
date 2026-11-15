@@ -89,11 +89,8 @@ impl Core {
     /// view can move that way.
     pub(crate) fn nav_scroll(&self, node_id: NodeId, nav: NavIntent) -> Option<ScrollOp> {
         let node = self.nodes.get(node_id)?;
-        let before = node.scroll;
         let op = nav.scroll_op();
-        let mut target = op.target(before, node.content_size);
-        clamp_scroll(&mut target, node.content_size, node.canvas);
-        (target != before).then_some(op)
+        (clamped_target(node, op) != node.scroll).then_some(op)
     }
 
     /// Return what applying `op` to `node_id` would change, without mutating
@@ -104,14 +101,9 @@ impl Core {
     /// node is missing.
     pub(crate) fn scroll_outcome(&self, node_id: NodeId, op: ScrollOp) -> Option<ChangeOutcome> {
         let node = self.nodes.get(node_id)?;
-        let before = node.scroll;
-        let mut target = op.target(before, node.content_size);
-        clamp_scroll(&mut target, node.content_size, node.canvas);
-        Some(if target != before || node.reveal.is_some() {
-            ChangeOutcome::Changed
-        } else {
-            ChangeOutcome::Unchanged
-        })
+        Some(outcome(
+            clamped_target(node, op) != node.scroll || node.reveal.is_some(),
+        ))
     }
 
     /// Move a viewport by an explicit scroll, clamped to its canvas.
@@ -242,8 +234,7 @@ impl Core {
                 let Some(node) = self.nodes.get(node_id) else {
                     return false;
                 };
-                let mut target = node.scroll.scroll(delta.x, delta.y);
-                clamp_scroll(&mut target, node.content_size, node.canvas);
+                let target = clamped_target(node, ScrollOp::By(delta.x, delta.y));
                 if target == node.scroll {
                     return false;
                 }
@@ -388,6 +379,13 @@ impl Core {
             current = parent;
         }
     }
+}
+
+/// Return where `op` moves the viewport of `node`, clamped to its canvas.
+fn clamped_target(node: &Node, op: ScrollOp) -> Point {
+    let mut target = op.target(node.scroll, node.content_size);
+    clamp_scroll(&mut target, node.content_size, node.canvas);
+    target
 }
 
 /// Convert a change flag into an outcome.
