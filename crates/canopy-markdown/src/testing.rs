@@ -785,16 +785,11 @@ impl EditCheck {
         if edit(self, epoch + 1)?.is_ok() {
             return Err("the reader took an edit of another epoch".into());
         }
-        let splits = |at: usize| {
-            at > 0
-                && text.as_bytes().get(at - 1) == Some(&b'\r')
-                && text.as_bytes().get(at) == Some(&b'\n')
-        };
         let valid = from <= to
             && text.is_char_boundary(from)
             && text.is_char_boundary(to)
-            && !splits(from)
-            && !splits(to);
+            && !splits_crlf(text, from)
+            && !splits_crlf(text, to);
         let taken = edit(self, epoch)?;
         let (source, edits) =
             self.reader(|reader, _| Ok((reader.accepted_source(), reader.take_edits())))?;
