@@ -49,8 +49,7 @@ impl Canopy {
 
     /// Remove application bindings and callbacks from the current source epoch.
     fn clear_script_callbacks(&mut self) {
-        let removed = self.core.input_map.clear_application();
-        self.release_removed_bindings(removed);
+        self.clear_bindings();
         for hook in self.script.host.drain_on_start_hooks() {
             self.script.host.release_function(hook);
         }

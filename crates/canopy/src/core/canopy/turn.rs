@@ -913,7 +913,7 @@ impl Canopy {
     /// Release pending work and preserve its diagnostics on driver failure.
     fn abort_headless_eval<T>(&mut self, result: &Result<T>) {
         if let Some(mut active) = self.driver.eval.take() {
-            if let Err(error) = self.script.host.abort_invocation(&mut active.invocation) {
+            if let Some(error) = self.abort_eval(&mut active) {
                 tracing::error!(%error, "aborting failed headless evaluation");
             }
             self.finish_eval(&mut active, result);
