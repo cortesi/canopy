@@ -472,7 +472,7 @@ impl Canopy {
                 operation: "prepare",
             });
         }
-        self.prepare_frame(false).map(|_| ())
+        self.prepare_frame(false)
     }
 
     /// Run a closure against the root context.

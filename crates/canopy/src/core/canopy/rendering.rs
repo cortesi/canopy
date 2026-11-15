@@ -342,7 +342,7 @@ impl Canopy {
     }
 
     /// Prepare and publish pending state without writing to a backend.
-    pub(super) fn prepare_frame(&mut self, force: bool) -> Result<bool> {
+    pub(super) fn prepare_frame(&mut self, force: bool) -> Result<()> {
         if self.driver.startup == Startup::Pending {
             self.run_startup_scripts()?;
         }
@@ -351,10 +351,10 @@ impl Canopy {
             && !self.script.host.has_on_start_hooks()
             && !self.state_hooks_pending()
         {
-            return Ok(false);
+            return Ok(());
         }
         let Some(screen_size) = self.frame.screen_size else {
-            return Ok(false);
+            return Ok(());
         };
         if let Some(palette) = self.core.pending_theme.take() {
             self.set_theme(palette);
@@ -397,7 +397,7 @@ impl Canopy {
         self.motion.primary(primary, clocks.now);
         self.core.changes = crate::ChangeSet::default();
         self.driver.publication.publish();
-        Ok(true)
+        Ok(())
     }
 
     /// Emit published cells. After a backend failure, repaint the next frame

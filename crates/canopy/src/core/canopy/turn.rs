@@ -666,7 +666,7 @@ impl Canopy {
         let failure = self.service_turn().err();
         let prepared = match failure {
             Some(_) => Ok(()),
-            None => self.prepare_frame(false).map(|_| ()),
+            None => self.prepare_frame(false),
         };
         self.settle_eval(failure, prepared, &mut outcome)?;
         if self.driver.publication.generation() != before {
