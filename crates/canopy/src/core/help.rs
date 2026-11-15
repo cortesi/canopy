@@ -174,11 +174,7 @@ impl Core {
         }
         let mut mouse_bindings = Vec::new();
         for mouse in self.input_map.eligible_mouse_inputs() {
-            mouse_bindings.extend(self.winner_along_route(
-                focus,
-                mouse,
-                InputSpec::Mouse(mouse),
-            )?);
+            mouse_bindings.extend(self.mouse_winner(focus, mouse)?);
         }
 
         Ok(BindingSnapshot {
@@ -238,23 +234,18 @@ impl Core {
         Ok(bindings)
     }
 
-    /// Return the binding that wins `spec` along the route from `focus`.
+    /// Return the binding that wins `mouse` along the route from `focus`.
     ///
     /// Mouse discovery has no widget prediction, so this walk selects at each
     /// route node as mouse routing does. Key discovery uses
     /// [`Core::explain_key`].
-    fn winner_along_route<I>(
-        &self,
-        focus: NodeId,
-        input: I,
-        spec: InputSpec,
-    ) -> Result<Option<AvailableBinding<I>>> {
+    fn mouse_winner(&self, focus: NodeId, mouse: Mouse) -> Result<Option<AvailableBinding<Mouse>>> {
         let winner = self.route(focus).find_map(|(node, path)| {
-            self.select_binding(node, &path, spec, focus, &[])
+            self.select_binding(node, &path, InputSpec::Mouse(mouse), focus, &[])
                 .map(|record| (node, path, record.id))
         });
         winner
-            .map(|(node, path, id)| self.available_binding(node, input, path, id))
+            .map(|(node, path, id)| self.available_binding(node, mouse, path, id))
             .transpose()
     }
 
