@@ -7,7 +7,7 @@ use crate::{NodeId, core::Core, error::Result};
 /// set. This is a debug function.
 pub fn dump(core: &Core) -> Result<String> {
     let mut output = String::new();
-    dump_node(&mut output, core, core.root, 0, core.focus)?;
+    dump_node(&mut output, core, core.root, 0)?;
     Ok(output)
 }
 
@@ -17,13 +17,7 @@ fn write_field(output: &mut String, indent: &str, label: &str, value: &str) {
 }
 
 /// Walk a node subtree and emit formatted debug output.
-fn dump_node(
-    output: &mut String,
-    core: &Core,
-    node_id: NodeId,
-    level: usize,
-    focus: Option<NodeId>,
-) -> Result<()> {
+fn dump_node(output: &mut String, core: &Core, node_id: NodeId, level: usize) -> Result<()> {
     let node = core.nodes.require(node_id)?;
 
     // Create indentation based on the level
@@ -32,7 +26,7 @@ fn dump_node(
     // Get node information
     let id = node_id;
     let is_hidden = node.hidden;
-    let is_focused = focus.map(|fg| fg == node_id).unwrap_or(false);
+    let is_focused = core.focus == Some(node_id);
 
     // Write indent and node name
     write!(output, "{indent}{id:?}").expect("writing to a String cannot fail");
@@ -47,13 +41,7 @@ fn dump_node(
     }
 
     if !indicators.is_empty() {
-        write!(output, " ").expect("writing to a String cannot fail");
-        for (i, indicator) in indicators.iter().enumerate() {
-            if i > 0 {
-                write!(output, ", ").expect("writing to a String cannot fail");
-            }
-            write!(output, "{indicator}").expect("writing to a String cannot fail");
-        }
+        write!(output, " {}", indicators.join(", ")).expect("writing to a String cannot fail");
     }
     writeln!(output).expect("writing to a String cannot fail");
 
@@ -89,9 +77,8 @@ fn dump_node(
 
     // Recursively dump children (skip if node is hidden)
     if !is_hidden {
-        let children = node.children.clone();
-        for child in children {
-            dump_node(output, core, child, level + 1, focus)?;
+        for &child in &node.children {
+            dump_node(output, core, child, level + 1)?;
         }
     }
 
