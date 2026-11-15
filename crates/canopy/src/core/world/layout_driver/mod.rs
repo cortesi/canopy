@@ -397,10 +397,7 @@ impl<'a> LayoutPass<'a> {
             return self.measure_wrap_content_stack(layout, constraints, &children, available);
         }
 
-        let main = constraints.main(layout.direction);
-        let cross = constraints.cross(layout.direction);
-        let main_fixed = main.is_exact();
-        let cross_fixed = cross.is_exact();
+        let main_fixed = constraints.main(layout.direction).is_exact();
         // Retain the viewport bound so an explicitly bounded descendant can
         // stop inherited overflow. Unbounded descendants ignore this bound.
         let bounded = constraints.clamp_size(available);
@@ -417,19 +414,7 @@ impl<'a> LayoutPass<'a> {
 
         for (i, child) in children.iter().enumerate() {
             let child_layout = self.node_layout_snapshot(*child)?.0;
-            let mut effective = bound_width(child_layout, budget);
-
-            let child_main = main_sizing(child_layout, layout.direction);
-            if !main_fixed && matches!(child_main, Sizing::Flex(_)) {
-                set_main_sizing(&mut effective, layout.direction, Sizing::Measure);
-            }
-
-            let child_cross = cross_sizing(child_layout, layout.direction);
-            if !cross_fixed && matches!(child_cross, Sizing::Flex(_)) {
-                set_cross_sizing(&mut effective, layout.direction, Sizing::Measure);
-            }
-
-            effective.inherit_overflow(layout.overflow_x, layout.overflow_y);
+            let effective = measured_child_layout(child_layout, layout, constraints, budget);
 
             if let Some(item) = FlexItem::of(effective, layout.direction) {
                 flex_children.push((i, item, effective));
@@ -490,21 +475,7 @@ impl<'a> LayoutPass<'a> {
 
         for child in children {
             let child_layout = self.node_layout_snapshot(*child)?.0;
-            let mut effective = bound_width(child_layout, budget);
-
-            // Treat flex as measure when parent is not exact
-            if !matches!(constraints.width, Constraint::Exact(_))
-                && matches!(child_layout.width, Sizing::Flex(_))
-            {
-                effective.width = Sizing::Measure;
-            }
-            if !matches!(constraints.height, Constraint::Exact(_))
-                && matches!(child_layout.height, Sizing::Flex(_))
-            {
-                effective.height = Sizing::Measure;
-            }
-
-            effective.inherit_overflow(layout.overflow_x, layout.overflow_y);
+            let effective = measured_child_layout(child_layout, layout, constraints, budget);
 
             let size = self.resolve_outer_size_with_layout(*child, effective, avail)?;
             max_w = max_w.max(size.w);
@@ -1027,28 +998,24 @@ fn main_sizing(layout: Layout, direction: LayoutDirection) -> Sizing {
     }
 }
 
-/// Extract the cross-axis sizing from a layout.
-fn cross_sizing(layout: Layout, direction: LayoutDirection) -> Sizing {
-    match direction {
-        LayoutDirection::Row => layout.height,
-        LayoutDirection::Column | LayoutDirection::Stack => layout.width,
+/// Return the layout that a child is measured with under `constraints`: its
+/// width bound to `budget`, each flex axis measured where the parent's
+/// constraint is not exact, and the parent's overflow inherited.
+fn measured_child_layout(
+    child: Layout,
+    parent: Layout,
+    constraints: MeasureConstraints,
+    budget: Option<u32>,
+) -> Layout {
+    let mut effective = bound_width(child, budget);
+    if !constraints.width.is_exact() && matches!(child.width, Sizing::Flex(_)) {
+        effective.width = Sizing::Measure;
     }
-}
-
-/// Set the main-axis sizing on a layout.
-fn set_main_sizing(layout: &mut Layout, direction: LayoutDirection, sizing: Sizing) {
-    match direction {
-        LayoutDirection::Row => layout.width = sizing,
-        LayoutDirection::Column | LayoutDirection::Stack => layout.height = sizing,
+    if !constraints.height.is_exact() && matches!(child.height, Sizing::Flex(_)) {
+        effective.height = Sizing::Measure;
     }
-}
-
-/// Set the cross-axis sizing on a layout.
-fn set_cross_sizing(layout: &mut Layout, direction: LayoutDirection, sizing: Sizing) {
-    match direction {
-        LayoutDirection::Row => layout.height = sizing,
-        LayoutDirection::Column | LayoutDirection::Stack => layout.width = sizing,
-    }
+    effective.inherit_overflow(parent.overflow_x, parent.overflow_y);
+    effective
 }
 
 /// Calculate the offset for aligning a child within available space.
