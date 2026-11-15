@@ -28,7 +28,7 @@ use super::{BlockEdit, Markdown, invalid};
 use crate::{
     presentation::PaintOverlays,
     source_store::Lifecycle,
-    surface::{PendingMark, RenderedSurface, SurfaceState},
+    surface::{RenderedSurface, SurfaceState},
     units::{EditKind, EditUnit, NewBlock, delete_unit, line_terminator, unit_at},
 };
 
@@ -872,22 +872,6 @@ fn ask_discard(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
     .with_closing(Closing::BeforeCall);
     Confirm::open(ctx, confirm, owner, request)?;
     Ok(())
-}
-
-/// Return the edit transition's mark for an edit that starts at `byte`, on
-/// screen row `row`.
-pub(super) fn pending_mark(
-    state: &SurfaceState,
-    epoch: u64,
-    byte: usize,
-    row: Option<u32>,
-) -> PendingMark {
-    PendingMark {
-        epoch,
-        byte,
-        row,
-        mode: state.mode(),
-    }
 }
 
 /// Return the screen row of the first row of the unit that holds `byte`, if

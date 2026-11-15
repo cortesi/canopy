@@ -1101,8 +1101,13 @@ impl Markdown {
         {
             let mut state = self.shared.borrow_mut();
             state.clear_marks();
-            let mark = slot::pending_mark(&state, epoch, first, row);
-            state.await_edit(mark);
+            let mode = state.mode();
+            state.await_edit(PendingMark {
+                epoch,
+                byte: first,
+                row,
+                mode,
+            });
         }
         self.edits.push_back(edit);
         self.schedule(ctx, true)?;
