@@ -311,8 +311,8 @@ impl<'a> Render<'a> {
         origin: geom::Point,
         paint: impl FnOnce(&mut Render<'_>) -> R,
     ) -> R {
-        let effects = self.effects.to_vec();
-        self.scoped(origin, &effects, paint)
+        let effects = self.effects;
+        self.scoped(origin, effects, paint)
     }
 
     /// Run `paint` with `effect` on top of the effect stack, so every style
