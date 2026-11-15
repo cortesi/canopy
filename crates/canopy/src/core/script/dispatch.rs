@@ -13,15 +13,14 @@ use super::{
     runtime_error_to_canopy, scoped_to_arg_value, script_error_to_canopy, with_current_canopy,
 };
 
-/// Dispatch a command positionally from `node_id` using the active script
+/// Dispatch a command positionally from the node of the active script
 /// context.
 pub(super) fn dispatch_command(
     scope: &Scope<'_>,
     spec: &'static CommandSpec,
-    node_id: NodeId,
     values: Vec<ArgValue>,
 ) -> Result<ArgValue> {
-    with_current_canopy(scope, |canopy, _| {
+    with_current_canopy(scope, |canopy, node_id| {
         let call = spec.call_with(CommandArgs::Positional(values));
         commands::dispatch(&mut canopy.core, node_id, &call).map_err(error::Error::from)
     })

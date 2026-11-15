@@ -2533,8 +2533,7 @@ pub(super) fn build_owner_modules(
                 move |scope: &Scope<'_>, args: MultiValue<'_>| {
                     let mut args = HostArgCursor::new(scope, args);
                     let values = values_to_args(scope, iter::from_fn(|| args.raw()).collect())?;
-                    let node_id = with_current_canopy(scope, |_, node_id| Ok(node_id))?;
-                    let result = dispatch_command(scope, spec, node_id, values)?;
+                    let result = dispatch_command(scope, spec, values)?;
                     ret_arg(scope, &result)
                 },
             );
