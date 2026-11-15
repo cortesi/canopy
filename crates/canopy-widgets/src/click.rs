@@ -17,31 +17,22 @@ struct ClickRecord {
     count: u8,
 }
 
-/// Counts same-location clicks that arrive within a threshold, up to 3.
-#[derive(Clone, Debug)]
+/// Counts same-location clicks that arrive within [`DEFAULT_THRESHOLD`] of
+/// each other, up to 3.
+#[derive(Clone, Debug, Default)]
 pub struct ClickTracker {
-    /// Maximum delay between clicks that still increment the count.
-    threshold: Duration,
     /// Previous click in the sequence, if any.
     last: Option<ClickRecord>,
 }
 
 impl ClickTracker {
-    /// Construct a tracker with the provided inter-click threshold.
-    pub(crate) fn new(threshold: Duration) -> Self {
-        Self {
-            threshold,
-            last: None,
-        }
-    }
-
     /// Return the click count for a click at `location` at `now`, which the
     /// caller reads from the driver clock, saturating at 3.
     pub(crate) fn count(&mut self, location: Point, now: Instant) -> u8 {
         let count = match &self.last {
             Some(last)
                 if last.location == location
-                    && now.saturating_duration_since(last.last_click) <= self.threshold =>
+                    && now.saturating_duration_since(last.last_click) <= DEFAULT_THRESHOLD =>
             {
                 (last.count + 1).min(3)
             }
@@ -53,13 +44,6 @@ impl ClickTracker {
             count,
         });
         count
-    }
-}
-
-impl Default for ClickTracker {
-    /// Construct a tracker using [`DEFAULT_THRESHOLD`].
-    fn default() -> Self {
-        Self::new(DEFAULT_THRESHOLD)
     }
 }
 
