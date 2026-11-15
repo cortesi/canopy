@@ -174,12 +174,7 @@ pub fn expand_tabs(s: &str, tab_stop: usize) -> Cow<'_, str> {
 /// Compute the width of the next tab from the provided column.
 pub fn tab_width(column: usize, tab_stop: usize) -> usize {
     let tab_stop = tab_stop.max(1);
-    let offset = column % tab_stop;
-    if offset == 0 {
-        tab_stop
-    } else {
-        tab_stop - offset
-    }
+    tab_stop - column % tab_stop
 }
 
 /// Return the terminal cells `s` occupies, saturating at `u32::MAX`.
