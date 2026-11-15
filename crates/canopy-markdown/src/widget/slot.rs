@@ -148,8 +148,10 @@ pub(super) struct OpenSlot {
 impl OpenSlot {
     /// Return the text of the editor with its line breaks in the unit's
     /// terminator.
-    fn draft(&self, editor: &Editor) -> String {
-        in_terminator(&editor.text(), self.terminator)
+    fn draft(&self, ctx: &dyn ViewContext) -> Result<String> {
+        ctx.with_widget(self.editor, |editor: &Editor| {
+            Ok(in_terminator(&editor.text(), self.terminator))
+        })
     }
 
     /// Return the edit that puts `text` in place of the range: the text
@@ -737,7 +739,7 @@ pub(super) fn close(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> 
 /// before the edit, and otherwise close it.
 pub(super) fn commit(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()> {
     let target = match reader.slot.open() {
-        Some(slot) => ctx.with_widget(slot.editor, |editor: &Editor| Ok(slot.draft(editor)))?,
+        Some(slot) => slot.draft(ctx)?,
         None => return Ok(()),
     };
     if reader.refused_by_lock(ctx)? {
@@ -751,7 +753,7 @@ pub(super) fn commit(reader: &mut Markdown, ctx: &mut dyn Context) -> Result<()>
 pub(super) fn discard(reader: &mut Markdown, ctx: &mut dyn Context, confirmed: bool) -> Result<()> {
     let (kept, changed) = match reader.slot.open() {
         Some(slot) => {
-            let draft = ctx.with_widget(slot.editor, |editor: &Editor| Ok(slot.draft(editor)))?;
+            let draft = slot.draft(ctx)?;
             (slot.kept.clone(), draft != slot.kept)
         }
         None => return Ok(()),
@@ -808,7 +810,7 @@ pub(super) fn checkpoint(reader: &mut Markdown, ctx: &dyn ViewContext) -> Result
     let Some(slot) = reader.slot.open() else {
         return Ok(());
     };
-    let draft = ctx.with_widget(slot.editor, |editor: &Editor| Ok(slot.draft(editor)))?;
+    let draft = slot.draft(ctx)?;
     if let Edit::Open(slot) = &mut reader.slot {
         slot.kept = draft;
     }
@@ -819,9 +821,7 @@ pub(super) fn checkpoint(reader: &mut Markdown, ctx: &dyn ViewContext) -> Result
 /// editor's text in place of its range.
 pub(super) fn draft(reader: &Markdown, ctx: &dyn ViewContext) -> Option<BlockEdit> {
     let slot = reader.slot.open()?;
-    let draft = ctx
-        .with_widget(slot.editor, |editor: &Editor| Ok(slot.draft(editor)))
-        .ok()?;
+    let draft = slot.draft(ctx).ok()?;
     Some(slot.edit(&draft))
 }
 
