@@ -222,6 +222,23 @@ fn framework_registration_is_idempotent_and_rejects_conflicts() -> Result<()> {
         )
         .is_err()
     );
+    assert!(
+        framework(
+            &mut map,
+            InputSpec::Key('j'.into()),
+            BindingOptions {
+                show_in_help: false,
+                path: Some("/root/help/**/".parse()?),
+                tier: BindingTier::Framework(HELP),
+                description: "Scroll down".to_string(),
+                source: None,
+                phase: Some(BindingPhase::AfterWidget),
+            },
+            command("binding_list::scroll_down"),
+        )
+        .is_err(),
+        "a record hidden from help differs from one shown"
+    );
     Ok(())
 }
 

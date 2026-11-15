@@ -706,6 +706,7 @@ impl InputMap {
                     && record.path_filter() == path_filter
             }) {
                 if existing.description == options.description
+                    && existing.show_in_help == options.show_in_help
                     && existing.phase == phase
                     && existing.source == options.source
                     && existing.action == target
