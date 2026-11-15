@@ -262,15 +262,14 @@ impl Widget for Text {
 
     fn canvas(&self, view: Size, _ctx: &canopy::layout::CanvasContext) -> Size {
         let wrap_width = self.wrap_width_for(view.w.max(1));
-        let wrapped_width = self
-            .with_wrap_cache(wrap_width, |cache| cache.max_width)
-            .max(1);
+        let (wrapped_width, height) = self.with_wrap_cache(wrap_width, |cache| {
+            (cache.max_width.max(1), cache.lines.len() as u32)
+        });
         let canvas_width = match self.canvas_width {
             CanvasWidth::View => view.w.max(1),
             CanvasWidth::Intrinsic => wrapped_width,
             CanvasWidth::Fixed(width) => width.max(1),
         };
-        let height = self.with_wrap_cache(wrap_width, |cache| cache.lines.len() as u32);
         Size::new(canvas_width, height)
     }
 
