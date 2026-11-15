@@ -483,8 +483,9 @@ impl Core {
                 .into_iter()
                 .find(|node| is_focus_candidate(self, *node, false))
         };
-        // Focus returns to where it was, or else to the nearest ancestor of
-        // that node that still lives, or else to the region left open.
+        // Focus returns to where it was, or else to the first candidate
+        // under the nearest ancestor of that node that still lives and has
+        // one, or else to the first candidate of the region left open.
         let focus = retired[0]
             .focus_ancestry
             .iter()
