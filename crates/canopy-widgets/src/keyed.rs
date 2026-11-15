@@ -175,16 +175,13 @@ where
             }
 
             for key in &removed {
-                let Some(typed_id) = working_map.get(key).copied() else {
+                let Some(typed_id) = working_map.remove(key) else {
                     continue;
                 };
                 let node_id = NodeId::from(typed_id);
-                if ctx.type_id_of(node_id).is_none() {
-                    working_map.remove(key);
-                    continue;
+                if ctx.type_id_of(node_id).is_some() {
+                    ctx.remove_subtree(node_id)?;
                 }
-                ctx.remove_subtree(node_id)?;
-                working_map.remove(key);
             }
 
             for typed_id in &ordered {
