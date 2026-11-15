@@ -364,9 +364,6 @@ impl GradientSpec {
 
     /// Blend between gradient stops for a normalized ratio.
     fn color_for_ratio(&self, ratio: f32) -> Color {
-        if self.stops.len() == 1 {
-            return self.stops[0].color;
-        }
         let ratio = ratio.clamp(0.0, 1.0);
         let mut prev = &self.stops[0];
         for stop in &self.stops[1..] {
@@ -377,7 +374,7 @@ impl GradientSpec {
             }
             prev = stop;
         }
-        self.stops.last().expect("gradient stops exist").color
+        prev.color
     }
 }
 
