@@ -2348,15 +2348,6 @@ impl Markdown {
         ctx.notify(NoticePost::warning(reason))
     }
 
-    /// The status of an action that goes on. The host reports a success in
-    /// its own way, and a notice reports a failure, so neither shows.
-    fn action_progress(&self) -> Option<&'static str> {
-        match self.action_status {
-            ActionStatus::Busy(status) => Some(status),
-            _ => None,
-        }
-    }
-
     /// Latest truthful status of a requested host action.
     #[command]
     pub fn action_status(&self) -> String {
@@ -2983,11 +2974,13 @@ impl Markdown {
         (new_bytes > 0 && self.shared.borrow().follow == Follow::Paused).then_some(new_bytes)
     }
     /// The progress of a running action, or else where the selected link
-    /// leads.
+    /// leads. The host reports a success in its own way, and a notice
+    /// reports a failure, so neither shows.
     fn action_note(&self) -> Option<ActionNote> {
-        self.action_progress()
-            .map(ActionNote::Progress)
-            .or_else(|| self.selected_destination().map(ActionNote::Link))
+        match self.action_status {
+            ActionStatus::Busy(status) => Some(ActionNote::Progress(status)),
+            _ => self.selected_destination().map(ActionNote::Link),
+        }
     }
     /// Refresh fixed status and query chrome without changing document state.
     fn update_chrome(&self, ctx: &mut dyn Context) -> Result<()> {
