@@ -300,6 +300,7 @@ fn capture_drag_count(core: &mut Core, id: NodeId) -> usize {
     .unwrap_or(0)
 }
 
+/// Build a left-button press over `node_id`.
 fn make_mouse_event(core: &Core, node_id: NodeId) -> mouse::MouseEvent {
     let loc = core
         .nodes
@@ -579,11 +580,6 @@ fn explicit_binding_phases_override_the_same_selector_and_change_route_trace() -
     })
 }
 
-/// Build a left-button press over `node`.
-fn click_on(core: &Core, node: NodeId) -> mouse::MouseEvent {
-    make_mouse_event(core, node)
-}
-
 /// Options for one mouse binding on the test tree.
 fn mouse_options(path: &str, phase: inputmap::BindingPhase) -> Result<inputmap::BindingOptions> {
     Ok(inputmap::BindingOptions {
@@ -600,7 +596,7 @@ fn mouse_options(path: &str, phase: inputmap::BindingPhase) -> Result<inputmap::
 fn a_mouse_binding_runs_in_the_phase_it_declares() -> Result<()> {
     run_ttree(|c, mut tr, tree| {
         c.render(&mut tr)?;
-        let click = inputmap::InputSpec::Mouse(click_on(&c.core, tree.a_a).into());
+        let click = inputmap::InputSpec::Mouse(make_mouse_event(&c.core, tree.a_a).into());
         for phase in [
             inputmap::BindingPhase::BeforeWidget,
             inputmap::BindingPhase::AfterWidget,
@@ -612,7 +608,7 @@ fn a_mouse_binding_runs_in_the_phase_it_declares() -> Result<()> {
                 BaLa::call_c_leaf(),
             )?;
             reset_state();
-            c.mouse(None, click_on(&c.core, tree.a_a))?;
+            c.mouse(None, make_mouse_event(&c.core, tree.a_a))?;
             let phases = c
                 .route_trace()
                 .iter()
@@ -637,7 +633,7 @@ fn a_mouse_binding_runs_in_the_phase_it_declares() -> Result<()> {
 fn one_winner_decides_each_route_node_and_phases_stay_local() -> Result<()> {
     run_ttree(|c, mut tr, tree| {
         c.render(&mut tr)?;
-        let click = inputmap::InputSpec::Mouse(click_on(&c.core, tree.a_a).into());
+        let click = inputmap::InputSpec::Mouse(make_mouse_event(&c.core, tree.a_a).into());
         // An ancestor's early binding is early only at the ancestor. The leaf's
         // widget still sees the click first, because the route reaches the leaf
         // before the ancestor exists as a route node at all.
@@ -648,7 +644,7 @@ fn one_winner_decides_each_route_node_and_phases_stay_local() -> Result<()> {
             R::call_c_root(),
         )?;
         reset_state();
-        c.mouse(None, click_on(&c.core, tree.a_a))?;
+        c.mouse(None, make_mouse_event(&c.core, tree.a_a))?;
         assert_eq!(
             get_state().path,
             ["ba_la@mouse->ignore", "ba@mouse->ignore", "r.c_root()"]
@@ -664,7 +660,7 @@ fn one_winner_decides_each_route_node_and_phases_stay_local() -> Result<()> {
             BaLa::call_c_leaf(),
         )?;
         reset_state();
-        c.mouse(None, click_on(&c.core, tree.a_a))?;
+        c.mouse(None, make_mouse_event(&c.core, tree.a_a))?;
         assert_eq!(get_state().path, ["ba_la.c_leaf()"]);
 
         // A widget that handles the click ends the route before the winning
@@ -677,7 +673,7 @@ fn one_winner_decides_each_route_node_and_phases_stay_local() -> Result<()> {
         )?;
         set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
         reset_state();
-        c.mouse(None, click_on(&c.core, tree.a_a))?;
+        c.mouse(None, make_mouse_event(&c.core, tree.a_a))?;
         assert_eq!(get_state().path, ["ba_la@mouse->handle"]);
         Ok(())
     })
@@ -820,7 +816,7 @@ fn an_early_mouse_binding_respects_modal_admission_and_wheel_fallback() -> Resul
             mouse_options("/r/bb/**/", inputmap::BindingPhase::BeforeWidget)?,
             R::call_c_root(),
         )?;
-        let mut scroll = click_on(&c.core, tree.a_a);
+        let mut scroll = make_mouse_event(&c.core, tree.a_a);
         scroll.action = mouse::Action::ScrollDown;
         scroll.button = mouse::Button::None;
         reset_state();
@@ -833,7 +829,7 @@ fn an_early_mouse_binding_respects_modal_admission_and_wheel_fallback() -> Resul
         // A framework group blocks application bindings whatever their phase.
         bind_command(
             c,
-            inputmap::InputSpec::Mouse(click_on(&c.core, tree.a_a).into()),
+            inputmap::InputSpec::Mouse(make_mouse_event(&c.core, tree.a_a).into()),
             mouse_options("/r/**/", inputmap::BindingPhase::BeforeWidget)?,
             R::call_c_root(),
         )?;
@@ -844,7 +840,7 @@ fn an_early_mouse_binding_respects_modal_admission_and_wheel_fallback() -> Resul
                 intents: &[],
             }));
         reset_state();
-        c.mouse(None, click_on(&c.core, tree.a_a))?;
+        c.mouse(None, make_mouse_event(&c.core, tree.a_a))?;
         assert!(
             !get_state().path.contains(&"r.c_root()".to_string()),
             "a framework group blocks an early application binding"
@@ -2581,14 +2577,6 @@ impl Widget for IntentLeaf {
     }
 }
 
-/// Mount one action leaf and give it the keyboard.
-fn mount_action_leaf(canopy: &mut Canopy, leaf: IntentLeaf) -> Result<NodeId> {
-    let node = canopy.core.create_detached(leaf)?;
-    canopy.core.attach(canopy.core.root, node)?;
-    canopy.core.set_focus(node)?;
-    Ok(node)
-}
-
 #[test]
 fn the_rendered_api_narrows_the_action_arm_to_registered_names() -> Result<()> {
     let bare = app();
@@ -2635,7 +2623,7 @@ fn the_rendered_api_narrows_the_action_arm_to_registered_names() -> Result<()> {
 fn an_intent_dispatches_to_its_accepting_consumer() -> Result<()> {
     let mut canopy = clear_intent_app();
     let calls = Arc::new(AtomicUsize::new(0));
-    let leaf = mount_action_leaf(
+    let leaf = focused_leaf(
         &mut canopy,
         IntentLeaf {
             intent: "test.clear",
@@ -2682,7 +2670,7 @@ fn an_intent_dispatches_to_its_accepting_consumer() -> Result<()> {
 fn a_dormant_action_does_not_shadow_the_next_candidate() -> Result<()> {
     let mut canopy = clear_intent_app();
     let raw = Arc::new(AtomicUsize::new(0));
-    let leaf = mount_action_leaf(
+    let leaf = focused_leaf(
         &mut canopy,
         IntentLeaf {
             intent: "test.clear",
@@ -2824,7 +2812,7 @@ fn an_intent_dispatches_for_the_route_focus_after_a_widget_moves_focus() -> Resu
 #[test]
 fn a_dormant_global_action_falls_through_to_the_default_tier() -> Result<()> {
     let mut canopy = clear_intent_app();
-    mount_action_leaf(
+    focused_leaf(
         &mut canopy,
         IntentLeaf {
             intent: "test.clear",
@@ -2860,7 +2848,7 @@ fn a_transient_mode_offers_its_action_before_the_raw_key() -> Result<()> {
     let mut canopy = clear_intent_app();
     let calls = Arc::new(AtomicUsize::new(0));
     let raw = Arc::new(AtomicUsize::new(0));
-    mount_action_leaf(
+    focused_leaf(
         &mut canopy,
         IntentLeaf {
             intent: "test.clear",
@@ -2903,7 +2891,7 @@ fn a_transient_mode_offers_its_action_before_the_raw_key() -> Result<()> {
 fn a_transient_mode_dismisses_a_dormant_action() -> Result<()> {
     let mut canopy = clear_intent_app();
     let raw = Arc::new(AtomicUsize::new(0));
-    mount_action_leaf(
+    focused_leaf(
         &mut canopy,
         IntentLeaf {
             intent: "test.clear",
@@ -3268,7 +3256,7 @@ fn a_disabled_command_claims_the_key_after_a_dormant_action() -> Result<()> {
     let mut canopy = clear_intent_app();
     canopy.core.commands.add(DisabledLeaf::commands())?;
     let calls = Arc::new(AtomicUsize::new(0));
-    let leaf = mount_action_leaf(
+    let leaf = focused_leaf(
         &mut canopy,
         IntentLeaf {
             intent: "test.clear",
@@ -3320,7 +3308,7 @@ fn a_disabled_command_claims_the_key_before_an_accepting_intent() -> Result<()> 
     let mut canopy = clear_intent_app();
     canopy.core.commands.add(DisabledLeaf::commands())?;
     let calls = Arc::new(AtomicUsize::new(0));
-    let leaf = mount_action_leaf(
+    let leaf = focused_leaf(
         &mut canopy,
         IntentLeaf {
             intent: "test.clear",
@@ -3370,7 +3358,7 @@ fn a_disabled_command_claims_the_key_before_an_accepting_intent() -> Result<()> 
 fn an_unreadable_widget_declines_an_action() -> Result<()> {
     let mut canopy = clear_intent_app();
     let calls = Arc::new(AtomicUsize::new(0));
-    let leaf = mount_action_leaf(
+    let leaf = focused_leaf(
         &mut canopy,
         IntentLeaf {
             intent: "test.clear",
@@ -3412,7 +3400,7 @@ fn an_unreadable_widget_declines_an_action() -> Result<()> {
 fn checked_dispatch_accepts_an_action_expectation() -> Result<()> {
     let mut canopy = clear_intent_app();
     let calls = Arc::new(AtomicUsize::new(0));
-    mount_action_leaf(
+    focused_leaf(
         &mut canopy,
         IntentLeaf {
             intent: "test.clear",
@@ -3450,7 +3438,7 @@ fn checked_dispatch_accepts_an_action_expectation() -> Result<()> {
 fn an_inconsistent_action_consumer_trips_the_debug_assert() {
     let mut canopy = clear_intent_app();
     let calls = Arc::new(AtomicUsize::new(0));
-    mount_action_leaf(
+    focused_leaf(
         &mut canopy,
         IntentLeaf {
             intent: "test.clear",
@@ -3524,7 +3512,7 @@ fn the_script_api_declares_named_mode_operations_only() -> Result<()> {
 fn a_mouse_menu_cannot_bury_a_waiting_menu() -> Result<()> {
     run_ttree(|c, mut tr, tree| {
         c.render(&mut tr)?;
-        let click = click_on(&c.core, tree.a_a);
+        let click = make_mouse_event(&c.core, tree.a_a);
         let mut options = mouse_options("/r/ba/ba_la/", BindingPhase::BeforeWidget)?;
         options.tier = BindingTier::Global;
         bind(
