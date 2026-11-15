@@ -59,14 +59,6 @@ fn image_error(err: impl fmt::Display) -> Error {
     Error::Invalid(format!("image error: {err}"))
 }
 
-/// Decode an image file into RGBA pixels at full size, under the limits of
-/// [`DecodedImage::read`]. A drawing keeps its own size, within 4096 pixels
-/// an edge.
-fn read_rgba(path: &Path) -> Result<RgbaImage> {
-    let full = DecodedImage::read(path)?.full()?;
-    Ok(Arc::unwrap_or_clone(full.image))
-}
-
 /// Rasterize a drawing at its own size, within 4096 pixels an edge.
 fn full_drawing(tree: &Tree) -> Result<RgbaImage> {
     svg::rasterize(tree, Size::new(DRAWING_MAX_EDGE, DRAWING_MAX_EDGE), false)
@@ -609,7 +601,9 @@ impl ImageView {
     /// Create a new image view widget from a file path, decoded at full size
     /// under the limits of [`DecodedImage::read`].
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {
-        Ok(Self::new(&read_rgba(path.as_ref())?))
+        Ok(Self::shared(
+            DecodedImage::read(path.as_ref())?.full()?.image,
+        ))
     }
 
     /// Return the size of the image in pixels.
@@ -622,10 +616,10 @@ impl ImageView {
     /// markup in no raster format parses as an SVG drawing, at its own size.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         if image::guess_format(bytes).is_err() && bytes.trim_ascii_start().starts_with(b"<") {
-            return Ok(Self::new(&full_drawing(&svg::parse(bytes)?)?));
+            return Ok(Self::shared(Arc::new(full_drawing(&svg::parse(bytes)?)?)));
         }
         let image = image::load_from_memory(bytes).map_err(image_error)?;
-        Ok(Self::new(&image.into_rgba8()))
+        Ok(Self::shared(Arc::new(image.into_rgba8())))
     }
 
     /// Create an image view with nothing to show yet.
@@ -673,7 +667,7 @@ impl ImageView {
     ///
     /// The view keeps its current image when the file cannot be read.
     pub fn set_path(&mut self, path: impl AsRef<Path>) -> Result<()> {
-        self.set_image(&read_rgba(path.as_ref())?);
+        self.set_preview(DecodedImage::read(path.as_ref())?.full()?);
         Ok(())
     }
 
