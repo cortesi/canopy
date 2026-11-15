@@ -5,7 +5,7 @@ use std::{
     iter,
 };
 
-use crossterm::{QueueableCommand, cursor as ccursor, style};
+use crossterm::style;
 
 use super::translate_result;
 use crate::{
@@ -277,11 +277,10 @@ impl RenderBackend for CrosstermRender {
             return Ok(());
         };
         self.cursor = None;
-        translate_result((|| {
-            let x = cell_coord(location.x)?;
-            let y = cell_coord(location.y)?;
-            self.pending.queue(ccursor::MoveTo(x, y)).map(|_| ())
-        })())
+        let x = translate_result(cell_coord(location.x))?;
+        let y = translate_result(cell_coord(location.y))?;
+        push_move(&mut self.pending, x, y);
+        Ok(())
     }
 
     fn supports_char_shift(&self) -> bool {
@@ -301,7 +300,7 @@ impl RenderBackend for CrosstermRender {
         let count_abs = count.unsigned_abs().min(u16::MAX as u32) as u16;
         let x = translate_result(cell_coord(loc.x))?;
         let y = translate_result(cell_coord(loc.y))?;
-        translate_result(self.pending.queue(ccursor::MoveTo(x, y)))?;
+        push_move(&mut self.pending, x, y);
         let op = if count > 0 { '@' } else { 'P' };
         translate_result(write!(self.pending, "\x1b[{count_abs}{op}"))
     }
@@ -319,7 +318,7 @@ impl RenderBackend for CrosstermRender {
         self.cursor = None;
         let count_abs = count.unsigned_abs().min(u16::MAX as u32) as u16;
         translate_result(write!(self.pending, "\x1b[{};{}r", top + 1, bottom + 1))?;
-        translate_result(self.pending.queue(ccursor::MoveTo(0, top)))?;
+        push_move(&mut self.pending, 0, top);
         let op = if count > 0 { 'T' } else { 'S' };
         translate_result(write!(self.pending, "\x1b[{count_abs}{op}\x1b[r"))
     }
