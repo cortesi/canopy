@@ -38,24 +38,14 @@ enum ColorEffect {
 
 impl StyleEffect for ColorEffect {
     fn apply(&self, mut style: Style) -> Style {
-        match *self {
-            Self::ScaleBrightness(f) => {
-                style.fg = style.fg.map_colors(|c| c.scale_brightness(f));
-                style.bg = style.bg.map_colors(|c| c.scale_brightness(f));
-            }
-            Self::Saturation(f) => {
-                style.fg = style.fg.map_colors(|c| c.saturation(f));
-                style.bg = style.bg.map_colors(|c| c.saturation(f));
-            }
-            Self::Invert => {
-                style.fg = style.fg.map_colors(Color::invert_rgb);
-                style.bg = style.bg.map_colors(Color::invert_rgb);
-            }
-            Self::HueShift(d) => {
-                style.fg = style.fg.map_colors(|c| c.shift_hue(d));
-                style.bg = style.bg.map_colors(|c| c.shift_hue(d));
-            }
-        }
+        let map = |color: Color| match *self {
+            Self::ScaleBrightness(factor) => color.scale_brightness(factor),
+            Self::Saturation(factor) => color.saturation(factor),
+            Self::Invert => color.invert_rgb(),
+            Self::HueShift(degrees) => color.shift_hue(degrees),
+        };
+        style.fg = style.fg.map_colors(map);
+        style.bg = style.bg.map_colors(map);
         style
     }
 }
