@@ -2,7 +2,7 @@
 //!
 //! A view that highlights search matches, such as the
 //! [`Editor`](crate::Editor), the [`DiffView`](crate::DiffView), or a
-//! rendered Markdown document, follows four conventions:
+//! rendered Markdown document, follows five conventions:
 //!
 //! - It paints the current match with [`CURRENT`] and every other match with
 //!   [`MATCH`]. The theme gives both roles one hue, and the current match takes

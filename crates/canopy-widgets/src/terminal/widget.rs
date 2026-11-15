@@ -524,7 +524,7 @@ impl Terminal {
         drop(session.send_input_bytes(bytes, "mouse"));
     }
 
-    /// Swallow Ctrl+Shift+C so the chord does not reach the PTY.
+    /// Copy the selection to the system clipboard.
     fn copy_selection(&self) {
         let Some(text) = self.session().and_then(Session::copy_selection) else {
             return;

@@ -124,7 +124,7 @@ impl Cursor {
 /// [`ColumnChart::set_columns`], and a change of the fit clear it too. The
 /// wheel moves the cursor. Moving the cursor to the newest column turns on
 /// following: after [`ColumnChart::set_columns`], the cursor stays on the
-/// newest column. [`ColumnChart::with_command`] sets a call that runs after
+/// newest column. [`ColumnChart::with_on_change`] sets a call that runs after
 /// each change of the cursor or the hover by input or by a cursor command.
 ///
 /// `ColumnChart` pushes the `column_chart` layer. It paints the `axis`,

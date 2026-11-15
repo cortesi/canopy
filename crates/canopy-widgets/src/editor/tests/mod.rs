@@ -2286,7 +2286,7 @@ fn highlight_preparation_batches_updates_until_render() {
 
     harness.key('!').unwrap();
     assert_eq!(*prepared.borrow(), ["final", "!final"]);
-    // Replacing an edited buffer resets its revision to zero.
+    // New text raises the revision, so the next render prepares again.
     with_editor(&mut harness, |editor| editor.set_text("replacement"));
     assert_eq!(prepared.borrow().len(), 2);
     harness.render().unwrap();
