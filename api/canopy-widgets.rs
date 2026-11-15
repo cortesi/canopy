@@ -824,7 +824,8 @@ impl !Sync for ColumnChart {}
 ///
 /// A framed row can also [label](Columns::set_label) a pane: a short text at
 /// the right end of the rule above it, such as a mark that the pane holds
-/// unsaved changes.
+/// unsaved changes. A [title](Columns::set_title) takes the rule's left end,
+/// and shortens to the room that the label leaves.
 ///
 /// `Columns` owns the scrollbars of its panes, so an enclosing frame draws none
 /// for them. Dividers use `columns/divider`, thumbs `columns/thumb`, and a
@@ -880,6 +881,28 @@ impl Columns {
     /// between it and the corner. A label too wide for the rule, and the
     /// label of a row without a frame, do not draw.
     pub fn set_label(&mut self, pane: NodeId, style: impl Into<String>, text: impl Into<String>);
+
+    /// Title `pane` with `text` in `style`, at the left end of the frame's
+    /// rule above it, or take its title away with an empty `text`.
+    ///
+    /// The title draws with a space on each side, after a cell of the rule.
+    /// It takes the room up to a cell of the rule before the pane's label,
+    /// or before the corner, and `truncate` cuts it to that room: a path
+    /// keeps its tail with [`Truncate::Start`]. A title without room for a
+    /// character beside the truncation marker does not draw, nor does one in
+    /// a row without a frame.
+    pub fn set_title(
+        &mut self,
+        pane: NodeId,
+        style: impl Into<String>,
+        text: impl Into<String>,
+        truncate: Truncate,
+    );
+
+    /// Return the title text of `pane`, as it stands before truncation, or
+    /// none.
+    #[must_use]
+    pub fn title(&self, pane: NodeId) -> Option<&str>;
 
     /// Build columns that box each pane in `light` and the pane with focus
     /// in `focused`.

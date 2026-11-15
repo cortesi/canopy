@@ -9,7 +9,7 @@ use canopy::{
     input::Event,
     layout::{Direction, Edges, Layout, ScrollAxis},
     render::Render,
-    text,
+    text::{self, Truncate},
     tree::FocusScope,
 };
 
@@ -37,7 +37,8 @@ use crate::{
 ///
 /// A framed row can also [label](Columns::set_label) a pane: a short text at
 /// the right end of the rule above it, such as a mark that the pane holds
-/// unsaved changes.
+/// unsaved changes. A [title](Columns::set_title) takes the rule's left end,
+/// and shortens to the room that the label leaves.
 ///
 /// `Columns` owns the scrollbars of its panes, so an enclosing frame draws none
 /// for them. Dividers use `columns/divider`, thumbs `columns/thumb`, and a
@@ -54,6 +55,18 @@ pub struct Columns {
     home: Vec<NodeId>,
     /// The label of each labelled pane: its style and its text.
     labels: Vec<(NodeId, String, String)>,
+    /// The title of each titled pane.
+    titles: Vec<(NodeId, Title)>,
+}
+
+/// The title of a pane, at the left end of the rule above it.
+struct Title {
+    /// The style it draws in.
+    style: String,
+    /// Its text, which `truncate` shortens to fit the rule.
+    text: String,
+    /// The end of `text` that gives way.
+    truncate: Truncate,
 }
 
 #[derive_commands]
@@ -66,6 +79,7 @@ impl Columns {
             frame: None,
             home: Vec::new(),
             labels: Vec::new(),
+            titles: Vec::new(),
         }
     }
 
@@ -115,6 +129,47 @@ impl Columns {
             .iter()
             .find(|(labelled, ..)| *labelled == pane)
             .map(|(_, _, text)| text.as_str())
+    }
+
+    /// Title `pane` with `text` in `style`, at the left end of the frame's
+    /// rule above it, or take its title away with an empty `text`.
+    ///
+    /// The title draws with a space on each side, after a cell of the rule.
+    /// It takes the room up to a cell of the rule before the pane's label,
+    /// or before the corner, and `truncate` cuts it to that room: a path
+    /// keeps its tail with [`Truncate::Start`]. A title without room for a
+    /// character beside the truncation marker does not draw, nor does one in
+    /// a row without a frame.
+    pub fn set_title(
+        &mut self,
+        pane: NodeId,
+        style: impl Into<String>,
+        text: impl Into<String>,
+        truncate: Truncate,
+    ) {
+        let text = text.into();
+        self.titles.retain(|(titled, _)| *titled != pane);
+        if !text.is_empty() {
+            let style = style.into();
+            self.titles.push((
+                pane,
+                Title {
+                    style,
+                    text,
+                    truncate,
+                },
+            ));
+        }
+    }
+
+    /// Return the title text of `pane`, as it stands before truncation, or
+    /// none.
+    #[must_use]
+    pub fn title(&self, pane: NodeId) -> Option<&str> {
+        self.titles
+            .iter()
+            .find(|(titled, _)| *titled == pane)
+            .map(|(_, title)| title.text.as_str())
     }
 
     /// Build columns with replaced scrollbar glyphs.
@@ -252,7 +307,8 @@ impl Columns {
             let (style, glyphs) = look(lit);
             rndr.fill(style, Rect::new(x, 0, w, 1), glyphs.horizontal)?;
             rndr.fill(style, Rect::new(x, bottom, w, 1), glyphs.horizontal)?;
-            self.render_label(rndr, pane, x, w)?;
+            let end = self.render_label(rndr, pane, x, w)?;
+            self.render_title(rndr, pane, x, end)?;
         }
         // A side lies left of each pane and right of the last, between the
         // panes on either side of it.
@@ -280,19 +336,41 @@ impl Columns {
     }
 
     /// Draw the label of `pane` at the right end of its rule, which spans
-    /// `w` cells from `x`.
-    fn render_label(&self, rndr: &mut Render, pane: NodeId, x: u32, w: u32) -> Result<()> {
+    /// `w` cells from `x`, and return the column where the rule's free cells
+    /// end: the label's start, or the rule's end.
+    fn render_label(&self, rndr: &mut Render, pane: NodeId, x: u32, w: u32) -> Result<u32> {
+        let end = x + w;
         let Some((_, style, label)) = self.labels.iter().find(|(labelled, ..)| *labelled == pane)
         else {
-            return Ok(());
+            return Ok(end);
         };
         let padded = format!(" {label} ");
         let width = text::width(&padded);
         // A cell of the rule stays on each side of the label.
         if width.saturating_add(2) > w {
+            return Ok(end);
+        }
+        let start = end - 1 - width;
+        rndr.text(style, Line::new(start, 0, width), &padded)?;
+        Ok(start)
+    }
+
+    /// Draw the title of `pane` on its rule, in the cells from `x` to `end`,
+    /// with a cell of the rule at each end.
+    fn render_title(&self, rndr: &mut Render, pane: NodeId, x: u32, end: u32) -> Result<()> {
+        let Some((_, title)) = self.titles.iter().find(|(titled, _)| *titled == pane) else {
+            return Ok(());
+        };
+        // Two cells of the rule and the title's two spaces.
+        let room = end.saturating_sub(x).saturating_sub(4);
+        // The truncation marker takes two cells, and needs a character after.
+        if room < 3 && text::width(&title.text) > room {
             return Ok(());
         }
-        rndr.text(style, Line::new(x + w - 1 - width, 0, width), &padded)?;
+        let room = usize::try_from(room).unwrap_or(usize::MAX);
+        let padded = format!(" {} ", title.truncate.apply(&title.text, room));
+        let width = text::width(&padded);
+        rndr.text(&title.style, Line::new(x + 1, 0, width), &padded)?;
         Ok(())
     }
 

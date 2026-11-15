@@ -16,6 +16,7 @@ use canopy::{
     },
     style::Color,
     testing::harness::Harness,
+    text::Truncate,
 };
 
 use crate::{
@@ -1038,6 +1039,51 @@ fn a_framed_row_labels_a_pane_at_the_right_of_its_rule() -> Result<()> {
         label(&mut harness, left, "")?,
         "┌────────────┬────────────┐"
     );
+    Ok(())
+}
+
+#[test]
+fn a_framed_row_titles_a_pane_in_the_room_its_label_leaves() -> Result<()> {
+    // Twenty columns less the frame's two sides leave one pane of eighteen.
+    let (mut harness, nodes) = scene(20, 4, |c| {
+        let root = c.node_id();
+        let columns: NodeId = c
+            .add_child(
+                root,
+                Columns::new().with_frame(BoxGlyphs::SINGLE, BoxGlyphs::SINGLE_THICK),
+            )?
+            .into();
+        Ok(vec![columns, boxed(c, columns, Layout::fill())?])
+    })?;
+    let (columns, pane) = (nodes[0], nodes[1]);
+    let rule = |harness: &mut Harness, title: &str, label: &str| -> Result<String> {
+        harness.canopy.with_root_context(|c| {
+            c.update(columns, |columns: &mut Columns| {
+                columns.set_title(pane, "columns/divider", title, Truncate::Start);
+                columns.set_label(pane, "columns/divider", label);
+            })
+        })?;
+        harness.render()?;
+        Ok(harness.tbuf().lines()[0].clone())
+    };
+
+    assert_eq!(rule(&mut harness, "a/b.txt", "")?, "┌─ a/b.txt ────────┐");
+    assert_eq!(
+        rule(&mut harness, "a/long/dir/to/a.txt", "")?,
+        "┌─ … dir/to/a.txt ─┐",
+        "a long title keeps its tail"
+    );
+    assert_eq!(
+        rule(&mut harness, "a/long/dir/to/a.txt", "●")?,
+        "┌─ … to/a.txt ─ ● ─┐",
+        "a title gives way to the label"
+    );
+    assert_eq!(
+        rule(&mut harness, "a/b.txt", "far too wide")?,
+        "┌─── far too wide ─┐",
+        "a title without room does not draw"
+    );
+    assert_eq!(rule(&mut harness, "", "")?, "┌──────────────────┐");
     Ok(())
 }
 
