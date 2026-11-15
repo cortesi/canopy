@@ -569,7 +569,7 @@ pub(super) fn screen_text_for_rect(canopy: &mut Canopy, rect: RectI32) -> Result
 /// Return the rendered screen as styled text.
 pub(super) fn screen_capture(canopy: &mut Canopy) -> Result<ArgValue> {
     let capture = rendered_buffer(canopy)?.capture();
-    Ok(commands::SerdeArg(capture).try_to_arg_value()?)
+    Ok(commands::serde_to_arg_value(capture)?)
 }
 
 /// Return the rendered screen as plain text.

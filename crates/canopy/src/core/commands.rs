@@ -526,9 +526,6 @@ impl<'a> DeclRegistry<'a> {
     }
 }
 
-/// Wrapper for fallible serde argument conversion.
-pub(crate) struct SerdeArg<T>(pub T);
-
 /// Convert ArgValue into a JSON value for serde interop.
 fn arg_value_to_json(value: &ArgValue, node_json: NodeJson) -> Result<JsonValue, CommandError> {
     Ok(match value {
@@ -627,16 +624,11 @@ fn json_to_arg_value(value: JsonValue) -> Result<ArgValue, CommandError> {
     }
 }
 
-impl<T> SerdeArg<T>
-where
-    T: Serialize,
-{
-    /// Encode a serde argument into ArgValue, returning conversion errors.
-    pub(crate) fn try_to_arg_value(self) -> Result<ArgValue, CommandError> {
-        let value = serde_json::to_value(self.0)
-            .map_err(|err| CommandError::conversion(err.to_string()))?;
-        json_to_arg_value(value)
-    }
+/// Encode a serde value into ArgValue, returning conversion errors.
+pub(crate) fn serde_to_arg_value(value: impl Serialize) -> Result<ArgValue, CommandError> {
+    let value =
+        serde_json::to_value(value).map_err(|err| CommandError::conversion(err.to_string()))?;
+    json_to_arg_value(value)
 }
 
 impl<T> FromArgValue for T
@@ -1846,7 +1838,7 @@ mod tests {
             }
         }
 
-        let err = SerdeArg(BadSerde).try_to_arg_value().unwrap_err();
+        let err = serde_to_arg_value(BadSerde).unwrap_err();
         assert!(matches!(err, CommandError::Conversion { .. }));
     }
 
@@ -1900,7 +1892,7 @@ mod tests {
             map,
         };
 
-        let encoded = SerdeArg(value.clone()).try_to_arg_value().unwrap();
+        let encoded = serde_to_arg_value(value.clone()).unwrap();
         let decoded = Outer::from_arg_value(&encoded).unwrap();
         assert_eq!(decoded, value);
     }
@@ -1908,7 +1900,7 @@ mod tests {
     #[test]
     fn serde_arg_encodes_large_unsigned_values() {
         let value = (i64::MAX as u64) + 1;
-        let encoded = SerdeArg(value).try_to_arg_value().unwrap();
+        let encoded = serde_to_arg_value(value).unwrap();
         assert_eq!(encoded, ArgValue::UInt(value));
     }
 }
