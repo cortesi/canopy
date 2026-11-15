@@ -1998,9 +1998,8 @@ impl Markdown {
             return self.schedule(ctx, true);
         }
         let supplied = Arc::make_mut(&mut self.supplied);
-        let embed = match (kind, resource) {
-            (ResourceKind::Link, _) => unreachable!("links return above"),
-            (_, Resource::Image(image)) => {
+        let embed = match resource {
+            Resource::Image(image) => {
                 let info = EmbedInfo::Size {
                     width: image.width(),
                     height: image.height(),
@@ -2010,18 +2009,16 @@ impl Markdown {
                     .overlays
                     .images
                     .insert(destination.clone(), image);
-                Some(info)
+                info
             }
-            (_, Resource::Text(text)) => Some(EmbedInfo::Text(
-                embedded_section(&text, target.fragment.as_deref()).into(),
-            )),
-            (_, Resource::Missing) => Some(EmbedInfo::Failed("not found".into())),
-            (_, Resource::Found) => Some(EmbedInfo::Failed("nothing to show".into())),
-            (_, Resource::Failed(reason)) => Some(EmbedInfo::Failed(reason)),
+            Resource::Text(text) => {
+                EmbedInfo::Text(embedded_section(&text, target.fragment.as_deref()).into())
+            }
+            Resource::Missing => EmbedInfo::Failed("not found".into()),
+            Resource::Found => EmbedInfo::Failed("nothing to show".into()),
+            Resource::Failed(reason) => EmbedInfo::Failed(reason),
         };
-        if let Some(embed) = embed {
-            supplied.embeds.insert(destination, embed);
-        }
+        supplied.embeds.insert(destination, embed);
         self.generation += 1;
         self.schedule(ctx, true)
     }
