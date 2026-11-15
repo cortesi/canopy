@@ -221,12 +221,6 @@ impl IntentCatalog {
         }
     }
 
-    /// Return whether the catalog holds no actions.
-    #[must_use]
-    pub(crate) fn is_empty(&self) -> bool {
-        self.actions.is_empty()
-    }
-
     /// Return whether `name` is registered.
     #[must_use]
     pub(crate) fn contains(&self, name: &IntentName) -> bool {

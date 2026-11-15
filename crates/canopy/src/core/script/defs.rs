@@ -90,8 +90,7 @@ fn command_params_sig(spec: &CommandSpec) -> declaration::FunctionSignature {
 
 /// Register framework-owned record and alias declarations.
 ///
-/// Returns the binding action union, which narrows to `IntentName`
-/// whenever the application registered at least one intent.
+/// Returns the binding action union.
 pub(super) fn register_framework_declarations(
     builder: &mut module::Builder,
     actions: &IntentCatalog,
@@ -318,23 +317,12 @@ pub(super) fn register_framework_declarations(
     action_type
 }
 
-/// Register `IntentName` when the catalog holds actions, and return the
-/// binding action union.
-///
-/// An empty catalog leaves the union at commands and callbacks, because no
-/// string action can be registered in that application.
+/// Register `IntentName` for the catalog's actions, and return the binding
+/// action union.
 fn register_action_type(
     builder: &mut module::Builder,
     actions: &IntentCatalog,
 ) -> declaration::Type {
-    let mut union = vec![
-        declaration::Type::named("CommandCall"),
-        declaration::Type::named("MenuAction"),
-        declaration::Type::func(declaration::FunctionSignature::new()),
-    ];
-    if actions.is_empty() {
-        return declaration::Type::union(union);
-    }
     let mut doc = String::from(
         "Registered intent name. The route offers the action to the focused \
          widget; a widget that accepts it consumes the key.",
@@ -349,8 +337,12 @@ fn register_action_type(
     builder.alias(
         declaration::Alias::new("IntentName", declaration::Type::literals(literals)).doc(doc),
     );
-    union.push(declaration::Type::named("IntentName"));
-    declaration::Type::union(union)
+    declaration::Type::union([
+        declaration::Type::named("CommandCall"),
+        declaration::Type::named("MenuAction"),
+        declaration::Type::func(declaration::FunctionSignature::new()),
+        declaration::Type::named("IntentName"),
+    ])
 }
 
 /// The binding tier field shared by binding records.
