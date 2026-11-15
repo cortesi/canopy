@@ -456,9 +456,8 @@ mod tests {
         );
         let clocks = clocks_after(0);
         assert_eq!(
-            buf.next_motion_change(&clocks, Duration::from_millis(33))
-                .map(|at| at.duration_since(clocks.now) >= Duration::from_millis(599)),
-            Some(true)
+            buf.next_motion_change(&clocks, Duration::from_millis(33)),
+            Some(clocks.now + Duration::from_millis(600))
         );
         Ok(())
     }

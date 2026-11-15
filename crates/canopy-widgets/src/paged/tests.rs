@@ -193,7 +193,7 @@ fn keyboard_crosses_both_edges_with_only_one_resident_page() {
 
 #[test]
 fn keyboard_crosses_both_edges_of_a_one_row_window() {
-    let mut provider = Provider::new(3);
+    let mut provider = Provider::new(2);
     let mut model = model(1, 1);
     initial(&mut model, &mut provider);
     assert_eq!(selected(&model), Some(0));
