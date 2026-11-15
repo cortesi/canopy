@@ -382,156 +382,6 @@ fn grapheme_boundaries(line: &str) -> Option<Vec<usize>> {
     Some(bytes)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_match_never_splits_a_grapheme() {
-        let buffer = TextBuffer::new("e\u{301}x ex e");
-        let starts: Vec<usize> = find_matches(&buffer, "e")
-            .iter()
-            .map(|range| range.start.column)
-            .collect();
-        assert_eq!(starts, [4, 7]);
-        assert_eq!(find_matches(&buffer, "e\u{301}").len(), 1);
-        assert!(find_matches(&buffer, "\u{301}").is_empty());
-        assert_eq!(find_matches(&buffer, "x").len(), 2);
-    }
-
-    #[test]
-    fn search_finds_matches() {
-        let buffer = TextBuffer::new("hello\nworld hello");
-        let matches = find_matches(&buffer, "hello");
-        assert_eq!(matches.len(), 2);
-        assert_eq!(matches[0].start.line, 0);
-        assert_eq!(matches[1].start.line, 1);
-    }
-
-    #[test]
-    fn next_from_finds_the_match_after_a_position_and_wraps() {
-        let buffer = TextBuffer::new("ab ab\nab");
-        let at = |line, column| TextPosition::new(line, column);
-        let mut state = SearchState::new();
-        state.set_query(&buffer, "ab", SearchDirection::Forward);
-        let start = |state: &mut SearchState, from, reverse| {
-            state
-                .next_from(&buffer, from, reverse)
-                .map(|range| range.start)
-        };
-        assert_eq!(start(&mut state, at(0, 0), false), Some(at(0, 3)));
-        assert_eq!(state.current_index(), Some(1));
-        assert_eq!(start(&mut state, at(0, 1), false), Some(at(0, 3)));
-        assert_eq!(start(&mut state, at(1, 0), false), Some(at(0, 0)));
-        assert_eq!(start(&mut state, at(0, 3), true), Some(at(0, 0)));
-        assert_eq!(start(&mut state, at(0, 0), true), Some(at(1, 0)));
-        assert_eq!(start(&mut state, at(0, 4), true), Some(at(0, 3)));
-
-        state.set_query(&buffer, "ab", SearchDirection::Backward);
-        assert_eq!(start(&mut state, at(0, 3), false), Some(at(0, 0)));
-        assert_eq!(start(&mut state, at(0, 3), true), Some(at(1, 0)));
-
-        state.set_query(&buffer, "zz", SearchDirection::Forward);
-        assert_eq!(start(&mut state, at(0, 0), false), None);
-    }
-
-    #[test]
-    fn search_moves_forward_and_backward() {
-        let buffer = TextBuffer::new("alpha beta alpha");
-        let mut state = SearchState::new();
-        state.set_query(&buffer, "alpha", SearchDirection::Forward);
-        let first = state.current_match().unwrap().start;
-        let second = state.move_next(&buffer, false).unwrap();
-        assert_ne!(first, second);
-        let back = state.move_next(&buffer, true).unwrap();
-        assert_eq!(back, first);
-    }
-
-    #[test]
-    fn installed_matches_make_the_first_match_at_or_after_from_current() {
-        let buffer = TextBuffer::new("one two one");
-        let ranges = find_matches(&buffer, "one");
-        assert_eq!(ranges.len(), 2);
-        let mut state = SearchState::new();
-        state.set_matches(&buffer, ranges.clone(), TextPosition::new(0, 4));
-        assert_eq!(state.match_count(), 2);
-        assert_eq!(state.current_index(), Some(1));
-        assert_eq!(state.current_match(), Some(ranges[1]));
-    }
-
-    #[test]
-    fn installed_matches_wrap_and_survive_navigation() {
-        let buffer = TextBuffer::new("one two one");
-        let ranges = find_matches(&buffer, "one");
-        let mut state = SearchState::new();
-        state.set_matches(&buffer, ranges.clone(), TextPosition::new(0, 99));
-        assert_eq!(state.current_match(), Some(ranges[0]));
-        // The buffer did not change, so navigation keeps the installed set
-        // instead of recomputing a literal query.
-        state.move_next(&buffer, false);
-        assert_eq!(state.current_match(), Some(ranges[1]));
-        state.move_next(&buffer, false);
-        assert_eq!(state.current_match(), Some(ranges[0]));
-    }
-
-    #[test]
-    fn an_edit_drops_installed_matches_and_ends_the_search() {
-        let mut buffer = TextBuffer::new("one two one");
-        let ranges = find_matches(&buffer, "one");
-        let mut state = SearchState::new();
-        state.set_matches(&buffer, ranges, TextPosition::new(0, 0));
-        assert_eq!(state.source(), &Source::Installed);
-        state.update(&buffer);
-        assert_eq!(state.match_count(), 2, "an unchanged text keeps them");
-        buffer.insert_text("x");
-        state.update(&buffer);
-        assert_eq!(state.match_count(), 0);
-        assert_eq!(state.current_match(), None);
-        assert_eq!(state.source(), &Source::None);
-    }
-
-    #[test]
-    fn an_edit_searches_a_query_again() {
-        let mut buffer = TextBuffer::new("ONE two");
-        let mut state = SearchState::new();
-        state.set_smart_query(&buffer, "ONE", TextPosition::new(0, 0));
-        assert_eq!(state.match_count(), 1);
-        buffer.insert_text(" one ONE");
-        state.update(&buffer);
-        assert_eq!(state.match_count(), 2, "an uppercase query keeps case");
-        assert!(matches!(
-            state.source(),
-            Source::Query {
-                ignore_case: false,
-                ..
-            }
-        ));
-    }
-
-    #[test]
-    fn suffix_search_starts_before_nonoverlapping_match_collection() {
-        let buffer = TextBuffer::new("ééé");
-        assert_eq!(
-            find_matches_from(&buffer, "éé", TextPosition::new(0, 1)),
-            [TextRange::new(
-                TextPosition::new(0, 1),
-                TextPosition::new(0, 3)
-            )]
-        );
-        assert!(find_matches_from(&buffer, "é", TextPosition::new(0, 99)).is_empty());
-        assert!(find_matches_from(&buffer, "é", TextPosition::new(1, 0)).is_empty());
-        assert!(find_matches(&buffer, "").is_empty());
-    }
-
-    #[test]
-    fn crlf_and_lf_have_equivalent_search_matches() {
-        let lf = TextBuffer::new("ab\nab\n");
-        let crlf = TextBuffer::new("ab\r\nab\r\n");
-        assert_eq!(find_matches(&lf, "ab"), find_matches(&crlf, "ab"));
-        assert!(find_matches(&crlf, "\r").is_empty());
-    }
-}
-
 /// Prompt modes for search and replace interactions.
 #[derive(Debug, Clone)]
 pub(super) enum PromptState {
@@ -771,5 +621,155 @@ impl Editor {
         let y = origin.y.saturating_add(view_rect.h.saturating_sub(1));
         let line = Line::new(origin.x, y, view_rect.w);
         r.text(roles::PROMPT, line, &prompt_text(prompt))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_match_never_splits_a_grapheme() {
+        let buffer = TextBuffer::new("e\u{301}x ex e");
+        let starts: Vec<usize> = find_matches(&buffer, "e")
+            .iter()
+            .map(|range| range.start.column)
+            .collect();
+        assert_eq!(starts, [4, 7]);
+        assert_eq!(find_matches(&buffer, "e\u{301}").len(), 1);
+        assert!(find_matches(&buffer, "\u{301}").is_empty());
+        assert_eq!(find_matches(&buffer, "x").len(), 2);
+    }
+
+    #[test]
+    fn search_finds_matches() {
+        let buffer = TextBuffer::new("hello\nworld hello");
+        let matches = find_matches(&buffer, "hello");
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].start.line, 0);
+        assert_eq!(matches[1].start.line, 1);
+    }
+
+    #[test]
+    fn next_from_finds_the_match_after_a_position_and_wraps() {
+        let buffer = TextBuffer::new("ab ab\nab");
+        let at = |line, column| TextPosition::new(line, column);
+        let mut state = SearchState::new();
+        state.set_query(&buffer, "ab", SearchDirection::Forward);
+        let start = |state: &mut SearchState, from, reverse| {
+            state
+                .next_from(&buffer, from, reverse)
+                .map(|range| range.start)
+        };
+        assert_eq!(start(&mut state, at(0, 0), false), Some(at(0, 3)));
+        assert_eq!(state.current_index(), Some(1));
+        assert_eq!(start(&mut state, at(0, 1), false), Some(at(0, 3)));
+        assert_eq!(start(&mut state, at(1, 0), false), Some(at(0, 0)));
+        assert_eq!(start(&mut state, at(0, 3), true), Some(at(0, 0)));
+        assert_eq!(start(&mut state, at(0, 0), true), Some(at(1, 0)));
+        assert_eq!(start(&mut state, at(0, 4), true), Some(at(0, 3)));
+
+        state.set_query(&buffer, "ab", SearchDirection::Backward);
+        assert_eq!(start(&mut state, at(0, 3), false), Some(at(0, 0)));
+        assert_eq!(start(&mut state, at(0, 3), true), Some(at(1, 0)));
+
+        state.set_query(&buffer, "zz", SearchDirection::Forward);
+        assert_eq!(start(&mut state, at(0, 0), false), None);
+    }
+
+    #[test]
+    fn search_moves_forward_and_backward() {
+        let buffer = TextBuffer::new("alpha beta alpha");
+        let mut state = SearchState::new();
+        state.set_query(&buffer, "alpha", SearchDirection::Forward);
+        let first = state.current_match().unwrap().start;
+        let second = state.move_next(&buffer, false).unwrap();
+        assert_ne!(first, second);
+        let back = state.move_next(&buffer, true).unwrap();
+        assert_eq!(back, first);
+    }
+
+    #[test]
+    fn installed_matches_make_the_first_match_at_or_after_from_current() {
+        let buffer = TextBuffer::new("one two one");
+        let ranges = find_matches(&buffer, "one");
+        assert_eq!(ranges.len(), 2);
+        let mut state = SearchState::new();
+        state.set_matches(&buffer, ranges.clone(), TextPosition::new(0, 4));
+        assert_eq!(state.match_count(), 2);
+        assert_eq!(state.current_index(), Some(1));
+        assert_eq!(state.current_match(), Some(ranges[1]));
+    }
+
+    #[test]
+    fn installed_matches_wrap_and_survive_navigation() {
+        let buffer = TextBuffer::new("one two one");
+        let ranges = find_matches(&buffer, "one");
+        let mut state = SearchState::new();
+        state.set_matches(&buffer, ranges.clone(), TextPosition::new(0, 99));
+        assert_eq!(state.current_match(), Some(ranges[0]));
+        // The buffer did not change, so navigation keeps the installed set
+        // instead of recomputing a literal query.
+        state.move_next(&buffer, false);
+        assert_eq!(state.current_match(), Some(ranges[1]));
+        state.move_next(&buffer, false);
+        assert_eq!(state.current_match(), Some(ranges[0]));
+    }
+
+    #[test]
+    fn an_edit_drops_installed_matches_and_ends_the_search() {
+        let mut buffer = TextBuffer::new("one two one");
+        let ranges = find_matches(&buffer, "one");
+        let mut state = SearchState::new();
+        state.set_matches(&buffer, ranges, TextPosition::new(0, 0));
+        assert_eq!(state.source(), &Source::Installed);
+        state.update(&buffer);
+        assert_eq!(state.match_count(), 2, "an unchanged text keeps them");
+        buffer.insert_text("x");
+        state.update(&buffer);
+        assert_eq!(state.match_count(), 0);
+        assert_eq!(state.current_match(), None);
+        assert_eq!(state.source(), &Source::None);
+    }
+
+    #[test]
+    fn an_edit_searches_a_query_again() {
+        let mut buffer = TextBuffer::new("ONE two");
+        let mut state = SearchState::new();
+        state.set_smart_query(&buffer, "ONE", TextPosition::new(0, 0));
+        assert_eq!(state.match_count(), 1);
+        buffer.insert_text(" one ONE");
+        state.update(&buffer);
+        assert_eq!(state.match_count(), 2, "an uppercase query keeps case");
+        assert!(matches!(
+            state.source(),
+            Source::Query {
+                ignore_case: false,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn suffix_search_starts_before_nonoverlapping_match_collection() {
+        let buffer = TextBuffer::new("ééé");
+        assert_eq!(
+            find_matches_from(&buffer, "éé", TextPosition::new(0, 1)),
+            [TextRange::new(
+                TextPosition::new(0, 1),
+                TextPosition::new(0, 3)
+            )]
+        );
+        assert!(find_matches_from(&buffer, "é", TextPosition::new(0, 99)).is_empty());
+        assert!(find_matches_from(&buffer, "é", TextPosition::new(1, 0)).is_empty());
+        assert!(find_matches(&buffer, "").is_empty());
+    }
+
+    #[test]
+    fn crlf_and_lf_have_equivalent_search_matches() {
+        let lf = TextBuffer::new("ab\nab\n");
+        let crlf = TextBuffer::new("ab\r\nab\r\n");
+        assert_eq!(find_matches(&lf, "ab"), find_matches(&crlf, "ab"));
+        assert!(find_matches(&crlf, "\r").is_empty());
     }
 }

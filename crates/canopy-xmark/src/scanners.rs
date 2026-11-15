@@ -1608,8 +1608,8 @@ pub fn scan_inline_html_comment(
     let c = *bytes.get(ix)?;
     ix += 1;
     match c {
-        // An HTML comment consists of `<!-->`, `<!--->`, or  `<!--`, a string of characters not
-        // including the string `-->`, and `-->`.
+        // An HTML comment consists of `<!-->`, `<!--->`, or  `<!--`, a string
+        // of characters not including the string `-->`, and `-->`.
         b'-' if ix > scan_guard.comment => {
             // HTML comment needs two hyphens after the !.
             if *bytes.get(ix)? != b'-' {
@@ -1635,8 +1635,8 @@ pub fn scan_inline_html_comment(
             scan_guard.comment = bytes.len();
             None
         }
-        // A CDATA section consists of the string `<![CDATA[`, a string of characters not
-        // including the string `]]>`, and the string `]]>`.
+        // A CDATA section consists of the string `<![CDATA[`, a string of
+        // characters not including the string `]]>`, and the string `]]>`.
         b'[' if bytes[ix..].starts_with(b"CDATA[") && ix > scan_guard.cdata => {
             ix += b"CDATA[".len();
             while let Some(x) = memchr(b']', &bytes[ix..]) {
@@ -1650,8 +1650,8 @@ pub fn scan_inline_html_comment(
             scan_guard.cdata = bytes.len();
             None
         }
-        // A declaration consists of the string `<!`, an ASCII letter, zero or more characters not
-        // including the character >, and the character >.
+        // A declaration consists of the string `<!`, an ASCII letter, zero or
+        // more characters not including the character >, and the character >.
         _ if c.is_ascii_alphabetic() && ix > scan_guard.declaration => {
             while let Some(x) = memchr3(b'>', b'\n', b'\r', &bytes[ix..]) {
                 ix += x;
