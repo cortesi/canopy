@@ -192,6 +192,24 @@ fn keyboard_crosses_both_edges_with_only_one_resident_page() {
 }
 
 #[test]
+fn keyboard_crosses_both_edges_of_a_one_row_window() {
+    let mut provider = Provider::new(3);
+    let mut model = model(1, 1);
+    initial(&mut model, &mut provider);
+    assert_eq!(selected(&model), Some(0));
+    model.navigate(1);
+    publish(&mut model, &mut provider);
+    assert_eq!(selected(&model), Some(1));
+    model.navigate(-1);
+    publish(&mut model, &mut provider);
+    assert_eq!(selected(&model), Some(0));
+    // The closed side still clamps.
+    model.navigate(-1);
+    assert_eq!(model.pending_steps(), 0);
+    assert_eq!(model.take_request(), None);
+}
+
+#[test]
 fn opposite_keyboard_input_cancels_delayed_page_and_old_pending_steps() {
     let mut provider = Provider::new(40);
     let mut model = model(8, 4);

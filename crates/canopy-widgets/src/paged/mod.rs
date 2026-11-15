@@ -759,13 +759,11 @@ impl<T: Clone, K: Clone + Eq, C: Clone> Paged<T, K, C> {
             - i64::try_from(index).expect("resident index fits i64");
         self.pending_steps = self.pending_steps.saturating_sub(moved);
         self.pin(Some(desired));
-        if (desired == 0 && self.before.is_none()) || (desired == last && self.after.is_none()) {
-            // Only clamp movement toward the unavailable side.
-            if (self.pending_steps < 0 && desired == 0)
-                || (self.pending_steps > 0 && desired == last)
-            {
-                self.pending_steps = 0;
-            }
+        // Only clamp movement toward the unavailable side.
+        if (self.pending_steps < 0 && desired == 0 && self.before.is_none())
+            || (self.pending_steps > 0 && desired == last && self.after.is_none())
+        {
+            self.pending_steps = 0;
         }
     }
 
