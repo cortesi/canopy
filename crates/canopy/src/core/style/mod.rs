@@ -672,7 +672,7 @@ fn path_segments(path: &str) -> impl Iterator<Item = &str> {
 
 /// Return the canonical map key for a style path: non-empty components joined
 /// by `/`.
-fn canonical_path(path: &str) -> String {
+pub(crate) fn canonical_path(path: &str) -> String {
     let mut key = String::with_capacity(path.len());
     for part in path_segments(path) {
         if !key.is_empty() {

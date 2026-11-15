@@ -14,7 +14,7 @@ use std::{
 use crate::{
     NodeId,
     geom::Point,
-    style::{Color, Mix, ease_in_out, themes::Palette},
+    style::{Color, Mix, canonical_path, ease_in_out, themes::Palette},
 };
 
 /// The root cursor role, which every other role falls back to.
@@ -288,17 +288,17 @@ impl CursorLooks {
 
     /// Set the look of a role.
     pub fn set(&mut self, role: &str, look: CursorLook) {
-        self.looks.insert(canonical_role(role), look);
+        self.looks.insert(canonical_path(role), look);
     }
 
     /// Return the look set for exactly this role, without fallback.
     pub fn get(&self, role: &str) -> Option<CursorLook> {
-        self.looks.get(&canonical_role(role)).copied()
+        self.looks.get(&canonical_path(role)).copied()
     }
 
     /// Resolve the look of a role, falling back to its parent roles.
     pub fn resolve(&self, role: &str) -> CursorLook {
-        let mut role = canonical_role(role);
+        let mut role = canonical_path(role);
         loop {
             if let Some(look) = self.looks.get(&role) {
                 return *look;
@@ -316,14 +316,6 @@ impl CursorLooks {
         let look = patch.apply(self.resolve(role));
         self.set(role, look);
     }
-}
-
-/// Return the canonical key of a role: non-empty components joined by `/`.
-fn canonical_role(role: &str) -> String {
-    role.split('/')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("/")
 }
 
 /// Rule sets reapplied to the cursor looks after every theme switch.
