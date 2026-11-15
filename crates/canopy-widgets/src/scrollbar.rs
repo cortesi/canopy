@@ -573,13 +573,7 @@ impl Scrollbar {
         if offset == view.scroll {
             return Ok(EventOutcome::Ignore);
         }
-        ctx.scroll_node(
-            target,
-            ScrollOp::To(Point {
-                x: offset.x,
-                y: offset.y,
-            }),
-        )?;
+        ctx.scroll_node(target, ScrollOp::To(offset))?;
         Ok(EventOutcome::Handle)
     }
 

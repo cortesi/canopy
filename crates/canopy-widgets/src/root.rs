@@ -310,10 +310,7 @@ impl Root {
             Err(error) => {
                 c.with_widget_mut(list, |list: &mut BindingList, context| {
                     list.replace_tree(previous_snapshot);
-                    context.scroll(ScrollOp::To(Point {
-                        x: previous_scroll.x,
-                        y: previous_scroll.y,
-                    }));
+                    context.scroll(ScrollOp::To(previous_scroll));
                     Ok(())
                 })?;
                 return Err(error);
