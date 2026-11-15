@@ -519,16 +519,39 @@ impl CommandMeta {
         }
     }
 
+    /// Render the match that decodes the user parameters from `args`, by
+    /// position or by name, and ends each arm with `tail`.
+    fn decode_tokens(&self, tail: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+        let names_const_ident = self.names_const_ident();
+        let positional_bindings = self.positional_bindings();
+        let named_bindings = self.named_bindings();
+        let arity_check = self.arity_check_tokens();
+        quote! {
+            match args {
+                ::canopy::commands::CommandArgs::Positional(values) => {
+                    #arity_check
+                    #(#positional_bindings)*
+                    #tail
+                }
+                ::canopy::commands::CommandArgs::Named(values) => {
+                    let normalized = ::canopy::commands::normalize_named_args(
+                        values,
+                        Self::#names_const_ident,
+                    )?;
+                    #(#named_bindings)*
+                    #tail
+                }
+            }
+        }
+    }
+
     /// Render the generated argument check for this command.
     ///
     /// The check shares the arity bounds and parameter conversions of the
     /// invoke shim, and it needs no target, context, or call.
     fn check_tokens(&self) -> proc_macro2::TokenStream {
         let check_ident = self.check_ident();
-        let names_const_ident = self.names_const_ident();
-        let positional_bindings = self.positional_bindings();
-        let named_bindings = self.named_bindings();
-        let arity_check = self.arity_check_tokens();
+        let decode = self.decode_tokens(&quote! { Ok(()) });
 
         quote! {
             #[allow(unused_variables)]
@@ -538,21 +561,7 @@ impl CommandMeta {
             where
                 Self: 'static,
             {
-                match args {
-                    ::canopy::commands::CommandArgs::Positional(values) => {
-                        #arity_check
-                        #(#positional_bindings)*
-                        Ok(())
-                    }
-                    ::canopy::commands::CommandArgs::Named(values) => {
-                        let normalized = ::canopy::commands::normalize_named_args(
-                            values,
-                            Self::#names_const_ident,
-                        )?;
-                        #(#named_bindings)*
-                        Ok(())
-                    }
-                }
+                #decode
             }
         }
     }
@@ -560,18 +569,18 @@ impl CommandMeta {
     /// Render the generated invoke function for this command.
     fn invoke_tokens(&self) -> proc_macro2::TokenStream {
         let invoke_ident = self.invoke_ident();
-        let names_const_ident = self.names_const_ident();
         let shared_bindings = self.shared_bindings();
         let mutable_context_bindings = self.mutable_context_bindings();
-        let positional_bindings = self.positional_bindings();
-        let named_bindings = self.named_bindings();
-        let arity_check = self.arity_check_tokens();
         let target_ident = syn::Ident::new("target", proc_macro2::Span::call_site());
         let method_ident = self.name_ident();
         let call_args = self.call_args();
         let call_tokens =
             self.ret
                 .call_tokens(self.ignore_result, &target_ident, &method_ident, &call_args);
+        let decode = self.decode_tokens(&quote! {
+            #(#mutable_context_bindings)*
+            #call_tokens
+        });
 
         quote! {
             fn #invoke_ident(
@@ -589,23 +598,7 @@ impl CommandMeta {
                     .downcast_mut::<Self>()
                     .ok_or(::canopy::commands::CommandError::TargetTypeMismatch)?;
                 #(#shared_bindings)*
-                match args {
-                    ::canopy::commands::CommandArgs::Positional(values) => {
-                        #arity_check
-                        #(#positional_bindings)*
-                        #(#mutable_context_bindings)*
-                        #call_tokens
-                    }
-                    ::canopy::commands::CommandArgs::Named(values) => {
-                        let normalized = ::canopy::commands::normalize_named_args(
-                            values,
-                            Self::#names_const_ident,
-                        )?;
-                        #(#named_bindings)*
-                        #(#mutable_context_bindings)*
-                        #call_tokens
-                    }
-                }
+                #decode
             }
         }
     }
@@ -710,33 +703,16 @@ impl CommandMeta {
         };
         let status_ident = self.status_ident();
         let call = if self.enabled_params {
-            let names_const_ident = self.names_const_ident();
-            let positional_bindings = self.positional_bindings();
-            let named_bindings = self.named_bindings();
-            let arity_check = self.arity_check_tokens();
             let params = self.user_params();
             let idents: Vec<&syn::Ident> = params.iter().map(|param| &param.ident).collect();
             let types = params.iter().map(|param| &param.ty);
+            let decode = self.decode_tokens(&quote! { Ok((#(#idents,)*)) });
             quote! {
                 let decoded = (|| -> ::std::result::Result<
                     (#(#types,)*),
                     ::canopy::commands::CommandError,
                 > {
-                    match args {
-                        ::canopy::commands::CommandArgs::Positional(values) => {
-                            #arity_check
-                            #(#positional_bindings)*
-                            Ok((#(#idents,)*))
-                        }
-                        ::canopy::commands::CommandArgs::Named(values) => {
-                            let normalized = ::canopy::commands::normalize_named_args(
-                                values,
-                                Self::#names_const_ident,
-                            )?;
-                            #(#named_bindings)*
-                            Ok((#(#idents,)*))
-                        }
-                    }
+                    #decode
                 })();
                 match decoded {
                     Ok((#(#idents,)*)) => target.#method(ctx, #(#idents),*),
