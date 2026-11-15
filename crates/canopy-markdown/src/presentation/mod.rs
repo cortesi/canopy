@@ -541,10 +541,9 @@ impl PresentationSnapshot {
             })
             .map(|object| object.id)
             .collect();
-        let units: HashMap<_, _> = document.units.iter().map(|u| (u.id, u)).collect();
         let objects: HashMap<_, _> = document.objects.iter().map(|o| (o.unit_id, o.id)).collect();
         for block in &document.blocks {
-            let Some(&unit) = units.get(&block.unit_id) else {
+            let Some(unit) = document.unit(block.unit_id) else {
                 continue;
             };
             let object = unit
