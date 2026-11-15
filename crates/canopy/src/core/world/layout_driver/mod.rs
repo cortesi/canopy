@@ -403,9 +403,6 @@ impl<'a> LayoutPass<'a> {
         let bounded = constraints.clamp_size(available);
         let avail_main = layout.direction.main_size(bounded);
         let avail_cross = layout.direction.cross_size(bounded);
-        let avail = layout
-            .direction
-            .size_from_main_cross(avail_main, avail_cross);
 
         let budget = measured_width_budget(layout, constraints, children.len());
         let mut fixed_main_total = 0u32;
@@ -421,14 +418,12 @@ impl<'a> LayoutPass<'a> {
                 continue;
             }
 
-            let size = self.resolve_outer_size_with_layout(*child, effective, avail)?;
+            let size = self.resolve_outer_size_with_layout(*child, effective, bounded)?;
             child_sizes[i] = size;
             fixed_main_total = fixed_main_total.saturating_add(layout.direction.main_size(size));
         }
 
-        let gap_total = layout
-            .gap
-            .saturating_mul(children.len().saturating_sub(1) as u32);
+        let gap_total = gap_total(layout, children.len());
         let remaining = avail_main.saturating_sub(fixed_main_total.saturating_add(gap_total));
 
         if main_fixed && !flex_children.is_empty() {
@@ -564,9 +559,7 @@ impl<'a> LayoutPass<'a> {
             fixed_main_total = fixed_main_total.saturating_add(main);
         }
 
-        let gap_total = layout
-            .gap
-            .saturating_mul(children.len().saturating_sub(1) as u32);
+        let gap_total = gap_total(layout, children.len());
         let remaining = layout
             .direction
             .main_size(content)
@@ -755,8 +748,13 @@ fn width_budget(layout: Layout, content_width: u32, children: usize) -> u32 {
     if layout.direction != LayoutDirection::Row {
         return content_width;
     }
+    content_width.saturating_sub(gap_total(layout, children))
+}
+
+/// Return the room that the gaps between `children` displayed children take.
+fn gap_total(layout: Layout, children: usize) -> u32 {
     let gaps = u32::try_from(children.saturating_sub(1)).unwrap_or(u32::MAX);
-    content_width.saturating_sub(layout.gap.saturating_mul(gaps))
+    layout.gap.saturating_mul(gaps)
 }
 
 /// Return the width budget for children measured under `constraints`, or
