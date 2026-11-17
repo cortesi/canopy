@@ -158,6 +158,30 @@ impl SymbolSet {
 
     /// Compile a set from families, in priority order.
     pub fn from_families(families: &[Family]) -> Self {
+        Self::compile(
+            families
+                .iter()
+                .flat_map(|family| family.chars().into_iter().map(|ch| (*family, ch))),
+        )
+    }
+
+    /// Compile a set from the characters of `chars` that a family holds, in
+    /// the priority order of the families, so that a set of every character
+    /// of some families equals the set of those families. A character of no
+    /// family is left out. A caller can choose characters by their shape,
+    /// such as the characters of one grid of pixels.
+    pub fn from_chars(chars: &[char]) -> Self {
+        Self::compile(Family::ALL.iter().flat_map(|family| {
+            family
+                .chars()
+                .into_iter()
+                .filter(|ch| chars.contains(ch))
+                .map(|ch| (*family, ch))
+        }))
+    }
+
+    /// Compile a set from characters and their families, in priority order.
+    fn compile(chars: impl Iterator<Item = (Family, char)>) -> Self {
         /// The characters found for one canonical mask.
         struct Found {
             /// Position of the entry in priority order.
@@ -170,27 +194,25 @@ impl SymbolSet {
             inverse: Option<char>,
         }
         let mut found: HashMap<Mask, Found> = HashMap::new();
-        for &family in families {
-            for ch in family.chars() {
-                let Some(shape) = Shape::of(ch) else {
-                    continue;
-                };
-                let mask = shape.mask();
-                let canonical = canonical(mask);
-                let order = found.len();
-                let slot = found.entry(canonical).or_insert(Found {
-                    order,
-                    family,
-                    ink: None,
-                    inverse: None,
-                });
-                let place = if mask == canonical {
-                    &mut slot.ink
-                } else {
-                    &mut slot.inverse
-                };
-                place.get_or_insert(ch);
-            }
+        for (family, ch) in chars {
+            let Some(shape) = Shape::of(ch) else {
+                continue;
+            };
+            let mask = shape.mask();
+            let canonical = canonical(mask);
+            let order = found.len();
+            let slot = found.entry(canonical).or_insert(Found {
+                order,
+                family,
+                ink: None,
+                inverse: None,
+            });
+            let place = if mask == canonical {
+                &mut slot.ink
+            } else {
+                &mut slot.inverse
+            };
+            place.get_or_insert(ch);
         }
         let mut entries: Vec<(usize, Entry)> = found
             .into_iter()
@@ -335,6 +357,27 @@ mod tests {
                 "{bits:#x}"
             );
         }
+    }
+
+    #[test]
+    fn a_set_of_chars_keeps_the_order_of_the_families() {
+        let full = SymbolSet::tier(Tier::Full);
+        let all: Vec<char> = full.chars().collect();
+        // Every character of a tier, in any order, compiles to the tier.
+        let mut reversed = Family::ALL
+            .iter()
+            .flat_map(|family| family.chars())
+            .collect::<Vec<_>>();
+        reversed.reverse();
+        assert!(
+            SymbolSet::from_chars(&reversed)
+                .chars()
+                .eq(all.iter().copied())
+        );
+        // A few characters keep only their own masks, and a character of no
+        // family is left out. The full block draws the empty mask inverted.
+        let few = SymbolSet::from_chars(&['█', 'x', '▌']);
+        assert!(few.chars().eq(['█', '▌']));
     }
 
     #[test]
