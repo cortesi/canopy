@@ -350,7 +350,7 @@ impl CanopyctlMcpServer {
     async fn launch(&self, params: LaunchRequest) -> ToolResult<CallToolResult> {
         let _busy = self.sessions.busy();
         let config = self.sessions.config();
-        let socket = temp_socket_path(&config.config_dir).map_err(tool_error)?;
+        let socket = temp_socket_path(&config.socket_dir()).map_err(tool_error)?;
         let command = config
             .run_command(&params.command, &socket)
             .map_err(tool_error)?;
@@ -469,7 +469,7 @@ async fn run_command(config: LoadedConfig, args: RunArgs) -> Result<()> {
             host_command(&config, args, size).await
         };
     }
-    let socket_path = temp_socket_path(&config.config_dir)?;
+    let socket_path = temp_socket_path(&config.socket_dir())?;
     let mut command = config
         .run_command(&args.command, &socket_path)?
         .to_command();
@@ -512,7 +512,7 @@ async fn host_command(config: &LoadedConfig, args: RunArgs, size: ScreenSize) ->
     let detached = args.host_socket.is_some();
     let socket = match args.host_socket {
         Some(socket) => socket,
-        None => temp_socket_path(&config.config_dir)?,
+        None => temp_socket_path(&config.socket_dir())?,
     };
     let command = config.run_command(&args.command, &socket)?;
     let host = TermHost::launch(
@@ -544,7 +544,7 @@ async fn host_command(config: &LoadedConfig, args: RunArgs, size: ScreenSize) ->
 async fn detach_host(config: &LoadedConfig, args: &RunArgs, size: ScreenSize) -> Result<()> {
     use std::os::unix::process::CommandExt as _;
 
-    let socket = temp_socket_path(&config.config_dir)?;
+    let socket = temp_socket_path(&config.socket_dir())?;
     let log = term::log_path(&socket);
     let mut command = process::Command::new(env::current_exe()?);
     command
@@ -977,15 +977,15 @@ async fn mcp_command(config: LoadedConfig) -> Result<()> {
     Ok(served?)
 }
 
-/// Build a unique temporary Unix-domain socket path under `./tmp`.
-fn temp_socket_path(base_dir: &Path) -> Result<PathBuf> {
-    let tmp_dir = base_dir.join("tmp");
-    fs::create_dir_all(&tmp_dir).with_context(|| format!("create {}", tmp_dir.display()))?;
+/// Build a unique temporary Unix-domain socket path in `dir`, and create
+/// `dir`.
+fn temp_socket_path(dir: &Path) -> Result<PathBuf> {
+    fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .context("system clock before unix epoch")?
         .as_millis();
-    Ok(tmp_dir.join(format!("cctl-{}-{stamp}.sock", id())))
+    Ok(dir.join(format!("cctl-{}-{stamp}.sock", id())))
 }
 
 /// Read an eval script from either a file or an inline string.
@@ -1038,6 +1038,19 @@ mod tests {
     use futures::{StreamExt, executor};
     use tmcp::schema::ToolResultMode;
     use tokio::{runtime::Builder, task};
+
+    #[test]
+    fn a_socket_path_is_new_and_in_the_socket_directory() -> Result<()> {
+        let project = tempfile::tempdir()?;
+        let dir = project.path().join("scratch/sockets");
+        let socket = temp_socket_path(&dir)?;
+        assert!(dir.is_dir());
+        assert_eq!(socket.parent(), Some(dir.as_path()));
+        assert!(!socket.exists());
+        let name = socket.file_name().expect("a socket file name");
+        assert!(name.to_string_lossy().starts_with("cctl-"), "{name:?}");
+        Ok(())
+    }
 
     #[tokio::test]
     async fn a_gallery_fixture_lives_for_its_run() -> Result<()> {

@@ -346,7 +346,10 @@ resolves no configuration home, so the headless command needs no extra flag.
 
 `canopyctl` spawns the application from the directory that holds
 `.canopyctl.toml`, and `mcp_args` substitutes `{socket}` for the live socket
-path.
+path. The sockets of a run go to `tmp/` beside `.canopyctl.toml`, or to the
+directory that `[app].socket_dir` names, relative to that file. A Unix socket
+path holds at most 103 bytes on macOS and 107 on Linux, and the longest name
+that `canopyctl` adds is about 36 bytes, so keep that directory short.
 
 Each script in `smoke/` is one test. Scripts call commands, send keys, and
 assert:

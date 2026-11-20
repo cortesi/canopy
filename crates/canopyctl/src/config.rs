@@ -39,6 +39,8 @@ struct AppSection {
     cwd: Option<PathBuf>,
     /// Environment variables merged into spawned processes.
     env: Option<HashMap<String, String>>,
+    /// Directory of the sockets of a run.
+    socket_dir: Option<PathBuf>,
 }
 
 /// `[smoke]` section from `.canopyctl.toml`.
@@ -169,6 +171,16 @@ impl LoadedConfig {
             .and_then(|app| app.cwd.as_ref())
             .map(|cwd| self.resolve_path(cwd))
             .unwrap_or_else(|| self.config_dir.clone())
+    }
+
+    /// Return the directory of the sockets of a run: `[app].socket_dir`, else
+    /// `tmp/` beside the config.
+    pub fn socket_dir(&self) -> PathBuf {
+        self.file
+            .app
+            .as_ref()
+            .and_then(|app| app.socket_dir.as_ref())
+            .map_or_else(|| self.config_dir.join("tmp"), |dir| self.resolve_path(dir))
     }
 
     /// Build the interactive app command, including injected MCP socket args.
@@ -447,6 +459,20 @@ mod tests {
             plain.gallery_command(&[], None).unwrap().to_string(),
             "app smoke",
             "with no gallery command, the app's serves"
+        );
+    }
+
+    #[test]
+    fn the_sockets_of_a_run_go_to_the_configured_directory() {
+        let dir = PathBuf::from("/project");
+        assert_eq!(config("", &dir).socket_dir(), Path::new("/project/tmp"));
+        assert_eq!(
+            config("[app]\nsocket_dir = \"../tmp/project\"\n", &dir).socket_dir(),
+            Path::new("/project/../tmp/project")
+        );
+        assert_eq!(
+            config("[app]\nsocket_dir = \"/run/sockets\"\n", &dir).socket_dir(),
+            Path::new("/run/sockets")
         );
     }
 
