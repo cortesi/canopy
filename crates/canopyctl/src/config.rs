@@ -3,7 +3,7 @@
 use std::{
     collections::HashMap,
     env, fmt, fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     time::Duration,
 };
 
@@ -174,13 +174,16 @@ impl LoadedConfig {
     }
 
     /// Return the directory of the sockets of a run: `[app].socket_dir`, else
-    /// `tmp/` beside the config.
+    /// `tmp/` beside the config. The path drops each `.` and `..` lexically,
+    /// because a socket path has a small bound.
     pub fn socket_dir(&self) -> PathBuf {
-        self.file
+        let dir = self
+            .file
             .app
             .as_ref()
             .and_then(|app| app.socket_dir.as_ref())
-            .map_or_else(|| self.config_dir.join("tmp"), |dir| self.resolve_path(dir))
+            .map_or_else(|| self.config_dir.join("tmp"), |dir| self.resolve_path(dir));
+        normalize_lexically(&dir)
     }
 
     /// Build the interactive app command, including injected MCP socket args.
@@ -412,6 +415,28 @@ fn find_repo_root(start: &Path) -> Option<PathBuf> {
         .map(Path::to_path_buf)
 }
 
+/// Drop each `.` of `path`, and each `..` with the name before it, without a
+/// look at the file system. A `..` above the start of a relative path stays.
+fn normalize_lexically(path: &Path) -> PathBuf {
+    let mut normal = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => match normal.components().next_back() {
+                Some(Component::Normal(_)) => {
+                    normal.pop();
+                }
+                Some(Component::RootDir | Component::Prefix(_)) => {}
+                Some(Component::ParentDir | Component::CurDir) | None => {
+                    normal.push(component);
+                }
+            },
+            _ => normal.push(component),
+        }
+    }
+    normal
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::OsStr;
@@ -464,12 +489,27 @@ mod tests {
 
     #[test]
     fn the_sockets_of_a_run_go_to_the_configured_directory() {
-        let dir = PathBuf::from("/project");
-        assert_eq!(config("", &dir).socket_dir(), Path::new("/project/tmp"));
+        let dir = PathBuf::from("/repo/project");
         assert_eq!(
-            config("[app]\nsocket_dir = \"../tmp/project\"\n", &dir).socket_dir(),
-            Path::new("/project/../tmp/project")
+            config("", &dir).socket_dir(),
+            Path::new("/repo/project/tmp")
         );
+        assert_eq!(
+            config("[app]\nsocket_dir = \"../tmp/./project\"\n", &dir).socket_dir(),
+            Path::new("/repo/tmp/project"),
+            "the socket directory drops `.` and `..`, so that each socket path stays short"
+        );
+        for (path, normal) in [
+            ("/a/../../b", "/b"),
+            ("../a/./b/..", "../a"),
+            ("a/../../b", "../b"),
+        ] {
+            assert_eq!(
+                normalize_lexically(Path::new(path)),
+                Path::new(normal),
+                "{path}"
+            );
+        }
         assert_eq!(
             config("[app]\nsocket_dir = \"/run/sockets\"\n", &dir).socket_dir(),
             Path::new("/run/sockets")
