@@ -352,7 +352,7 @@ fn ignored_mouse_callback_conservatively_requests_render() -> Result<()> {
 
     let mut render = TestRender::new();
     canopy.render(&mut render)?;
-    assert!(!canopy.render_if_pending(&mut render)?);
+    assert!(!canopy.core.changes.is_pending());
 
     let event = mouse::MouseEvent {
         action: mouse::Action::Moved,
@@ -361,8 +361,9 @@ fn ignored_mouse_callback_conservatively_requests_render() -> Result<()> {
         location: PointI32 { x: 1, y: 1 },
     };
     canopy.event(&Event::Mouse(event))?;
-    assert!(canopy.render_if_pending(&mut render)?);
-    assert!(!canopy.render_if_pending(&mut render)?);
+    assert!(canopy.core.changes.is_pending());
+    canopy.render(&mut render)?;
+    assert!(!canopy.core.changes.is_pending());
     Ok(())
 }
 

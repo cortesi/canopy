@@ -75,16 +75,6 @@ impl Canopy {
         Ok(())
     }
 
-    /// Render the tree only if a render is pending.
-    #[cfg(test)]
-    pub(crate) fn render_if_pending<R: RenderBackend>(&mut self, be: &mut R) -> Result<bool> {
-        if !self.core.changes.is_pending() {
-            return Ok(false);
-        }
-        self.render(be)?;
-        Ok(true)
-    }
-
     /// Emit the published frame to `be`, as the terminal adapter does after
     /// a turn, diffing against the last emitted frame. Benchmarks use this to
     /// time emission.
