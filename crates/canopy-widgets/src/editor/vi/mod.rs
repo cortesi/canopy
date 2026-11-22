@@ -427,16 +427,6 @@ impl ViState {
         }
     }
 
-    /// Return the pending key state.
-    pub fn pending(&self) -> Option<PendingKey> {
-        self.pending
-    }
-
-    /// Set the pending key state.
-    pub fn set_pending(&mut self, pending: Option<PendingKey>) {
-        self.pending = pending;
-    }
-
     /// Record `edit`, when there is one, as the last repeatable edit.
     fn record(&mut self, edit: Option<RepeatableEdit>) {
         if let Some(edit) = edit {
@@ -466,11 +456,6 @@ impl ViState {
         if let State::Insert(session) = &mut self.state {
             *session = InsertSession::new(Entry::Insert);
         }
-    }
-
-    /// Return the last repeatable edit.
-    fn last_edit(&self) -> Option<RepeatableEdit> {
-        self.last_edit.clone()
     }
 }
 
@@ -521,7 +506,7 @@ impl Editor {
     /// With history arrows, Up and Down reach the host's bindings too, and j
     /// and k move the cursor.
     fn normal_command(&self, key: key::Key) -> Option<NormalCommand> {
-        match self.vi.pending() {
+        match self.vi.pending {
             Some(pending) => {
                 if let Some(command) = Self::pending_command(pending, key) {
                     return Some(NormalCommand::Pending(command));
@@ -637,9 +622,8 @@ impl Editor {
 
     /// Clear a pending vi prefix when its follow-up key is not part of it.
     fn reset_unmatched_pending(&mut self) {
-        if self.prompt.is_none() && self.vi.mode() != ViMode::Insert && self.vi.pending().is_some()
-        {
-            self.vi.set_pending(None);
+        if self.prompt.is_none() && self.vi.mode() != ViMode::Insert && self.vi.pending.is_some() {
+            self.vi.pending = None;
         }
     }
 
@@ -662,7 +646,7 @@ impl Editor {
             }
             NormalCommand::Plain(plain) => plain,
         };
-        self.vi.set_pending(None);
+        self.vi.pending = None;
         match plain {
             PlainCommand::BeginInsert => self.enter_insert(Entry::Insert),
             PlainCommand::AppendAfter => self.enter_insert(Entry::Append),
@@ -673,9 +657,7 @@ impl Editor {
             PlainCommand::BeginVisual(mode) => {
                 self.enter_visual(mode);
             }
-            PlainCommand::ClearPending => {
-                self.vi.set_pending(None);
-            }
+            PlainCommand::ClearPending => {}
             PlainCommand::Search(direction) => {
                 self.start_search_prompt(direction);
             }
@@ -704,7 +686,7 @@ impl Editor {
             }
             PlainCommand::Motion(motion) => self.apply_motion(motion, ctx),
             PlainCommand::SetPending(pending) => {
-                self.vi.set_pending(Some(pending));
+                self.vi.pending = Some(pending);
             }
             PlainCommand::YankLine => {
                 self.yank_line();
@@ -751,7 +733,7 @@ impl Editor {
                 self.yank_line();
             }
         }
-        self.vi.set_pending(None);
+        self.vi.pending = None;
     }
 
     /// Run one insert-mode command.
@@ -1062,7 +1044,7 @@ impl Editor {
         if self.config.interaction.read_only() {
             return;
         }
-        let Some(edit) = self.vi.last_edit() else {
+        let Some(edit) = self.vi.last_edit.clone() else {
             return;
         };
         self.apply_edit(&edit);

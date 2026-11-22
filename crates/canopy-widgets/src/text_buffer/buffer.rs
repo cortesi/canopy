@@ -192,10 +192,10 @@ impl TextBuffer {
         let Some(mut transaction) = self.transaction.take() else {
             return;
         };
-        if transaction.is_empty() {
+        if transaction.edits.is_empty() {
             return;
         }
-        transaction.finish(self.selection);
+        transaction.after = self.selection;
         self.undo.push(transaction);
         self.redo.clear();
     }
@@ -412,7 +412,7 @@ impl TextBuffer {
         } else {
             let mut transaction = Transaction::new(before);
             transaction.edits.push(edit);
-            transaction.finish(self.selection);
+            transaction.after = self.selection;
             self.undo.push(transaction);
             self.redo.clear();
         }

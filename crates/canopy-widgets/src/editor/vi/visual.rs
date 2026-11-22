@@ -423,7 +423,7 @@ impl Editor {
         key: key::Key,
     ) -> Option<VisualCommand> {
         let chord = key.mods.ctrl || key.mods.alt;
-        if let Some(pending) = self.vi.pending() {
+        if let Some(pending) = self.vi.pending {
             if key.key == key::KeyCode::Esc {
                 return Some(VisualCommand::ClearPending);
             }
@@ -508,12 +508,12 @@ impl Editor {
         command: VisualCommand,
         ctx: &mut dyn Context,
     ) {
-        self.vi.set_pending(None);
+        self.vi.pending = None;
         match command {
             VisualCommand::Exit => self.exit_visual(),
             VisualCommand::Switch(mode) => self.transition(Target::Visual(mode)),
             VisualCommand::ClearPending => {}
-            VisualCommand::Pending(pending) => self.vi.set_pending(Some(pending)),
+            VisualCommand::Pending(pending) => self.vi.pending = Some(pending),
             VisualCommand::Motion(motion) => self.apply_motion(motion, ctx),
             VisualCommand::SwapEnds => {
                 let selection = self.buffer.selection();

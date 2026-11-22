@@ -46,14 +46,4 @@ impl Transaction {
             after: before,
         }
     }
-
-    /// Return true when there are no edits recorded.
-    pub fn is_empty(&self) -> bool {
-        self.edits.is_empty()
-    }
-
-    /// Record the selection state after edits are applied.
-    pub fn finish(&mut self, after: Selection) {
-        self.after = after;
-    }
 }
