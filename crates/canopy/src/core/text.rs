@@ -90,8 +90,7 @@ pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {
     let mut start_byte = 0usize;
     let mut end_byte = 0usize;
 
-    for grapheme in graphemes(s) {
-        let idx = grapheme.as_ptr() as usize - s.as_ptr() as usize;
+    for (idx, grapheme) in grapheme_indices(s) {
         let g_width = grapheme_width(grapheme);
 
         if !started {
