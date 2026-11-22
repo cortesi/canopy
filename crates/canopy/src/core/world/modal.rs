@@ -100,8 +100,8 @@ impl Iterator for Route<'_> {
 struct ModalScope {
     /// Stable public handle.
     token: ModalToken,
-    /// Declared input and visual behavior.
-    options: ModalOptions,
+    /// Binding ownership admitted by this scope.
+    bindings: ModalBindings,
     /// Owning widget lifetime.
     owner: WidgetStamp,
     /// Modal widget lifetime.
@@ -160,7 +160,7 @@ impl Core {
             .modals
             .scopes
             .iter()
-            .map(|scope| scope.options.modal)
+            .map(|scope| scope.modal.node())
             .filter(|modal| children.contains(modal))
             .collect::<Vec<_>>();
         if opened.len() < 2 {
@@ -249,12 +249,12 @@ impl Core {
 
     /// Return the top normal-input subtree, if any.
     pub(crate) fn modal_region(&self) -> Option<NodeId> {
-        self.modals.scopes.last().map(|scope| scope.options.modal)
+        self.modals.scopes.last().map(|scope| scope.modal.node())
     }
 
     /// Return the last ancestor eligible for modal binding routing.
     pub(crate) fn modal_owner(&self) -> Option<NodeId> {
-        self.modals.scopes.last().map(|scope| scope.options.owner)
+        self.modals.scopes.last().map(|scope| scope.owner.node())
     }
 
     /// Whether normal input, focus, and capture may target this node.
@@ -307,7 +307,7 @@ impl Core {
         // modal rather than climbing through the root.
         if let Some(scope) = self.modals.scopes.last()
             && scope.overlay
-            && scope.options.modal == node
+            && scope.modal.node() == node
         {
             return None;
         }
@@ -334,13 +334,16 @@ impl Core {
     /// modal uses to tell bindings scoped to its owner from bindings scoped
     /// to a region around it.
     pub(crate) fn sync_modal_bindings(&mut self) {
-        let top = self.modals.scopes.last().map(|scope| scope.options);
-        let enclosing = top.map(|options| {
-            let parent = self.nodes.get(options.owner).and_then(|node| node.parent);
+        let top = self.modals.scopes.last();
+        let enclosing = top.map(|scope| {
+            let parent = self
+                .nodes
+                .get(scope.owner.node())
+                .and_then(|node| node.parent);
             parent.map_or_else(Path::empty, |parent| self.path_of(self.root, parent))
         });
         self.input_map
-            .set_modal_bindings(top.map(|options| options.bindings));
+            .set_modal_bindings(top.map(|scope| scope.bindings));
         self.input_map.set_modal_enclosing(enclosing);
     }
 
@@ -370,7 +373,7 @@ impl Core {
             .modals
             .scopes
             .iter()
-            .position(|scope| scope.options.modal == options.modal);
+            .position(|scope| scope.modal.node() == options.modal);
         if !formed || !admitted || duplicate.is_some() {
             // A scope whose close is queued still holds its subtree and its
             // region until the close commits. The open waits for that close
@@ -379,7 +382,7 @@ impl Core {
             let region_after = |closing: usize| {
                 closing
                     .checked_sub(1)
-                    .map(|below| self.modals.scopes[below].options.modal)
+                    .map(|below| self.modals.scopes[below].modal.node())
             };
             let held_by_closing = duplicate
                 .is_some_and(|index| closing.is_some_and(|closing| closing <= index))
@@ -412,7 +415,7 @@ impl Core {
         self.mouse_capture = None;
         self.modals.scopes.push(ModalScope {
             token,
-            options,
+            bindings: options.bindings,
             owner,
             modal,
             dim,
@@ -493,11 +496,11 @@ impl Core {
                 !self.modal_identity_live(scope.owner)
                     || !self.modal_identity_live(scope.modal)
                     || !(scope.overlay
-                        || self.is_ancestor_or_self(scope.options.owner, scope.options.modal))
+                        || self.is_ancestor_or_self(scope.owner.node(), scope.modal.node()))
                     || (index > 0
                         && !self.is_ancestor_or_self(
-                            self.modals.scopes[index - 1].options.modal,
-                            scope.options.owner,
+                            self.modals.scopes[index - 1].modal.node(),
+                            scope.owner.node(),
                         ))
             });
         if let Some(index) = invalid {
