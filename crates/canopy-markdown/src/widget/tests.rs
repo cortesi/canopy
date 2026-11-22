@@ -11,7 +11,7 @@ use canopy::{
 use canopy_widgets::image;
 
 use super::{
-    test_support::{builder, service, settle},
+    test_support::{answer, builder, drain_resources, service, settle, take_resources},
     *,
 };
 use crate::executor::{ExecutorOptions, HeldWork, ManualExecutor, MarkdownExecutor};
@@ -1403,8 +1403,7 @@ fn image_blocks_ask_the_host_and_lay_out_what_it_supplies() {
         // Before the image arrives, its alt text and destination stand in.
         assert!(harness.tbuf().contains_text("Local"));
         assert!(harness.tbuf().contains_text("pics/a.png"));
-        let requests =
-            harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests());
+        let requests = take_resources(&mut harness);
         if !enabled {
             assert!(requests.is_empty());
             continue;
@@ -1412,11 +1411,7 @@ fn image_blocks_ask_the_host_and_lay_out_what_it_supplies() {
         // Only the local image is asked for, and only once.
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].target.path, "pics/a.png");
-        assert!(
-            harness
-                .with_root_widget(|reader: &mut Markdown| reader.take_resource_requests())
-                .is_empty()
-        );
+        assert!(take_resources(&mut harness).is_empty());
         let before = harness.with_root_widget(|reader: &mut Markdown| {
             reader
                 .shared
@@ -1425,13 +1420,14 @@ fn image_blocks_ask_the_host_and_lay_out_what_it_supplies() {
                 .as_ref()
                 .map_or(0, |p| p.height())
         });
-        harness
-            .with_root_widget_context(|reader: &mut Markdown, ctx| {
-                // An unknown id changes nothing.
-                reader.supply_resource(ctx, 999, Resource::Missing)?;
-                reader.supply_resource(ctx, requests[0].id, Resource::Image(two_tone()))
-            })
-            .unwrap();
+        // An unknown id changes nothing.
+        answer(
+            &mut harness,
+            [
+                (999, Resource::Missing),
+                (requests[0].id, Resource::Image(two_tone())),
+            ],
+        );
         settle(&mut harness, &manual);
         let after = harness.with_root_widget(|reader: &mut Markdown| {
             reader
@@ -1462,8 +1458,7 @@ fn embeds_show_their_section_and_links_that_name_nothing_show_faint() {
     );
     harness.canopy.set_screen_size(Size::new(60, 16)).unwrap();
     settle(&mut harness, &manual);
-    let requests =
-        harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests());
+    let requests = take_resources(&mut harness);
     let kinds: Vec<(ResourceKind, &str)> = requests
         .iter()
         .map(|request| (request.kind, request.target.path.as_str()))
@@ -1476,17 +1471,17 @@ fn embeds_show_their_section_and_links_that_name_nothing_show_faint() {
             (ResourceKind::Link, "Here")
         ]
     );
-    harness
-        .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            reader.supply_resource(
-                ctx,
+    answer(
+        &mut harness,
+        [
+            (
                 requests[0].id,
                 Resource::Text("# Note\n\n## Plans\n\nShip it.\n\n## Later\n\nNot now.\n".into()),
-            )?;
-            reader.supply_resource(ctx, requests[1].id, Resource::Missing)?;
-            reader.supply_resource(ctx, requests[2].id, Resource::Found)
-        })
-        .unwrap();
+            ),
+            (requests[1].id, Resource::Missing),
+            (requests[2].id, Resource::Found),
+        ],
+    );
     settle(&mut harness, &manual);
     assert!(!harness.with_root_widget(|reader: &mut Markdown| reader.resources_pending()));
     let screen = harness.tbuf().lines().join("\n");
@@ -1527,24 +1522,7 @@ fn links_past_the_request_bound_settle_without_asking() {
         o.resources = true;
     });
     settle(&mut harness, &manual);
-    let mut asked = 0;
-    loop {
-        let requests =
-            harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests());
-        if requests.is_empty() {
-            break;
-        }
-        asked += requests.len();
-        harness
-            .with_root_widget_context(|reader: &mut Markdown, ctx| {
-                for request in requests {
-                    reader.supply_resource(ctx, request.id, Resource::Found)?;
-                }
-                Ok(())
-            })
-            .unwrap();
-    }
-    assert_eq!(asked, RESOURCE_TOTAL);
+    assert_eq!(drain_resources(&mut harness).len(), RESOURCE_TOTAL);
     assert!(!harness.with_root_widget(|reader: &mut Markdown| reader.resources_pending()));
 }
 
@@ -1554,7 +1532,7 @@ fn an_answer_for_a_replaced_document_changes_nothing() {
         o.resources = true;
     });
     settle(&mut harness, &manual);
-    let old = harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests());
+    let old = take_resources(&mut harness);
     harness
         .with_root_widget_context(|reader: &mut Markdown, ctx| {
             reader
@@ -1563,11 +1541,7 @@ fn an_answer_for_a_replaced_document_changes_nothing() {
         })
         .unwrap();
     settle(&mut harness, &manual);
-    harness
-        .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            reader.supply_resource(ctx, old[0].id, Resource::Missing)
-        })
-        .unwrap();
+    answer(&mut harness, [(old[0].id, Resource::Missing)]);
     settle(&mut harness, &manual);
     assert!(harness.with_root_widget(|reader: &mut Markdown| reader.resources_pending()));
     let missing =
@@ -1585,17 +1559,15 @@ fn a_recheck_asks_again_and_keeps_what_shows_until_it_hears() {
     );
     harness.canopy.set_screen_size(Size::new(60, 16)).unwrap();
     settle(&mut harness, &manual);
-    let take = |harness: &mut Harness| {
-        harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests())
-    };
-    let first = take(&mut harness);
-    harness
-        .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            reader.supply_resource(ctx, first[0].id, Resource::Text("First text.\n".into()))?;
-            reader.supply_resource(ctx, first[1].id, Resource::Missing)?;
-            reader.supply_resource(ctx, first[2].id, Resource::Found)
-        })
-        .unwrap();
+    let first = take_resources(&mut harness);
+    answer(
+        &mut harness,
+        [
+            (first[0].id, Resource::Text("First text.\n".into())),
+            (first[1].id, Resource::Missing),
+            (first[2].id, Resource::Found),
+        ],
+    );
     settle(&mut harness, &manual);
     assert!(harness.with_root_widget(|reader: &mut Markdown| reader.link_missing("Gone")));
     assert!(harness.tbuf().contains_text("First text."));
@@ -1603,7 +1575,7 @@ fn a_recheck_asks_again_and_keeps_what_shows_until_it_hears() {
     harness.with_root_widget(|reader: &mut Markdown| {
         reader.recheck_resources(&[ResourceKind::Link]);
     });
-    let links = take(&mut harness);
+    let links = take_resources(&mut harness);
     assert_eq!(
         links.iter().map(|request| request.kind).collect::<Vec<_>>(),
         [ResourceKind::Link, ResourceKind::Link]
@@ -1612,25 +1584,25 @@ fn a_recheck_asks_again_and_keeps_what_shows_until_it_hears() {
         harness.with_root_widget(|reader: &mut Markdown| reader.link_missing("Gone")),
         "a link stays faint until its new answer arrives"
     );
-    harness
-        .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            reader.supply_resource(ctx, links[0].id, Resource::Found)?;
-            reader.supply_resource(ctx, links[1].id, Resource::Found)
-        })
-        .unwrap();
+    answer(
+        &mut harness,
+        [
+            (links[0].id, Resource::Found),
+            (links[1].id, Resource::Found),
+        ],
+    );
     assert!(!harness.with_root_widget(|reader: &mut Markdown| reader.link_missing("Gone")));
     // A changed note shows its new text.
     harness.with_root_widget(|reader: &mut Markdown| {
         reader.recheck_resources(&[ResourceKind::Note]);
     });
-    let notes = take(&mut harness);
+    let notes = take_resources(&mut harness);
     assert_eq!(notes.len(), 1);
     assert_eq!(notes[0].kind, ResourceKind::Note);
-    harness
-        .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            reader.supply_resource(ctx, notes[0].id, Resource::Text("Second text.\n".into()))
-        })
-        .unwrap();
+    answer(
+        &mut harness,
+        [(notes[0].id, Resource::Text("Second text.\n".into()))],
+    );
     settle(&mut harness, &manual);
     assert!(harness.tbuf().contains_text("Second text."));
     assert!(!harness.with_root_widget(|reader: &mut Markdown| reader.resources_pending()));
@@ -1642,33 +1614,22 @@ fn a_recheck_during_a_request_asks_again_after_its_answer() {
         o.resources = true
     });
     settle(&mut harness, &manual);
-    let take = |harness: &mut Harness| {
-        harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests())
-    };
-    let first = take(&mut harness);
+    let first = take_resources(&mut harness);
     assert_eq!(first.len(), 1);
     // The files change while the check is on its way.
     harness.with_root_widget(|reader: &mut Markdown| {
         reader.recheck_resources(&[ResourceKind::Link]);
     });
     assert_eq!(
-        take(&mut harness),
+        take_resources(&mut harness),
         [],
         "the check in flight is not asked twice"
     );
-    harness
-        .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            reader.supply_resource(ctx, first[0].id, Resource::Missing)
-        })
-        .unwrap();
+    answer(&mut harness, [(first[0].id, Resource::Missing)]);
     assert!(harness.with_root_widget(|reader: &mut Markdown| reader.link_missing("Later")));
-    let again = take(&mut harness);
+    let again = take_resources(&mut harness);
     assert_eq!(again.len(), 1, "the stale answer is asked for again");
-    harness
-        .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            reader.supply_resource(ctx, again[0].id, Resource::Found)
-        })
-        .unwrap();
+    answer(&mut harness, [(again[0].id, Resource::Found)]);
     assert!(!harness.with_root_widget(|reader: &mut Markdown| reader.link_missing("Later")));
     assert!(!harness.with_root_widget(|reader: &mut Markdown| reader.resources_pending()));
 }
@@ -1686,39 +1647,24 @@ fn a_recheck_counts_only_what_was_asked_toward_the_bound() {
         o.resources = true;
     });
     settle(&mut harness, &manual);
-    let drain = |harness: &mut Harness| {
-        let mut asked = 0;
-        loop {
-            let requests =
-                harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests());
-            if requests.is_empty() {
-                return asked;
-            }
-            asked += requests.len();
-            harness
-                .with_root_widget_context(|reader: &mut Markdown, ctx| {
-                    for request in requests {
-                        reader.supply_resource(ctx, request.id, Resource::Found)?;
-                    }
-                    Ok(())
-                })
-                .unwrap();
-        }
-    };
     assert_eq!(
-        drain(&mut harness),
+        drain_resources(&mut harness).len(),
         RESOURCE_TOTAL,
         "the embed past the bound is skipped"
     );
     harness.with_root_widget(|reader: &mut Markdown| {
         reader.recheck_resources(&[ResourceKind::Note]);
     });
-    assert_eq!(drain(&mut harness), 0, "a skipped embed frees nothing");
+    assert_eq!(
+        drain_resources(&mut harness).len(),
+        0,
+        "a skipped embed frees nothing"
+    );
     harness.with_root_widget(|reader: &mut Markdown| {
         reader.recheck_resources(&[ResourceKind::Link]);
     });
     assert_eq!(
-        drain(&mut harness),
+        drain_resources(&mut harness).len(),
         RESOURCE_TOTAL,
         "the links are asked again"
     );
@@ -1734,26 +1680,19 @@ fn a_named_recheck_asks_again_only_for_its_destinations() {
     );
     harness.canopy.set_screen_size(Size::new(60, 16)).unwrap();
     settle(&mut harness, &manual);
-    let take = |harness: &mut Harness| {
-        harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests())
-    };
-    let first = take(&mut harness);
+    let first = take_resources(&mut harness);
     assert_eq!(first.len(), 4);
-    harness
-        .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            for request in &first {
-                reader.supply_resource(ctx, request.id, Resource::Missing)?;
-            }
-            Ok(())
-        })
-        .unwrap();
+    answer(
+        &mut harness,
+        first.iter().map(|request| (request.id, Resource::Missing)),
+    );
     // One directory changed: only its images are asked again. The link to
     // the same file and the names the document does not use stay as they are.
     harness.with_root_widget(|reader: &mut Markdown| {
         reader.recheck_destinations(ResourceKind::Image, ["img/a.png", "img/b.png", "nope.png"]);
         reader.recheck_destinations(ResourceKind::Note, ["img/a.png"]);
     });
-    let again = take(&mut harness);
+    let again = take_resources(&mut harness);
     let mut asked: Vec<_> = again
         .iter()
         .map(|request| (request.kind, request.destination.as_str()))
@@ -1766,7 +1705,7 @@ fn a_named_recheck_asks_again_only_for_its_destinations() {
             (ResourceKind::Image, "img/b.png")
         ]
     );
-    assert_eq!(take(&mut harness), [], "each is asked once");
+    assert_eq!(take_resources(&mut harness), [], "each is asked once");
 }
 
 #[test]
@@ -1778,28 +1717,21 @@ fn a_named_recheck_during_a_request_asks_again_after_its_answer() {
         |o| o.resources = true,
     );
     settle(&mut harness, &manual);
-    let take = |harness: &mut Harness| {
-        harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests())
-    };
-    let first = take(&mut harness);
+    let first = take_resources(&mut harness);
     assert_eq!(first.len(), 2);
     harness.with_root_widget(|reader: &mut Markdown| {
         reader.recheck_destinations(ResourceKind::Link, ["Later"]);
     });
     assert_eq!(
-        take(&mut harness),
+        take_resources(&mut harness),
         [],
         "the check in flight is not asked twice"
     );
-    harness
-        .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            for request in &first {
-                reader.supply_resource(ctx, request.id, Resource::Missing)?;
-            }
-            Ok(())
-        })
-        .unwrap();
-    let again = take(&mut harness);
+    answer(
+        &mut harness,
+        first.iter().map(|request| (request.id, Resource::Missing)),
+    );
+    let again = take_resources(&mut harness);
     assert_eq!(
         again
             .iter()
@@ -1821,32 +1753,13 @@ fn a_named_recheck_counts_again_toward_the_bound() {
         o.resources = true;
     });
     settle(&mut harness, &manual);
-    let drain = |harness: &mut Harness| {
-        let mut asked = Vec::new();
-        loop {
-            let requests =
-                harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests());
-            if requests.is_empty() {
-                return asked;
-            }
-            harness
-                .with_root_widget_context(|reader: &mut Markdown, ctx| {
-                    for request in &requests {
-                        reader.supply_resource(ctx, request.id, Resource::Found)?;
-                    }
-                    Ok(())
-                })
-                .unwrap();
-            asked.extend(requests.into_iter().map(|request| request.destination));
-        }
-    };
-    assert_eq!(drain(&mut harness).len(), RESOURCE_TOTAL);
+    assert_eq!(drain_resources(&mut harness).len(), RESOURCE_TOTAL);
     // The link past the bound was never asked for, so naming it frees
     // nothing. A named answered link frees its own place, and takes it again.
     harness.with_root_widget(|reader: &mut Markdown| {
         reader.recheck_destinations(ResourceKind::Link, ["late", "n7"]);
     });
-    assert_eq!(drain(&mut harness), ["n7"]);
+    assert_eq!(drain_resources(&mut harness), ["n7"]);
 }
 
 #[test]
@@ -1869,13 +1782,8 @@ fn an_image_takes_its_size_hint_and_follows_on_enter() {
         o.follow_links = true;
     });
     settle(&mut harness, &manual);
-    let id =
-        harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests())[0].id;
-    harness
-        .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            reader.supply_resource(ctx, id, Resource::Image(two_tone()))
-        })
-        .unwrap();
+    let id = take_resources(&mut harness)[0].id;
+    answer(&mut harness, [(id, Resource::Image(two_tone()))]);
     settle(&mut harness, &manual);
     // 80 pixels at 8 to a column: 10 columns, and 3 rows at the image's
     // aspect.
@@ -1905,13 +1813,11 @@ fn a_failed_image_shows_why() {
         o.resources = true;
     });
     settle(&mut harness, &manual);
-    let id =
-        harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests())[0].id;
-    harness
-        .with_root_widget_context(|reader: &mut Markdown, ctx| {
-            reader.supply_resource(ctx, id, Resource::Failed("cannot decode".into()))
-        })
-        .unwrap();
+    let id = take_resources(&mut harness)[0].id;
+    answer(
+        &mut harness,
+        [(id, Resource::Failed("cannot decode".into()))],
+    );
     settle(&mut harness, &manual);
     assert!(harness.tbuf().contains_text("Gone"));
     assert!(harness.tbuf().contains_text("cannot decode"));

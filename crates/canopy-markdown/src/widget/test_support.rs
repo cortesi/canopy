@@ -10,7 +10,10 @@ use canopy::{
 };
 
 use super::Markdown;
-use crate::executor::ManualExecutor;
+use crate::{
+    executor::ManualExecutor,
+    host::{Resource, ResourceRequest},
+};
 
 /// A harness builder over `root` that runs the reader's default bindings.
 /// The caller registers the types it mounts.
@@ -75,6 +78,39 @@ pub(super) fn reader<R>(
 pub(super) fn press(harness: &mut Harness, key: &str) {
     harness.key(Key::parse_spec(key).unwrap()).unwrap();
     service(harness);
+}
+
+/// Take the reader's requests for resources.
+pub(super) fn take_resources(harness: &mut Harness) -> Vec<ResourceRequest> {
+    harness.with_root_widget(|reader: &mut Markdown| reader.take_resource_requests())
+}
+
+/// Supply each resource as the answer to the request of its id, in one call
+/// into the reader.
+pub(super) fn answer(harness: &mut Harness, answers: impl IntoIterator<Item = (u64, Resource)>) {
+    reader(harness, |reader, ctx| {
+        for (id, resource) in answers {
+            reader.supply_resource(ctx, id, resource)?;
+        }
+        Ok(())
+    });
+}
+
+/// Answer each request of the reader as found until it asks for nothing
+/// more, and return the destinations that it asked for.
+pub(super) fn drain_resources(harness: &mut Harness) -> Vec<String> {
+    let mut asked = Vec::new();
+    loop {
+        let requests = take_resources(harness);
+        if requests.is_empty() {
+            return asked;
+        }
+        answer(
+            harness,
+            requests.iter().map(|request| (request.id, Resource::Found)),
+        );
+        asked.extend(requests.into_iter().map(|request| request.destination));
+    }
 }
 
 /// Readers in a column, each filling its share.

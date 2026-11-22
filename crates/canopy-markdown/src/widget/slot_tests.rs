@@ -6,7 +6,7 @@ use canopy_widgets::editor::{self, EditMode, EditorConfig, TextPosition, ViMode}
 
 use super::{
     cursor_tests::{bar_rows, marked, view},
-    test_support::{builder, press, reader, service, settle},
+    test_support::{answer, builder, press, reader, service, settle, take_resources},
     *,
 };
 use crate::{
@@ -959,17 +959,11 @@ fn the_rows_around_the_editor_keep_their_images() {
         options.resources = true;
     });
     settle(&mut harness, &manual);
-    let requests = reader(
+    let requests = take_resources(&mut harness);
+    answer(
         &mut harness,
-        |reader, _| Ok(reader.take_resource_requests()),
+        [(requests[0].id, Resource::Image(super::tests::two_tone()))],
     );
-    reader(&mut harness, |reader, ctx| {
-        reader.supply_resource(
-            ctx,
-            requests[0].id,
-            Resource::Image(super::tests::two_tone()),
-        )
-    });
     settle(&mut harness, &manual);
     press(&mut harness, "j");
     let (_, rows) = marked(&mut harness).unwrap();
@@ -997,17 +991,11 @@ fn a_commit_keeps_the_images() {
         options.resources = true;
     });
     settle(&mut harness, &manual);
-    let requests = reader(
+    let requests = take_resources(&mut harness);
+    answer(
         &mut harness,
-        |reader, _| Ok(reader.take_resource_requests()),
+        [(requests[0].id, Resource::Image(super::tests::two_tone()))],
     );
-    reader(&mut harness, |reader, ctx| {
-        reader.supply_resource(
-            ctx,
-            requests[0].id,
-            Resource::Image(super::tests::two_tone()),
-        )
-    });
     settle(&mut harness, &manual);
     press(&mut harness, "j");
     let (_, rows) = marked(&mut harness).unwrap();
@@ -1030,11 +1018,7 @@ fn a_commit_keeps_the_images() {
     // The new text keeps the image that the host supplied, and asks for
     // nothing again.
     assert_eq!(image(&harness), before);
-    let again = reader(
-        &mut harness,
-        |reader, _| Ok(reader.take_resource_requests()),
-    );
-    assert!(again.is_empty());
+    assert!(take_resources(&mut harness).is_empty());
 }
 
 #[test]
