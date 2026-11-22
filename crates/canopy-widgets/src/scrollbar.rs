@@ -73,6 +73,14 @@ impl Resolution {
             _ => Self::Ambiguous,
         }
     }
+
+    /// Return the node of a unique resolution.
+    fn target(self) -> Option<ScrollTarget> {
+        match self {
+            Self::Unique(target) => Some(target),
+            Self::Absent | Self::Ambiguous => None,
+        }
+    }
 }
 
 /// Return the one node beneath `owner` whose canvas overflows along `axis`.
@@ -87,16 +95,10 @@ pub fn scroll_target(
     owner: NodeId,
     axis: ScrollAxis,
 ) -> Result<Option<ScrollTarget>> {
-    if !ctx.is_attached(owner) {
-        return Ok(None);
-    }
     let Some(clip) = ancestor_clip(ctx, owner) else {
         return Ok(None);
     };
-    Ok(match resolve_children(ctx, owner, axis, clip)? {
-        Resolution::Unique(target) => Some(target),
-        Resolution::Absent | Resolution::Ambiguous => None,
-    })
+    Ok(resolve_children(ctx, owner, axis, clip)?.target())
 }
 
 /// Return the one node in `pane`, a child of `owner`, whose canvas overflows
@@ -109,20 +111,18 @@ pub(crate) fn pane_target(
     pane: NodeId,
     axis: ScrollAxis,
 ) -> Result<Option<ScrollTarget>> {
-    if !ctx.is_attached(owner) {
-        return Ok(None);
-    }
     let Some(clip) = ancestor_clip(ctx, owner) else {
         return Ok(None);
     };
-    Ok(match resolve(ctx, pane, axis, clip)? {
-        Resolution::Unique(target) => Some(target),
-        Resolution::Absent | Resolution::Ambiguous => None,
-    })
+    Ok(resolve(ctx, pane, axis, clip)?.target())
 }
 
-/// Return the screen area visible through `node` and each of its ancestors.
+/// Return the screen area visible through `node` and each of its ancestors,
+/// or `None` for a detached node.
 fn ancestor_clip(ctx: &dyn ViewContext, node: NodeId) -> Option<Rect> {
+    if !ctx.is_attached(node) {
+        return None;
+    }
     let screen = ctx.view_of(ctx.root_id())?.outer;
     let mut clip = visible(screen, Rect::new(0, 0, screen.w, screen.h))?;
     let mut current = Some(node);
