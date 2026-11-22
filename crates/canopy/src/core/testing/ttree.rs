@@ -76,18 +76,12 @@ macro_rules! node {
         node!(@node $type, stringify!($type), {});
     };
     ($type:ident, $command:ident) => {
-        node!(@node $type, stringify!($type), {
-            #[command]
-            /// A command that only this node kind carries.
-            pub fn $command(&self, _core: &mut dyn Context) -> Result<()> {
-                TSTATE.with(|s| {
-                    s.borrow_mut().add_command(&self.name(), stringify!($command));
-                });
-                Ok(())
-            }
-        });
+        node!(@command $type, stringify!($type), $command);
     };
     ($type:ident, $name:literal, $command:ident) => {
+        node!(@command $type, $name, $command);
+    };
+    (@command $type:ident, $name:expr, $command:ident) => {
         node!(@node $type, $name, {
             #[command]
             /// A command that only this node kind carries.
