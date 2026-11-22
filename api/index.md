@@ -54,7 +54,7 @@ Draw pictures and large text with block mosaic characters.
 - Publish: crates.io
 - Workspace dependencies: none
 - Workspace dependents: canopy-widgets, canopyctl, mosaic-score
-- Items: 59
+- Items: 60
 - Exposes: none
 
 ## canopy-options-derive

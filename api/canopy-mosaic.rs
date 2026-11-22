@@ -131,6 +131,13 @@ impl SymbolSet {
     /// The entries, in priority order.
     pub fn entries(&self) -> &[Entry];
 
+    /// Compile a set from the characters of `chars` that a family holds, in
+    /// the priority order of the families, so that a set of every character
+    /// of some families equals the set of those families. A character of no
+    /// family is left out. A caller can choose characters by their shape,
+    /// such as the characters of one grid of pixels.
+    pub fn from_chars(chars: &[char]) -> Self;
+
     /// Compile a set from families, in priority order.
     pub fn from_families(families: &[Family]) -> Self;
 
