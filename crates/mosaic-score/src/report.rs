@@ -232,6 +232,15 @@ fn row(out: &mut String, label: &str, tiers: &BTreeMap<Tier, f64>, delta: &str) 
     writeln!(out, " {delta:>9}").expect("write to string");
 }
 
+/// The scores of one metric.
+fn scores_of(scores: &[Score], metric: Metric) -> Vec<Score> {
+    scores
+        .iter()
+        .filter(|s| s.metric == metric)
+        .cloned()
+        .collect()
+}
+
 /// The report of one metric: each item, each group, and the suite, in each
 /// tier, with the change of the full tier from the baseline.
 fn section(
@@ -241,11 +250,7 @@ fn section(
     baseline: Option<&Baseline>,
     detail: bool,
 ) {
-    let scores: Vec<Score> = scores
-        .iter()
-        .filter(|s| s.metric == metric)
-        .cloned()
-        .collect();
+    let scores = scores_of(scores, metric);
     let now = Summary::new(&scores, |s| Some(s.value));
     let before = baseline.map(|b| Summary::new(&scores, |s| b.get(&s.key()).copied()));
     let before_item = |item: &str| {
@@ -340,11 +345,7 @@ pub const TOLERANCE: f64 = 0.001;
 pub fn regressions(scores: &[Score], baseline: &Baseline) -> Vec<String> {
     let mut found = Vec::new();
     for metric in Metric::ALL {
-        let scores: Vec<Score> = scores
-            .iter()
-            .filter(|s| s.metric == metric)
-            .cloned()
-            .collect();
+        let scores = scores_of(scores, metric);
         if let Some(missing) = scores.iter().find(|s| !baseline.contains_key(&s.key())) {
             found.push(format!("no baseline for {}", missing.key()));
             continue;
