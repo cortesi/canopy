@@ -10,7 +10,8 @@ use canopy::{
 };
 
 use crate::{
-    font::{FontEffects, FontLayout, FontRenderer, LayoutOptions, align_offset},
+    align::align_offset,
+    font::{FontEffects, FontLayout, FontRenderer, LayoutOptions},
     mosaic::{Tier, tier_for},
 };
 

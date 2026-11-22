@@ -12,6 +12,8 @@ use canopy::{
 use canopy_mosaic::{RasterView, SymbolSet, Tier, coverage_into, fixed_into};
 use fontdue::{Font as FontdueFont, FontSettings, LineMetrics, Metrics};
 
+use crate::align::align_offset;
+
 /// Supersampling scale factor used to rasterize glyphs before downsampling.
 const COVERAGE_SCALE: u32 = 8;
 
@@ -571,18 +573,6 @@ struct Placed {
     width_px: u32,
     /// Height of the text in pixels.
     height_px: u32,
-}
-
-/// Compute an offset for aligning content inside a span.
-pub(crate) fn align_offset(content: u32, available: u32, align: Align) -> u32 {
-    if available <= content {
-        return 0;
-    }
-    match align {
-        Align::Start => 0,
-        Align::Center => (available - content) / 2,
-        Align::End => available - content,
-    }
 }
 
 /// Convert a font raster into a glyph.
