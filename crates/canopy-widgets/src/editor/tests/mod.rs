@@ -2473,7 +2473,7 @@ fn prepared_view_keeps_its_wrap_geometry_until_next_publication() {
     let mut editor = Editor::new("", config);
     editor.publish_view(prepared, false);
     let before = editor.layout.total_lines();
-    editor.update_layout(Rect::new(0, 0, 50, 10), 0);
+    editor.update_layout(Rect::new(0, 0, 50, 10));
     assert_eq!(editor.layout.total_lines(), before);
     assert_eq!(editor.wrap(50).width, 5);
 }

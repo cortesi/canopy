@@ -702,22 +702,20 @@ impl Editor {
             .unwrap_or_else(|| metrics(&self.buffer, wrap))
     }
 
-    /// Synchronize layout and return the cursor position in content
-    /// coordinates.
-    pub(super) fn update_layout(&mut self, view_rect: Rect, gutter_width: u32) -> Point {
+    /// Synchronize layout and cache the cursor position in view coordinates.
+    pub(super) fn update_layout(&mut self, view_rect: Rect) {
         let wrap = self.wrap(view_rect.w);
         self.layout.sync(&mut self.buffer, wrap);
         let cursor = self.buffer.cursor();
         let point = self.layout.point_for_position(&self.buffer, cursor);
         let cursor_point = Point {
-            x: point.x.saturating_add(gutter_width),
+            x: point.x.saturating_add(self.gutter_width()),
             y: point.y,
         };
         self.cursor_view_point = view_rect.contains_point(cursor_point).then(|| Point {
             x: cursor_point.x - view_rect.tl.x,
             y: cursor_point.y - view_rect.tl.y,
         });
-        cursor_point
     }
 
     /// Synchronize the wrap layout and reveal the cursor once layout settles.
@@ -726,7 +724,7 @@ impl Editor {
     /// final content width, so edits and resizes in the same turn count.
     pub(super) fn ensure_cursor_visible(&mut self, ctx: &mut dyn Context) {
         let view_rect = ctx.view().view_rect();
-        self.update_layout(view_rect, self.gutter_width());
+        self.update_layout(view_rect);
         ctx.reveal_anchor(RevealAlign::Nearest);
     }
 
@@ -775,7 +773,7 @@ impl Editor {
     /// column of the first one, also through rows too short for it.
     pub(super) fn move_row(&mut self, delta: isize, ctx: &dyn Context) {
         let view_rect = ctx.view().view_rect();
-        self.update_layout(view_rect, self.gutter_width());
+        self.update_layout(view_rect);
         let point = self
             .layout
             .point_for_position(&self.buffer, self.buffer.cursor());
@@ -1022,7 +1020,7 @@ impl Editor {
         let view = ctx.view();
         let view_rect = view.view_rect();
         let gutter_width = self.gutter_width();
-        self.update_layout(view_rect, gutter_width);
+        self.update_layout(view_rect);
         // A drag beyond the top or left edge selects toward the start.
         let content_point = view.viewport_to_content(event.location)?.clamped_point();
         let mut text_point = content_point;
@@ -1406,7 +1404,7 @@ impl Editor {
     /// Lay out the view, and return the start of the text line at its top.
     fn view_top(&mut self, ctx: &dyn ViewContext) -> TextPosition {
         let view_rect = ctx.view().view_rect();
-        self.update_layout(view_rect, self.gutter_width());
+        self.update_layout(view_rect);
         let line = match self.layout.total_lines() {
             0 => 0,
             lines => self
@@ -1608,7 +1606,7 @@ impl Widget for Editor {
         let view_rect = view.view_rect();
         let origin = view.content_origin();
         let gutter_width = self.gutter_width();
-        self.update_layout(view_rect, gutter_width);
+        self.update_layout(view_rect);
         if self.highlight_cache.sync_revision(self.buffer.revision())
             && let Some(highlighter) = &self.highlighter
         {
