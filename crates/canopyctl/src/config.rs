@@ -12,6 +12,8 @@ use canopy_term::{TermCommand, is_cargo_package_var};
 use serde::Deserialize;
 use tokio::process::Command;
 
+use crate::screenshot::ScreenshotOptions;
+
 /// Parsed `.canopyctl.toml` contents.
 #[derive(Debug, Default, Clone, Deserialize)]
 struct FileConfig {
@@ -273,13 +275,14 @@ impl LoadedConfig {
                 |name| name.to_string_lossy().into_owned(),
             )
         });
+        let shot = ScreenshotOptions::default();
         GallerySettings {
             suite: self.resolve_path(&section.suite.unwrap_or_else(|| "gallery".into())),
             out: self.resolve_path(&section.out.unwrap_or_else(|| "tmp/gallery".into())),
             sizes: section.sizes.unwrap_or_else(|| vec!["100x30".to_owned()]),
             timeout_ms: section.timeout_ms,
-            font_size: section.font_size.unwrap_or(14.0),
-            scale: section.scale.unwrap_or(2.0),
+            font_size: section.font_size.unwrap_or(shot.font_size),
+            scale: section.scale.unwrap_or(shot.scale),
             title,
         }
     }
