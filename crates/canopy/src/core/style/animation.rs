@@ -224,7 +224,8 @@ impl Animation {
 
     /// Show `on` for `on_time`, then `off` for `off_time`, in a loop.
     pub fn blink(on: Color, off: Color, on_time: Duration, off_time: Duration) -> Self {
-        let duration = on_time + off_time;
+        // A blink too long for a duration holds its first color.
+        let duration = on_time.saturating_add(off_time);
         let split = if duration.is_zero() {
             1.0
         } else {
@@ -427,7 +428,10 @@ impl Animation {
         if self.easing != Easing::Hold {
             let next = clocks.now + sample;
             return Some(match self.repeat {
-                Repeat::Once => next.min(start + self.duration),
+                // A run that ends past the clock's range samples on.
+                Repeat::Once => start
+                    .checked_add(self.duration)
+                    .map_or(next, |end| next.min(end)),
                 Repeat::Loop | Repeat::Alternate => next,
             });
         }
@@ -599,5 +603,21 @@ mod tests {
         };
         assert_eq!(held.color(&after), Color::White);
         assert_eq!(held.next_change(&after, sample), Some(t0 + MS(2250)));
+    }
+
+    #[test]
+    fn a_blink_too_long_for_a_duration_holds_its_first_color() {
+        let t0 = Instant::now();
+        let blink = Animation::blink(Color::White, Color::Black, Duration::MAX, MS(400));
+        assert_eq!(blink.duration, Duration::MAX);
+        assert_eq!(blink.color(&clocks(t0, 1000)), Color::White);
+    }
+
+    #[test]
+    fn a_run_that_ends_past_the_clocks_range_samples_on() {
+        let t0 = Instant::now();
+        let fade = Animation::fade(Color::White, Color::Black, Duration::MAX);
+        fade.bind_shown(t0);
+        assert_eq!(fade.next_change(&clocks(t0, 0), MS(33)), Some(t0 + MS(33)));
     }
 }

@@ -531,6 +531,15 @@ fn script_motion_settings_replace_only_the_given_fields() -> Result<()> {
 }
 
 #[test]
+fn a_script_pause_too_long_for_a_duration_never_begins() -> Result<()> {
+    let (mut canopy, _clock, _) = cursor_row()?;
+    canopy.eval_script("canopy.set_motion({ idle_ms = 1e300, blink_ms = 1e300 })")?;
+    assert_eq!(canopy.motion().idle_pause, Duration::MAX);
+    assert_eq!(canopy.motion().blink_pause, Duration::MAX);
+    Ok(())
+}
+
+#[test]
 fn a_drifting_gradient_moves_with_the_epoch() -> Result<()> {
     let gradient = Paint::gradient(
         GradientSpec::with_stops(

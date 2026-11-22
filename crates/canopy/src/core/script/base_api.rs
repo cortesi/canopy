@@ -894,8 +894,9 @@ fn host_set_motion<'s>(
     let mut max_fps = None;
     let mut idle = None;
     let mut blink = None;
+    // A pause too long for a duration saturates, and so never begins.
     let millis = |name: &str, value| -> StdResult<Duration, RuntimeError> {
-        Ok(Duration::from_secs_f64(number(name, value)? / 1000.0))
+        Ok(Duration::try_from_secs_f64(number(name, value)? / 1000.0).unwrap_or(Duration::MAX))
     };
     for (name, value) in fields {
         match name.as_str() {
