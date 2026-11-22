@@ -9,7 +9,7 @@ use canopy::{
     input::{AvailableBinding, BindingSnapshot, key::Key},
 };
 
-use super::binding_list::{MOUSE_SORT_GROUP, acts, key_sort_key};
+use super::binding_list::{acts, key_sort_key};
 
 /// Most entries an index holds. A tree this large only comes from many keys
 /// that open the same menus, and its later chains add nothing to a search.
@@ -60,11 +60,6 @@ impl HelpTree {
             snapshot,
             menus: BTreeMap::new(),
         }
-    }
-
-    /// Return the snapshot of the focus.
-    pub(super) fn snapshot(&self) -> &BindingSnapshot {
-        &self.snapshot
     }
 }
 
@@ -120,7 +115,7 @@ pub(super) fn entries(tree: &HelpTree) -> Vec<HelpEntry> {
         .iter()
         .filter(|binding| binding.show_in_help && acts(binding))
         .collect::<Vec<_>>();
-    mice.sort_by_key(|binding| (MOUSE_SORT_GROUP, binding.input.to_string()));
+    mice.sort_by_key(|binding| binding.input.to_string());
     for binding in mice {
         if out.len() >= ENTRY_LIMIT {
             break;

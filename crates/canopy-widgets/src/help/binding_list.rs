@@ -98,7 +98,7 @@ impl BindingList {
     /// Return the installed snapshot.
     #[cfg(test)]
     pub(crate) fn snapshot(&self) -> Option<&BindingSnapshot> {
-        self.tree.as_ref().map(HelpTree::snapshot)
+        self.tree.as_ref().map(|tree| &tree.snapshot)
     }
 
     /// Rank the entries against `query`, and return how many match, or
@@ -161,7 +161,7 @@ impl BindingList {
     fn rows(&self) -> Vec<BindingRow> {
         self.tree
             .as_ref()
-            .map_or_else(Vec::new, |tree| snapshot_rows(tree.snapshot()))
+            .map_or_else(Vec::new, |tree| snapshot_rows(&tree.snapshot))
     }
 
     /// Return the width that shows every row on one line. While a search is
@@ -706,7 +706,7 @@ pub(super) fn binding_description<I>(binding: &AvailableBinding<I>) -> String {
 /// Sort category for every key with a modifier, after each plain key category.
 const MODIFIED_SORT_GROUP: u8 = 5;
 /// Sort category for every mouse input, after each key category.
-pub(super) const MOUSE_SORT_GROUP: u8 = 6;
+const MOUSE_SORT_GROUP: u8 = 6;
 
 /// Sort keys: plain keys first, by category, then keys with modifiers.
 ///
