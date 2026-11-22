@@ -1151,7 +1151,12 @@ impl Widget for DiffView {
                 DiffLayout::SideBySide => self.draw_side_by_side(rndr, ctx)?,
             }
         }
-        if self.layout == DiffLayout::SideBySide && width > 0 {
+        // A message spans the whole view, so only the panes of a diff have a
+        // divider.
+        if self.layout == DiffLayout::SideBySide
+            && width > 0
+            && matches!(self.content, Content::Diff(_))
+        {
             let geom = self.geometry(width);
             // Even viewport widths leave two central cells so the panes
             // remain exactly equal. Only one carries the divider glyph.
@@ -1646,6 +1651,21 @@ mod tests {
                 "",
                 ""
             ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_side_by_side_message_has_no_divider() -> Result<()> {
+        let view = DiffView::new(DiffModel::from_texts("a\n", "b\n"))
+            .with_layout(DiffLayout::SideBySide)
+            .with_message("Unresolved conflict: deleted by them.");
+        let mut harness = Harness::builder(view).size(25, 3).build()?;
+        harness.render()?;
+        let lines = harness.tbuf().lines();
+        assert_eq!(
+            lines.iter().map(|line| line.trim_end()).collect::<Vec<_>>(),
+            ["Unresolved conflict:", "deleted by them.", ""]
         );
         Ok(())
     }
