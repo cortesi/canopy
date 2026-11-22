@@ -510,6 +510,7 @@ pub fn check_units(text: &str) -> Result<(), String> {
     let document = parse(text);
     let units = edit_units(&document);
     check_unit_list(text, &document, &units)?;
+    check_same_units(text, &units)?;
     for (index, unit) in units.iter().enumerate() {
         if unit.own.is_none() {
             continue;
@@ -619,10 +620,25 @@ fn check_unit_list(
 /// their invariants. A unit replaced with its own bytes gives the same text
 /// and the same units.
 pub fn check_edit(text: &str, index: usize, replacement: &str, own: bool) -> Result<(), String> {
-    edit(text, &parse_units(text), index, replacement, own)
+    let units = parse_units(text);
+    if index < units.len() {
+        check_same_units(text, &units)?;
+    }
+    edit(text, &units, index, replacement, own)
 }
 
-/// Check one edit of `text`, whose units are `units`, as [`check_edit`] does.
+/// Check that `text`, whose units are `units`, parses again to the same
+/// units, as it does after a unit is replaced with its own bytes, which
+/// leaves the text as it was. One check serves every unit of the text.
+fn check_same_units(text: &str, units: &[EditUnit]) -> Result<(), String> {
+    if parse_units(text).as_slice() != units {
+        return Err("a unit replaced with its own bytes changed the units".to_owned());
+    }
+    Ok(())
+}
+
+/// Check one edit of `text`, whose units are `units`, as [`check_edit`] does,
+/// except for [`check_same_units`].
 fn edit(
     text: &str,
     units: &[EditUnit],
@@ -660,15 +676,7 @@ fn edit(
     }
     let document = parse(&new);
     check_unit_list(&new, &document, &edit_units(&document))
-        .map_err(|error| format!("after an edit of unit {index} to {new:?}: {error}"))?;
-    let mut same = text.to_owned();
-    same.replace_range(unit.range.clone(), &text[unit.range.clone()]);
-    if same != text || parse_units(&same).as_slice() != units {
-        return Err(format!(
-            "unit {index} replaced with its own bytes changed the units"
-        ));
-    }
-    Ok(())
+        .map_err(|error| format!("after an edit of unit {index} to {new:?}: {error}"))
 }
 
 /// Check one edit of `text` through a reader, as `Markdown::apply_edit` makes
