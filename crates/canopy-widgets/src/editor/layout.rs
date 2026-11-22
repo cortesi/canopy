@@ -255,22 +255,13 @@ impl LayoutCache {
         )
     }
 
-    /// Return the logical line index for a display line.
+    /// Return the logical line index for a display line, or the last line
+    /// for a display line past the end.
     pub(crate) fn line_for_display(&self, y: usize) -> usize {
-        if self.line_offsets.len() <= 1 {
-            return 0;
-        }
-        let mut low = 0usize;
-        let mut high = self.line_offsets.len().saturating_sub(1);
-        while low < high {
-            let mid = (low + high).div_ceil(2);
-            if self.line_offsets[mid] <= y {
-                low = mid;
-            } else {
-                high = mid.saturating_sub(1);
-            }
-        }
-        low.min(self.lines.len().saturating_sub(1))
+        self.line_offsets
+            .partition_point(|&offset| offset <= y)
+            .saturating_sub(1)
+            .min(self.lines.len().saturating_sub(1))
     }
 
     /// Rebuild the entire layout cache.
@@ -808,6 +799,8 @@ mod tests {
         assert_eq!(cache.line_for_display(0), 0);
         assert_eq!(cache.line_for_display(1), 1);
         assert_eq!(cache.line_for_display(2), 1);
+        assert_eq!(cache.line_for_display(9), 1);
+        assert_eq!(LayoutCache::new().line_for_display(0), 0);
     }
 
     #[test]

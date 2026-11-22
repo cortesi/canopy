@@ -1405,12 +1405,7 @@ impl Editor {
     fn view_top(&mut self, ctx: &dyn ViewContext) -> TextPosition {
         let view_rect = ctx.view().view_rect();
         self.update_layout(view_rect);
-        let line = match self.layout.total_lines() {
-            0 => 0,
-            lines => self
-                .layout
-                .line_for_display((view_rect.tl.y as usize).min(lines - 1)),
-        };
+        let line = self.layout.line_for_display(view_rect.tl.y as usize);
         TextPosition::new(line, 0)
     }
 
