@@ -11,7 +11,7 @@ use std::{
 
 use super::{Core, completion::CompletionRequest, focus::is_focus_candidate};
 use crate::{
-    Invalidation, NodeId,
+    Invalidation, NodeId, WidgetStamp,
     error::{Error, Result},
     input::FrameworkBindingGroup,
     path::Path,
@@ -95,15 +95,6 @@ impl Iterator for Route<'_> {
     }
 }
 
-/// Node identity that cannot silently refer to a replacement widget.
-#[derive(Clone, Copy)]
-struct Identity {
-    /// Arena identity.
-    node: NodeId,
-    /// Widget generation.
-    incarnation: u64,
-}
-
 /// Owned state retained until a scope is closed or structurally retired.
 #[derive(Clone)]
 struct ModalScope {
@@ -112,15 +103,15 @@ struct ModalScope {
     /// Declared input and visual behavior.
     options: ModalOptions,
     /// Owning widget lifetime.
-    owner: Identity,
+    owner: WidgetStamp,
     /// Modal widget lifetime.
-    modal: Identity,
+    modal: WidgetStamp,
     /// Dimming target lifetime, independent from its ordinary effects.
-    dim: Option<Identity>,
+    dim: Option<WidgetStamp>,
     /// The dimming effect, kept for the scope's life so its fade runs once.
     dim_effect: Effect,
     /// Exact prior focus followed by its nearest ancestors.
-    focus_ancestry: Vec<Identity>,
+    focus_ancestry: Vec<WidgetStamp>,
     /// Handles woken once when the scope ends.
     close_wakes: Vec<NodeWakeHandle>,
     /// Whether the modal sits in the overlay layer rather than inside its
@@ -140,20 +131,14 @@ pub(super) struct ModalStack {
 
 impl Core {
     /// Capture a live node's widget identity.
-    fn modal_identity(&self, node: NodeId) -> Result<Identity> {
+    fn modal_identity(&self, node: NodeId) -> Result<WidgetStamp> {
         self.validate_attached_node(node)?;
-        Ok(Identity {
-            node,
-            incarnation: self.nodes[node].incarnation,
-        })
+        Ok(WidgetStamp::new(node, self.nodes[node].incarnation))
     }
 
     /// Whether a saved identity still belongs to the active tree.
-    fn modal_identity_live(&self, identity: Identity) -> bool {
-        self.nodes
-            .get(identity.node)
-            .is_some_and(|entry| entry.incarnation == identity.incarnation)
-            && self.is_attached_to_root(identity.node)
+    fn modal_identity_live(&self, identity: WidgetStamp) -> bool {
+        self.is_incarnation(identity) && self.is_attached_to_root(identity.node())
     }
 
     /// Whether `node` sits in the overlay layer: a child of the root.
@@ -336,7 +321,7 @@ impl Core {
             .iter()
             .filter(|scope| {
                 scope.dim.is_some_and(|identity| {
-                    identity.node == node && self.modal_identity_live(identity)
+                    identity.node() == node && self.modal_identity_live(identity)
                 })
             })
             .map(|scope| Arc::clone(&scope.dim_effect))
@@ -472,7 +457,7 @@ impl Core {
         self.mouse_capture = None;
         for scope in retired.iter().rev() {
             if self.modal_identity_live(scope.modal) {
-                self.nodes[scope.modal.node].hidden = true;
+                self.nodes[scope.modal.node()].hidden = true;
             }
         }
         self.invalidate(Invalidation::Layout);
@@ -490,7 +475,7 @@ impl Core {
             .focus_ancestry
             .iter()
             .filter(|identity| self.modal_identity_live(**identity))
-            .find_map(|identity| first_in(identity.node))
+            .find_map(|identity| first_in(identity.node()))
             .or_else(|| first_in(self.modal_region().unwrap_or(self.root)));
         let focused = self.transition_focus(focus).map(drop);
         let woken = self.wake_ended_modals();
@@ -528,7 +513,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        Context, ViewContext, Widget, WidgetStamp,
+        Context, ViewContext, Widget,
         core::world::CoreOwner,
         input::{Event, key, mouse},
         runtime::PollLifetime,

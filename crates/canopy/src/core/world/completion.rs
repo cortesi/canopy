@@ -39,14 +39,6 @@ const MAX_COMPLETION_REQUESTS: usize = 1024;
 /// again would otherwise never let the drain end.
 pub const MAX_POSTED_CALLS: usize = 1024;
 
-/// One queued removal tied to the widget that received the request.
-pub(super) struct RemovalRequest {
-    /// Arena node to remove.
-    node: NodeId,
-    /// Widget incarnation when queued.
-    incarnation: u64,
-}
-
 /// The work of a posted call.
 pub(super) enum PostedWork {
     /// A command call, bound to exactly the target.
@@ -59,10 +51,8 @@ pub(super) enum PostedWork {
 pub(super) struct PostRequest {
     /// Node that posted the call, which a failure's notice names.
     origin: NodeId,
-    /// Node the call resolved to.
-    target: NodeId,
-    /// Target widget incarnation when posted.
-    incarnation: u64,
+    /// Widget the call resolved to, stamped when posted.
+    target: WidgetStamp,
     /// The work to run on the target.
     work: PostedWork,
     /// Event in scope when posted, which the call's injections read.
@@ -102,7 +92,7 @@ pub(super) enum CompletionRequest {
     /// Run a posted call.
     Post(PostRequest),
     /// Remove a widget incarnation.
-    Remove(RemovalRequest),
+    Remove(WidgetStamp),
     /// Close a modal and all its descendants.
     CloseModal(ModalToken),
     /// Post a notice to the log.
@@ -198,10 +188,10 @@ impl Core {
         let Some(entry) = self.nodes.get(node) else {
             return Ok(());
         };
-        self.enqueue_completion(CompletionRequest::Remove(RemovalRequest {
+        self.enqueue_completion(CompletionRequest::Remove(WidgetStamp::new(
             node,
-            incarnation: entry.incarnation,
-        }))
+            entry.incarnation,
+        )))
     }
 
     /// Close a modal and its nested scopes after callbacks return, with
@@ -223,11 +213,9 @@ impl Core {
     /// fails here. The call keeps the event in scope for its injections.
     pub(crate) fn post(&mut self, origin: NodeId, call: &CommandCall) -> Result<()> {
         let target = commands::resolve_posted(self, origin, call)?;
-        let incarnation = self.nodes[target].incarnation;
         self.enqueue_completion(CompletionRequest::Post(PostRequest {
             origin,
-            target,
-            incarnation,
+            target: WidgetStamp::new(target, self.nodes[target].incarnation),
             work: PostedWork::Command(call.clone().with_target(CommandTarget::Exact(target))),
             event: self.current_event().cloned(),
             source: self.completion.notice_sources.last().copied(),
@@ -246,7 +234,7 @@ impl Core {
         call: WidgetCall,
     ) -> Result<Delivery> {
         let node = stamp.node();
-        if !self.is_incarnation(node, stamp.incarnation()) {
+        if !self.is_incarnation(stamp) {
             return Ok(Delivery::Expired);
         }
         if !self.widget_busy(node) {
@@ -255,8 +243,7 @@ impl Core {
         }
         self.enqueue_completion(CompletionRequest::Post(PostRequest {
             origin,
-            target: node,
-            incarnation: stamp.incarnation(),
+            target: stamp,
             work: PostedWork::Widget(call),
             event: self.current_event().cloned(),
             source: self.completion.notice_sources.last().copied(),
@@ -328,7 +315,7 @@ impl Core {
                         });
                     }
                     posted += 1;
-                    if self.is_incarnation(request.target, request.incarnation) {
+                    if self.is_incarnation(request.target) {
                         let failure = request.failure();
                         self.deliver(request).map_err(|source| DrainError {
                             source,
@@ -341,9 +328,9 @@ impl Core {
                     let now = self.clock.now();
                     self.notices.post(post, None, now);
                 }
-                CompletionRequest::Remove(request) => {
-                    if self.is_incarnation(request.node, request.incarnation) {
-                        self.remove_subtree(request.node)?;
+                CompletionRequest::Remove(stamp) => {
+                    if self.is_incarnation(stamp) {
+                        self.remove_subtree(stamp.node())?;
                     }
                 }
             }
@@ -351,11 +338,12 @@ impl Core {
         Ok(())
     }
 
-    /// Return whether `node` still holds the widget incarnation `incarnation`.
-    fn is_incarnation(&self, node: NodeId, incarnation: u64) -> bool {
+    /// Return whether the node of `stamp` still holds the stamped widget
+    /// incarnation.
+    pub(super) fn is_incarnation(&self, stamp: WidgetStamp) -> bool {
         self.nodes
-            .get(node)
-            .is_some_and(|entry| entry.incarnation == incarnation)
+            .get(stamp.node())
+            .is_some_and(|entry| entry.incarnation == stamp.incarnation())
     }
 
     /// Run a posted call in exactly the event it was posted in.
@@ -363,15 +351,16 @@ impl Core {
     /// The call's dispatch is its own boundary: a failure discards what the
     /// call queued, and a success leaves its work for this drain to pick up.
     fn deliver(&mut self, request: PostRequest) -> Result<()> {
+        let target = request.target.node();
         let mut scope = self.enter_events(request.event.into_iter().collect());
         match request.work {
-            PostedWork::Command(call) => commands::dispatch(&mut scope, request.target, &call)
+            PostedWork::Command(call) => commands::dispatch(&mut scope, target, &call)
                 .map(|_| ())
                 .map_err(Error::from),
             PostedWork::Widget(call) => {
                 let mut dispatch = scope.enter_dispatch();
                 let result = dispatch
-                    .with_widget_ctx(request.target, |widget, ctx| call(widget, ctx))
+                    .with_widget_ctx(target, |widget, ctx| call(widget, ctx))
                     .and_then(|result| result);
                 let completion = dispatch.finish(result.is_ok());
                 result.and(completion)
