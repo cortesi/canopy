@@ -44,9 +44,9 @@ use crate::{
     term::{Read, TermRequest},
 };
 
-/// How long the `launch` tool waits for an app to serve automation, builds
-/// included.
-const LAUNCH_TIMEOUT: Duration = Duration::from_secs(600);
+/// How long a hosted app may take to serve automation, builds included: the
+/// wait of the `launch` tool, and the default of `run --ready-timeout`.
+const READY_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// Top-level CLI arguments.
 #[derive(Parser)]
@@ -108,7 +108,7 @@ struct RunArgs {
     #[arg(long, requires = "pty")]
     detach: bool,
     /// Seconds to wait for a hosted app to serve automation, builds included.
-    #[arg(long, default_value_t = 600)]
+    #[arg(long, default_value_t = READY_TIMEOUT.as_secs())]
     ready_timeout: u64,
     /// The socket a detached host serves at; set by `--detach` itself.
     #[arg(long, hide = true, requires = "pty", conflicts_with = "detach")]
@@ -360,7 +360,7 @@ impl CanopyctlMcpServer {
             height: params.height.unwrap_or(default.height),
         };
         self.sessions
-            .launch(&command, socket, size, LAUNCH_TIMEOUT)
+            .launch(&command, socket, size, READY_TIMEOUT)
             .await
             .map_err(tool_error)?;
         if let Some(fixture) = params.fixture {
