@@ -9,7 +9,6 @@ use std::{
     collections::hash_map::RandomState,
     hash::{BuildHasher, Hasher},
     path::Path,
-    process::Stdio,
 };
 
 use crate::cargo_env;
@@ -86,8 +85,6 @@ pub fn run(workspace_root: &Path, names: &[String], cases: Option<u32>, seed: Op
             .env("PROPTEST_CASES", cases.to_string())
             .env("PROPTEST_RNG_SEED", seed.to_string())
             .current_dir(workspace_root)
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
             .status();
         match status {
             Ok(status) if status.success() => {}

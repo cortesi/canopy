@@ -11,7 +11,7 @@ mod xmark_specs;
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::{Command, ExitCode, Stdio},
+    process::{Command, ExitCode},
 };
 
 use clap::{Parser, Subcommand};
@@ -382,11 +382,7 @@ fn nightly_host() -> Option<String> {
 
 /// Run `command`, which `label` names in messages, with inherited output.
 fn run_command(command: &mut Command, label: &str) -> bool {
-    match command
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-    {
+    match command.status() {
         Ok(status) if status.success() => true,
         Ok(status) => {
             eprintln!("Command `{label}` failed with status {status}");
