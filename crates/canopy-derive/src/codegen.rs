@@ -250,26 +250,21 @@ impl ParamMeta {
         let ty = &self.ty;
         let name = self.name_lit();
         let missing = self.missing_value_tokens(source);
+        let lookup = match source {
+            UserBindingSource::Positional(index) => quote! { values.get(#index) },
+            UserBindingSource::Named => {
+                quote! { normalized.get(&::canopy::commands::normalize_key(#name)) }
+            }
+        };
 
-        match source {
-            UserBindingSource::Positional(index) => quote! {
-                let #ident: #ty = match values.get(#index) {
-                    Some(value) => {
-                        <#ty as ::canopy::commands::FromArgValue>::from_arg_value(value)
-                            .map_err(|err| err.with_param(#name))?
-                    }
-                    None => #missing,
-                };
-            },
-            UserBindingSource::Named => quote! {
-                let #ident: #ty = match normalized.get(&::canopy::commands::normalize_key(#name)) {
-                    Some(value) => {
-                        <#ty as ::canopy::commands::FromArgValue>::from_arg_value(value)
-                            .map_err(|err| err.with_param(#name))?
-                    }
-                    None => #missing,
-                };
-            },
+        quote! {
+            let #ident: #ty = match #lookup {
+                Some(value) => {
+                    <#ty as ::canopy::commands::FromArgValue>::from_arg_value(value)
+                        .map_err(|err| err.with_param(#name))?
+                }
+                None => #missing,
+            };
         }
     }
 }
@@ -308,26 +303,15 @@ impl ReturnMeta {
         method: &syn::Ident,
         args: &[syn::Ident],
     ) -> proc_macro2::TokenStream {
-        let call = quote! { #target.#method(#(#args),*) };
+        let mut call = quote! { #target.#method(#(#args),*) };
+        if self.is_result {
+            call = quote! { #call.map_err(::canopy::commands::CommandError::execution)? };
+        }
 
         if ignore_result || matches!(self.kind, ReturnKind::Unit) {
-            if self.is_result {
-                quote! {
-                    let _ = #call
-                        .map_err(::canopy::commands::CommandError::execution)?;
-                    return Ok(::canopy::commands::ArgValue::Null);
-                }
-            } else {
-                quote! {
-                    let _ = #call;
-                    return Ok(::canopy::commands::ArgValue::Null);
-                }
-            }
-        } else if self.is_result {
             quote! {
-                let value = #call
-                    .map_err(::canopy::commands::CommandError::execution)?;
-                return Ok(::canopy::commands::ToArgValue::to_arg_value(value));
+                let _ = #call;
+                return Ok(::canopy::commands::ArgValue::Null);
             }
         } else {
             quote! {
