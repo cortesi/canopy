@@ -589,7 +589,8 @@ pub trait Context: ViewContext + sealed::Context {
     /// Focus an attached node.
     fn set_focus(&mut self, node: NodeId) -> Result<ChangeOutcome>;
 
-    /// Move focus in a direction within an explicit scope.
+    /// Move focus in a direction within an explicit scope. Focus stays where
+    /// it is when the scope has no node to move it to.
     fn focus_move(&mut self, scope: FocusScope, direction: FocusDirection)
     -> Result<ChangeOutcome>;
 

@@ -157,25 +157,30 @@ impl Core {
         }
     }
 
-    /// Focus the next node in the pre-order traversal of root.
+    /// Focus the next node in the pre-order traversal of root. Focus stays
+    /// where it is when the subtree has no node that takes it.
     pub fn focus_next(&mut self, root: NodeId) -> Result<ChangeOutcome> {
         if let Some(current) = self.focus
             && let Some(target) = find_next_focus(self, root, current)
         {
             return self.set_focus(target);
         }
-        self.transition_focus(first_focusable(self, root))
+        self.focus_first(root)
     }
 
-    /// Focus the previous node in the pre-order traversal of `root`.
+    /// Focus the previous node in the pre-order traversal of `root`. Focus
+    /// stays where it is when the subtree has no node that takes it.
     pub fn focus_prev(&mut self, root: NodeId) -> Result<ChangeOutcome> {
         if let Some(current) = self.focus
             && let Some(target) = find_prev_focus(self, root, current)
         {
             return self.set_focus(target);
         }
-
-        self.transition_focus(find_last_focusable(self, root))
+        if let Some(target) = find_last_focusable(self, root) {
+            self.set_focus(target)
+        } else {
+            Ok(ChangeOutcome::Unchanged)
+        }
     }
 
     /// Move focus within the subtree at `root`.

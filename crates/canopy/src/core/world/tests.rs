@@ -1779,6 +1779,20 @@ fn failed_widget_replacement_keeps_the_old_owners_modal_bindings() -> Result<()>
 }
 
 #[test]
+fn focus_next_and_prev_keep_focus_in_a_subtree_with_no_focusable_node() -> Result<()> {
+    let mut core = Core::new();
+    let focused = core.create_detached(FocusableWidget)?;
+    let empty = core.create_detached(simple_widget())?;
+    core.set_children(core.root, vec![focused, empty])?;
+    core.set_focus(focused)?;
+    assert_eq!(core.focus_next(empty)?, ChangeOutcome::Unchanged);
+    assert_eq!(core.focus, Some(focused));
+    assert_eq!(core.focus_prev(empty)?, ChangeOutcome::Unchanged);
+    assert_eq!(core.focus, Some(focused));
+    Ok(())
+}
+
+#[test]
 fn focus_recovery_excludes_hidden_ancestor_subtrees() -> Result<()> {
     for laid_out in [false, true] {
         let mut core = Core::new();
