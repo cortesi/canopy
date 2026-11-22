@@ -8,7 +8,7 @@ use canopy_widgets::editor::{EditMode, EditorConfig};
 use proptest::{collection::vec, option, prelude::*};
 
 use super::{
-    test_support::{builder, press, service, settle},
+    test_support::{Readers, builder, press, service, settle},
     *,
 };
 use crate::{
@@ -338,34 +338,6 @@ fn the_object_cursor_steps_both_ways_from_the_marked_unit() {
     assert_eq!(object_step(&mut harness, -1), (Some(4), code));
 }
 
-/// Readers in a column, for focus traversal.
-struct Pair {
-    /// The readers to mount.
-    readers: Vec<Markdown>,
-}
-
-impl Widget for Pair {
-    fn name(&self) -> NodeName {
-        NodeName::convert("pair")
-    }
-    fn layout(&self) -> Layout {
-        Layout::fill().direction(Direction::Column)
-    }
-    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        for reader in self.readers.drain(..) {
-            let node = ctx.add_child(ctx.node_id(), reader)?;
-            ctx.set_layout_override(node.into(), Layout::fill().into())?;
-        }
-        Ok(())
-    }
-}
-
-impl Register for Pair {
-    fn register(setup: &mut Setup) -> Result<()> {
-        Markdown::register(setup)
-    }
-}
-
 #[test]
 fn the_object_cursor_leaves_each_end_toward_its_own_side() {
     let (executor, manual) = MarkdownExecutor::manual(ExecutorOptions::default());
@@ -384,8 +356,8 @@ fn the_object_cursor_leaves_each_end_toward_its_own_side() {
             .unwrap()
         })
         .collect();
-    let mut harness = builder(Pair { readers })
-        .register::<Pair>()
+    let mut harness = builder(Readers { readers })
+        .register::<Readers>()
         .size(30, 12)
         .build()
         .unwrap();
@@ -393,7 +365,7 @@ fn the_object_cursor_leaves_each_end_toward_its_own_side() {
     for _ in 0..16 {
         harness.render().unwrap();
         readers = harness
-            .with_root_widget_context(|_: &mut Pair, ctx| {
+            .with_root_widget_context(|_: &mut Readers, ctx| {
                 let nodes = ctx.find_nodes("**/markdown")?;
                 for node in &nodes {
                     ctx.with_widget_mut(*node, |reader: &mut Markdown, ctx| {
@@ -412,7 +384,7 @@ fn the_object_cursor_leaves_each_end_toward_its_own_side() {
     let mut left = Vec::new();
     for delta in [-1, 1] {
         let focused = harness
-            .with_root_widget_context(|_: &mut Pair, ctx| {
+            .with_root_widget_context(|_: &mut Readers, ctx| {
                 let surface = ctx.with_widget(second, |reader: &Markdown| {
                     Ok(reader.navigation_node().unwrap())
                 })?;

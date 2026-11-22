@@ -12,7 +12,7 @@ use proptest::{collection::vec, prelude::*};
 
 use super::{
     cursor_tests::{marked, view},
-    test_support::{builder, press, reader},
+    test_support::{Readers, builder, press, reader},
     *,
 };
 use crate::{
@@ -440,34 +440,6 @@ fn in_breaks(text: &str, terminator: &str) -> String {
         .replace('\n', "\r\n")
 }
 
-/// Two readers in a column, sharing one executor.
-struct Two {
-    /// The readers to mount.
-    readers: Vec<Markdown>,
-}
-
-impl Widget for Two {
-    fn name(&self) -> NodeName {
-        NodeName::convert("two")
-    }
-    fn layout(&self) -> Layout {
-        Layout::fill().direction(Direction::Column)
-    }
-    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        for reader in self.readers.drain(..) {
-            let node = ctx.add_child(ctx.node_id(), reader)?;
-            ctx.set_layout_override(node.into(), Layout::fill().into())?;
-        }
-        Ok(())
-    }
-}
-
-impl Register for Two {
-    fn register(setup: &mut Setup) -> Result<()> {
-        Markdown::register(setup)
-    }
-}
-
 proptest! {
     #![proptest_config(testing::config(12))]
 
@@ -499,8 +471,8 @@ proptest! {
             })
             .collect();
         let clock = Arc::new(ManualClock::new());
-        let mut harness = builder(Two { readers })
-            .register::<Two>()
+        let mut harness = builder(Readers { readers })
+            .register::<Readers>()
             .clock(clock.clone())
             .size(40, 20)
             .build()

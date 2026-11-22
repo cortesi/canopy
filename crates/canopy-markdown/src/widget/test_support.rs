@@ -2,9 +2,10 @@
 //! fields, which the public `testing` module cannot.
 
 use canopy::{
-    Context, Widget,
+    Context, ContextExt, NodeName, Register, Setup, Widget,
     error::Result,
     input::key::Key,
+    layout::{Direction, Layout},
     testing::harness::{Harness, HarnessBuilder},
 };
 
@@ -74,4 +75,32 @@ pub(super) fn reader<R>(
 pub(super) fn press(harness: &mut Harness, key: &str) {
     harness.key(Key::parse_spec(key).unwrap()).unwrap();
     service(harness);
+}
+
+/// Readers in a column, each filling its share.
+pub(super) struct Readers {
+    /// The readers to mount.
+    pub(super) readers: Vec<Markdown>,
+}
+
+impl Widget for Readers {
+    fn name(&self) -> NodeName {
+        NodeName::convert("readers")
+    }
+    fn layout(&self) -> Layout {
+        Layout::fill().direction(Direction::Column)
+    }
+    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        for reader in self.readers.drain(..) {
+            let node = ctx.add_child(ctx.node_id(), reader)?;
+            ctx.set_layout_override(node.into(), Layout::fill().into())?;
+        }
+        Ok(())
+    }
+}
+
+impl Register for Readers {
+    fn register(setup: &mut Setup) -> Result<()> {
+        Markdown::register(setup)
+    }
 }
