@@ -1,7 +1,7 @@
 use canopy::layout::Align;
 
 /// Compute an offset for aligning content inside a span.
-pub(crate) fn align_offset(content: u32, available: u32, align: Align) -> u32 {
+pub fn align_offset(content: u32, available: u32, align: Align) -> u32 {
     if available <= content {
         return 0;
     }
