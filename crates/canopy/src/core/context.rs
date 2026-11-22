@@ -1572,7 +1572,7 @@ mod tests {
         use crate::{core::Core, render::Glyphs};
 
         let mut core = Core::new();
-        let root = core.root_id();
+        let root = core.root;
         let mut context = CoreContext::new(&mut core, root);
         assert_eq!(context.glyphs(), Glyphs::Full);
         context.set_glyphs(Glyphs::Blocks);
@@ -1593,7 +1593,7 @@ mod tests {
         use crate::core::Core;
 
         let mut core = Core::new();
-        let root = core.root_id();
+        let root = core.root;
         let reporter = core.create_detached(Reporter)?;
         let view = CoreViewContext::new(&core, root);
         let items = view.status_of(reporter)?;
@@ -1621,7 +1621,7 @@ mod tests {
         };
 
         let mut core = Core::new();
-        let root = core.root_id();
+        let root = core.root;
         for height in [0, 3, i32::MAX as u32 + 1, u32::MAX] {
             let max_y = if height == 0 { 0 } else { u32::MAX - height };
             // A page keeps one line of overlap.

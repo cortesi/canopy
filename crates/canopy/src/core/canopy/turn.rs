@@ -442,7 +442,7 @@ impl Canopy {
         reply: Option<oneshot::Sender<EvalOutcome>>,
     ) -> Option<EvalOutcome> {
         let started = self.now();
-        let origin = self.core.root_id();
+        let origin = self.core.root;
         let mut diagnostics = Vec::new();
         let prepared = (|| {
             self.prepare_frame(false)?;

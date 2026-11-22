@@ -1273,7 +1273,7 @@ fn host_root<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    host_value(scope, |canopy, _| Ok(ArgValue::Node(canopy.core.root_id())))
+    host_value(scope, |canopy, _| Ok(ArgValue::Node(canopy.core.root)))
 }
 
 /// `canopy.focused`: return the focused node id, or nil.
@@ -1284,7 +1284,7 @@ fn host_focused<'s>(
     host_value(scope, |canopy, _| {
         Ok(canopy
             .core
-            .focus_id()
+            .focus
             .map(ArgValue::Node)
             .unwrap_or(ArgValue::Null))
     })
@@ -1328,7 +1328,7 @@ fn host_find_node<'s>(
     let pattern = args.required::<String>("pattern")?;
     host_value(scope, |canopy, _| {
         let filter = PathFilter::normalized(&pattern)?;
-        let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
+        let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root);
         Ok(matching_nodes(&root_ctx, &filter)
             .next()
             .map(ArgValue::Node)
@@ -1345,7 +1345,7 @@ fn host_find_nodes<'s>(
     let pattern = args.required::<String>("pattern")?;
     host_value(scope, |canopy, _| {
         let filter = PathFilter::normalized(&pattern)?;
-        let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
+        let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root);
         Ok(node_list_to_arg(
             matching_nodes(&root_ctx, &filter).collect::<Vec<_>>(),
         ))
@@ -1360,7 +1360,7 @@ fn host_set_focus<'s>(
     let mut args = HostArgCursor::new(scope, args);
     let node_id = read_node_id(scope, &mut args, "id")?;
     let focused = with_current_canopy(scope, |canopy, _| {
-        let root_id = canopy.core.root_id();
+        let root_id = canopy.core.root;
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
         ctx.set_focus(node_id).map(ChangeOutcome::changed)
     })?;
@@ -1373,7 +1373,7 @@ fn host_focus_move<'s>(
     direction: FocusDirection,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     host_unit(scope, |canopy, _| {
-        let root_id = canopy.core.root_id();
+        let root_id = canopy.core.root;
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
         ctx.focus_move(FocusScope::Root, direction)?;
         Ok(())

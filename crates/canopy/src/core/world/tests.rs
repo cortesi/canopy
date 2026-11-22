@@ -690,7 +690,7 @@ fn focus_path_queries_tolerate_a_stale_internal_id() -> Result<()> {
     assert!(!CoreViewContext::new(&core, core.root).is_on_focus_path(core.root));
     assert_eq!(core.focus_path(core.root), Path::empty());
     core.ensure_focus_valid()?;
-    assert_eq!(core.focus_id(), None);
+    assert_eq!(core.focus, None);
     Ok(())
 }
 
@@ -1795,16 +1795,16 @@ fn focus_recovery_excludes_hidden_ancestor_subtrees() -> Result<()> {
         }
         core.set_focus(child)?;
         core.set_hidden(parent, true)?;
-        assert_eq!(core.focus_id(), Some(sibling));
+        assert_eq!(core.focus, Some(sibling));
         assert!(!core.focusable_leaves(core.root).contains(&child));
         core.focus_next(core.root)?;
-        assert_eq!(core.focus_id(), Some(sibling));
+        assert_eq!(core.focus, Some(sibling));
         core.set_hidden(sibling, true)?;
-        assert_eq!(core.focus_id(), None);
+        assert_eq!(core.focus, None);
         core.set_hidden(parent, false)?;
         core.set_layout_of(parent, Layout::fill())?;
         core.focus_first(core.root)?;
-        assert_eq!(core.focus_id(), Some(child));
+        assert_eq!(core.focus, Some(child));
     }
     Ok(())
 }
@@ -1819,13 +1819,13 @@ fn focus_on_a_node_awaiting_layout_survives_structural_edits() -> Result<()> {
     // Neither node has a view until layout runs.
     let other = core.create_detached(FocusableWidget)?;
     core.attach(core.root, other)?;
-    assert_eq!(core.focus_id(), Some(focused));
+    assert_eq!(core.focus, Some(focused));
 
     for id in [core.root, focused, other] {
         core.set_layout_of(id, Layout::fill())?;
     }
     core.update_layout(Size::new(10, 10))?;
-    assert_eq!(core.focus_id(), Some(focused));
+    assert_eq!(core.focus, Some(focused));
     Ok(())
 }
 
@@ -1839,7 +1839,7 @@ fn focused_widget_survives_unrelated_visibility_change_during_its_callback() -> 
 
     core.with_widget_dyn_mut(focused, |_widget, core| core.set_hidden(sibling, true))??;
 
-    assert_eq!(core.focus_id(), Some(focused));
+    assert_eq!(core.focus, Some(focused));
     Ok(())
 }
 
@@ -1857,7 +1857,7 @@ fn focused_child_survives_nested_parent_callback_visibility_change() -> Result<(
         core.with_widget_dyn_mut(parent, |_widget, core| core.set_hidden(sibling, true))?
     })??;
 
-    assert_eq!(core.focus_id(), Some(focused));
+    assert_eq!(core.focus, Some(focused));
     Ok(())
 }
 
@@ -1886,12 +1886,12 @@ fn edits_inside_a_callback_recover_focus_to_the_callback_widget() -> Result<()> 
             } else {
                 core.detach(child)?;
             }
-            assert_eq!(core.focus_id(), None);
+            assert_eq!(core.focus, None);
             core.debug_assert_tree_invariants();
             Ok::<_, Error>(())
         })??;
 
-        assert_eq!(core.focus_id(), Some(parent));
+        assert_eq!(core.focus, Some(parent));
         core.validate_invariants()?;
     }
     Ok(())
@@ -1904,11 +1904,11 @@ fn hiding_focus_inside_a_callback_repairs_once_the_cell_returns() -> Result<()> 
     core.with_widget_dyn_mut(parent, |_widget, core| {
         core.with_widget_dyn_mut(child, |_widget, core| core.set_hidden(child, true))??;
         // The outer callback still holds the parent's cell.
-        assert_eq!(core.focus_id(), Some(child));
+        assert_eq!(core.focus, Some(child));
         Ok::<_, Error>(())
     })??;
 
-    assert_eq!(core.focus_id(), Some(parent));
+    assert_eq!(core.focus, Some(parent));
     Ok(())
 }
 
@@ -1923,7 +1923,7 @@ fn focus_set_inside_a_callback_overrides_the_deferred_repair() -> Result<()> {
         core.set_focus(other).map(drop)
     })??;
 
-    assert_eq!(core.focus_id(), Some(other));
+    assert_eq!(core.focus, Some(other));
     Ok(())
 }
 
@@ -1944,7 +1944,7 @@ fn detach_recovers_focus_like_removal() -> Result<()> {
         } else {
             core.detach(nodes[1])?;
         }
-        assert_eq!(core.focus_id(), Some(nodes[2]));
+        assert_eq!(core.focus, Some(nodes[2]));
 
         core.set_focus(nodes[2])?;
         if remove {
@@ -1952,7 +1952,7 @@ fn detach_recovers_focus_like_removal() -> Result<()> {
         } else {
             core.detach(nodes[2])?;
         }
-        assert_eq!(core.focus_id(), Some(nodes[0]));
+        assert_eq!(core.focus, Some(nodes[0]));
     }
     Ok(())
 }
@@ -1991,7 +1991,7 @@ fn hidden_or_refusing_focused_widget_still_recovers_during_callbacks() -> Result
     core.set_focus(focused)?;
 
     core.with_widget_dyn_mut(focused, |_widget, core| core.set_hidden(focused, true))??;
-    assert_eq!(core.focus_id(), Some(sibling));
+    assert_eq!(core.focus, Some(sibling));
 
     core.set_hidden(focused, false)?;
     core.set_focus(focused)?;
@@ -1999,10 +1999,10 @@ fn hidden_or_refusing_focused_widget_still_recovers_during_callbacks() -> Result
         accepts.store(false, Ordering::Relaxed);
         core.set_hidden(sibling, true)
     })??;
-    assert_eq!(core.focus_id(), Some(focused));
+    assert_eq!(core.focus, Some(focused));
 
     core.repair_focus_and_capture(None)?;
-    assert_eq!(core.focus_id(), None);
+    assert_eq!(core.focus, None);
     Ok(())
 }
 

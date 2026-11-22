@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn scoped_identity_tracks_moves_replacement_and_nested_rollback() -> Result<()> {
         let mut core = Core::new();
-        let root = core.root_id();
+        let root = core.root;
         let a = core.create_detached(Leaf)?;
         let b = core.create_detached(Leaf)?;
         core.attach(root, a)?;
@@ -191,7 +191,7 @@ mod tests {
         let scope = core.create_detached(Leaf)?;
         let child = core.create_detached(Leaf)?;
         core.attach_slot(scope, "slot", child)?;
-        let root = core.root_id();
+        let root = core.root;
         {
             let mut context = CoreContext::new(&mut core, scope);
             context.set_identity(child, scope, "field")?;
@@ -214,7 +214,7 @@ mod tests {
     #[test]
     fn validate_semantic_keys_rejects_a_broken_index() -> Result<()> {
         let mut core = Core::new();
-        let root = core.root_id();
+        let root = core.root;
         let scope = core.create_detached(Leaf)?;
         let other = core.create_detached(Leaf)?;
         core.attach(root, scope)?;

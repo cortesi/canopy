@@ -282,16 +282,6 @@ impl Core {
         self.event_scope.truncate(depth);
     }
 
-    /// Return the root node id.
-    pub fn root_id(&self) -> NodeId {
-        self.root
-    }
-
-    /// Return the currently focused node id, if any.
-    pub fn focus_id(&self) -> Option<NodeId> {
-        self.focus
-    }
-
     /// Take a mutable reference to a widget for a single call.
     ///
     /// The widget's cell is empty during the call. Once the outermost call

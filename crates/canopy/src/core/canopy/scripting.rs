@@ -393,9 +393,7 @@ impl Canopy {
         let attempt = self.begin_startup_attempt();
         let baseline = self.begin_script_journal();
         let host = self.script.host.clone();
-        let result = host
-            .execute(self, self.core.root_id(), script_id)
-            .map(|_| ());
+        let result = host.execute(self, self.core.root, script_id).map(|_| ());
         self.record_script_journal(origin, source, baseline, &result);
         if result.is_ok() {
             self.commit_startup_attempt();
@@ -525,8 +523,7 @@ impl Canopy {
                 None => self.script.host.compile(&source)?,
             };
             let host = self.script.host.clone();
-            host.execute(self, self.core.root_id(), script_id)
-                .map(|_| ())
+            host.execute(self, self.core.root, script_id).map(|_| ())
         })();
         self.record_script_journal(
             ScriptOrigin::ScriptFile(path.display().to_string()),
@@ -595,7 +592,7 @@ impl Canopy {
         let baseline = self.begin_script_journal();
         Ok(DefaultBindingsRun {
             host,
-            root_id: self.core.root_id(),
+            root_id: self.core.root,
             script_id,
             source,
             baseline,
@@ -813,7 +810,7 @@ impl Canopy {
             ran |= !hooks.is_empty();
             let mut hooks = hooks.into_iter();
             while let Some(hook) = hooks.next() {
-                let root_id = self.core.root_id();
+                let root_id = self.core.root;
                 let result = host.call_function(self, root_id, hook);
                 host.release_function(hook);
                 if let Err(error) = result {

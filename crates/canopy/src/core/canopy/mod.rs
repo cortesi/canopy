@@ -334,7 +334,7 @@ impl Canopy {
 
     /// Return the root node ID.
     pub fn root_id(&self) -> NodeId {
-        self.core.root_id()
+        self.core.root
     }
 
     /// Replace the root widget while preserving its stable node ID.
@@ -480,7 +480,7 @@ impl Canopy {
         &mut self,
         f: impl FnOnce(&mut dyn crate::Context) -> Result<R>,
     ) -> Result<R> {
-        self.with_context(self.core.root_id(), f)
+        self.with_context(self.core.root, f)
     }
 
     /// Run a closure against a mutable context bound to a node.
@@ -542,7 +542,7 @@ impl Canopy {
 
     /// Run a closure against an immutable view of the root context.
     pub fn with_root_view<R>(&self, f: impl FnOnce(&dyn crate::ViewContext) -> R) -> R {
-        let context = crate::core::context::CoreViewContext::new(&self.core, self.core.root_id());
+        let context = crate::core::context::CoreViewContext::new(&self.core, self.core.root);
         f(&context)
     }
 

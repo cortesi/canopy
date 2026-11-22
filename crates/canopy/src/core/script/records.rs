@@ -213,7 +213,7 @@ pub(super) fn node_info_to_arg(
     let Some(node) = canopy.core.nodes.get(node_id) else {
         return Err(error::Error::NotFound(format!("node {node_id:?}")));
     };
-    let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
+    let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root);
     let rect = if node.view.outer.w == 0 || node.view.outer.h == 0 {
         ArgValue::Null
     } else {
