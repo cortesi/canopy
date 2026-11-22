@@ -63,20 +63,13 @@ impl RenderLimits {
                 limit: self.max_height,
             });
         }
-        let width = usize::try_from(size.w).map_err(|_| Error::RenderCellCountOverflow {
+        let overflow = || Error::RenderCellCountOverflow {
             width: size.w,
             height: size.h,
-        })?;
-        let height = usize::try_from(size.h).map_err(|_| Error::RenderCellCountOverflow {
-            width: size.w,
-            height: size.h,
-        })?;
-        let cells = width
-            .checked_mul(height)
-            .ok_or(Error::RenderCellCountOverflow {
-                width: size.w,
-                height: size.h,
-            })?;
+        };
+        let width = usize::try_from(size.w).map_err(|_| overflow())?;
+        let height = usize::try_from(size.h).map_err(|_| overflow())?;
+        let cells = width.checked_mul(height).ok_or_else(overflow)?;
         if cells > self.max_cells {
             return Err(Error::RenderCellLimit {
                 requested: cells,
