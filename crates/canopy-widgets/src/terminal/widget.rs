@@ -682,24 +682,10 @@ impl Widget for Terminal {
             return Ok(EventOutcome::Ignore);
         }
 
-        match event {
-            input::Event::Key(key) => {
-                if self.handle_key(*key) {
-                    Ok(EventOutcome::Handle)
-                } else {
-                    Ok(EventOutcome::Ignore)
-                }
-            }
-            input::Event::Paste(content) => {
-                if self.handle_paste(content) {
-                    Ok(EventOutcome::Handle)
-                } else {
-                    Ok(EventOutcome::Ignore)
-                }
-            }
-            input::Event::Mouse(mouse_event) if mouse_event.action == mouse::Action::Leave => {
-                Ok(EventOutcome::Ignore)
-            }
+        let handled = match event {
+            input::Event::Key(key) => self.handle_key(*key),
+            input::Event::Paste(content) => self.handle_paste(content),
+            input::Event::Mouse(mouse_event) if mouse_event.action == mouse::Action::Leave => false,
             input::Event::Mouse(mouse_event) => {
                 ctx.set_focus(ctx.node_id())?;
                 let Some(state) = self.state() else {
@@ -717,56 +703,46 @@ impl Widget for Terminal {
                     return Ok(EventOutcome::Handle);
                 }
 
-                let outcome = match mouse_event.action {
+                match mouse_event.action {
                     mouse::Action::ScrollUp => {
                         if let Some(session) = self.session_mut() {
                             session.scroll_delta(session.scroll_wheel_step());
                         }
-                        EventOutcome::Handle
+                        true
                     }
                     mouse::Action::ScrollDown => {
                         if let Some(session) = self.session_mut() {
                             session.scroll_delta(-session.scroll_wheel_step());
                         }
-                        EventOutcome::Handle
+                        true
                     }
                     mouse::Action::Down if mouse_event.button == mouse::Button::Left => {
-                        if self
-                            .handle_selection_start(mouse_event.location.clamped_point(), ctx.now())
-                        {
-                            EventOutcome::Handle
-                        } else {
-                            EventOutcome::Ignore
-                        }
+                        self.handle_selection_start(mouse_event.location.clamped_point(), ctx.now())
                     }
                     mouse::Action::Drag if mouse_event.button == mouse::Button::Left => {
-                        if self.handle_selection_update(mouse_event.location.clamped_point()) {
-                            EventOutcome::Handle
-                        } else {
-                            EventOutcome::Ignore
-                        }
+                        self.handle_selection_update(mouse_event.location.clamped_point())
                     }
                     mouse::Action::Up if mouse_event.button == mouse::Button::Left => {
-                        if self.handle_selection_end() {
-                            EventOutcome::Handle
-                        } else {
-                            EventOutcome::Ignore
-                        }
+                        self.handle_selection_end()
                     }
-                    _ => EventOutcome::Ignore,
-                };
-                Ok(outcome)
+                    _ => false,
+                }
             }
             input::Event::FocusGained => {
                 self.sync_focus(true);
-                Ok(EventOutcome::Handle)
+                true
             }
             input::Event::FocusLost => {
                 self.sync_focus(false);
-                Ok(EventOutcome::Handle)
+                true
             }
-            _ => Ok(EventOutcome::Ignore),
-        }
+            _ => false,
+        };
+        Ok(if handled {
+            EventOutcome::Handle
+        } else {
+            EventOutcome::Ignore
+        })
     }
 
     fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> EventOutcome {
