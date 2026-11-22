@@ -126,19 +126,6 @@ impl Options {
         )))
     }
 
-    /// Close the panel, if it is open. The panel reads closed at once, and
-    /// the widget's poll notes the end of its modal once the close commits.
-    pub(crate) fn close_panel(&mut self, context: &mut dyn Context) -> Result<()> {
-        self.reconcile(context)?;
-        if let PanelState::Open(token) = self.panel
-            && context.modal_is_open(token)
-        {
-            // A modal that closed with its owner has nothing left to close.
-            context.close_modal(token).ok();
-        }
-        Ok(())
-    }
-
     /// Return the current value of an option.
     /// @param path The dotted path of the option, such as `listing.hidden`.
     /// @return The value: a bool, an integer, a string, a list of strings, or
@@ -330,7 +317,16 @@ impl Options {
     /// Close the options panel.
     #[command]
     pub fn close(&mut self, context: &mut dyn Context) -> Result<()> {
-        self.close_panel(context)
+        // The panel, if open, reads closed at once, and the widget's poll
+        // notes the end of its modal once the close commits.
+        self.reconcile(context)?;
+        if let PanelState::Open(token) = self.panel
+            && context.modal_is_open(token)
+        {
+            // A modal that closed with its owner has nothing left to close.
+            context.close_modal(token).ok();
+        }
+        Ok(())
     }
 
     /// Return whether the options panel is open.
@@ -630,7 +626,7 @@ mod tests {
         pub fn close_options_and_fail(&self, context: &mut dyn Context) -> Result<()> {
             let root = context.root_id();
             context.with_widget_mut(root, |options: &mut Options, context| {
-                options.close_panel(context)?;
+                options.close(context)?;
                 assert!(!options.is_open(context), "a closing panel reads closed");
                 Ok(())
             })?;

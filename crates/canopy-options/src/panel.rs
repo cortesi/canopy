@@ -982,7 +982,7 @@ impl PanelBody {
             return Ok(());
         };
         context.with_widget_mut(host, |options: &mut Options, context| {
-            options.close_panel(context)
+            options.close(context)
         })
     }
 
