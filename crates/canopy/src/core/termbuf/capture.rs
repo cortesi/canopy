@@ -119,8 +119,8 @@ impl TermBuf {
 
 /// Serialize a color as `#rrggbb`.
 fn hex<S: Serializer>(rgb: &[u8; 3], serializer: S) -> Result<S::Ok, S::Error> {
-    let [r, g, b] = rgb;
-    serializer.serialize_str(&format!("#{r:02x}{g:02x}{b:02x}"))
+    let [r, g, b] = *rgb;
+    serializer.serialize_str(&Color::Rgb { r, g, b }.to_hex())
 }
 
 /// Return whether no attribute is on.
@@ -153,15 +153,10 @@ fn parse_attrs<'de, D: Deserializer<'de>>(deserializer: D) -> Result<AttrSet, D:
 /// Deserialize a color from `#rrggbb`.
 fn unhex<'de, D: Deserializer<'de>>(deserializer: D) -> Result<[u8; 3], D::Error> {
     let text = String::deserialize(deserializer)?;
-    let digits = text
-        .strip_prefix('#')
-        .filter(|digits| digits.len() == 6 && digits.is_ascii())
-        .ok_or_else(|| D::Error::custom(format!("color `{text}` is not #rrggbb")))?;
-    let channel = |at: usize| {
-        u8::from_str_radix(&digits[at..at + 2], 16)
-            .map_err(|_| D::Error::custom(format!("color `{text}` is not #rrggbb")))
-    };
-    Ok([channel(0)?, channel(2)?, channel(4)?])
+    let (r, g, b) = Color::from_hex(&text)
+        .ok_or_else(|| D::Error::custom(format!("color `{text}` is not #rrggbb")))?
+        .rgb();
+    Ok([r, g, b])
 }
 
 #[cfg(test)]
@@ -202,5 +197,11 @@ mod tests {
         let mut unknown = json;
         unknown["styles"][1]["attrs"] = serde_json::json!(["Bold"]);
         assert!(serde_json::from_value::<ScreenCapture>(unknown).is_err());
+    }
+
+    #[test]
+    fn a_capture_color_rejects_a_signed_channel() {
+        let style = serde_json::json!({ "fg": "#+f+f+f", "bg": "#000000" });
+        assert!(serde_json::from_value::<CaptureStyle>(style).is_err());
     }
 }

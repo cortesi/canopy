@@ -133,6 +133,26 @@ impl Color {
         }
     }
 
+    /// Parse a `#rrggbb` color.
+    pub(crate) fn from_hex(text: &str) -> Option<Self> {
+        let digits = text.strip_prefix('#')?;
+        if digits.len() != 6 || !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
+        let byte = |at: usize| u8::from_str_radix(&digits[at..at + 2], 16).ok();
+        Some(Self::Rgb {
+            r: byte(0)?,
+            g: byte(2)?,
+            b: byte(4)?,
+        })
+    }
+
+    /// Format this color's RGB channels as `#rrggbb`.
+    pub(crate) fn to_hex(self) -> String {
+        let (r, g, b) = self.rgb();
+        format!("#{r:02x}{g:02x}{b:02x}")
+    }
+
     /// Scale brightness by a factor. 0.0 = black, 1.0 = unchanged, 2.0 = double
     /// brightness.
     #[must_use]
@@ -602,6 +622,24 @@ mod tests {
                 b: 239
             }
         );
+    }
+
+    #[test]
+    fn hex_parses_only_six_unsigned_digits_and_round_trips() {
+        let color = Color::from_hex("#0aFf10").expect("hex");
+        assert_eq!(
+            color,
+            Color::Rgb {
+                r: 10,
+                g: 255,
+                b: 16
+            }
+        );
+        assert_eq!(color.to_hex(), "#0aff10");
+        assert_eq!(Color::Red.to_hex(), "#ff0000");
+        for bad in ["0aff10", "#0aff1", "#0aff100", "#+f+f+f", "#0aff1g"] {
+            assert_eq!(Color::from_hex(bad), None, "{bad}");
+        }
     }
 
     #[test]

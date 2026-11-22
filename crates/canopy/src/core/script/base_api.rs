@@ -792,20 +792,6 @@ fn option_string<'s>(
     }
 }
 
-/// Parse a `#rrggbb` color.
-fn parse_hex_color(text: &str) -> Option<Color> {
-    let digits = text.strip_prefix('#')?;
-    if digits.len() != 6 || !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return None;
-    }
-    let byte = |at: usize| u8::from_str_radix(&digits[at..at + 2], 16).ok();
-    Some(Color::Rgb {
-        r: byte(0)?,
-        g: byte(2)?,
-        b: byte(4)?,
-    })
-}
-
 /// `canopy.set_cursor_look`: replace parts of a cursor role's look.
 fn host_set_cursor_look<'s>(
     scope: &Scope<'s>,
@@ -827,7 +813,7 @@ fn host_set_cursor_look<'s>(
             ("motion", "blink") => patch.motion = Some(CursorMotion::BLINK),
             ("motion", "pulse") => patch.motion = Some(CursorMotion::PULSE),
             ("color", color) => {
-                patch.color = Some(parse_hex_color(color).ok_or_else(|| {
+                patch.color = Some(Color::from_hex(color).ok_or_else(|| {
                     RuntimeError::runtime(format!(
                         "cursor look color must be #rrggbb, got `{color}`"
                     ))
