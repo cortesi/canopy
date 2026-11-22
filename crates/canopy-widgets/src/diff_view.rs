@@ -233,8 +233,9 @@ pub struct DiffView {
     loading: SpinnerRun,
     /// Wake handle that starts the polls of a wait, after the view mounts.
     wake: Option<NodeWakeHandle>,
-    /// Index into the change heads that the last change move reached.
-    change: usize,
+    /// Index into the change heads that the last change move reached, or
+    /// `None` before the first move.
+    change: Option<usize>,
     /// Changes whenever the displayed text changes.
     revision: u64,
     /// Matches in display order, indexed by source line for painting.
@@ -264,7 +265,7 @@ impl DiffView {
             prepared: false,
             loading: SpinnerRun::Idle,
             wake: None,
-            change: 0,
+            change: None,
             revision: 0,
             matches: Vec::new(),
             match_lines: BTreeMap::new(),
@@ -285,7 +286,7 @@ impl DiffView {
     /// Replace the diff with an already computed model, keeping the layout.
     ///
     /// This clears any message and loading state, drops the highlighters,
-    /// and returns change movement to the first change.
+    /// and restarts change movement from the rows in view.
     pub fn set_model(&mut self, model: DiffModel) {
         self.old_highlighter = None;
         self.new_highlighter = None;
@@ -303,7 +304,7 @@ impl DiffView {
         self.ensure_side_rows();
         self.prepared = false;
         self.loading.set(false);
-        self.change = 0;
+        self.change = None;
         self.clear_matches();
     }
 
@@ -567,14 +568,25 @@ impl DiffView {
 
     /// Scroll `step` changes from the current one, stopping at either end.
     fn step_change(&mut self, c: &mut dyn Context, step: isize) {
-        let heads = self.change_heads(c.view().view_rect().w);
+        let view_rect = c.view().view_rect();
+        let heads = self.change_heads(view_rect.w);
         if heads.is_empty() {
             return;
         }
-        self.change = self.change.saturating_add_signed(step).min(heads.len() - 1);
+        // Before the first move, the current change is the last one that
+        // starts above the bottom of the view: a change in view counts as
+        // seen, and a change below it is the first to visit.
+        let bottom = view_rect.tl.y.saturating_add(view_rect.h) as usize;
+        let current = self
+            .change
+            .or_else(|| heads.iter().rposition(|&head| head < bottom));
+        let change = current.map_or(0, |index| {
+            index.saturating_add_signed(step).min(heads.len() - 1)
+        });
+        self.change = Some(change);
         c.scroll(ScrollOp::To(Point {
             x: 0,
-            y: column(heads[self.change]),
+            y: column(heads[change]),
         }));
     }
 
@@ -589,7 +601,7 @@ impl DiffView {
         }
         self.layout = layout;
         self.ensure_side_rows();
-        self.change = 0;
+        self.change = None;
         self.revision = self.revision.wrapping_add(1);
         self.clear_matches();
     }
@@ -1713,6 +1725,35 @@ mod tests {
                 })?;
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn the_first_next_change_goes_to_a_first_change_below_the_view() -> Result<()> {
+        let shared = (0..10)
+            .map(|index| format!("shared {index}\n"))
+            .collect::<String>();
+        let old = format!("{shared}old one\n{shared}old two\n{shared}");
+        let new = format!("{shared}new one\n{shared}new two\n{shared}");
+        let view = DiffView::new(DiffModel::from_texts(&old, &new));
+        let mut harness = Harness::builder(view).size(80, 4).build()?;
+        harness.render()?;
+        harness.with_root_widget_context(|view: &mut DiffView, ctx| {
+            assert_eq!(view.change_heads(80), [10, 22]);
+            view.next_change(ctx);
+            Ok(())
+        })?;
+        harness.render()?;
+        harness.with_root_widget_context(|view: &mut DiffView, ctx| {
+            assert_eq!(ctx.view().scroll.y, 10, "the first change");
+            view.next_change(ctx);
+            Ok(())
+        })?;
+        harness.render()?;
+        harness.with_root_widget_context(|_: &mut DiffView, ctx| {
+            assert_eq!(ctx.view().scroll.y, 22, "the second change");
+            Ok(())
+        })?;
         Ok(())
     }
 
