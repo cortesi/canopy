@@ -97,12 +97,13 @@ pub fn run_suite(factory: &AppFactory, config: &SuiteConfig) -> Result<SuiteOutc
     let mut results = Vec::new();
     for script in plan_suite(config)? {
         let outcome = factory.evaluate(&script.request);
+        let failed = !outcome.success();
         results.push(ScriptOutcome {
             path: script.path,
             fixture: script.request.fixture,
             outcome,
         });
-        if config.fail_fast && !results.last().expect("just pushed").outcome.success() {
+        if config.fail_fast && failed {
             break;
         }
     }
