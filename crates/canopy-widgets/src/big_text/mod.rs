@@ -27,7 +27,10 @@ pub use face::{BigFace, BigWeight};
 pub use layout::{BigGrid, BigSize};
 use layout::{Column, Resolved, resolve};
 
-use crate::mosaic::{Tier, tier_for};
+use crate::{
+    font::align_offset,
+    mosaic::{Tier, tier_for},
+};
 
 /// Time that a changed character takes to roll.
 const ROLL: Duration = Duration::from_millis(200);
@@ -474,11 +477,7 @@ impl Placement {
         let (scale, grid) = (resolved.scale, resolved.grid);
         let block = resolved.laid.grid_rows(scale, grid);
         let room = area.h.saturating_mul(grid.down());
-        let top = match vertical {
-            Align::Start => 0,
-            Align::Center => room.saturating_sub(block) / 2,
-            Align::End => room.saturating_sub(block),
-        };
+        let top = align_offset(block, room, vertical);
         let columns = area.w.saturating_mul(grid.across());
         let lefts = lines
             .iter()
@@ -486,11 +485,7 @@ impl Placement {
                 let width = u32::try_from(line.len())
                     .unwrap_or(u32::MAX)
                     .saturating_mul(scale);
-                match align {
-                    Align::Start => 0,
-                    Align::Center => columns.saturating_sub(width) / 2,
-                    Align::End => columns.saturating_sub(width),
-                }
+                align_offset(width, columns, align)
             })
             .collect();
         Self {
