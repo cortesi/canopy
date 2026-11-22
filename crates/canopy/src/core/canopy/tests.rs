@@ -26,8 +26,8 @@ use crate::{
     geom::{Point, PointI32, RectI32},
     input::{
         BindingActionKind, BindingId, BindingPhase, BindingTarget, BindingTier, Event, InputSpec,
-        KeyExpectation, ModalBindings, ModalOptions, NavIntent, RouteOutcome, RouteWinner, key,
-        mouse,
+        KeyExpectation, ModalBindings, ModalOptions, ModalToken, NavIntent, RouteOutcome,
+        RouteWinner, key, mouse,
     },
     layout::{CanvasContext, Edges, Layout},
     path::Path,
@@ -2194,14 +2194,7 @@ fn send_key_checked_allows_a_widget_to_suppress_an_after_widget_binding() -> Res
 #[test]
 fn send_key_checked_accepts_an_unhandled_route_at_a_modal_boundary() -> Result<()> {
     let mut canopy = app();
-    let modal = focused_leaf(&mut canopy, PredictingLeaf)?;
-    canopy.core.open_modal(ModalOptions {
-        owner: canopy.root_id(),
-        modal,
-        initial_focus: modal,
-        dim_target: None,
-        bindings: ModalBindings::Application,
-    })?;
+    modal_leaf(&mut canopy, ModalBindings::Application)?;
 
     canopy.send_key_checked('u', KeyExpectation::Unhandled)?;
 
@@ -2214,17 +2207,18 @@ fn send_key_checked_accepts_an_unhandled_route_at_a_modal_boundary() -> Result<(
     Ok(())
 }
 
-/// Open a modal over a focused leaf and return the leaf.
-fn modal_leaf(canopy: &mut Canopy, bindings: ModalBindings) -> Result<NodeId> {
+/// Open a modal over a focused leaf and return the leaf and the modal's
+/// token.
+fn modal_leaf(canopy: &mut Canopy, bindings: ModalBindings) -> Result<(NodeId, ModalToken)> {
     let modal = focused_leaf(canopy, PredictingLeaf)?;
-    canopy.core.open_modal(ModalOptions {
+    let token = canopy.core.open_modal(ModalOptions {
         owner: canopy.root_id(),
         modal,
         initial_focus: modal,
         dim_target: None,
         bindings,
     })?;
-    Ok(modal)
+    Ok((modal, token))
 }
 
 /// Open `mode` as a menu that waits for one key, as a menu binding does.
@@ -3546,14 +3540,7 @@ fn a_modal_session_closes_through_closing_and_reconciles_to_closed() -> Result<(
     use crate::{core::context::CoreContext, input::ModalSession};
 
     let mut canopy = app();
-    let modal = focused_leaf(&mut canopy, PredictingLeaf)?;
-    let token = canopy.core.open_modal(ModalOptions {
-        owner: canopy.root_id(),
-        modal,
-        initial_focus: modal,
-        dim_target: None,
-        bindings: ModalBindings::Application,
-    })?;
+    let (modal, token) = modal_leaf(&mut canopy, ModalBindings::Application)?;
     let mut session = ModalSession::Closed;
     session.opened(token, "question");
     // A close queued in a dispatch leaves the scope until the dispatch
@@ -3576,14 +3563,7 @@ fn regression_a_modal_session_waits_while_its_queued_close_drains() -> Result<()
     use crate::{core::context::CoreContext, input::ModalSession};
 
     let mut canopy = app();
-    let modal = focused_leaf(&mut canopy, PredictingLeaf)?;
-    let token = canopy.core.open_modal(ModalOptions {
-        owner: canopy.root_id(),
-        modal,
-        initial_focus: modal,
-        dim_target: None,
-        bindings: ModalBindings::Application,
-    })?;
+    let (modal, token) = modal_leaf(&mut canopy, ModalBindings::Application)?;
     let mut session = ModalSession::Closed;
     session.opened(token, "question");
     let mut scope = canopy.core.enter_dispatch();
@@ -3606,14 +3586,7 @@ fn regression_a_modal_session_sees_a_close_queued_by_another_route() -> Result<(
     use crate::{core::context::CoreContext, input::ModalSession};
 
     let mut canopy = app();
-    let modal = focused_leaf(&mut canopy, PredictingLeaf)?;
-    let token = canopy.core.open_modal(ModalOptions {
-        owner: canopy.root_id(),
-        modal,
-        initial_focus: modal,
-        dim_target: None,
-        bindings: ModalBindings::Application,
-    })?;
+    let (modal, token) = modal_leaf(&mut canopy, ModalBindings::Application)?;
     let mut session = ModalSession::Closed;
     session.opened(token, 1);
     let mut scope = canopy.core.enter_dispatch();
@@ -3636,14 +3609,7 @@ fn a_modal_session_close_returns_its_kind() -> Result<()> {
     use crate::{core::context::CoreContext, input::ModalSession};
 
     let mut canopy = app();
-    let modal = focused_leaf(&mut canopy, PredictingLeaf)?;
-    let token = canopy.core.open_modal(ModalOptions {
-        owner: canopy.root_id(),
-        modal,
-        initial_focus: modal,
-        dim_target: None,
-        bindings: ModalBindings::Application,
-    })?;
+    let (modal, token) = modal_leaf(&mut canopy, ModalBindings::Application)?;
     let mut session = ModalSession::Closed;
     session.opened(token, "question");
     let mut ctx = CoreContext::new(&mut canopy.core, modal);
@@ -3662,14 +3628,7 @@ fn a_modal_session_sees_an_outside_close() -> Result<()> {
     use crate::{core::context::CoreContext, input::ModalSession};
 
     let mut canopy = app();
-    let modal = focused_leaf(&mut canopy, PredictingLeaf)?;
-    let token = canopy.core.open_modal(ModalOptions {
-        owner: canopy.root_id(),
-        modal,
-        initial_focus: modal,
-        dim_target: None,
-        bindings: ModalBindings::Application,
-    })?;
+    let (modal, token) = modal_leaf(&mut canopy, ModalBindings::Application)?;
     let mut session = ModalSession::Closed;
     session.opened(token, 1);
     canopy.core.close_modal_now(token)?;
