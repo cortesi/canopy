@@ -81,6 +81,11 @@ fn baseline_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("baseline.txt")
 }
 
+/// The directory of the contact sheets.
+fn sheet_dir() -> PathBuf {
+    suite::root().join("tmp/score")
+}
+
 /// Halve an image of linear pixels by area and encode it to sRGB.
 fn half_srgb(pixels: &[[f32; 3]], width: usize) -> (usize, Vec<[u8; 3]>) {
     let (w, h) = (width / 2, pixels.len() / width / 2);
@@ -97,7 +102,7 @@ fn half_srgb(pixels: &[[f32; 3]], width: usize) -> (usize, Vec<[u8; 3]>) {
 
 /// Write a contact sheet: the reference, then the display of each tier.
 fn write_sheet(name: &str, width: usize, panels: &[Vec<[f32; 3]>]) {
-    let dir = suite::root().join("tmp/score");
+    let dir = sheet_dir();
     fs::create_dir_all(&dir).expect("sheet directory");
     let halves: Vec<_> = panels.iter().map(|p| half_srgb(p, width)).collect();
     let (w, h) = (halves[0].0, halves[0].1.len() / halves[0].0);
@@ -163,7 +168,7 @@ fn neighborhood(pixels: &[[f32; 3]], cols: usize, (col, row): (usize, usize)) ->
 /// neighborhood in the reference, the display, and the stray, the cell
 /// framed in red.
 fn write_worst_sheet(worst: &[Worst]) {
-    let dir = suite::root().join("tmp/score");
+    let dir = sheet_dir();
     fs::create_dir_all(&dir).expect("sheet directory");
     let (w, h) = (TILE[0] * CELL_W, TILE[1] * CELL_H);
     let gap = 8;
@@ -351,7 +356,7 @@ fn main() -> ExitCode {
         started.elapsed().as_secs_f64()
     );
     if args.sheets {
-        println!("sheets in {}", suite::root().join("tmp/score").display());
+        println!("sheets in {}", sheet_dir().display());
     }
     if args.worst > 0 {
         worst.sort_by(|a, b| b.stray.total_cmp(&a.stray));
