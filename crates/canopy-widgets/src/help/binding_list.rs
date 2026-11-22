@@ -437,13 +437,12 @@ fn result_lines(rows: &[ResultRow], width: u32) -> Vec<DisplayLine> {
         .map(|row| text_width(&row.chain))
         .max()
         .unwrap_or(0);
-    let natural = rows
+    let max_text_width = rows
         .iter()
         .map(|row| text_width(&row.text))
         .max()
-        .unwrap_or(0)
-        .saturating_add(max_key_width + 2);
-    let narrow = width < natural && (width < max_key_width.saturating_add(12) || width < 28);
+        .unwrap_or(0);
+    let narrow = stacks(width, max_key_width, max_text_width);
     let mut lines = Vec::new();
     for row in rows {
         let (indent, wrap_width) = if narrow {
@@ -577,13 +576,14 @@ fn binding_groups(rows: &[BindingRow]) -> Vec<BindingGroup> {
 /// Pack key labels into rows no wider than [`KEY_ROW_WIDTH`], with at least one
 /// label on each row.
 ///
-/// A comma and a space separate keys.
+/// [`KEY_SEPARATOR`] separates keys.
 fn key_rows(keys: &[String]) -> Vec<String> {
+    let separator = text_width(KEY_SEPARATOR);
     let mut rows: Vec<String> = Vec::new();
     for key in keys {
         match rows.last_mut() {
-            Some(row) if text_width(row) + 2 + text_width(key) <= KEY_ROW_WIDTH => {
-                row.push_str(", ");
+            Some(row) if text_width(row) + separator + text_width(key) <= KEY_ROW_WIDTH => {
+                row.push_str(KEY_SEPARATOR);
                 row.push_str(key);
             }
             _ => rows.push(key.clone()),
@@ -597,6 +597,16 @@ fn text_width(text: &str) -> usize {
     text::width(text) as usize
 }
 
+/// Return whether lines at `width` stack keys above their text, given the
+/// widest key and the widest text.
+fn stacks(width: usize, max_key_width: usize, max_text_width: usize) -> bool {
+    // The width that shows all text beside its keys. A panel measured to its
+    // own content is given exactly this, so stacking at or above it would
+    // break rows that fit. The cramped-column rules only apply below it.
+    let natural = max_text_width.saturating_add(max_key_width.saturating_add(2));
+    width < natural && (width < max_key_width.saturating_add(12) || width < 28)
+}
+
 /// Build aligned shortcut rows, stacking keys above actions on narrow screens.
 ///
 /// A group's extra key rows pair with its wrapped action lines, so a long run
@@ -607,16 +617,12 @@ fn binding_lines(
     max_key_width: usize,
 ) -> Vec<DisplayLine> {
     let width = width as usize;
-    // The width that shows every action beside its keys. A panel measured to
-    // its own content is given exactly this, so stacking at or above it would
-    // break rows that fit. The cramped-column rules only apply below it.
-    let natural = groups
+    let max_description_width = groups
         .iter()
         .map(|(_, description)| text_width(description))
         .max()
-        .unwrap_or(0)
-        .saturating_add(max_key_width.saturating_add(2));
-    let narrow = width < natural && (width < max_key_width.saturating_add(12) || width < 28);
+        .unwrap_or(0);
+    let narrow = stacks(width, max_key_width, max_description_width);
     let mut lines = Vec::new();
     for (keys, description) in groups {
         if narrow {
