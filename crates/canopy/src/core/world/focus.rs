@@ -51,10 +51,7 @@ impl Core {
     /// Apply one validated focus transition. `None` clears focus.
     pub(crate) fn transition_focus(&mut self, target: Option<NodeId>) -> Result<ChangeOutcome> {
         if let Some(node) = target {
-            self.validate_attached_node(node)?;
-            if !self.modal_admits(node) {
-                return Err(Error::Invalid("node is outside the active modal".into()));
-            }
+            self.validate_admitted_node(node)?;
         }
         if self.focus == target {
             Ok(ChangeOutcome::Unchanged)
@@ -115,6 +112,16 @@ impl Core {
         self.nodes.require(node)?;
         if !self.is_attached_to_root(node) {
             return Err(Error::NodeDetached(node));
+        }
+        Ok(())
+    }
+
+    /// Validate that a node belongs to the active tree and that the active
+    /// modal admits it.
+    fn validate_admitted_node(&self, node: NodeId) -> Result<()> {
+        self.validate_attached_node(node)?;
+        if !self.modal_admits(node) {
+            return Err(Error::Invalid("node is outside the active modal".into()));
         }
         Ok(())
     }
@@ -404,10 +411,7 @@ impl Core {
     /// Apply one validated mouse-capture transition.
     fn transition_mouse_capture(&mut self, target: Option<NodeId>) -> Result<ChangeOutcome> {
         if let Some(node) = target {
-            self.validate_attached_node(node)?;
-            if !self.modal_admits(node) {
-                return Err(Error::Invalid("node is outside the active modal".into()));
-            }
+            self.validate_admitted_node(node)?;
         }
         if self.mouse_capture == target {
             Ok(ChangeOutcome::Unchanged)
