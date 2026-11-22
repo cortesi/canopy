@@ -593,6 +593,15 @@ struct Node {
 }
 /// One parse's tree, and what the parse of an appended revision reuses.
 struct Parsed {
+    /// The tree, and what the revision keeps for the next, appended revision.
+    cache: ParseCache,
+    /// What the stream's open tail needs.
+    watch: TailWatch,
+}
+
+/// What a revision's parse keeps for the next, appended revision.
+#[derive(Debug)]
+struct ParseCache {
     /// The top-level nodes.
     roots: Vec<Arc<Node>>,
     /// The events read through each top-level node, counted from the start
@@ -602,24 +611,7 @@ struct Parsed {
     marks: Vec<TailMark>,
     /// Every reference definition's source span.
     definitions: Vec<Range<usize>>,
-    /// What the stream's open tail needs.
-    watch: TailWatch,
     /// What the parser learned, for resuming after a prefix.
-    resume: Resume,
-}
-
-/// What a revision's parse keeps for the next, appended revision.
-#[derive(Debug)]
-struct ParseCache {
-    /// The top-level nodes.
-    roots: Vec<Arc<Node>>,
-    /// The events read through each top-level node.
-    events: Vec<usize>,
-    /// Where the tail watch stood after each top-level node.
-    marks: Vec<TailMark>,
-    /// Every reference definition's source span.
-    definitions: Vec<Range<usize>>,
-    /// What the parser learned.
     resume: Resume,
 }
 
@@ -688,12 +680,14 @@ fn tree(
     }
     let resume = events.resume();
     Some(Parsed {
-        roots,
-        events: root_events,
-        marks,
-        definitions,
+        cache: ParseCache {
+            roots,
+            events: root_events,
+            marks,
+            definitions,
+            resume,
+        },
         watch,
-        resume,
     })
 }
 
@@ -737,7 +731,10 @@ fn parse_tree(
     };
     let before = cache.resume.before(settle);
     let after = (cache.events[keep - 1], cache.marks[keep - 1]);
-    let suffix = tree(text, limits, settle, &before, after)?;
+    let Parsed {
+        cache: suffix,
+        watch,
+    } = tree(text, limits, settle, &before, after)?;
     let mut roots = cache.roots[..keep].to_vec();
     roots.extend(suffix.roots);
     let mut events = cache.events[..keep].to_vec();
@@ -752,12 +749,14 @@ fn parse_tree(
         .collect();
     definitions.extend(suffix.definitions);
     Some(Parsed {
-        roots,
-        events,
-        marks,
-        definitions,
-        watch: suffix.watch,
-        resume: before.then(suffix.resume),
+        cache: ParseCache {
+            roots,
+            events,
+            marks,
+            definitions,
+            resume: before.then(suffix.resume),
+        },
+        watch,
     })
 }
 /// The semantic tone of an alert, which sets its colour.
@@ -1953,28 +1952,21 @@ pub fn parse_document(
     // Comments are hidden before parsing. Every byte keeps its offset, so
     // source ranges still index `text`, which source cards show.
     let parsed = canopy_xmark::hide_comments(&text, Options::obsidian());
-    let Some(Parsed {
-        roots,
-        events,
-        marks,
-        definitions,
-        watch,
-        resume,
-    }) = parse_tree(&parsed, source, limits, previous)
-    else {
+    let Some(Parsed { cache, watch }) = parse_tree(&parsed, source, limits, previous) else {
         builder.document.degraded = Some("node or depth limit".into());
         builder.source_fallback(&text, "Semantic node or depth limit");
         builder.document.estimated_bytes = builder.document.estimate_bytes();
         return builder.document;
     };
     let mut leaves = Vec::new();
-    collect(&roots, &Context::default(), &mut leaves);
+    collect(&cache.roots, &Context::default(), &mut leaves);
     let tail = (!source.lifecycle.is_complete())
-        .then(|| watch.open_tail(&parsed, &definitions))
+        .then(|| watch.open_tail(&parsed, &cache.definitions))
         .flatten();
     builder.document.provisional = tail.as_ref().map(|tail| tail.start..text.len());
     if let Some(region) = &builder.document.provisional {
-        let excluded: Vec<_> = definitions
+        let excluded: Vec<_> = cache
+            .definitions
             .iter()
             .filter(|r| r.start >= region.start)
             .cloned()
@@ -1992,7 +1984,7 @@ pub fn parse_document(
                 String::from_utf8(bytes).expect("offset-preserving ASCII masks preserve UTF-8");
             if let Some(masked) = tree(&masked, limits, 0, &Resume::default(), Default::default()) {
                 leaves.clear();
-                collect(&masked.roots, &Context::default(), &mut leaves);
+                collect(&masked.cache.roots, &Context::default(), &mut leaves);
             }
             let range = region.clone();
             let line_start = text[..range.start].rfind('\n').map_or(0, |at| at + 1);
@@ -2024,13 +2016,7 @@ pub fn parse_document(
         }
         builder.leaf(leaf, &text);
     }
-    builder.document.parse = Some(Arc::new(ParseCache {
-        roots,
-        events,
-        marks,
-        definitions,
-        resume,
-    }));
+    builder.document.parse = Some(Arc::new(cache));
     builder.document.estimated_bytes = builder.document.estimate_bytes();
     builder.document
 }
