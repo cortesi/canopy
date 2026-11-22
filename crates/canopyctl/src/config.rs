@@ -156,23 +156,16 @@ impl LoadedConfig {
         }
     }
 
-    /// Return the merged application environment.
-    pub fn app_env(&self) -> HashMap<String, String> {
-        self.file
-            .app
-            .as_ref()
-            .and_then(|app| app.env.clone())
-            .unwrap_or_default()
-    }
-
-    /// Return the working directory used for spawned app processes.
-    pub fn app_cwd(&self) -> PathBuf {
-        self.file
-            .app
-            .as_ref()
+    /// Return `argv` as a command that runs as the app does: in `[app].cwd`,
+    /// else the config directory, with `[app].env` merged into its
+    /// environment.
+    fn app_command(&self, argv: Vec<String>) -> Result<ResolvedCommand> {
+        let app = self.file.app.as_ref();
+        let cwd = app
             .and_then(|app| app.cwd.as_ref())
-            .map(|cwd| self.resolve_path(cwd))
-            .unwrap_or_else(|| self.config_dir.clone())
+            .map_or_else(|| self.config_dir.clone(), |cwd| self.resolve_path(cwd));
+        let env = app.and_then(|app| app.env.clone()).unwrap_or_default();
+        ResolvedCommand::new(argv, cwd, env)
     }
 
     /// Return the directory of the sockets of a run: `[app].socket_dir`, else
@@ -212,11 +205,7 @@ impl LoadedConfig {
         let replaced = extra
             .into_iter()
             .map(|arg| arg.replace("{socket}", &socket.display().to_string()));
-        ResolvedCommand::new(
-            base.into_iter().chain(replaced).collect(),
-            self.app_cwd(),
-            self.app_env(),
-        )
+        self.app_command(base.into_iter().chain(replaced).collect())
     }
 
     /// Build the headless stdio MCP command.
@@ -230,7 +219,7 @@ impl LoadedConfig {
         } else {
             override_command.to_vec()
         };
-        ResolvedCommand::new(argv, self.app_cwd(), self.app_env())
+        self.app_command(argv)
     }
 
     /// Resolve the smoke suite directory.
@@ -296,7 +285,7 @@ impl LoadedConfig {
             .into_iter()
             .chain([fixture.display().to_string()])
             .collect();
-        Some(ResolvedCommand::new(argv, self.app_cwd(), self.app_env()))
+        Some(self.app_command(argv))
     }
 
     /// Build the command that serves the gallery: the override, else
@@ -325,7 +314,7 @@ impl LoadedConfig {
                 None => arg,
             })
             .collect();
-        ResolvedCommand::new(argv, self.app_cwd(), self.app_env())
+        self.app_command(argv)
     }
 
     /// Resolve the idle time after which `canopyctl mcp` shuts down its app.
