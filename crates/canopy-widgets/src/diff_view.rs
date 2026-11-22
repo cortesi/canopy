@@ -118,6 +118,13 @@ struct Geometry {
     width: u32,
 }
 
+impl Geometry {
+    /// Return the code width of one side-by-side half, gutter excluded.
+    fn pane_code_width(&self) -> u32 {
+        self.half.saturating_sub(self.gutter)
+    }
+}
+
 /// Wrapped source lines and display offsets for the paired rows.
 struct SideLayout {
     /// Code width used to wrap both versions.
@@ -519,7 +526,7 @@ impl DiffView {
                 1,
             );
         }
-        self.with_side_layout(geometry.half.saturating_sub(geometry.gutter), |layout| {
+        self.with_side_layout(geometry.pane_code_width(), |layout| {
             let lines = &layout.lines[found.row];
             let line = match found.side {
                 Side::Old => &lines.0,
@@ -688,7 +695,7 @@ impl DiffView {
                     self.model().scope,
                 );
                 let geom = self.geometry(width);
-                self.with_side_layout(geom.half.saturating_sub(geom.gutter), |layout| {
+                self.with_side_layout(geom.pane_code_width(), |layout| {
                     heads.into_iter().map(|row| layout.offsets[row]).collect()
                 })
             }
@@ -795,7 +802,7 @@ impl DiffView {
             DiffLayout::Unified => self.model().rows.len(),
             DiffLayout::SideBySide => {
                 let geom = self.geometry(width);
-                self.with_side_layout(geom.half.saturating_sub(geom.gutter), |layout| {
+                self.with_side_layout(geom.pane_code_width(), |layout| {
                     *layout.offsets.last().expect("layout has a total height")
                 })
             }
@@ -993,96 +1000,93 @@ impl DiffView {
         let left = origin.x;
         let right = origin.x + geom.width - geom.half;
         let first = view_rect.tl.y as usize;
-        self.with_side_layout(
-            geom.half.saturating_sub(geom.gutter),
-            |layout| -> Result<()> {
-                let last = first
-                    .saturating_add(view_rect.h as usize)
-                    .min(*layout.offsets.last().expect("layout has a total height"));
-                let mut index = layout
-                    .offsets
-                    .partition_point(|&row| row <= first)
-                    .saturating_sub(1);
-                for display in first..last {
-                    while layout.offsets[index + 1] <= display {
-                        index += 1;
+        self.with_side_layout(geom.pane_code_width(), |layout| -> Result<()> {
+            let last = first
+                .saturating_add(view_rect.h as usize)
+                .min(*layout.offsets.last().expect("layout has a total height"));
+            let mut index = layout
+                .offsets
+                .partition_point(|&row| row <= first)
+                .saturating_sub(1);
+            for display in first..last {
+                while layout.offsets[index + 1] <= display {
+                    index += 1;
+                }
+                let continuation = display - layout.offsets[index];
+                let pair = &layout.lines[index];
+                let y = origin.y + column(display - first);
+                match &self.side_rows[index] {
+                    SideRow::Pair { old, new, changed } => {
+                        let (left_style, right_style) = if *changed {
+                            ("removed", "added")
+                        } else {
+                            ("context", "context")
+                        };
+                        let left_marker = if *changed { '-' } else { ' ' };
+                        let right_marker = if *changed { '+' } else { ' ' };
+                        self.draw_pair_side(
+                            rndr,
+                            view_rect,
+                            origin,
+                            &geom,
+                            *old,
+                            Side::Old,
+                            left,
+                            left_marker,
+                            left_style,
+                            y,
+                            pair.0.as_ref().and_then(|line| line.segment(continuation)),
+                        )?;
+                        self.draw_pair_side(
+                            rndr,
+                            view_rect,
+                            origin,
+                            &geom,
+                            *new,
+                            Side::New,
+                            right,
+                            right_marker,
+                            right_style,
+                            y,
+                            pair.1.as_ref().and_then(|line| line.segment(continuation)),
+                        )?;
                     }
-                    let continuation = display - layout.offsets[index];
-                    let pair = &layout.lines[index];
-                    let y = origin.y + column(display - first);
-                    match &self.side_rows[index] {
-                        SideRow::Pair { old, new, changed } => {
-                            let (left_style, right_style) = if *changed {
-                                ("removed", "added")
-                            } else {
-                                ("context", "context")
-                            };
-                            let left_marker = if *changed { '-' } else { ' ' };
-                            let right_marker = if *changed { '+' } else { ' ' };
-                            self.draw_pair_side(
-                                rndr,
-                                view_rect,
-                                origin,
-                                &geom,
-                                *old,
-                                Side::Old,
-                                left,
-                                left_marker,
-                                left_style,
-                                y,
-                                pair.0.as_ref().and_then(|line| line.segment(continuation)),
-                            )?;
-                            self.draw_pair_side(
-                                rndr,
-                                view_rect,
-                                origin,
-                                &geom,
-                                *new,
-                                Side::New,
-                                right,
-                                right_marker,
-                                right_style,
-                                y,
-                                pair.1.as_ref().and_then(|line| line.segment(continuation)),
-                            )?;
-                        }
-                        SideRow::Gap => {
-                            rndr.fill("gap", Rect::new(left, y, geom.half, 1), ' ')?;
-                            rndr.fill("gap", Rect::new(right, y, geom.half, 1), ' ')?;
-                            Self::draw_number(
-                                rndr,
-                                left,
-                                y,
-                                geom.gutter,
-                                '…',
-                                None,
-                                geom.digits,
-                                "gap",
-                            )?;
-                            Self::draw_number(
-                                rndr,
-                                right,
-                                y,
-                                geom.gutter,
-                                '…',
-                                None,
-                                geom.digits,
-                                "gap",
-                            )?;
-                        }
-                        SideRow::Header { old, new } => {
-                            rndr.fill("header", Rect::new(left, y, geom.width, 1), ' ')?;
-                            rndr.text(
-                                "header",
-                                Line::new(left + geom.gutter, y, geom.width - geom.gutter),
-                                &header_text(old, new),
-                            )?;
-                        }
+                    SideRow::Gap => {
+                        rndr.fill("gap", Rect::new(left, y, geom.half, 1), ' ')?;
+                        rndr.fill("gap", Rect::new(right, y, geom.half, 1), ' ')?;
+                        Self::draw_number(
+                            rndr,
+                            left,
+                            y,
+                            geom.gutter,
+                            '…',
+                            None,
+                            geom.digits,
+                            "gap",
+                        )?;
+                        Self::draw_number(
+                            rndr,
+                            right,
+                            y,
+                            geom.gutter,
+                            '…',
+                            None,
+                            geom.digits,
+                            "gap",
+                        )?;
+                    }
+                    SideRow::Header { old, new } => {
+                        rndr.fill("header", Rect::new(left, y, geom.width, 1), ' ')?;
+                        rndr.text(
+                            "header",
+                            Line::new(left + geom.gutter, y, geom.width - geom.gutter),
+                            &header_text(old, new),
+                        )?;
                     }
                 }
-                Ok(())
-            },
-        )
+            }
+            Ok(())
+        })
     }
 
     /// Draw one half of a side-by-side pair row.
@@ -1120,7 +1124,7 @@ impl DiffView {
             view_rect,
             origin,
             x + geom.gutter,
-            geom.half.saturating_sub(geom.gutter),
+            geom.pane_code_width(),
             style,
             side,
             line,
