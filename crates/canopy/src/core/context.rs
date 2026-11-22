@@ -1235,8 +1235,7 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
     }
 
     fn widget_stamp(&self, node: NodeId) -> Result<WidgetStamp> {
-        let entry = self.core.nodes.require(node)?;
-        Ok(WidgetStamp::new(node, entry.incarnation))
+        self.core.widget_stamp(node)
     }
 
     fn children_of(&self, node: NodeId) -> Vec<NodeId> {

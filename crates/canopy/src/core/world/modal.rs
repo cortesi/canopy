@@ -133,7 +133,7 @@ impl Core {
     /// Capture a live node's widget identity.
     fn modal_identity(&self, node: NodeId) -> Result<WidgetStamp> {
         self.validate_attached_node(node)?;
-        Ok(WidgetStamp::new(node, self.nodes[node].incarnation))
+        self.widget_stamp(node)
     }
 
     /// Whether a saved identity still belongs to the active tree.
@@ -938,7 +938,7 @@ mod tests {
             assert!(core.modal_is_open(token));
 
             // An earlier posted call that fails before the queued close.
-            let stamp = WidgetStamp::new(tree.b_a, core.nodes[tree.b_a].incarnation);
+            let stamp = core.widget_stamp(tree.b_a)?;
             let mut scope = core.enter_dispatch();
             let ran = scope.with_widget_ctx(tree.b_a, |_widget, ctx| -> Result<()> {
                 ctx.with_widget_dyn_mut_or_post(

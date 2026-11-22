@@ -169,6 +169,12 @@ impl Core {
         }))
     }
 
+    /// Stamp a node with its current widget incarnation.
+    pub(crate) fn widget_stamp(&self, node: NodeId) -> Result<WidgetStamp> {
+        let entry = self.nodes.require(node)?;
+        Ok(WidgetStamp::new(node, entry.incarnation))
+    }
+
     /// Capture a wake handle for the requested lifetime of a live node.
     pub(crate) fn wake_handle(
         &self,
@@ -185,13 +191,10 @@ impl Core {
     ///
     /// A node that no longer exists needs no removal.
     pub(crate) fn remove_after_dispatch(&mut self, node: NodeId) -> Result<()> {
-        let Some(entry) = self.nodes.get(node) else {
+        let Ok(stamp) = self.widget_stamp(node) else {
             return Ok(());
         };
-        self.enqueue_completion(CompletionRequest::Remove(WidgetStamp::new(
-            node,
-            entry.incarnation,
-        )))
+        self.enqueue_completion(CompletionRequest::Remove(stamp))
     }
 
     /// Close a modal and its nested scopes after callbacks return, with
@@ -215,7 +218,7 @@ impl Core {
         let target = commands::resolve_posted(self, origin, call)?;
         self.enqueue_completion(CompletionRequest::Post(PostRequest {
             origin,
-            target: WidgetStamp::new(target, self.nodes[target].incarnation),
+            target: self.widget_stamp(target)?,
             work: PostedWork::Command(call.clone().with_target(CommandTarget::Exact(target))),
             event: self.current_event().cloned(),
             source: self.completion.notice_sources.last().copied(),
