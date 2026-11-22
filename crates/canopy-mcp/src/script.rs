@@ -525,14 +525,8 @@ pub fn bootstrap_for_canopy(
 ) -> CanopyResult<BootstrapResponse> {
     let api = canopy.script_api()?.to_string();
     metadata.api_digest = Some(stable_digest(&api));
-    let catalog =
-        script_api_catalog(api).map_err(|error| CanopyError::Invalid(error.to_string()))?;
-    let ScriptApiResolution::Response(overview) = catalog
-        .query(&ScriptApiQuery::default())
-        .map_err(|error| CanopyError::Invalid(error.to_string()))?
-    else {
-        unreachable!("Canopy declarations are ready")
-    };
+    let overview = query_script_api(api, &ScriptApiQuery::default())
+        .map_err(|error| CanopyError::Invalid(error.to_string()))?;
     let focus_commands = bootstrap_commands(canopy, CommandTarget::Focus)?;
     let default_commands = bootstrap_commands(canopy, CommandTarget::From(canopy.root_id()))?;
     Ok(BootstrapResponse {
