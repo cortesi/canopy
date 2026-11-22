@@ -473,11 +473,11 @@ impl Canopy {
         let (deadline, invocation) = match prepared {
             Ok(prepared) => prepared,
             Err(error) => {
-                let result: Result<()> = Err(error);
+                let result = Err(error);
                 self.record_eval_journal(&request.source, started, &result, &[], &[]);
                 let outcome = EvalOutcome {
                     id,
-                    result: result.map(|()| ArgValue::Null),
+                    result,
                     logs: Vec::new(),
                     assertions: Vec::new(),
                     diagnostics,
