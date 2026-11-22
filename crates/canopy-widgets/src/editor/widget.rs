@@ -25,7 +25,7 @@ use super::{
 use crate::{
     CLEAR_INTENT,
     click::ClickTracker,
-    highlight::{HighlightSpan, Highlighter},
+    highlight::{HighlightSpan, Highlighter, SpanWalk},
     register_clear_intent, run_paint,
     text_buffer::{Selection, TextBuffer, TextPosition, TextRange, single_line},
     view_search,
@@ -1153,8 +1153,7 @@ impl Editor {
             None => &[],
         };
 
-        let mut span_idx = 0usize;
-        let mut span_style: Option<Style> = None;
+        let mut span_walk = SpanWalk::new(highlight_spans);
         let search_ranges = self.search.matches_for_line(line_idx);
         let current_search = self
             .search
@@ -1200,21 +1199,7 @@ impl Editor {
                 {
                     mark_style.clone()
                 } else {
-                    let mut chosen = text_style.clone();
-                    while let Some(span) = highlight_spans.get(span_idx) {
-                        if span.range.end <= g_start {
-                            span_idx = span_idx.saturating_add(1);
-                            span_style = None;
-                            continue;
-                        }
-                        if span.range.start < g_end && span.range.end > g_start {
-                            let resolved = span_style
-                                .get_or_insert_with(|| span.paint_style(render, &text_style));
-                            chosen = resolved.clone();
-                        }
-                        break;
-                    }
-                    chosen
+                    span_walk.style(render, &text_style, g_start, g_end)
                 }
             },
         )?;

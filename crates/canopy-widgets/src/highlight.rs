@@ -127,7 +127,7 @@ impl HighlightSpan {
 
     /// Return the style of the span over the ground of `base`, with the
     /// render effects applied once.
-    pub(crate) fn paint_style(&self, render: &Render, base: &Style) -> Style {
+    fn paint_style(&self, render: &Render, base: &Style) -> Style {
         match &self.style {
             SpanStyle::Fixed(style) => {
                 let mut style = render.apply_effects(style.clone());
@@ -139,6 +139,55 @@ impl HighlightSpan {
                 style.bg = base.bg.clone();
                 style
             }
+        }
+    }
+}
+
+/// A walk over the ordered spans of one line, for graphemes that paint in
+/// order. Each span resolves its style once.
+pub(crate) struct SpanWalk<'a> {
+    /// Spans of the line, ordered by range.
+    spans: &'a [HighlightSpan],
+    /// The first span that may cover the next grapheme.
+    index: usize,
+    /// The resolved style of the span at `index`, once a grapheme needs it.
+    style: Option<Style>,
+}
+
+impl<'a> SpanWalk<'a> {
+    /// Start a walk at the first span of `spans`.
+    pub(crate) fn new(spans: &'a [HighlightSpan]) -> Self {
+        Self {
+            spans,
+            index: 0,
+            style: None,
+        }
+    }
+
+    /// Return the style of the grapheme over chars `start..end`: the style
+    /// of the span that covers it, over the ground of `base`, or `base` where
+    /// no span does.
+    pub(crate) fn style(
+        &mut self,
+        render: &Render,
+        base: &Style,
+        start: usize,
+        end: usize,
+    ) -> Style {
+        while self
+            .spans
+            .get(self.index)
+            .is_some_and(|span| span.range.end <= start)
+        {
+            self.index += 1;
+            self.style = None;
+        }
+        match self.spans.get(self.index) {
+            Some(span) if span.range.start < end => self
+                .style
+                .get_or_insert_with(|| span.paint_style(render, base))
+                .clone(),
+            _ => base.clone(),
         }
     }
 }

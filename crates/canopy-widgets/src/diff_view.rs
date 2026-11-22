@@ -32,7 +32,6 @@ use canopy::{
     layout::{CanvasContext, MeasureConstraints, Measurement, ScrollAxis, ScrollMark, ScrollOp},
     render::Render,
     runtime::{NodeWakeHandle, PollLifetime},
-    style::Style,
     text,
 };
 
@@ -43,7 +42,7 @@ use crate::{
         TextRange, WrapMode,
         layout::{LineLayout, Wrap, WrapSegment, layout_line},
     },
-    highlight::{HighlightSpan, Highlighter},
+    highlight::{HighlightSpan, Highlighter, SpanWalk},
     run_paint::{self, column},
     spinner::SpinnerRun,
     view_search,
@@ -864,8 +863,7 @@ impl DiffView {
         let matches = self.match_lines.get(&(side, line));
         let search_current = rndr.resolve_style(view_search::CURRENT);
         let search_match = rndr.resolve_style(view_search::MATCH);
-        let mut span_index = 0usize;
-        let mut span_style: Option<Style> = None;
+        let mut span_walk = SpanWalk::new(&spans);
         let line_rect = Rect::new(origin.x, y, width, 1);
         let wrapped;
         let (code, tab_col, start_char, scroll) = if let Some(segment) = segment {
@@ -908,20 +906,7 @@ impl DiffView {
                         search_match.clone()
                     };
                 }
-                while let Some(span) = spans.get(span_index) {
-                    if span.range.end <= g_start {
-                        span_index += 1;
-                        span_style = None;
-                        continue;
-                    }
-                    if span.range.start < g_end && span.range.end > g_start {
-                        let merged =
-                            span_style.get_or_insert_with(|| span.paint_style(render, &base));
-                        return merged.clone();
-                    }
-                    break;
-                }
-                base.clone()
+                span_walk.style(render, &base, g_start, g_end)
             },
         )
     }
