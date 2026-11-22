@@ -1347,7 +1347,7 @@ impl DiffView {
     /// Replace the diff with an already computed model, keeping the layout.
     ///
     /// This clears any message and loading state, drops the highlighters,
-    /// and returns change movement to the first change.
+    /// and restarts change movement from the rows in view.
     pub fn set_model(&mut self, model: DiffModel);
 
     /// Set the display layout while constructing a view.

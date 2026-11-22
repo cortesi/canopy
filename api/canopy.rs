@@ -159,7 +159,8 @@ pub trait Context: ViewContext + Context {
     /// Focus the first focusable node within an explicit scope.
     fn focus_first(&mut self, scope: FocusScope) -> crate::error::Result<ChangeOutcome>;
 
-    /// Move focus in a direction within an explicit scope.
+    /// Move focus in a direction within an explicit scope. Focus stays where
+    /// it is when the scope has no node to move it to.
     fn focus_move(
         &mut self,
         scope: FocusScope,

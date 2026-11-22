@@ -15,7 +15,7 @@ fn demo_api_build_does_not_assemble_or_publish() -> Result<()> {
     assert!(canopy.snapshot().is_none());
     assert!(
         canopy
-            .with_root_view(|context| context.find_nodes("root/termgym"))?
+            .with_root_view(|context| context.find_nodes("**/term_gym"))?
             .is_empty()
     );
     Ok(())
