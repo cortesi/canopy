@@ -163,6 +163,7 @@ type Glyphs = BTreeMap<char, Glyph>;
 fn generate(workspace_root: &Path) -> Result<String, String> {
     let fonts = workspace_root.join(FONTS);
     let mut faces: Vec<(String, Glyphs)> = Vec::new();
+    let mut sources = Vec::new();
     for size in SIZES {
         let mut pair = Vec::new();
         for (suffix, weight) in WEIGHTS {
@@ -172,6 +173,7 @@ fn generate(workspace_root: &Path) -> Result<String, String> {
             let glyphs = parse_bdf(&text).map_err(|error| format!("{file}: {error}"))?;
             let name = format!("TAMZEN_{}_{weight}", size.to_uppercase());
             pair.push((name, glyphs));
+            sources.push((file, text));
         }
         repair(&mut pair);
         faces.extend(pair);
@@ -193,15 +195,8 @@ fn generate(workspace_root: &Path) -> Result<String, String> {
     let compact_text = fs::read_to_string(fonts.join("compact.txt"))
         .map_err(|error| format!("cannot read {FONTS}/compact.txt: {error}"))?;
     let compact = parse_compact(&compact_text).map_err(|error| format!("compact.txt: {error}"))?;
-    let mut sources = vec![("compact.txt".to_owned(), compact_text)];
-    for size in SIZES {
-        for (suffix, _) in WEIGHTS {
-            let file = format!("tamzen/Tamzen{size}{suffix}.bdf");
-            let text = fs::read_to_string(fonts.join(&file))
-                .map_err(|error| format!("cannot read {FONTS}/{file}: {error}"))?;
-            sources.push((file, text));
-        }
-    }
+    // The module lists the compact font first.
+    sources.insert(0, ("compact.txt".to_owned(), compact_text));
     Ok(module(&sources, &compact, &faces))
 }
 
