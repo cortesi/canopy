@@ -348,12 +348,13 @@ impl Core {
         node_id: NodeId,
         f: impl FnOnce(&mut dyn Widget, &Self) -> R,
     ) -> Result<R> {
-        let node = self.nodes.require(node_id).map_err(|error| {
-            self.widget_operation_error(WidgetOperation::render("render access"), node_id, error)
-        })?;
-        let mut guard = WidgetMutGuard::borrow(node_id, node).map_err(|error| {
-            self.widget_operation_error(WidgetOperation::render("render access"), node_id, error)
-        })?;
+        let operation = WidgetOperation::render("render access");
+        let node = self
+            .nodes
+            .require(node_id)
+            .map_err(|error| self.widget_operation_error(operation, node_id, error))?;
+        let mut guard = WidgetMutGuard::borrow(node_id, node)
+            .map_err(|error| self.widget_operation_error(operation, node_id, error))?;
         Ok(f(guard.widget_mut(), self))
     }
 
