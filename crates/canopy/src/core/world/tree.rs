@@ -74,11 +74,11 @@ impl TreeEditJournal {
     }
 }
 
-impl MountedWidget {
-    /// Return the stable identity of this widget cell.
-    fn identity(&self) -> usize {
-        Rc::as_ptr(&self.widget) as usize
-    }
+/// Return the identity of a widget cell, which stays stable across node
+/// snapshots and replacement. The journal of a tree edit records mounted and
+/// unmounted widgets by it.
+fn cell_identity<T>(cell: &Rc<T>) -> usize {
+    Rc::as_ptr(cell) as usize
 }
 
 impl Core {
@@ -296,7 +296,7 @@ impl Core {
     ) {
         let mut rollback = self.enter_rollback(before);
         for mounted in mounted.iter().rev() {
-            if unmounted.contains(&mounted.identity()) {
+            if unmounted.contains(&cell_identity(&mounted.widget)) {
                 continue;
             }
             let Ok(mut widget) = mounted.widget.try_borrow_mut() else {
@@ -329,7 +329,7 @@ impl Core {
             node.mark_unmounted();
         }
         if let Some(journal) = self.tree_edit.as_mut() {
-            journal.unmounted.insert(Rc::as_ptr(&widget) as usize);
+            journal.unmounted.insert(cell_identity(&widget));
         }
         Ok(())
     }
