@@ -633,7 +633,6 @@ impl Widget for Terminal {
         let selection = session.selection();
         let child_exited = session.child_exited();
         let child_exit_code = session.child_exit_code().unwrap_or(1);
-        let default_bg = DEFAULT_BACKGROUND;
         self.cursor = cursor_from_state(&state, session.cursor_blink_enabled());
 
         for (row_idx, line) in runs.iter().enumerate() {
@@ -645,7 +644,6 @@ impl Widget for Terminal {
                     run,
                     selection,
                     state.display_offset,
-                    default_bg,
                 )?;
             }
         }
@@ -923,7 +921,6 @@ fn render_run(
     run: &StyledRunPublic,
     selection: Option<SelectionSnapshot>,
     display_offset: usize,
-    default_bg: Color,
 ) -> Result<()> {
     // Apply effects once to each variant after the raw selection color swap.
     let base = ResolvedStyle::new(
@@ -932,7 +929,7 @@ fn render_run(
             g: run.fg.g(),
             b: run.fg.b(),
         },
-        run.bg.map_or(default_bg, |color| Color::Rgb {
+        run.bg.map_or(DEFAULT_BACKGROUND, |color| Color::Rgb {
             r: color.r(),
             g: color.g(),
             b: color.b(),
@@ -1240,15 +1237,7 @@ mod tests {
                 start_col: 0,
                 end_col: 5,
             };
-            render_run(
-                render,
-                geom::Point::default(),
-                0,
-                &run,
-                None,
-                0,
-                Color::Black,
-            )
+            render_run(render, geom::Point::default(), 0, &run, None, 0)
         }
     }
 
@@ -1312,7 +1301,6 @@ mod tests {
                     block: false,
                 }),
                 0,
-                Color::Black,
             )
         }
     }
