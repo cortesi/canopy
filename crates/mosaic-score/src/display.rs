@@ -30,7 +30,6 @@ fn coverage(ch: char) -> &'static [f32] {
         Family::ALL
             .iter()
             .flat_map(|family| family.chars())
-            .chain([' '])
             .map(|ch| {
                 let shape = Shape::of(ch).expect("every symbol has a shape");
                 let (sx, sy) = (1.0 / CELL_W as f32, 1.0 / CELL_H as f32);
