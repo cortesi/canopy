@@ -42,8 +42,8 @@ enum InputKey {
     Cancel,
 }
 
-/// Default tab stop width for single-line inputs.
-const DEFAULT_TAB_STOP: usize = 4;
+/// Tab stop width for single-line inputs.
+const TAB_STOP: usize = 4;
 
 /// A single-line text buffer with horizontal scrolling.
 #[derive(Debug, Clone)]
@@ -56,8 +56,6 @@ struct InputBuffer {
     scroll: usize,
     /// Visible window width in columns.
     view_width: usize,
-    /// Tab stop width in columns.
-    tab_stop: usize,
 }
 
 impl InputBuffer {
@@ -71,7 +69,6 @@ impl InputBuffer {
             value,
             scroll: 0,
             view_width: 0,
-            tab_stop: DEFAULT_TAB_STOP,
         };
         out.ensure_cursor_visible();
         out
@@ -99,7 +96,7 @@ impl InputBuffer {
         if self.view_width == 0 {
             return String::new();
         }
-        let expanded = text::expand_tabs(&self.value, self.tab_stop);
+        let expanded = text::expand_tabs(&self.value, TAB_STOP);
         let (out, _) = text::slice_by_columns(&expanded, self.scroll, self.view_width);
         out.to_string()
     }
@@ -174,14 +171,14 @@ impl InputBuffer {
     /// Compute the cursor column in display coordinates.
     fn cursor_column(&self) -> usize {
         self.buffer
-            .column_for_position(self.buffer.cursor(), self.tab_stop)
+            .column_for_position(self.buffer.cursor(), TAB_STOP)
     }
 
     /// Compute the display width of the line.
     fn line_width(&self) -> usize {
         let len = self.buffer.line_char_len(0);
         self.buffer
-            .column_for_position(TextPosition::new(0, len), self.tab_stop)
+            .column_for_position(TextPosition::new(0, len), TAB_STOP)
     }
 
     /// Ensure the cursor stays within the visible window.

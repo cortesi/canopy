@@ -155,8 +155,7 @@ impl SearchBar {
     /// it.
     pub fn open(&mut self, ctx: &mut dyn Context, query: &str) -> Result<()> {
         let field = self.field()?;
-        self.set_query(ctx, query)?;
-        ctx.set_hidden(ctx.node_id(), false)?;
+        self.show(ctx, query)?;
         ctx.set_focus(field.into())?;
         Ok(())
     }
