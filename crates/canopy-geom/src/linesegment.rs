@@ -23,25 +23,13 @@ impl LineSegment {
     /// Return the intersection between this line segment and other. The line
     /// segment returned will always have a non-zero length.
     pub(crate) fn intersection(&self, other: Self) -> Option<Self> {
-        if self.len == 0 || other.len == 0 {
-            None
-        } else if self.contains(other) {
-            Some(other)
-        } else if other.contains(*self) {
-            Some(*self)
-        } else if self.off <= other.off && u64::from(other.off) < self.end() {
-            Some(Self {
-                off: other.off,
-                len: u32::try_from(self.end() - u64::from(other.off)).ok()?,
-            })
-        } else if other.off <= self.off && u64::from(self.off) < other.end() {
-            Some(Self {
-                off: self.off,
-                len: u32::try_from(other.end() - u64::from(self.off)).ok()?,
-            })
-        } else {
-            None
-        }
+        let off = self.off.max(other.off);
+        let end = self.end().min(other.end());
+        let len = end.checked_sub(u64::from(off)).filter(|len| *len > 0)?;
+        Some(Self {
+            off,
+            len: u32::try_from(len).expect("an intersection is no longer than either segment"),
+        })
     }
 
     /// Split this extent into (pre, active, post) extents, based on the
@@ -163,6 +151,43 @@ mod tests {
         assert_eq!(l.intersection(LineSegment { off: 5, len: 0 }), None);
         assert_eq!(l.intersection(LineSegment { off: 0, len: 5 }), None);
         Ok(())
+    }
+
+    #[test]
+    fn intersect_widens() {
+        let far = LineSegment {
+            off: u32::MAX - 1,
+            len: u32::MAX,
+        };
+        let whole = LineSegment {
+            off: 0,
+            len: u32::MAX,
+        };
+        assert_eq!(far.intersection(far), Some(far));
+        assert_eq!(
+            far.intersection(whole),
+            Some(LineSegment {
+                off: u32::MAX - 1,
+                len: 1,
+            })
+        );
+        assert_eq!(
+            far.intersection(LineSegment {
+                off: u32::MAX,
+                len: 10,
+            }),
+            Some(LineSegment {
+                off: u32::MAX,
+                len: 10,
+            })
+        );
+        assert_eq!(
+            whole.intersection(LineSegment {
+                off: u32::MAX,
+                len: 1,
+            }),
+            None
+        );
     }
 
     #[test]
