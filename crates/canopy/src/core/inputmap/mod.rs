@@ -871,7 +871,9 @@ impl InputMap {
         match &self.modal_bindings {
             Some(ModalBindings::Framework { groups, intents }) => {
                 for group in *groups {
-                    self.extend_framework_group(&mut out, lookup, *group);
+                    self.extend_tier(&mut out, lookup, |tier| {
+                        tier.framework_group() == Some(*group)
+                    });
                 }
                 if intents.is_empty() {
                     self.extend_tier(&mut out, lookup, |tier| *tier == BindingTier::Global);
@@ -887,7 +889,9 @@ impl InputMap {
                     self.extend_application_tiers(&mut out, lookup, true);
                 }
                 for group in *groups {
-                    self.extend_framework_group(&mut out, lookup, *group);
+                    self.extend_tier(&mut out, lookup, |tier| {
+                        tier.framework_group() == Some(*group)
+                    });
                 }
                 if !menu {
                     self.extend_application_tiers(&mut out, lookup, true);
@@ -923,16 +927,6 @@ impl InputMap {
             self.extend_tier(out, lookup, |tier| tier.mode() == Some(mode.as_str()));
         }
         self.extend_tier(out, lookup, |tier| *tier == BindingTier::Default);
-    }
-
-    /// Append the candidates of one framework group, best first.
-    fn extend_framework_group<'a>(
-        &'a self,
-        out: &mut Vec<BindingCandidate<'a>>,
-        lookup: &Lookup<'_>,
-        group: FrameworkBindingGroup,
-    ) {
-        self.extend_tier(out, lookup, |tier| tier.framework_group() == Some(group));
     }
 
     /// Append the candidates of one tier, best first. `in_tier` selects the
