@@ -143,62 +143,30 @@ impl TextBuffer {
 
     /// Return the line length in chars, excluding any trailing newline.
     pub fn line_char_len(&self, line: usize) -> usize {
-        let line = line.min(self.line_count().saturating_sub(1));
-        self.line_char_len_at(line)
+        self.line_slice(line).len_chars()
     }
 
-    /// Return the line length in chars without clamping the line index.
-    fn line_char_len_at(&self, line: usize) -> usize {
-        let (slice, separator) = self.line_slice(line);
-        slice.len_chars() - separator
-    }
-
-    /// Return a logical line, separator included, and the separator's
-    /// length in chars.
-    fn line_slice(&self, line: usize) -> (RopeSlice<'_>, usize) {
-        let slice = self.rope.line(line);
-        let len = slice.len_chars();
-        let separator = if line + 1 == self.line_count() {
-            0
-        } else if len >= 2 && slice.char(len - 2) == '\r' && slice.char(len - 1) == '\n' {
-            2
-        } else {
-            1
-        };
-        (slice, separator)
+    /// Return a logical line without its separator. An index past the end
+    /// clamps to the last line.
+    fn line_slice(&self, line: usize) -> RopeSlice<'_> {
+        let last = self.line_count().saturating_sub(1);
+        let line = line.min(last);
+        without_separator(self.rope.line(line), line == last)
     }
 
     /// Return the text of each logical line in order, without its
     /// separator, borrowed where the rope holds it in one piece.
     pub fn lines(&self) -> impl Iterator<Item = Cow<'_, str>> {
         let count = self.line_count();
-        self.rope.lines().enumerate().map(move |(index, slice)| {
-            let len = slice.len_chars();
-            let separator = if index + 1 == count {
-                0
-            } else if len >= 2 && slice.char(len - 2) == '\r' && slice.char(len - 1) == '\n' {
-                2
-            } else {
-                1
-            };
-            Cow::from(slice.slice(..len - separator.min(len)))
-        })
+        self.rope
+            .lines()
+            .enumerate()
+            .map(move |(index, slice)| Cow::from(without_separator(slice, index + 1 == count)))
     }
 
     /// Return the text of a logical line without a trailing newline.
     pub fn line_text(&self, line: usize) -> String {
-        let line = line.min(self.line_count().saturating_sub(1));
-        self.line_text_at(line)
-    }
-
-    /// Return the text of a logical line without clamping the line index.
-    fn line_text_at(&self, line: usize) -> String {
-        let (slice, separator) = self.line_slice(line);
-        let mut text = slice.to_string();
-        for _ in 0..separator {
-            let _ = text.pop();
-        }
-        text
+        self.line_slice(line).to_string()
     }
 
     /// Take the pending line change, if any.
@@ -550,6 +518,20 @@ enum EditDirection {
     Undo,
     /// Apply edits in the redo direction.
     Redo,
+}
+
+/// Return a rope line without its separator: none on the `last` line, CRLF
+/// where the line ends with it, and one char otherwise.
+fn without_separator(slice: RopeSlice<'_>, last: bool) -> RopeSlice<'_> {
+    let len = slice.len_chars();
+    let separator = if last {
+        0
+    } else if len >= 2 && slice.char(len - 2) == '\r' && slice.char(len - 1) == '\n' {
+        2
+    } else {
+        1
+    };
+    slice.slice(..len - separator.min(len))
 }
 
 /// Convert a char index to a display column.
