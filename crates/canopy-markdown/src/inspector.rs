@@ -50,6 +50,7 @@ const EVENT_COUNT: usize = 32;
 /// range.
 const EVENT_BYTES: usize = 16 * 1024 * 1024;
 /// Default output budget for standalone inspector tests.
+#[cfg(test)]
 const DEFAULT_COPY_BYTES: usize = 4 * 1024 * 1024;
 
 /// Pinned reader content.
@@ -581,12 +582,7 @@ impl MarkdownInspector {
         let owner_id = ctx.node_id();
         let owner = ctx.wake_handle(PollLifetime::Node)?;
         let mailbox = Rc::new(RefCell::new(Mailbox::default()));
-        let mut inspector = Self::new(executor, owner, mailbox.clone(), content);
-        inspector.allow_copy = options.allow_copy;
-        inspector.copy_limit = options.copy_limit.min(EVENT_BYTES);
-        inspector.source_options.syntax_limit = options.syntax_limit;
-        inspector.row_numbers = options.row_numbers;
-        inspector.centered = options.centered;
+        let inspector = Self::new(executor, owner, mailbox.clone(), content, options);
         let node = ctx.add_child(parent, inspector)?;
         let view: &dyn ViewContext = ctx;
         let (focus, wake) = view.with_widget(node, |widget: &Self| {
@@ -627,6 +623,7 @@ impl MarkdownInspector {
         owner: NodeWakeHandle,
         mailbox: Rc<RefCell<Mailbox>>,
         content: InspectorContent,
+        options: InspectorOptions,
     ) -> Self {
         Self {
             content: Some(content),
@@ -638,18 +635,21 @@ impl MarkdownInspector {
             reader_parent: None,
             status: None,
             lane: None,
-            source_options: SourceOptions::default(),
+            source_options: SourceOptions {
+                syntax_limit: options.syntax_limit,
+                ..SourceOptions::default()
+            },
             prompt: None,
             full_copy: None,
             open_url: None,
             generation: 0,
             search: Search::Idle,
-            allow_copy: true,
-            copy_limit: DEFAULT_COPY_BYTES,
+            allow_copy: options.allow_copy,
+            copy_limit: options.copy_limit.min(EVENT_BYTES),
             pending_copy: None,
             reveal: None,
-            row_numbers: true,
-            centered: false,
+            row_numbers: options.row_numbers,
+            centered: options.centered,
         }
     }
     /// Apply a queued source location once the source reader has mounted.
