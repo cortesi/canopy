@@ -284,26 +284,18 @@ pub(crate) const SEXTANT_LAST: u32 = 0x1FB3B;
 
 /// The octant pattern of a character in the octant block. The block assigns
 /// the patterns in order, skipping those that [`OCTANT_ELSEWHERE`] holds.
-pub(crate) fn octant_bits(code: u32) -> Option<u8> {
+fn octant_bits(code: u32) -> Option<u8> {
     if !(OCTANT_FIRST..=OCTANT_LAST).contains(&code) {
         return None;
     }
-    let mut index = code - OCTANT_FIRST;
-    for bits in 0..=255u8 {
-        if OCTANT_ELSEWHERE.iter().any(|(pattern, _)| *pattern == bits) {
-            continue;
-        }
-        if index == 0 {
-            return Some(bits);
-        }
-        index -= 1;
-    }
-    None
+    (0..=255u8)
+        .filter(|bits| !OCTANT_ELSEWHERE.iter().any(|(pattern, _)| pattern == bits))
+        .nth((code - OCTANT_FIRST) as usize)
 }
 
 /// The sextant pattern of a character in the sextant block. The block assigns
 /// the patterns 1 to 62 in order, skipping the left and right halves.
-pub(crate) fn sextant_bits(code: u32) -> Option<u32> {
+fn sextant_bits(code: u32) -> Option<u32> {
     if !(SEXTANT_FIRST..=SEXTANT_LAST).contains(&code) {
         return None;
     }
