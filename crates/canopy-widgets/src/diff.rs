@@ -23,16 +23,6 @@ pub enum Scope {
     Context(usize),
 }
 
-impl Scope {
-    /// Return the context lines around changes, or nothing in whole-file scope.
-    fn context(self) -> Option<usize> {
-        match self {
-            Self::WholeFile => None,
-            Self::Context(lines) => Some(lines),
-        }
-    }
-}
-
 /// One row of a diff.
 ///
 /// Rows are ordered the way a unified diff reads: removed lines precede added
@@ -219,9 +209,9 @@ impl Diff {
     /// scope or texts change.
     #[must_use]
     pub fn rows(&self, scope: Scope) -> Vec<DiffRow> {
-        match scope.context() {
-            None => self.whole_file_rows(),
-            Some(context) => self.context_rows(context),
+        match scope {
+            Scope::WholeFile => self.whole_file_rows(),
+            Scope::Context(context) => self.context_rows(context),
         }
     }
 
@@ -330,23 +320,11 @@ fn push_change(rows: &mut Vec<DiffRow>, hunk: &Hunk) {
 fn line_spans(text: &str) -> Vec<Range<usize>> {
     let mut spans = Vec::new();
     let mut start = 0;
-    for (index, byte) in text.bytes().enumerate() {
-        if byte != b'\n' {
-            continue;
-        }
-        let mut end = index;
-        if end > start && text.as_bytes()[end - 1] == b'\r' {
-            end -= 1;
-        }
-        spans.push(start..end);
-        start = index + 1;
-    }
-    if start < text.len() {
-        let mut end = text.len();
-        if end > start && text.as_bytes()[end - 1] == b'\r' {
-            end -= 1;
-        }
-        spans.push(start..end);
+    for line in text.split_inclusive('\n') {
+        let content = line.strip_suffix('\n').unwrap_or(line);
+        let content = content.strip_suffix('\r').unwrap_or(content);
+        spans.push(start..start + content.len());
+        start += line.len();
     }
     spans
 }
