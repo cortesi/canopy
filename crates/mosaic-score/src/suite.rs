@@ -146,13 +146,6 @@ impl Item {
                 let mut cells = Vec::new();
                 rgb_into(&view, set, &mut cells);
                 cells
-                    .iter()
-                    .map(|cell| Shown {
-                        ch: cell.ch,
-                        fg: cell.fg,
-                        bg: cell.bg,
-                    })
-                    .collect()
             }
             Input::Coverage {
                 matrix,

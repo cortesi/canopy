@@ -18,16 +18,9 @@ pub const CELL_W: usize = 16;
 /// Device pixels down a cell: a cell is twice as tall as it is wide.
 pub const CELL_H: usize = 32;
 
-/// One cell as the terminal shows it.
-#[derive(Debug, Clone, Copy)]
-pub struct Shown {
-    /// The character.
-    pub ch: char,
-    /// The sRGB color of the ink.
-    pub fg: [u8; 3],
-    /// The sRGB color of the rest of the cell.
-    pub bg: [u8; 3],
-}
+/// One cell as the terminal shows it: a character, and the sRGB colors of
+/// its ink and of the rest of the cell.
+pub type Shown = canopy_mosaic::Cell<[u8; 3]>;
 
 /// The ink coverage of each character that the matcher can emit, 0 to 1 for
 /// each device pixel of a cell.
