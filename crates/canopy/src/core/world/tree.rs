@@ -151,12 +151,6 @@ impl Core {
         Ok(())
     }
 
-    /// Restore the widget's base layout.
-    #[cfg(test)]
-    pub fn clear_layout_override_of(&mut self, node: NodeId) -> Result<()> {
-        self.set_layout_override(node, LayoutOverride::default())
-    }
-
     /// Override every field of a node's layout.
     #[cfg(test)]
     pub fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
@@ -636,9 +630,6 @@ impl Core {
     ) -> Result<NodeId> {
         let parent = parent.into();
         self.with_tree_edit("add keyed child", |core| {
-            if core.child_slot(parent, key).is_some() {
-                return Err(Error::DuplicateSlot(key.to_string()));
-            }
             let child = core.create_detached_boxed(widget)?;
             core.attach_inner(parent, child, Some(key))?;
             Ok(child)

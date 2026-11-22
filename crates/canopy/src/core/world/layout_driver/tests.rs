@@ -1098,8 +1098,6 @@ fn excluded_subtrees_clear_previously_computed_layout() -> Result<()> {
 
 #[test]
 fn sparse_overrides_survive_refresh_and_clear() -> Result<()> {
-    use crate::layout::LayoutOverride;
-
     let mut core = Core::new();
     let base = Layout::column().padding(Edges::all(1));
     let node = core.create_detached(LayoutWidget(base))?;
@@ -1114,7 +1112,7 @@ fn sparse_overrides_survive_refresh_and_clear() -> Result<()> {
     core.detach(node)?;
     attach_root_child(&mut core, node)?;
     assert_eq!(core.nodes[node].layout.min_height, Some(4));
-    core.clear_layout_override_of(node)?;
+    core.set_layout_override(node, LayoutOverride::default())?;
     assert_eq!(core.nodes[node].layout, base);
     core.set_layout_override(node, LayoutOverride::new().fixed_height(4))?;
     core.replace_subtree(node, LayoutWidget(Layout::row()))?;
@@ -1125,8 +1123,6 @@ fn sparse_overrides_survive_refresh_and_clear() -> Result<()> {
 
 #[test]
 fn invalid_override_merge_and_refresh_preserve_previous_layout() -> Result<()> {
-    use crate::layout::LayoutOverride;
-
     let mut core = Core::new();
     let node = core.create_detached(LayoutWidget(Layout::column().max_height(4)))?;
     let before = core.nodes[node].layout;
@@ -1176,8 +1172,6 @@ fn invalid_override_merge_and_refresh_preserve_previous_layout() -> Result<()> {
 
 #[test]
 fn bounded_descendant_stops_inherited_measurement_overflow() -> Result<()> {
-    use crate::layout::MeasureOverflow;
-
     let mut core = Core::new();
     let parent = core.create_detached(LayoutWidget(
         Layout::column()
@@ -1209,8 +1203,6 @@ fn bounded_descendant_stops_inherited_measurement_overflow() -> Result<()> {
 
 #[test]
 fn structural_failure_restores_layout_base_and_override() -> Result<()> {
-    use crate::layout::LayoutOverride;
-
     let mut core = Core::new();
     let node = core.create_detached(LayoutWidget(Layout::column().padding(Edges::all(1))))?;
     core.set_layout_override(node, LayoutOverride::new().fixed_height(3))?;
@@ -1231,8 +1223,6 @@ fn structural_failure_restores_layout_base_and_override() -> Result<()> {
 
 #[test]
 fn refreshed_base_must_remain_valid_after_parent_constraints() -> Result<()> {
-    use crate::layout::LayoutOverride;
-
     let mut core = Core::new();
     let node = core.create_detached(LayoutWidget(Layout::column().max_height(10)))?;
     core.set_layout_override(
