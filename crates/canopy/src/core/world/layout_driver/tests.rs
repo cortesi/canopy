@@ -27,8 +27,8 @@ use crate::{
     error::{Error, NodeOperationKind, Result},
     geom::{Point, Rect, Size},
     layout::{
-        Align, Constraint, Direction, Direction as LayoutDirection, Edges, Layout, LayoutOverride,
-        MeasureConstraints, MeasureOverflow, Measurement, Sizing,
+        Align, Constraint, Direction, Edges, Layout, LayoutOverride, MeasureConstraints,
+        MeasureOverflow, Measurement, Sizing,
     },
     render::Glyphs,
 };
@@ -780,7 +780,7 @@ fn random_tree_no_panics() -> Result<()> {
     for node in core.nodes.values() {
         // For Stack direction, children can overlap, so skip position ordering
         // check
-        if node.layout.direction == LayoutDirection::Stack {
+        if node.layout.direction == Direction::Stack {
             continue;
         }
         let mut last = 0u32;
@@ -790,9 +790,9 @@ fn random_tree_no_panics() -> Result<()> {
                 continue;
             }
             let pos = match node.layout.direction {
-                LayoutDirection::Row => child.rect.tl.x,
-                LayoutDirection::Column => child.rect.tl.y,
-                LayoutDirection::Stack => continue,
+                Direction::Row => child.rect.tl.x,
+                Direction::Column => child.rect.tl.y,
+                Direction::Stack => continue,
             };
             assert!(pos >= last);
             last = pos;
