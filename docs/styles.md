@@ -211,7 +211,7 @@ cell for such uses.
   paints `track`, and the label paints `label`. Stacked values and markers
   paint the style paths they name, such as `marker`. The block look draws to
   an eighth of a cell, and a gradient on `fill` spans the whole bar. The line
-  look, `MeterLook::Line`, draws a heavy line to half a cell over a line
+  look, `MeterLook::Line`, draws a heavy line in whole cells over a line
   track, and each run takes the paint of its own path.
 - `Spans` pushes `spans`. Each run paints the style path it names, and the
   fill between the left and right runs paints its own path, such as `rule`.

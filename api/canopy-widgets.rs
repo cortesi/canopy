@@ -2724,8 +2724,9 @@ pub enum MeterLook {
     /// spans the whole bar.
     #[default]
     Blocks,
-    /// A heavy line, drawn to half a cell, over a line track. Each run of one
-    /// part takes the paint of its style path.
+    /// A heavy line over a line track, drawn in whole cells so that the line
+    /// does not break where the fill ends. Each run of one part takes the
+    /// paint of its style path.
     Line,
 }
 

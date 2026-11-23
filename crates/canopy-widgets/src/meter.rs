@@ -14,10 +14,8 @@ use crate::chart::{self, Marker, Scale, Segment};
 
 /// Narrowest bar that a meter asks for.
 const MIN_BAR: u32 = 8;
-/// The glyph of a whole cell of a line bar.
+/// The glyph of a cell of a line bar.
 const LINE: &str = "━";
-/// The glyph of a line bar that ends half way through a cell.
-const HALF_LINE: &str = "╸";
 
 /// How a meter draws its bar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -26,8 +24,9 @@ pub enum MeterLook {
     /// spans the whole bar.
     #[default]
     Blocks,
-    /// A heavy line, drawn to half a cell, over a line track. Each run of one
-    /// part takes the paint of its style path.
+    /// A heavy line over a line track, drawn in whole cells so that the line
+    /// does not break where the fill ends. Each run of one part takes the
+    /// paint of its style path.
     Line,
 }
 
@@ -155,28 +154,27 @@ impl Meter {
             .map_or(0, |label| text::width(label).saturating_add(1))
     }
 
-    /// Paints the bar of the line look in `line`. Each half of a cell
-    /// belongs to the first segment that reaches past it. A cell whose halves
-    /// both belong to segments shows a whole line in the color of the first,
-    /// a cell whose left half alone does shows a half line, and the cells
-    /// that no segment reaches show the track.
+    /// Paints the bar of the line look in `line`. Each cell belongs to the
+    /// first segment that reaches past it and shows the line in its color,
+    /// and the cells that no segment reaches show the track. A glyph of half
+    /// a line would leave the other half of its cell empty, because a cell
+    /// holds one color, so the line keeps to whole cells.
     fn paint_line(&self, render: &mut Render<'_>, line: Line) -> Result<()> {
-        let ends = segment_ends(&self.segments, self.max, line.w.saturating_mul(2));
-        let owner = |half: u32| ends.iter().position(|end| *end > half);
-        let cell = |x: u32| match (owner(2 * x), owner(2 * x + 1)) {
-            (Some(first), Some(_)) => (LINE, self.segments[first].style.as_str()),
-            (Some(first), None) => (HALF_LINE, self.segments[first].style.as_str()),
-            (None, _) => (LINE, "track"),
+        let ends = segment_ends(&self.segments, self.max, line.w);
+        let style = |x: u32| {
+            ends.iter()
+                .position(|end| *end > x)
+                .map_or("track", |first| self.segments[first].style.as_str())
         };
         let mut x = 0;
         while x < line.w {
-            let (glyph, style) = cell(x);
+            let run_style = style(x);
             let mut run = 1;
-            while x + run < line.w && cell(x + run) == (glyph, style) {
+            while x + run < line.w && style(x + run) == run_style {
                 run += 1;
             }
             let at = Line::new(line.tl.x + x, line.tl.y, run);
-            render.text(style, at, &glyph.repeat(run as usize))?;
+            render.text(run_style, at, &LINE.repeat(run as usize))?;
             x += run;
         }
         Ok(())
@@ -206,8 +204,8 @@ impl Meter {
 }
 
 /// Returns the end of each of `segments`, stacked on a scale from zero to
-/// `max`, in halves of a cell out of `halves`.
-fn segment_ends(segments: &[Segment], max: f64, halves: u32) -> Vec<u32> {
+/// `max`, in cells of a bar `width` cells wide.
+fn segment_ends(segments: &[Segment], max: f64, width: u32) -> Vec<u32> {
     let mut total = 0.0;
     segments
         .iter()
@@ -216,7 +214,7 @@ fn segment_ends(segments: &[Segment], max: f64, halves: u32) -> Vec<u32> {
                 total += segment.value;
             }
             let share = (total / max).clamp(0.0, 1.0);
-            (share * f64::from(halves)).round() as u32
+            (share * f64::from(width)).round() as u32
         })
         .collect()
 }
@@ -373,13 +371,17 @@ mod tests {
     }
 
     #[test]
-    fn a_line_meter_draws_to_half_a_cell() {
-        // 10 cells hold 20 halves, and 0.45 of them is 9: 4 cells and a half.
+    fn a_line_meter_draws_an_unbroken_line_in_whole_cells() {
+        // 0.45 of 10 cells is 4.5, which rounds to 5: a half cell would leave
+        // a gap between the fill and the track.
         let harness = painted(Meter::new().with_look(MeterLook::Line).with_value(0.45), 10);
-        assert_eq!(harness.tbuf().lines()[0], "━━━━╸━━━━━");
+        assert_eq!(harness.tbuf().lines()[0], "━━━━━━━━━━");
         assert_eq!(cell(&harness, 0).1.fg, FILL);
         assert_eq!(cell(&harness, 4).1.fg, FILL);
         assert_eq!(cell(&harness, 5).1.fg, TRACK);
+        let less = painted(Meter::new().with_look(MeterLook::Line).with_value(0.44), 10);
+        assert_eq!(cell(&less, 3).1.fg, FILL);
+        assert_eq!(cell(&less, 4).1.fg, TRACK);
         let full = painted(Meter::new().with_look(MeterLook::Line).with_value(1.0), 4);
         assert_eq!(full.tbuf().lines()[0], "━━━━");
         assert_eq!(cell(&full, 3).1.fg, FILL);
@@ -393,7 +395,7 @@ mod tests {
             .with_look(MeterLook::Line)
             .with_max(8.0)
             .with_segments(vec![Segment::new(2.0, "fill"), Segment::new(3.0, "other")]);
-        // 8 cells hold 16 halves: the segments end at 4 and at 10 halves.
+        // On 8 cells, the segments end at 2 and at 5 cells.
         let harness = painted(meter, 8);
         assert_eq!(harness.tbuf().lines()[0], "━━━━━━━━");
         let colors: Vec<Color> = (0..8).map(|x| cell(&harness, x).1.fg).collect();
