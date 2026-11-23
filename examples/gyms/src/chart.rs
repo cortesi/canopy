@@ -38,8 +38,8 @@ use canopy::{
     },
 };
 use canopy_widgets::{
-    BigFace, BigSize, BigText, BigWeight, BoxGlyphs, ColumnChart, Container, Frame, Meter, Scroll,
-    Sparkline, Tabs, Text,
+    BigFace, BigSize, BigText, BigWeight, BoxGlyphs, ColumnChart, Container, Frame, Meter,
+    MeterLook, Scroll, Span, Spans, Sparkline, Tabs, Text,
     chart::{self, Base, Braille, Column, Marker, Scale, Segment, Tint},
 };
 
@@ -338,6 +338,10 @@ struct Nodes {
     stacked: TypedId<Meter>,
     /// A meter with a gradient fill.
     heat: TypedId<Meter>,
+    /// A line meter of one value, with a marker at its middle.
+    line_meter: TypedId<Meter>,
+    /// A line meter of stacked values.
+    line_stacked: TypedId<Meter>,
     /// A clock of the time the data has moved.
     clock: TypedId<BigText>,
     /// The primitives page.
@@ -680,8 +684,17 @@ impl ChartGym {
             nodes.heat,
             vec![Segment::new(level, "heat")],
             100.0,
+            Some(label.clone()),
+        )?;
+        set_meter(
+            c,
+            nodes.line_meter,
+            vec![Segment::new(level, "fill")],
+            100.0,
             Some(label),
         )?;
+        let hit = format!("{:>8}", format!("{:.0}% hit", parts[0]));
+        set_meter(c, nodes.line_stacked, composition(parts), 100.0, Some(hit))?;
         let seconds = live.step / 10;
         let clock = format!(
             "{:02}:{:02}:{:02}",
@@ -722,6 +735,21 @@ impl ChartGym {
         let level = labeled(c, page, "value", Meter::new(), 1)?;
         let stacked = labeled(c, page, "stacked", Meter::new(), 1)?;
         let heat = labeled(c, page, "gradient", Meter::new(), 1)?;
+        let line_meter = Meter::new()
+            .with_look(MeterLook::Line)
+            .with_max(100.0)
+            .with_marker(50.0, Marker::new('│', "marker"));
+        let line_meter = labeled(c, page, "line, marker", line_meter, 1)?;
+        let line_stacked = Meter::new().with_look(MeterLook::Line);
+        let line_stacked = labeled(c, page, "line, stacked", line_stacked, 1)?;
+        heading(c, page, "spans")?;
+        let spans = Spans::new(vec![
+            Span::new("tokens", "name"),
+            Span::new("  12.5K", "amount"),
+        ])
+        .with_right(vec![Span::new("updated now", "meta")])
+        .with_fill('─', "rule");
+        labeled(c, page, "runs, rule", spans, 1)?;
         Ok(WidgetsPage {
             tiles: [tokens, cache, output, context],
             bars,
@@ -730,6 +758,8 @@ impl ChartGym {
             level,
             stacked,
             heat,
+            line_meter,
+            line_stacked,
         })
     }
 
@@ -829,6 +859,10 @@ struct WidgetsPage {
     stacked: TypedId<Meter>,
     /// A meter with a gradient fill.
     heat: TypedId<Meter>,
+    /// A line meter of one value, with a marker at its middle.
+    line_meter: TypedId<Meter>,
+    /// A line meter of stacked values.
+    line_stacked: TypedId<Meter>,
 }
 
 impl Widget for ChartGym {
@@ -884,6 +918,8 @@ impl Widget for ChartGym {
             level: page.level,
             stacked: page.stacked,
             heat: page.heat,
+            line_meter: page.line_meter,
+            line_stacked: page.line_stacked,
             clock,
             primitives,
             timeline,
@@ -1348,6 +1384,10 @@ fn styles(p: &Palette, rules: StyleRules<'_>) {
         .fg("track", tint(p.faint_fg, 0.7))
         .fg("line", p.cyan)
         .fg("heat", Paint::gradient(heat))
+        .fg("name", p.fg)
+        .attr("name", Attr::Bold)
+        .fg("amount", p.accent)
+        .fg("meta", p.muted_fg)
         .fg("marker/compaction", p.violet)
         .fg("marker/failed", p.red)
         .fg("marker/retry", p.yellow);

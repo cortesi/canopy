@@ -208,8 +208,13 @@ cell for such uses.
   the bars. Its braille line paints `line`, and a missing value breaks the
   line.
 - `Meter` pushes `meter`. A single value paints `fill`, the rest of the bar
-  paints `track`, and the label paints `label`. Stacked values paint the style
-  paths they name.
+  paints `track`, and the label paints `label`. Stacked values and markers
+  paint the style paths they name, such as `marker`. The block look draws to
+  an eighth of a cell, and a gradient on `fill` spans the whole bar. The line
+  look, `MeterLook::Line`, draws a heavy line to half a cell over a line
+  track, and each run takes the paint of its own path.
+- `Spans` pushes `spans`. Each run paints the style path it names, and the
+  fill between the left and right runs paints its own path, such as `rule`.
 - `BigText` pushes `big_text`. A plain run paints `text`, and a run with its
   own path paints that path, so a value can dim its unit with a rule such as
   `big_text/unit`. The `text` part also paints the rest of the area, and a
@@ -222,8 +227,8 @@ cell for such uses.
   the two tones of each cell.
 
 The built-in themes paint bars, lines, and fills in the accent, tracks in a
-faint tone near the ground, gaps and labels quietly, and large text in the
-foreground. A column chart draws its axis in the frame colour, its reference
+faint tone near the ground, gaps, labels, and meter markers quietly, rules of
+spans in the frame colour, and large text in the foreground. A column chart draws its axis in the frame colour, its reference
 lines faint, and its cursor in the accent.
 
 ## Status bars

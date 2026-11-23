@@ -59,7 +59,7 @@ mod label;
 /// Typed list container with selection.
 mod list_view;
 pub mod menu;
-/// One-row gauge over a track.
+/// One-row gauge over a track, with markers.
 mod meter;
 pub mod mosaic;
 /// The notice log panel that the root opens for review.
@@ -88,6 +88,8 @@ mod search_bar;
 mod search_progress;
 /// Selection widget.
 mod selector;
+/// One line of runs in several styles, with an optional fill.
+mod spans;
 /// Small series of values as bars or a braille line.
 mod sparkline;
 /// Frames for a busy indicator.
@@ -140,7 +142,7 @@ pub use keyed::KeyedChildren;
 pub use label::{ItemLabel, ItemVisibility};
 pub use list_view::{List, Selectable};
 pub use menu::widget::{Menu, MenuItem, MenuList, MenuRow};
-pub use meter::Meter;
+pub use meter::{Meter, MeterLook};
 pub use pane::{Pane, PaneKeys, pane_has_keys};
 pub use picker::{Picker, PickerList};
 pub use root::Root;
@@ -148,6 +150,7 @@ pub use scroll::Scroll;
 pub use search_bar::SearchBar;
 pub use search_progress::SearchProgress;
 pub use selector::Selector;
+pub use spans::{Span, Spans};
 pub use sparkline::Sparkline;
 pub use spinner::Spinner;
 pub use status_bar::{KeyHint, StatusBar};

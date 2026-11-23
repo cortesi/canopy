@@ -2651,24 +2651,33 @@ impl MenuRow {
     pub fn with_value(self, value: impl Into<String>) -> Self;
 }
 
-/// A one-row gauge: a stacked bar of values over a track, drawn to an eighth
-/// of a cell, and a label at its end.
+/// A one-row gauge: a stacked bar of values over a track, markers at values,
+/// and a label at its end.
 ///
 /// The values stack from the left on a scale from zero to the meter's top,
 /// which is one unless set. A value past the top fills the bar. `Meter`
 /// pushes the `meter` layer and paints `fill` for a single value, `track`
-/// for the rest of the bar, and `label` for its label. A gradient paint on
-/// `fill` spans the whole bar, track included, so the color at the end of the
-/// fill tells the level.
+/// for the rest of the bar, and `label` for its label. A marker shows its
+/// glyph in the cell of its value, over the bar, in the style path it names,
+/// such as `marker`. A gradient paint on `fill` spans the whole bar of the
+/// block look, track included, so the color at the end of the fill tells the
+/// level.
 #[derive(Default)]
 pub struct Meter {/* private fields */}
 
 impl Meter {
-    /// Constructs an empty meter on a scale from zero to one.
+    /// Constructs an empty meter of blocks on a scale from zero to one.
     pub fn new() -> Self;
 
     /// Shows a label at the end of the bar, or no label.
     pub fn set_label(&mut self, label: Option<String>);
+
+    /// Draws the bar in `look`.
+    pub fn set_look(&mut self, look: MeterLook);
+
+    /// Shows `markers`, each at its value on the scale, in place of the
+    /// markers before.
+    pub fn set_markers(&mut self, markers: Vec<(f64, Marker)>);
 
     /// Sets the top of the scale. A top that is not a positive finite number
     /// is one.
@@ -2683,6 +2692,14 @@ impl Meter {
     /// Shows a label at the end of the bar.
     #[must_use]
     pub fn with_label(self, label: impl Into<String>) -> Self;
+
+    /// Draws the bar in `look`.
+    #[must_use]
+    pub fn with_look(self, look: MeterLook) -> Self;
+
+    /// Shows `marker` at `value` on the scale, such as a limit or a target.
+    #[must_use]
+    pub fn with_marker(self, value: f64, marker: Marker) -> Self;
 
     /// Sets the top of the scale. A top that is not a positive finite number
     /// is one.
@@ -2699,6 +2716,18 @@ impl Meter {
 }
 
 impl Widget for Meter {}
+
+/// How a meter draws its bar.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum MeterLook {
+    /// Solid blocks, drawn to an eighth of a cell. A gradient paint on `fill`
+    /// spans the whole bar.
+    #[default]
+    Blocks,
+    /// A heavy line, drawn to half a cell, over a line track. Each run of one
+    /// part takes the paint of its style path.
+    Line,
+}
 
 /// A column that paints the ground of a pane.
 ///
@@ -3497,6 +3526,50 @@ impl<T> CommandNode for Selector<T> where T: 'static + ItemLabel {}
 impl<T> Register for Selector<T> where T: 'static + ItemLabel {}
 
 impl<T> Widget for Selector<T> where T: 'static + ItemLabel {}
+
+/// A run of text in one style.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Span {
+    /// The text.
+    pub text: String,
+    /// The style path of the text.
+    pub style: String,
+}
+
+impl Span {
+    /// Returns a run of `text` in the style `style`.
+    pub fn new(text: impl Into<String>, style: impl Into<String>) -> Self;
+}
+
+/// One line of runs: runs from the left edge, runs that end at the right
+/// edge, and an optional glyph that fills the space between them.
+///
+/// `Spans` pushes the `spans` layer and paints each run in the style path it
+/// names, and the fill in its own path, such as `rule`. The right runs give
+/// way when the line is too narrow for both sides, and the left runs clip at
+/// the right edge. The fill keeps one cell clear on each side.
+pub struct Spans {/* private fields */}
+
+impl Spans {
+    /// Constructs a line of `left`.
+    pub fn new(left: Vec<Span>) -> Self;
+
+    /// Replaces the runs from the left edge.
+    pub fn set_left(&mut self, left: Vec<Span>);
+
+    /// Replaces the runs at the right edge.
+    pub fn set_right(&mut self, right: Vec<Span>);
+
+    /// Fills the space between the sides with `glyph` in the style `style`.
+    #[must_use]
+    pub fn with_fill(self, glyph: char, style: impl Into<String>) -> Self;
+
+    /// Puts `right` at the right edge.
+    #[must_use]
+    pub fn with_right(self, right: Vec<Span>) -> Self;
+}
+
+impl Widget for Spans {}
 
 /// A series of values drawn small: bars of eighth blocks, or a braille line.
 ///

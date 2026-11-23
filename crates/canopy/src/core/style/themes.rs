@@ -156,6 +156,9 @@ impl Palette {
             .fg("/meter/fill", p.accent)
             .fg("/meter/track", p.faint_fg.mix(p.bg, TRACK_FADE, Mix::Rgb))
             .fg("/meter/label", p.muted_fg)
+            .fg("/meter/marker", p.muted_fg)
+            // A line of spans draws its rules in the frame colour.
+            .fg("/spans/rule", p.frame)
             .fg("/big_text/text", p.fg)
             // A column chart keeps its axis and scale quiet, so the columns
             // carry the data, and its cursor takes the accent.
