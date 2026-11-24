@@ -69,6 +69,7 @@ use std::{
         SubAssign,
     },
     path::Path,
+    str::FromStr,
 };
 
 use bitflags::{
@@ -440,7 +441,7 @@ impl TryFrom<usize> for HeadingLevel {
 
 /// An inline string that can contain almost three words
 /// of utf-8 text.
-#[derive(Clone, Copy, Debug, Display, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, Eq, FromStr, Hash, PartialEq)]
 pub struct InlineStr {/* private fields */}
 
 impl AsRef<str> for InlineStr {}
@@ -450,10 +451,6 @@ impl Deref for InlineStr {
 }
 
 impl From<char> for InlineStr {}
-
-impl TryFrom<&str> for InlineStr {
-    type Error = StringTooLongError;
-}
 
 /// Returned when trying to convert a `usize` into a `Heading` but it fails
 /// because the usize isn't a valid heading level
@@ -1031,7 +1028,7 @@ impl Resume {
     pub fn then(self, after: Self) -> Self;
 }
 
-/// Returned when trying to convert a `&str` into a `InlineStr`
+/// Returned when parsing a `&str` into a `InlineStr`
 /// but it fails because it doesn't fit.
 #[derive(Debug)]
 pub struct StringTooLongError;

@@ -8,12 +8,12 @@ use core::{
     fmt,
     hash::{Hash, Hasher},
     ops::Deref,
-    str::from_utf8,
+    str::{FromStr, from_utf8},
 };
 
 const MAX_INLINE_STR_LEN: usize = 3 * core::mem::size_of::<isize>() - 2;
 
-/// Returned when trying to convert a `&str` into a `InlineStr`
+/// Returned when parsing a `&str` into a `InlineStr`
 /// but it fails because it doesn't fit.
 #[derive(Debug)]
 pub struct StringTooLongError;
@@ -53,10 +53,10 @@ impl core::cmp::PartialEq<Self> for InlineStr {
     }
 }
 
-impl TryFrom<&str> for InlineStr {
-    type Error = StringTooLongError;
+impl FromStr for InlineStr {
+    type Err = StringTooLongError;
 
-    fn try_from(s: &str) -> Result<Self, StringTooLongError> {
+    fn from_str(s: &str) -> Result<Self, StringTooLongError> {
         let len = s.len();
         if len <= MAX_INLINE_STR_LEN {
             let mut inner = [0u8; MAX_INLINE_STR_LEN];
@@ -124,7 +124,7 @@ impl<'a> Hash for CowStr<'a> {
 impl<'a> core::clone::Clone for CowStr<'a> {
     fn clone(&self) -> Self {
         match self {
-            CowStr::Boxed(s) => match InlineStr::try_from(&**s) {
+            CowStr::Boxed(s) => match s.parse::<InlineStr>() {
                 Ok(inline) => CowStr::Inlined(inline),
                 Err(..) => CowStr::Boxed(s.clone()),
             },
@@ -223,7 +223,7 @@ impl<'a> CowStr<'a> {
     pub fn into_static(self) -> CowStr<'static> {
         match self {
             CowStr::Boxed(b) => CowStr::Boxed(b),
-            CowStr::Borrowed(b) => match InlineStr::try_from(b) {
+            CowStr::Borrowed(b) => match b.parse::<InlineStr>() {
                 Ok(inline) => CowStr::Inlined(inline),
                 Err(_) => CowStr::Boxed(b.into()),
             },
@@ -285,7 +285,7 @@ mod test_special_string {
     #[cfg(target_pointer_width = "64")]
     fn inlinestr_fits_twentytwo() {
         let s = "0123456789abcdefghijkl";
-        let stack_str = InlineStr::try_from(s).unwrap();
+        let stack_str = InlineStr::from_str(s).unwrap();
         assert_eq!(stack_str.deref(), s);
     }
 
@@ -293,7 +293,7 @@ mod test_special_string {
     #[cfg(target_pointer_width = "64")]
     fn inlinestr_not_fits_twentythree() {
         let s = "0123456789abcdefghijklm";
-        let _stack_str = InlineStr::try_from(s).unwrap_err();
+        let _stack_str = InlineStr::from_str(s).unwrap_err();
     }
 
     #[test]
@@ -336,7 +336,7 @@ mod test_special_string {
         assert!(variant_eq(&actual, &expected));
 
         let s = "s";
-        let inline_str: InlineStr = InlineStr::try_from(s).unwrap();
+        let inline_str: InlineStr = InlineStr::from_str(s).unwrap();
         let cow_str = CowStr::Inlined(inline_str);
         let actual = Cow::from(cow_str);
         let expected: Cow<str> = Cow::Owned(s.to_string());
@@ -360,7 +360,7 @@ mod test_special_string {
         assert_eq!(actual, expected);
 
         let s = "s";
-        let inline_str: InlineStr = InlineStr::try_from(s).unwrap();
+        let inline_str: InlineStr = InlineStr::from_str(s).unwrap();
         let cow_str = CowStr::Inlined(inline_str);
         let actual = String::from(cow_str);
         let expected = String::from("s");
