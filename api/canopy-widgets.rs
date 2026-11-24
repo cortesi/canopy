@@ -1310,9 +1310,9 @@ impl DiffView {
     /// Return the displayed source text in unified row order.
     ///
     /// Hidden context is omitted. Headers, gaps, and the rows above a
-    /// section's body contribute empty lines, and a message contributes
-    /// none. In a view of one diff, each text line then has the same index
-    /// as its unified display row.
+    /// section's body contribute empty lines, and a message or text
+    /// contributes none. In a view of one diff, each text line then has the
+    /// same index as its unified display row.
     #[must_use]
     pub fn search_text(&self) -> String;
 
@@ -4797,9 +4797,9 @@ pub mod diff {
     /// One diff of a [`DiffView`] that shows several, one after the other, such
     /// as one file of a change set.
     ///
-    /// A section shows a diff model or a message. A title names it on a line of
-    /// its own above its rows, which a blank row sets apart from the section
-    /// before.
+    /// A section shows a diff model, a message, or text. A title names it on a
+    /// line of its own above its rows, which a blank row sets apart from the
+    /// section before.
     pub struct DiffSection {/* private fields */}
 
     impl DiffSection {
@@ -4811,6 +4811,16 @@ pub mod diff {
         /// Show `model`. Install highlighters with [`Self::with_highlighters`].
         #[must_use]
         pub fn new(model: DiffModel) -> Self;
+
+        /// Show `text` in place of a diff, as it is written, such as the
+        /// message of a commit above the diffs of its files. Each of its lines
+        /// starts a row, and wraps to the view width.
+        ///
+        /// A message says why the view shows no diff, and reads as one
+        /// paragraph. Text is content of its own, so it keeps its lines. A
+        /// search does not read it.
+        #[must_use]
+        pub fn text(text: impl Into<String>) -> Self;
 
         /// Install the highlighters for the old and new sides.
         #[must_use]

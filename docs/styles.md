@@ -270,10 +270,11 @@ paint `text`. The built-in themes define `selector/chosen` and
 ## Diffs
 
 `DiffView` pushes `diff_view` and paints `context`, `added`, `removed`,
-`header`, `gap`, `missing`, `separator`, `message`, and `title`. The built-in
-themes colour added rows green, removed rows red, headers with the accent,
-and gaps muted. A view of several diffs names each with a `title` line, which
-the themes draw bold on a band across the view.
+`header`, `gap`, `missing`, `separator`, `message`, `text`, and `title`. The
+built-in themes colour added rows green, removed rows red, headers with the
+accent, and gaps muted. A view of several diffs names each with a `title`
+line, which the themes draw bold on a band across the view. Text in place of
+a diff, such as a commit message, takes the view's own colours.
 
 ## Notices
 

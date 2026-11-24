@@ -21,6 +21,7 @@
 //! - `diff_view/separator`: the side-by-side divider.
 //! - `diff_view/title`: the line that names a section.
 //! - `diff_view/message`: a message in place of a diff.
+//! - `diff_view/text`: text in place of a diff.
 
 use std::{
     cell::RefCell,
@@ -221,22 +222,39 @@ enum Content {
     Diff(DiffModel),
     /// A message in place of any diff.
     Message(String),
+    /// Text in place of any diff, shown as it is written.
+    Text(String),
 }
 
-/// The model that a section showing a message presents to its queries: one
-/// with no lines.
+impl Content {
+    /// Return the lines of a body that is no diff, wrapped to `width`, and
+    /// the style that draws them.
+    fn prose(&self, width: u32) -> Option<(&'static str, Vec<String>)> {
+        match self {
+            Self::Diff(_) => None,
+            Self::Message(message) => Some(("message", wrap_message(message, width))),
+            Self::Text(written) => Some((
+                "text",
+                text::wrap_with(written, width, text::WrapOptions::PROSE),
+            )),
+        }
+    }
+}
+
+/// The model that a section showing a message or text presents to its
+/// queries: one with no lines.
 static EMPTY_MODEL: LazyLock<DiffModel> = LazyLock::new(|| DiffModel::from_texts("", ""));
 
 /// One diff of a [`DiffView`] that shows several, one after the other, such
 /// as one file of a change set.
 ///
-/// A section shows a diff model or a message. A title names it on a line of
-/// its own above its rows, which a blank row sets apart from the section
-/// before.
+/// A section shows a diff model, a message, or text. A title names it on a
+/// line of its own above its rows, which a blank row sets apart from the
+/// section before.
 pub struct DiffSection {
     /// The line that names the section.
     title: Option<String>,
-    /// The diff or the message being shown.
+    /// The diff, the message, or the text being shown.
     content: Content,
     /// Rows paired for side-by-side layout.
     side_rows: Vec<SideRow>,
@@ -262,6 +280,18 @@ impl DiffSection {
     #[must_use]
     pub fn message(message: impl Into<String>) -> Self {
         Self::of(Content::Message(message.into()))
+    }
+
+    /// Show `text` in place of a diff, as it is written, such as the
+    /// message of a commit above the diffs of its files. Each of its lines
+    /// starts a row, and wraps to the view width.
+    ///
+    /// A message says why the view shows no diff, and reads as one
+    /// paragraph. Text is content of its own, so it keeps its lines. A
+    /// search does not read it.
+    #[must_use]
+    pub fn text(text: impl Into<String>) -> Self {
+        Self::of(Content::Text(text.into()))
     }
 
     /// Construct an untitled section of `content`.
@@ -306,11 +336,12 @@ impl DiffSection {
         self.prepared = false;
     }
 
-    /// Return the model shown, or a model with no lines for a message.
+    /// Return the model shown, or a model with no lines for a message or
+    /// text.
     fn model(&self) -> &DiffModel {
         match &self.content {
             Content::Diff(model) => model,
-            Content::Message(_) => &EMPTY_MODEL,
+            Content::Message(_) | Content::Text(_) => &EMPTY_MODEL,
         }
     }
 
@@ -358,13 +389,14 @@ impl DiffSection {
 
     /// Return the rows the section's body takes in the display.
     fn body_rows(&self, geometry: &Geometry) -> usize {
-        match (&self.content, geometry.layout) {
-            (Content::Message(message), _) => wrap_message(message, geometry.view).len(),
-            (Content::Diff(model), DiffLayout::Unified) => model.rows.len(),
-            (Content::Diff(_), DiffLayout::SideBySide) => self
-                .with_side_layout(geometry.pane_code_width(), |layout| {
-                    *layout.offsets.last().expect("layout has a total height")
-                }),
+        if let Some((_, lines)) = self.content.prose(geometry.view) {
+            return lines.len();
+        }
+        match geometry.layout {
+            DiffLayout::Unified => self.model().rows.len(),
+            DiffLayout::SideBySide => self.with_side_layout(geometry.pane_code_width(), |layout| {
+                *layout.offsets.last().expect("layout has a total height")
+            }),
         }
     }
 
@@ -634,7 +666,7 @@ impl DiffView {
     #[must_use]
     pub fn message(&self) -> Option<&str> {
         match &self.sections.first()?.content {
-            Content::Diff(_) => None,
+            Content::Diff(_) | Content::Text(_) => None,
             Content::Message(message) => Some(message),
         }
     }
@@ -658,9 +690,9 @@ impl DiffView {
     /// Return the displayed source text in unified row order.
     ///
     /// Hidden context is omitted. Headers, gaps, and the rows above a
-    /// section's body contribute empty lines, and a message contributes
-    /// none. In a view of one diff, each text line then has the same index
-    /// as its unified display row.
+    /// section's body contribute empty lines, and a message or text
+    /// contributes none. In a view of one diff, each text line then has the
+    /// same index as its unified display row.
     #[must_use]
     pub fn search_text(&self) -> String {
         let mut lines = Vec::new();
@@ -1250,22 +1282,17 @@ impl DiffView {
         }
         let local = first - body..last - body;
         let y = y_of(first);
-        match (&section.content, self.layout) {
-            (Content::Message(message), _) => {
-                let lines = wrap_message(message, view_rect.w);
-                for (offset, line) in (0..).zip(&lines[local]) {
-                    rndr.text(
-                        "message",
-                        Line::new(origin.x, y + offset, view_rect.w),
-                        line,
-                    )?;
-                }
-                Ok(())
+        if let Some((style, lines)) = section.content.prose(view_rect.w) {
+            for (offset, line) in (0..).zip(&lines[local]) {
+                rndr.text(style, Line::new(origin.x, y + offset, view_rect.w), line)?;
             }
-            (Content::Diff(_), DiffLayout::Unified) => {
+            return Ok(());
+        }
+        match self.layout {
+            DiffLayout::Unified => {
                 self.draw_unified(rndr, geom, view_rect, origin, index, local, y)
             }
-            (Content::Diff(_), DiffLayout::SideBySide) => {
+            DiffLayout::SideBySide => {
                 self.draw_side_by_side(rndr, geom, view_rect, origin, index, local, y)
             }
         }
@@ -1494,8 +1521,8 @@ impl DiffView {
 
     /// Draw the divider between the panes of each side-by-side diff in
     /// `visible`, over the rows of its body in view. Below the last diff of
-    /// the view, the divider runs on to the end of the view. A title and a
-    /// message span the whole view, so neither has one.
+    /// the view, the divider runs on to the end of the view. A title, a
+    /// message, and text span the whole view, so none of them has one.
     fn draw_dividers(
         &self,
         rndr: &mut Render,
@@ -2435,6 +2462,51 @@ mod tests {
             .iter()
             .map(|line| line.trim_end().to_owned())
             .collect()
+    }
+
+    #[test]
+    fn a_text_section_shows_its_lines_as_written() -> Result<()> {
+        let mut view = DiffView::new(DiffModel::from_texts("", ""));
+        view.set_sections(vec![
+            DiffSection::text("Fix the long thing\n\nA body line that wraps.\nSigned: me\n")
+                .with_title("Message"),
+            DiffSection::new(DiffModel::from_texts("", "added needle\n")).with_title("c.txt"),
+        ]);
+        assert_eq!(view.message(), None, "text is no message");
+        assert_eq!(
+            view.search_text(),
+            "\n\n\nadded needle",
+            "text has no lines to search"
+        );
+        let mut harness = Harness::builder(view).size(20, 10).build()?;
+        harness.render()?;
+        assert_eq!(
+            trimmed(&harness),
+            [
+                " Message",
+                "Fix the long thing",
+                "",
+                "A body line that",
+                "wraps.",
+                "Signed: me",
+                "",
+                " c.txt",
+                "+1 added needle",
+                ""
+            ],
+            "each line starts a row, and wraps to the view"
+        );
+        let text = harness.canopy.style().resolve("diff_view/text");
+        assert_eq!(
+            harness.buf().get(Point::new(0, 1)).expect("text").style.fg,
+            text.fg.solid_color().expect("a solid colour"),
+        );
+        let message = harness.canopy.style().resolve("diff_view/message");
+        assert_ne!(text.fg, message.fg, "text does not read as a message");
+        harness.with_root_widget(|view: &mut DiffView| {
+            assert_eq!(view.section_starts(20), [0, 7]);
+        });
+        Ok(())
     }
 
     #[test]
