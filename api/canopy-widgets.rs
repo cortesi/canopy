@@ -1236,7 +1236,8 @@ impl Dialog {
 
 impl Widget for Dialog {}
 
-/// A line diff with a display layout, a scope, and optional highlighting.
+/// A line diff with a display layout, a scope, and optional highlighting, or
+/// several such diffs in sections.
 pub struct DiffView {/* private fields */}
 
 impl DiffView {
@@ -1257,7 +1258,7 @@ impl DiffView {
     /// Remove the search and its highlights without moving the view.
     pub fn clear_search(&mut self, _ctx: &mut dyn Context);
 
-    /// Return the diff being shown.
+    /// Return the diff being shown: the first section's.
     #[must_use]
     pub fn diff(&self) -> &Diff;
 
@@ -1265,7 +1266,8 @@ impl DiffView {
     #[must_use]
     pub fn layout(&self) -> DiffLayout;
 
-    /// Return whether the view shows a message rather than a diff.
+    /// Return the message of a view that shows one in place of a diff: the
+    /// message of its first section.
     #[must_use]
     pub fn message(&self) -> Option<&str>;
 
@@ -1286,7 +1288,7 @@ impl DiffView {
     #[must_use]
     pub fn revision(&self) -> u64;
 
-    /// Return the rows for the current scope.
+    /// Return the first section's rows for the current scope.
     #[must_use]
     pub fn rows(&self) -> &[DiffRow];
 
@@ -1307,12 +1309,20 @@ impl DiffView {
 
     /// Return the displayed source text in unified row order.
     ///
-    /// Hidden context is omitted. Headers and gaps contribute empty lines,
-    /// so each text line has the same index as its unified display row.
+    /// Hidden context is omitted. Headers, gaps, and the rows above a
+    /// section's body contribute empty lines, and a message contributes
+    /// none. In a view of one diff, each text line then has the same index
+    /// as its unified display row.
     #[must_use]
     pub fn search_text(&self) -> String;
 
-    /// Replace the highlighters for the old and new sides.
+    /// Return the canvas row each section starts at, in a view `width`
+    /// columns wide: the row of its title, or its first row without one.
+    #[must_use]
+    pub fn section_starts(&self, width: u32) -> Vec<u32>;
+
+    /// Replace the highlighters for the old and new sides of the first
+    /// section.
     pub fn set_highlighters(
         &mut self,
         old: Option<Box<dyn Highlighter>>,
@@ -1350,6 +1360,19 @@ impl DiffView {
     /// and restarts change movement from the rows in view.
     pub fn set_model(&mut self, model: DiffModel);
 
+    /// Replace the section at `index`, such as when its diff arrives, and
+    /// return whether the view holds such a section. The other sections keep
+    /// their state, so the view prepares no highlighter again.
+    pub fn set_section(&mut self, index: usize, section: DiffSection) -> bool;
+
+    /// Show `sections` one after the other, in place of what the view shows,
+    /// keeping the layout.
+    ///
+    /// This clears the loading state and restarts change movement from the
+    /// rows in view. Search, change movement, and scrolling take the
+    /// sections as one text.
+    pub fn set_sections(&mut self, sections: Vec<DiffSection>);
+
     /// Set the display layout while constructing a view.
     #[must_use]
     pub fn with_layout(self, layout: DiffLayout) -> Self;
@@ -1361,11 +1384,11 @@ impl DiffView {
     #[must_use]
     pub fn with_message(self, message: impl Into<String>) -> Self;
 
-    /// Install a highlighter for the new side.
+    /// Install a highlighter for the new side of the first section.
     #[must_use]
     pub fn with_new_highlighter(self, highlighter: Box<dyn Highlighter>) -> Self;
 
-    /// Install a highlighter for the old side.
+    /// Install a highlighter for the old side of the first section.
     #[must_use]
     pub fn with_old_highlighter(self, highlighter: Box<dyn Highlighter>) -> Self;
 
@@ -4770,6 +4793,40 @@ pub mod diff {
             new: Range<usize>,
         },
     }
+
+    /// One diff of a [`DiffView`] that shows several, one after the other, such
+    /// as one file of a change set.
+    ///
+    /// A section shows a diff model or a message. A title names it on a line of
+    /// its own above its rows, which a blank row sets apart from the section
+    /// before.
+    pub struct DiffSection {/* private fields */}
+
+    impl DiffSection {
+        /// Show `message` in place of a diff, such as for a binary file. The
+        /// message wraps to the view width.
+        #[must_use]
+        pub fn message(message: impl Into<String>) -> Self;
+
+        /// Show `model`. Install highlighters with [`Self::with_highlighters`].
+        #[must_use]
+        pub fn new(model: DiffModel) -> Self;
+
+        /// Install the highlighters for the old and new sides.
+        #[must_use]
+        pub fn with_highlighters(
+            self,
+            old: Option<Box<dyn Highlighter>>,
+            new: Option<Box<dyn Highlighter>>,
+        ) -> Self;
+
+        /// Name the section with `title`, such as a file's path.
+        #[must_use]
+        pub fn with_title(self, title: impl Into<String>) -> Self;
+    }
+
+    impl !Send for DiffSection {}
+    impl !Sync for DiffSection {}
 
     /// How much unchanged text the rows show.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]

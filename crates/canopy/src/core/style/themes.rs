@@ -131,6 +131,15 @@ impl Palette {
             .fg("/columns/thumb/active", p.accent)
             // A diff reads changed rows by their colour, and its chrome stays
             // quiet: gaps, the empty half of a one-sided change, and the divider.
+            // The title of a section is a band across the view, so the place
+            // where one diff ends and the next begins shows at a glance.
+            .style(
+                "/diff_view/title",
+                PartialStyle::new()
+                    .fg(p.fg)
+                    .bg(p.element_bg)
+                    .attr(Attr::Bold),
+            )
             .fg("/diff_view/context", p.fg)
             .fg("/diff_view/added", p.green)
             .fg("/diff_view/removed", p.red)
