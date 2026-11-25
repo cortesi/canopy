@@ -50,8 +50,10 @@ pub fn command(
 /// intentionally discarded instead of published in command metadata.
 ///
 /// Method documentation may use `@param name text` lines to document user
-/// parameters and `@return text` to document the returned value. These tagged
-/// lines are removed from the command's main documentation.
+/// parameters and `@return text` to document the returned value. A tag goes
+/// on in the lines after it, up to a blank line or another tag, so a wrapped
+/// tag keeps its text. These tagged lines are removed from the command's main
+/// documentation.
 #[proc_macro_attribute]
 pub fn derive_commands(
     attr: proc_macro::TokenStream,

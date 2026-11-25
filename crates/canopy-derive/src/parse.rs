@@ -14,6 +14,14 @@ pub fn doc_string(attrs: &[Attribute]) -> Option<String> {
     extract_doc_comments(attrs).0
 }
 
+/// A tag of a method's documentation.
+enum Tag {
+    /// The `@param` tag of the named parameter.
+    Param(String),
+    /// The `@return` tag.
+    Return,
+}
+
 /// Extract documentation from `#[doc = "..."]` attributes.
 fn extract_doc_comments(
     attrs: &[Attribute],
@@ -45,19 +53,38 @@ fn extract_doc_comments(
     }
 
     let mut body = Vec::new();
+    // The tag that a wrapped line goes on with, up to a blank line or another
+    // tag.
+    let mut open = None;
     for line in lines {
         let trimmed = line.trim();
         if let Some(rest) = trimmed.strip_prefix("@param ") {
             let mut parts = rest.splitn(2, char::is_whitespace);
+            open = None;
             if let Some(name) = parts.next()
                 && let Some(doc) = parts.next()
             {
                 param_docs.insert(name.to_string(), doc.trim().to_string());
+                open = Some(Tag::Param(name.to_string()));
             }
             continue;
         }
         if let Some(rest) = trimmed.strip_prefix("@return ") {
             return_doc = Some(rest.trim().to_string());
+            open = Some(Tag::Return);
+            continue;
+        }
+        if trimmed.is_empty() {
+            open = None;
+        } else if let Some(tag) = &open {
+            let doc = match tag {
+                Tag::Param(name) => param_docs.get_mut(name),
+                Tag::Return => return_doc.as_mut(),
+            };
+            if let Some(doc) = doc {
+                doc.push(' ');
+                doc.push_str(trimmed);
+            }
             continue;
         }
         body.push(line);

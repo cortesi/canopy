@@ -143,6 +143,16 @@ mod tests {
         }
 
         #[command]
+        /// Return a number.
+        /// @param i The number, on a tag that the formatter
+        /// wrapped.
+        /// @return The same number, on another tag that
+        /// wraps.
+        fn wrapped_tags(&self, i: isize) -> isize {
+            i
+        }
+
+        #[command]
         fn result_str(&mut self, _core: &mut dyn canopy::Context) -> Result<String> {
             self.naked_str_triggered = true;
             Ok("".into())
@@ -457,6 +467,18 @@ mod tests {
                 if spec.rust == "String" && spec.doc == Some("The generated string.")
         ));
 
+        let spec_wrapped = Foo::spec_wrapped_tags();
+        assert_eq!(spec_wrapped.doc, Some("Return a number."));
+        assert_eq!(
+            spec_wrapped.params[0].ty.doc,
+            Some("The number, on a tag that the formatter wrapped.")
+        );
+        assert!(matches!(
+            spec_wrapped.ret,
+            CommandReturnSpec::Value(spec)
+                if spec.doc == Some("The same number, on another tag that wraps.")
+        ));
+
         let spec_result = Foo::spec_result_str();
         assert!(matches!(
             spec_result.ret,
@@ -484,7 +506,7 @@ mod tests {
     #[test]
     fn commands() {
         let commands = Foo::commands();
-        assert_eq!(commands.len(), 10);
+        assert_eq!(commands.len(), 11);
 
         assert_spec_a_metadata();
         assert_spec_isize_metadata();
