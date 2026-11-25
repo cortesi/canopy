@@ -356,16 +356,18 @@ enum Row {
     Item(usize),
 }
 
-/// The text of a filter, with the words it matches.
+/// The text of a filter, with the words it matches. A host whose list needs
+/// a layout of its own filters it as [`Picker`] does, through
+/// [`PickerFilter`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct Query {
+pub struct PickerQuery {
     /// The text as typed, which the field shows.
     text: String,
     /// The words of the text, in lower case. No words is no filter.
     words: Vec<String>,
 }
 
-impl Query {
+impl PickerQuery {
     /// Normalize `text` into its words.
     fn new(text: String) -> Self {
         let words = text.split_whitespace().map(str::to_lowercase).collect();
@@ -379,29 +381,32 @@ impl Query {
 }
 
 /// The filter of a list.
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Filter {
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum PickerFilter {
     /// No filter: every item shows, and the field is hidden.
+    #[default]
     Off,
     /// The field takes filter text.
-    Editing(Query),
+    Editing(PickerQuery),
     /// A filter given with Enter, which the field shows. Its query has words.
-    Applied(Query),
+    Applied(PickerQuery),
 }
 
-impl Filter {
+impl PickerFilter {
     /// Return the filter that opens the field, keeping the query.
-    fn edit(self) -> Self {
+    #[must_use]
+    pub fn edit(self) -> Self {
         match self {
-            Self::Off => Self::Editing(Query::default()),
+            Self::Off => Self::Editing(PickerQuery::default()),
             Self::Editing(query) | Self::Applied(query) => Self::Editing(query),
         }
     }
 
     /// Return the filter with `text` in place of its query. The field stays
     /// open or closed; a closed field with no words has no filter.
-    fn with_text(self, text: String) -> Self {
-        let query = Query::new(text);
+    #[must_use]
+    pub fn with_text(self, text: String) -> Self {
+        let query = PickerQuery::new(text);
         match self {
             Self::Editing(_) => Self::Editing(query),
             Self::Off | Self::Applied(_) => Self::apply(query),
@@ -409,7 +414,8 @@ impl Filter {
     }
 
     /// Return the filter that closes the field and keeps its query.
-    fn give(self) -> Self {
+    #[must_use]
+    pub fn give(self) -> Self {
         match self {
             Self::Off => Self::Off,
             Self::Editing(query) | Self::Applied(query) => Self::apply(query),
@@ -417,7 +423,7 @@ impl Filter {
     }
 
     /// Return the applied filter of `query`, or none for a blank query.
-    fn apply(query: Query) -> Self {
+    fn apply(query: PickerQuery) -> Self {
         if query.is_blank() {
             Self::Off
         } else {
@@ -426,7 +432,7 @@ impl Filter {
     }
 
     /// Return the query, if there is one.
-    fn query(&self) -> Option<&Query> {
+    fn query(&self) -> Option<&PickerQuery> {
         match self {
             Self::Off => None,
             Self::Editing(query) | Self::Applied(query) => Some(query),
@@ -434,17 +440,17 @@ impl Filter {
     }
 
     /// Return the text the field shows.
-    fn text(&self) -> &str {
+    pub fn text(&self) -> &str {
         self.query().map_or("", |query| query.text.as_str())
     }
 
     /// Return the words that each shown item contains.
-    fn words(&self) -> &[String] {
+    pub fn words(&self) -> &[String] {
         self.query().map_or(&[], |query| query.words.as_slice())
     }
 
     /// Return whether the field takes filter text.
-    fn editing(&self) -> bool {
+    pub fn editing(&self) -> bool {
         matches!(self, Self::Editing(_))
     }
 }
@@ -469,7 +475,7 @@ where
     /// Cursor over `shown`, giving a position within it, not within `items`.
     cursor: RowCursor,
     /// The filter, and whether the field takes its text.
-    filter: Filter,
+    filter: PickerFilter,
     /// What the frame's title calls this list.
     label: String,
     /// Text shown in place of an empty list.
@@ -510,7 +516,7 @@ where
             shown: Vec::new(),
             rows: Vec::new(),
             cursor: RowCursor::new(0),
-            filter: Filter::Off,
+            filter: PickerFilter::Off,
             label: String::new(),
             placeholder: "",
             chrome: None,
@@ -598,7 +604,7 @@ where
     /// match it.
     #[command]
     pub fn start_filter(&mut self, context: &mut dyn Context) -> Result<()> {
-        self.filter = mem::replace(&mut self.filter, Filter::Off).edit();
+        self.filter = mem::replace(&mut self.filter, PickerFilter::Off).edit();
         self.republish(context)
     }
 
@@ -608,7 +614,7 @@ where
     /// @param text Words an item must contain. Empty text shows every item.
     #[command]
     pub fn set_filter(&mut self, context: &mut dyn Context, text: String) -> Result<()> {
-        self.filter = mem::replace(&mut self.filter, Filter::Off).with_text(text);
+        self.filter = mem::replace(&mut self.filter, PickerFilter::Off).with_text(text);
         self.apply_filter();
         self.refresh(context)
     }
@@ -617,7 +623,7 @@ where
     #[command]
     pub fn clear_filter(&mut self, context: &mut dyn Context) -> Result<()> {
         let words = !self.filter.words().is_empty();
-        self.filter = Filter::Off;
+        self.filter = PickerFilter::Off;
         if !words {
             return self.republish(context);
         }
@@ -661,7 +667,7 @@ where
         self.items = items;
         self.label = title.into();
         self.placeholder = placeholder;
-        self.filter = Filter::Off;
+        self.filter = PickerFilter::Off;
         self.apply_filter();
         // The list is new, so it opens at its first row rather than wherever
         // the last one was left.
@@ -822,7 +828,7 @@ where
             // show: one being typed, or one left standing after it was given.
             // Hidden, it leaves the layout entirely, so the frame gives the row
             // back to the list.
-            context.set_hidden(field, self.filter == Filter::Off)?;
+            context.set_hidden(field, self.filter == PickerFilter::Off)?;
             context.update(field, |field: &mut Input| {
                 field.set_value(text);
                 field.set_active(Some(active));
@@ -872,7 +878,7 @@ where
                 Some(FilterCommand::Accept) => {
                     // A blank query matches as no filter does, so the shown
                     // items stay as they are.
-                    self.filter = mem::replace(&mut self.filter, Filter::Off).give();
+                    self.filter = mem::replace(&mut self.filter, PickerFilter::Off).give();
                     self.republish(context)?;
                     return Ok(EventOutcome::Handle);
                 }
@@ -1016,7 +1022,7 @@ where
             ("End", "Last entry", nav(NavIntent::Last)?),
             (
                 "/",
-                "Filter the list",
+                "PickerFilter the list",
                 BindingAction::Command(Self::call_start_filter()),
             ),
             (
@@ -1742,13 +1748,13 @@ mod tests {
 
     #[test]
     fn filter_transitions() {
-        use super::{Filter, Query};
-        let query = |text: &str| Query::new(text.to_string());
-        let editing = |text: &str| Filter::Editing(query(text));
-        let applied = |text: &str| Filter::Applied(query(text));
+        use super::{PickerFilter, PickerQuery};
+        let query = |text: &str| PickerQuery::new(text.to_string());
+        let editing = |text: &str| PickerFilter::Editing(query(text));
+        let applied = |text: &str| PickerFilter::Applied(query(text));
         // Start the filter.
         for (filter, next) in [
-            (Filter::Off, editing("")),
+            (PickerFilter::Off, editing("")),
             (editing("al"), editing("al")),
             (applied("al"), editing("al")),
         ] {
@@ -1756,12 +1762,12 @@ mod tests {
         }
         // Set the filter's text.
         for (filter, text, next) in [
-            (Filter::Off, "al", applied("al")),
-            (Filter::Off, " ", Filter::Off),
+            (PickerFilter::Off, "al", applied("al")),
+            (PickerFilter::Off, " ", PickerFilter::Off),
             (editing("a"), " ", editing(" ")),
             (editing("a"), "al", editing("al")),
             (applied("a"), "al", applied("al")),
-            (applied("a"), "", Filter::Off),
+            (applied("a"), "", PickerFilter::Off),
         ] {
             assert_eq!(
                 filter.clone().with_text(text.into()),
@@ -1771,8 +1777,8 @@ mod tests {
         }
         // Enter gives the filter; clear_filter and Esc drop it to Off.
         for (filter, next) in [
-            (Filter::Off, Filter::Off),
-            (editing(" "), Filter::Off),
+            (PickerFilter::Off, PickerFilter::Off),
+            (editing(" "), PickerFilter::Off),
             (editing("al "), applied("al ")),
             (applied("al"), applied("al")),
         ] {

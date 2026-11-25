@@ -144,7 +144,7 @@ pub use list_view::{List, Selectable};
 pub use menu::widget::{Menu, MenuItem, MenuList, MenuRow};
 pub use meter::{Meter, MeterLook};
 pub use pane::{Pane, PaneKeys, pane_has_keys};
-pub use picker::{Picker, PickerList};
+pub use picker::{Picker, PickerFilter, PickerList, PickerQuery};
 pub use root::Root;
 pub use scroll::Scroll;
 pub use search_bar::SearchBar;

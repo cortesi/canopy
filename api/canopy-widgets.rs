@@ -2925,6 +2925,42 @@ impl<T> CommandNode for Picker<T> where T: 'static + ItemLabel {}
 
 impl<T> Widget for Picker<T> where T: 'static + ItemLabel {}
 
+/// The filter of a list.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub enum PickerFilter {
+    /// No filter: every item shows, and the field is hidden.
+    #[default]
+    Off,
+    /// The field takes filter text.
+    Editing(PickerQuery),
+    /// A filter given with Enter, which the field shows. Its query has words.
+    Applied(PickerQuery),
+}
+
+impl PickerFilter {
+    /// Return the filter that opens the field, keeping the query.
+    #[must_use]
+    pub fn edit(self) -> Self;
+
+    /// Return whether the field takes filter text.
+    pub fn editing(&self) -> bool;
+
+    /// Return the filter that closes the field and keeps its query.
+    #[must_use]
+    pub fn give(self) -> Self;
+
+    /// Return the text the field shows.
+    pub fn text(&self) -> &str;
+
+    /// Return the filter with `text` in place of its query. The field stays
+    /// open or closed; a closed field with no words has no filter.
+    #[must_use]
+    pub fn with_text(self, text: String) -> Self;
+
+    /// Return the words that each shown item contains.
+    pub fn words(&self) -> &[String];
+}
+
 /// A list of items, scrolled by its own view.
 ///
 /// The list shows the items its filter passes, one per row, trimmed to the
@@ -3119,6 +3155,12 @@ impl<T> CommandNode for PickerList<T> where T: 'static + ItemLabel {}
 impl<T> Register for PickerList<T> where T: 'static + ItemLabel {}
 
 impl<T> Widget for PickerList<T> where T: 'static + ItemLabel {}
+
+/// The text of a filter, with the words it matches. A host whose list needs
+/// a layout of its own filters it as [`Picker`] does, through
+/// [`PickerFilter`].
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct PickerQuery {/* private fields */}
 
 /// A Root widget that lives at the base of a Canopy app.
 #[derive(Default)]
