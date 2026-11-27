@@ -132,14 +132,12 @@ pub fn edit_units(document: &DocumentSnapshot) -> Vec<EditUnit> {
 /// Parse `text` as a complete document with the default parse limits, and
 /// return its edit units. A text past a limit reads as one source unit.
 pub fn parse_units(text: &str) -> Vec<EditUnit> {
-    match SourceStore::complete_with_limit(text, usize::MAX) {
-        Ok(store) => edit_units(&parse_document(
-            &store.snapshot(),
-            &ParseLimits::default(),
-            None,
-        )),
-        Err(_) => Vec::new(),
-    }
+    let store = SourceStore::complete_with_limit(text, usize::MAX).expect("no source limit");
+    edit_units(&parse_document(
+        &store.snapshot(),
+        &ParseLimits::default(),
+        None,
+    ))
 }
 
 /// Return the index of the unit whose range holds `byte`, counting the end
@@ -262,15 +260,7 @@ impl NewBlock {
         let terminator = line_terminator(&source, &unit.range);
         let prefix = block_prefix(document, unit.blocks.start);
         let blank = prefix.trim_end_matches([' ', '\t']);
-        let next = source[at..]
-            .strip_prefix(terminator)
-            .map(|rest| &rest[..line_text_end(rest, 0)]);
-        let trail = match next {
-            Some(line) if !is_blank(line) => {
-                format!("{terminator}{blank}")
-            }
-            _ => String::new(),
-        };
+        let trail = apart(&source, at, terminator, blank);
         Self {
             at,
             lead: format!("{terminator}{blank}{terminator}"),
@@ -324,15 +314,7 @@ impl NewBlock {
             .max(unit.range.end);
         let terminator = line_terminator(&source, &unit.range);
         let blank = first.trim_end_matches([' ', '\t']).to_owned();
-        let next = source[at..]
-            .strip_prefix(terminator)
-            .map(|rest| &rest[..line_text_end(rest, 0)]);
-        // A line that follows takes a blank line, so it stays out of a
-        // paragraph, and apart from an item of a loose list.
-        let apart = match next {
-            Some(line) if !is_blank(line) => format!("{terminator}{blank}"),
-            _ => String::new(),
-        };
+        let apart = apart(&source, at, terminator, &blank);
         let paragraph = Self {
             at,
             lead: format!("{terminator}{blank}{terminator}"),
@@ -573,6 +555,20 @@ fn blank_run(source: &str, from: usize, to: usize) -> Option<usize> {
     })
 }
 
+/// Return the text that sets a new block at `at` apart from the line after
+/// it: a blank line in the containers `blank` when a line that is not blank
+/// follows, so the line stays out of the block's paragraph, and apart from
+/// an item of a loose list.
+fn apart(source: &str, at: usize, terminator: &str, blank: &str) -> String {
+    let next = source[at..]
+        .strip_prefix(terminator)
+        .map(|rest| &rest[..line_text_end(rest, 0)]);
+    match next {
+        Some(line) if !is_blank(line) => format!("{terminator}{blank}"),
+        _ => String::new(),
+    }
+}
+
 /// Return whether `line` is blank: it holds nothing but quote markers and
 /// blanks.
 fn is_blank(line: &str) -> bool {
@@ -760,8 +756,7 @@ fn lines(text: &str) -> Vec<&str> {
     let mut rest = text;
     while let Some(at) = rest.find(['\n', '\r']) {
         out.push(&rest[..at]);
-        let width = if rest[at..].starts_with("\r\n") { 2 } else { 1 };
-        rest = &rest[at + width..];
+        rest = &rest[at + terminator_at(rest, at)..];
     }
     out.push(rest);
     out
