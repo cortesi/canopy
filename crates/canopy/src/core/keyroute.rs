@@ -132,6 +132,14 @@ impl RouteWinner {
 }
 
 impl Core {
+    /// Return the node a probe starts from: `requested`, or else the focus,
+    /// or else the root. It must be attached.
+    pub(crate) fn probe_focus(&self, requested: Option<NodeId>) -> Result<NodeId> {
+        let focus = requested.or(self.focus).unwrap_or(self.root);
+        self.validate_attached_node(focus)?;
+        Ok(focus)
+    }
+
     /// Explain where `key` would go if the route started at `requested`.
     ///
     /// The walk consults the same resolver and widget predictions as key
@@ -141,8 +149,7 @@ impl Core {
         requested: Option<NodeId>,
         key: Key,
     ) -> Result<KeyRouteExplanation> {
-        let focus = requested.or(self.focus).unwrap_or(self.root);
-        self.validate_attached_node(focus)?;
+        let focus = self.probe_focus(requested)?;
         let focus_path = self.path_of(self.root, focus);
         if self.effective_transient_mode().is_some() {
             let outcome = match self.transient_winner(focus, key) {

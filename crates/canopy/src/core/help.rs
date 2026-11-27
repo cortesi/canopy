@@ -156,8 +156,7 @@ impl Core {
     /// Key discovery explains each candidate key, so it cannot disagree with
     /// [`Core::explain_key`] about which binding a key reaches.
     pub(crate) fn available_bindings(&self, requested: Option<NodeId>) -> Result<BindingSnapshot> {
-        let focus = requested.or(self.focus).unwrap_or(self.root);
-        self.validate_attached_node(focus)?;
+        let focus = self.probe_focus(requested)?;
         let focus_path = self.path_of(self.root, focus);
 
         let mut bindings = Vec::new();
@@ -208,8 +207,7 @@ impl Core {
         requested: Option<NodeId>,
         menu: &str,
     ) -> Result<Vec<AvailableBinding<Key>>> {
-        let focus = requested.or(self.focus).unwrap_or(self.root);
-        self.validate_attached_node(focus)?;
+        let focus = self.probe_focus(requested)?;
         let Some(stack) = self.input_map.menu_stack(menu) else {
             return Ok(Vec::new());
         };
