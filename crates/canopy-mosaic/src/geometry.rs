@@ -469,22 +469,6 @@ fn shape_of(ch: char) -> Option<Vec<Part>> {
         0x2590 => vec![columns(4, 8)],
         0x2594 => vec![rows(0, 1)],
         0x2595 => vec![columns(7, 8)],
-        0x2596..=0x259F => {
-            // Quadrants, as octant patterns.
-            let bits = match code {
-                0x2596 => 0x50,
-                0x2597 => 0xA0,
-                0x2598 => 0x05,
-                0x2599 => 0xF5,
-                0x259A => 0xA5,
-                0x259B => 0x5F,
-                0x259C => 0xAF,
-                0x259D => 0x0A,
-                0x259E => 0x5A,
-                _ => 0xFA,
-            };
-            lattice(bits, 4)
-        }
         // Triangles that meet at the center.
         0x1FB68 => vec![triangle(UPPER), triangle(RIGHT), triangle(LOWER)],
         0x1FB69 => vec![triangle(LEFT), triangle(LOWER), triangle(RIGHT)],
@@ -519,14 +503,14 @@ fn shape_of(ch: char) -> Option<Vec<Part>> {
         0x1FB89 => vec![columns(3, 8)],
         0x1FB8A => vec![columns(2, 8)],
         0x1FB8B => vec![columns(1, 8)],
-        // Quarter blocks that complete the octant patterns.
-        0x1FBE6 => lattice(0x14, 4),
-        0x1FBE7 => lattice(0x28, 4),
-        0x1CEA0 => lattice(0x80, 4),
-        0x1CEA3 => lattice(0x40, 4),
-        0x1CEA8 => lattice(0x01, 4),
-        0x1CEAB => lattice(0x02, 4),
-        _ => return None,
+        // Quadrants, and the quarter blocks that complete the octant
+        // patterns, as those patterns.
+        _ => {
+            let (bits, _) = OCTANT_ELSEWHERE
+                .iter()
+                .find(|(_, other)| u32::from(*other) == code)?;
+            lattice(u32::from(*bits), 4)
+        }
     };
     Some(parts)
 }

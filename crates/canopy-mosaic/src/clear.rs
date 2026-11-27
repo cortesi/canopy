@@ -8,7 +8,7 @@
 
 use crate::{
     Cell, RasterView, coverage_into,
-    geometry::{MATRIX, Mask, Shape},
+    geometry::{MATRIX, Mask, PIXELS, Shape},
     raster::{LinearRaster, encode_table, to_u16},
     rgb_into,
     symbols::SymbolSet,
@@ -50,56 +50,39 @@ pub fn clear_into(raster: &LinearRaster, set: &SymbolSet, out: &mut Vec<Cell<Opt
     for (index, (color, shape)) in colors.iter().zip(&shapes).enumerate() {
         let (col, row) = (index % cols, index / cols);
         let cell_pixels = |mask: Mask| {
-            (0..MATRIX * MATRIX)
+            (0..PIXELS)
                 .filter(move |at| mask.get(at % MATRIX, at / MATRIX))
                 .map(move |at| {
                     let (x, y) = (col * MATRIX + at % MATRIX, row * MATRIX + at / MATRIX);
                     pixels[y * width + x]
                 })
         };
-        let ink = cell_pixels(Mask(u64::MAX))
+        let ink = cell_pixels(Mask::FULL)
             .filter(|pixel| pixel[3] >= INK_ALPHA)
             .count();
-        let clear = Cell {
-            ch: ' ',
-            fg: None,
-            bg: None,
-        };
-        let cell = if ink == 0 {
-            clear
-        } else if ink == MATRIX * MATRIX {
+        let half = u8::MAX / 2;
+        let (fg_ink, bg_ink) = (shape.fg > half, shape.bg > half);
+        let cell = if ink == 0 || (ink < PIXELS && !fg_ink && !bg_ink) {
+            Cell {
+                ch: ' ',
+                fg: None,
+                bg: None,
+            }
+        } else if ink == PIXELS || (fg_ink && bg_ink) {
             Cell {
                 ch: color.ch,
                 fg: Some(color.fg),
                 bg: Some(color.bg),
             }
         } else {
-            let half = u8::MAX / 2;
-            match (shape.fg > half, shape.bg > half) {
-                (true, true) => Cell {
-                    ch: color.ch,
-                    fg: Some(color.fg),
-                    bg: Some(color.bg),
-                },
-                (false, false) => clear,
-                (fg_ink, _) => {
-                    let mask = Shape::of(shape.ch).map_or(Mask(u64::MAX), |s| s.mask());
-                    let mask = if fg_ink { mask } else { mask.inverse() };
-                    let pen = Some(mean_color(cell_pixels(mask), encode));
-                    if fg_ink {
-                        Cell {
-                            ch: shape.ch,
-                            fg: pen,
-                            bg: None,
-                        }
-                    } else {
-                        Cell {
-                            ch: shape.ch,
-                            fg: None,
-                            bg: pen,
-                        }
-                    }
-                }
+            let mask = Shape::of(shape.ch).map_or(Mask::FULL, |s| s.mask());
+            let mask = if fg_ink { mask } else { mask.inverse() };
+            let pen = Some(mean_color(cell_pixels(mask), encode));
+            let (fg, bg) = if fg_ink { (pen, None) } else { (None, pen) };
+            Cell {
+                ch: shape.ch,
+                fg,
+                bg,
             }
         };
         out.push(cell);
