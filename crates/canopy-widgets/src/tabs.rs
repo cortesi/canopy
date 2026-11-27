@@ -8,14 +8,14 @@ use canopy::{
     derive_commands,
     error::Result,
     geom::{Line, Point, Rect},
-    input::{Event, mouse},
+    input::Event,
     layout::{Edges, Layout, LayoutOverride},
     render::Render,
     text,
     tree::FocusScope,
 };
 
-use crate::border::BoxGlyphs;
+use crate::{border::BoxGlyphs, row_cursor::is_primary_click};
 
 /// Columns left blank between tab labels.
 const TAB_GAP: u32 = 1;
@@ -188,7 +188,7 @@ fn clicked<'a>(
     let Event::Mouse(m) = event else {
         return None;
     };
-    if m.action != mouse::Action::Down || m.button != mouse::Button::Left {
+    if !is_primary_click(*m) {
         return None;
     }
     let point: Point = ctx
@@ -467,7 +467,10 @@ mod tests {
     use std::{cell::RefCell, rc::Rc};
 
     use canopy::{
-        Register, Setup, commands::CommandTarget, geom::PointI32, input::key,
+        Register, Setup,
+        commands::CommandTarget,
+        geom::PointI32,
+        input::{key, mouse},
         testing::harness::Harness,
     };
 
