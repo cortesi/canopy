@@ -710,14 +710,8 @@ impl Widget for FontLabel {
         if view_rect.w == 0 || view_rect.h == 0 {
             return Ok(());
         }
-        let full_width = text::width(&self.text);
-        let available = view_rect.w.max(1);
-        let offset = if full_width >= available {
-            0
-        } else {
-            (available - full_width) / 2
-        };
-        let (out, out_width) = text::slice_by_columns(&self.text, 0, available as usize);
+        let offset = Align::Center.offset(text::width(&self.text), view_rect.w);
+        let (out, out_width) = text::slice_by_columns(&self.text, 0, view_rect.w as usize);
         if out_width == 0 {
             return Ok(());
         }

@@ -3,7 +3,6 @@
 //! This crate provides a collection of reusable widgets for building terminal
 //! user interfaces with canopy.
 
-/// Offsets that align content inside a span.
 /// A centred row of buttons, each of which gives one answer.
 mod answers;
 /// Large text in a built-in pixel font.

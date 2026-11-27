@@ -369,7 +369,8 @@ pub fn wrap_with(s: &str, width: u32, options: WrapOptions) -> Vec<String> {
             })
             .collect()
     } else {
-        // `textwrap` reads a trailing line break as the start of an empty line.
+        // Splitting at line breaks reads a trailing break as the start of an
+        // empty line.
         wrap(s.strip_suffix('\n').unwrap_or(s))
     };
     if lines.is_empty() {
@@ -702,6 +703,12 @@ mod tests {
             ..WrapOptions::PROSE
         };
         assert_eq!(wrap_with("日本語 です", 6, limit), ["日本 …"]);
+    }
+
+    #[test]
+    fn a_character_wider_than_the_line_takes_a_line_of_its_own() {
+        assert_eq!(wrap("中文", 1), ["中", "文"]);
+        assert_eq!(wrap("a 中b", 2), ["a", "中", "b"]);
     }
 
     #[test]

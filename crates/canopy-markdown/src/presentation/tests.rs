@@ -1006,12 +1006,6 @@ fn a_quote_bar_runs_unbroken_through_spacing_and_cards() {
 }
 
 #[test]
-fn a_character_wider_than_the_line_takes_a_line_of_its_own() {
-    assert_eq!(text::wrap("中文", 1), ["中", "文"]);
-    assert_eq!(text::wrap("a 中b", 2), ["a", "中", "b"]);
-}
-
-#[test]
 fn a_centered_document_starts_every_block_at_its_centered_margin() {
     let text = "Some prose.\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n```\ncode\n```\n";
     let layout = |centered: bool| {

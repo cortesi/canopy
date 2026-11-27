@@ -632,7 +632,7 @@ impl<'a> LayoutPass<'a> {
             return Ok(0);
         }
         let natural = content.w.saturating_add(layout.padding.horizontal());
-        Ok(available.w.saturating_sub(natural) / 2)
+        Ok(Align::Center.offset(natural, available.w))
     }
 
     /// Set a node's position within its parent's content area.
