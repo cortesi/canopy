@@ -15,7 +15,7 @@ pub const RESERVED_KEYS: [char; 7] = ['h', 'j', 'k', 'l', 'q', 'R', 'S'];
 /// Keys that the panel binds in every level besides the reserved keys, and
 /// that it thus never chooses as an accelerator: revert, clear, and select
 /// all. An option can still take one explicitly.
-const PANEL_KEYS: [char; 3] = ['x', 'X', 'A'];
+pub const PANEL_KEYS: [char; 3] = ['x', 'X', 'A'];
 
 /// Return whether `key` cannot be an accelerator: it is reserved, or it is
 /// not a visible character.

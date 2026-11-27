@@ -18,7 +18,7 @@ use syn::{
 
 /// Keys that the options panel uses for its own actions.
 ///
-/// Keep this list in step with `canopy_options::RESERVED_KEYS`.
+/// A test holds this list to `canopy_options::RESERVED_KEYS`.
 const RESERVED_KEYS: [char; 7] = ['h', 'j', 'k', 'l', 'q', 'R', 'S'];
 
 /// Derive an option group for a struct with named fields.
@@ -652,6 +652,11 @@ mod tests {
         expand_enum(input)
             .expect_err("the enum derive should refuse")
             .to_string()
+    }
+
+    #[test]
+    fn the_reserved_keys_are_the_panels() {
+        assert_eq!(super::RESERVED_KEYS, canopy_options::RESERVED_KEYS);
     }
 
     #[test]

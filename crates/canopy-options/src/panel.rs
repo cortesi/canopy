@@ -1563,3 +1563,21 @@ impl Widget for PanelBody {
         NodeName::convert("options_body")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{BROWSE_BINDINGS, KEYS};
+    use crate::model::{PANEL_KEYS, RESERVED_KEYS};
+
+    #[test]
+    fn the_reserved_and_panel_keys_are_bound_in_browse_mode() {
+        for key in RESERVED_KEYS.iter().chain(&PANEL_KEYS) {
+            assert!(
+                KEYS.iter().any(
+                    |(group, bound, ..)| *group == BROWSE_BINDINGS && *bound == key.to_string()
+                ),
+                "{key:?} is not a browse key"
+            );
+        }
+    }
+}

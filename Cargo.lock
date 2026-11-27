@@ -462,6 +462,7 @@ dependencies = [
 name = "canopy-options-derive"
 version = "0.1.0"
 dependencies = [
+ "canopy-options",
  "convert_case 0.12.0",
  "proc-macro2",
  "quote",
