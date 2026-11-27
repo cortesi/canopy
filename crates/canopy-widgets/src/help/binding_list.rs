@@ -489,12 +489,11 @@ fn result_lines(rows: &[ResultRow], width: u32) -> Vec<DisplayLine> {
 /// Wrap `text` to lines of at most `width` columns, breaking words at
 /// their hyphens.
 fn wrap(text: &str, width: usize) -> Vec<String> {
-    let options = WrapOptions {
-        break_hyphens: true,
-        paragraphs: false,
-        max_lines: None,
-    };
-    text::wrap_with(text, u32::try_from(width).unwrap_or(u32::MAX), options)
+    text::wrap_with(
+        text,
+        u32::try_from(width).unwrap_or(u32::MAX),
+        WrapOptions::PLAIN,
+    )
 }
 
 /// Wrap `text` to `width`, and return each line with the position of its

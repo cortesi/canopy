@@ -1771,12 +1771,7 @@ fn header_text(old: &Range<usize>, new: &Range<usize>) -> String {
 /// Wrap a message at word boundaries, so a narrow pane shows all of it
 /// rather than a clipped first line.
 fn wrap_message(message: &str, width: u32) -> Vec<String> {
-    let options = text::WrapOptions {
-        break_hyphens: true,
-        paragraphs: false,
-        max_lines: None,
-    };
-    text::wrap_with(message, width, options)
+    text::wrap_with(message, width, text::WrapOptions::PLAIN)
 }
 
 /// Return the paired row that shows each source line.

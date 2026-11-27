@@ -324,6 +324,14 @@ impl WrapOptions {
         paragraphs: true,
         max_lines: None,
     };
+
+    /// Hyphen breaks, no paragraphs, and no line limit: the defaults of
+    /// `textwrap`.
+    pub const PLAIN: Self = Self {
+        break_hyphens: true,
+        paragraphs: false,
+        max_lines: None,
+    };
 }
 
 /// Wrap `s` at word boundaries to lines of at most `width` columns, as
@@ -611,11 +619,7 @@ mod tests {
         assert_eq!(wrap("one\n", 10), ["one"], "a trailing break adds no line");
         assert_eq!(wrap("one\n\n", 10), ["one", ""]);
         assert_eq!(wrap("one\n  \ntwo", 10), ["one", "", "two"]);
-        let text = WrapOptions {
-            break_hyphens: true,
-            paragraphs: false,
-            max_lines: None,
-        };
+        let text = WrapOptions::PLAIN;
         assert_eq!(wrap_with("one\n", 10, text), ["one"]);
         assert_eq!(wrap_with("one\n\n", 10, text), ["one", ""]);
         assert_eq!(wrap_with("", 10, text), [""]);

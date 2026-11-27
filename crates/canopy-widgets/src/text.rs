@@ -22,14 +22,6 @@ pub enum CanvasWidth {
     Fixed(u32),
 }
 
-/// How `Text` wraps unless a host chooses: `textwrap`'s defaults, with hyphen
-/// breaks and no paragraphs.
-const TEXT_WRAP: WrapOptions = WrapOptions {
-    break_hyphens: true,
-    paragraphs: false,
-    max_lines: None,
-};
-
 /// Multiline text widget with wrapping and scrolling.
 pub struct Text {
     /// Raw text content.
@@ -68,7 +60,7 @@ impl Text {
         Self {
             raw: raw.into(),
             wrap_width: None,
-            wrap_options: TEXT_WRAP,
+            wrap_options: WrapOptions::PLAIN,
             fit: false,
             canvas_width: CanvasWidth::View,
             style: String::from("text"),
