@@ -8,7 +8,7 @@
 //! newest at the bottom, and each goes when its own time ends. The notice log
 //! in the core decides which toasts are live, so this module only shows them.
 
-use std::{mem, time::Duration};
+use std::time::Duration;
 
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, TypedId, ViewContext, Widget,
@@ -204,49 +204,21 @@ impl ToastBox {
 }
 
 /// Wrap `message` at `width` columns, at word boundaries, keeping its line
-/// breaks. A word wider than a line breaks across lines.
+/// breaks. Runs of blanks show as one, a blank line is dropped, and a word
+/// wider than a line breaks across lines.
 fn wrap(message: &str, width: usize) -> Vec<String> {
-    let mut lines = Vec::new();
-    for paragraph in message.lines() {
-        let mut line = String::new();
-        for word in paragraph.split_whitespace() {
-            let mut word = word;
-            while text::width(word) as usize > width {
-                if !line.is_empty() {
-                    lines.push(mem::take(&mut line));
-                }
-                let (head, _) = text::slice_by_columns(word, 0, width);
-                // A grapheme wider than the line takes a line of its own.
-                let head = if head.is_empty() {
-                    word.chars().next().map_or("", |c| &word[..c.len_utf8()])
-                } else {
-                    head
-                };
-                lines.push(head.to_owned());
-                word = &word[head.len()..];
-            }
-            if word.is_empty() {
-                continue;
-            }
-            let needed = text::width(&line) as usize
-                + usize::from(!line.is_empty())
-                + text::width(word) as usize;
-            if !line.is_empty() && needed > width {
-                lines.push(mem::take(&mut line));
-            }
-            if !line.is_empty() {
-                line.push(' ');
-            }
-            line.push_str(word);
-        }
-        if !line.is_empty() {
-            lines.push(line);
-        }
-    }
+    let width = u32::try_from(width).unwrap_or(u32::MAX);
+    let lines: Vec<String> = message
+        .lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|line| !line.is_empty())
+        .flat_map(|line| text::wrap(&line, width))
+        .collect();
     if lines.is_empty() {
-        lines.push(String::new());
+        vec![String::new()]
+    } else {
+        lines
     }
-    lines
 }
 
 impl Widget for ToastBox {
