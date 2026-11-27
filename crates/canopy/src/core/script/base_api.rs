@@ -1367,19 +1367,6 @@ fn host_set_focus<'s>(
     Ok(ret_one(ScopedValue::Boolean(focused)))
 }
 
-/// Move root focus in one direction.
-fn host_focus_move<'s>(
-    scope: &Scope<'s>,
-    direction: FocusDirection,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    host_unit(scope, |canopy, _| {
-        let root_id = canopy.core.root;
-        let mut ctx = CoreContext::new(&mut canopy.core, root_id);
-        ctx.focus_move(FocusScope::Root, direction)?;
-        Ok(())
-    })
-}
-
 /// `canopy.move_focus`: move focus in a direction.
 fn host_move_focus<'s>(
     scope: &Scope<'s>,
@@ -1387,9 +1374,14 @@ fn host_move_focus<'s>(
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = HostArgCursor::new(scope, args);
     let dir = args.required::<String>("dir")?;
-    let dir = commands::FromArgValue::from_arg_value(&ArgValue::String(dir))
+    let dir: FocusDirection = commands::FromArgValue::from_arg_value(&ArgValue::String(dir))
         .map_err(|error| RuntimeError::runtime(error.to_string()))?;
-    host_focus_move(scope, dir)
+    host_unit(scope, |canopy, _| {
+        let root_id = canopy.core.root;
+        let mut ctx = CoreContext::new(&mut canopy.core, root_id);
+        ctx.focus_move(FocusScope::Root, dir)?;
+        Ok(())
+    })
 }
 
 /// `canopy.send_key`: inject a key event.
