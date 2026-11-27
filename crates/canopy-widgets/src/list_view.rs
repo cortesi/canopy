@@ -458,27 +458,27 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     /// Check every row.
     #[command]
     pub fn check_all(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.checks.is_none() {
-            return Ok(());
-        }
-        self.checks = Some(self.items.keys().iter().cloned().collect());
-        let ids = self.items.iter_ids().collect::<Vec<_>>();
-        for id in ids {
-            ctx.update(id, |widget: &mut W| widget.set_checked(true))?;
-        }
-        Ok(())
+        self.set_all_checks(ctx, true)
     }
 
     /// Uncheck every row.
     #[command]
     pub fn clear_checks(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        self.set_all_checks(ctx, false)
+    }
+
+    /// Check or uncheck every row, when the list has checks.
+    fn set_all_checks(&mut self, ctx: &mut dyn Context, checked: bool) -> Result<()> {
         if self.checks.is_none() {
             return Ok(());
         }
-        self.checks = Some(HashSet::new());
-        let ids = self.items.iter_ids().collect::<Vec<_>>();
-        for id in ids {
-            ctx.update(id, |widget: &mut W| widget.set_checked(false))?;
+        self.checks = Some(if checked {
+            self.items.keys().iter().cloned().collect()
+        } else {
+            HashSet::new()
+        });
+        for id in self.items.iter_ids() {
+            ctx.update(id, |widget: &mut W| widget.set_checked(checked))?;
         }
         Ok(())
     }
