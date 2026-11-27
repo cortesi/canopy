@@ -269,23 +269,10 @@ impl TextBuffer {
         }
 
         let cursor = self.selection.head();
-        if cursor.column == 0 {
-            if !allow_line_wrap || cursor.line == 0 {
-                return false;
-            }
-            let prev_line = cursor.line.saturating_sub(1);
-            let prev_len = self.line_char_len(prev_line);
-            let start = TextPosition::new(prev_line, prev_len);
-            let end = TextPosition::new(cursor.line, 0);
-            self.replace_range(TextRange::new(start, end), "");
-            return true;
-        }
-
-        let line_text = self.line_text(cursor.line);
-        let prev = prev_grapheme_boundary(&line_text, cursor.column);
-        let start = TextPosition::new(cursor.line, prev);
-        let end = cursor;
-        self.replace_range(TextRange::new(start, end), "");
+        let Some(start) = self.step_left(cursor, allow_line_wrap) else {
+            return false;
+        };
+        self.replace_range(TextRange::new(start, cursor), "");
         true
     }
 
@@ -299,14 +286,8 @@ impl TextBuffer {
         from: TextPosition,
         allow_line_wrap: bool,
     ) -> Option<TextRange> {
-        if from.column >= self.line_char_len(from.line) {
-            if !allow_line_wrap || from.line + 1 >= self.line_count() {
-                return None;
-            }
-            return Some(TextRange::new(from, TextPosition::new(from.line + 1, 0)));
-        }
-        let next = next_grapheme_boundary(&self.line_text(from.line), from.column);
-        Some(TextRange::new(from, TextPosition::new(from.line, next)))
+        self.step_right(from, allow_line_wrap)
+            .map(|end| TextRange::new(from, end))
     }
 
     /// Delete the selection or the grapheme after the cursor.
@@ -326,37 +307,49 @@ impl TextBuffer {
 
     /// Move the cursor left by one grapheme.
     pub fn move_left(&mut self, allow_line_wrap: bool) -> bool {
-        let cursor = self.selection.head();
-        if cursor.column == 0 {
-            if !allow_line_wrap || cursor.line == 0 {
-                return false;
-            }
-            let prev_line = cursor.line - 1;
-            let prev_len = self.line_char_len(prev_line);
-            self.selection = Selection::caret(TextPosition::new(prev_line, prev_len));
-            return true;
-        }
-        let line_text = self.line_text(cursor.line);
-        let prev = prev_grapheme_boundary(&line_text, cursor.column);
-        self.selection = Selection::caret(TextPosition::new(cursor.line, prev));
-        true
+        self.move_to(self.step_left(self.selection.head(), allow_line_wrap))
     }
 
     /// Move the cursor right by one grapheme.
     pub fn move_right(&mut self, allow_line_wrap: bool) -> bool {
-        let cursor = self.selection.head();
-        let line_len = self.line_char_len(cursor.line);
-        if cursor.column >= line_len {
-            if !allow_line_wrap || cursor.line + 1 >= self.line_count() {
-                return false;
-            }
-            self.selection = Selection::caret(TextPosition::new(cursor.line + 1, 0));
-            return true;
-        }
-        let line_text = self.line_text(cursor.line);
-        let next = next_grapheme_boundary(&line_text, cursor.column);
-        self.selection = Selection::caret(TextPosition::new(cursor.line, next));
+        self.move_to(self.step_right(self.selection.head(), allow_line_wrap))
+    }
+
+    /// Put a caret at `position`, when there is one, and return whether the
+    /// cursor moved.
+    fn move_to(&mut self, position: Option<TextPosition>) -> bool {
+        let Some(position) = position else {
+            return false;
+        };
+        self.selection = Selection::caret(position);
         true
+    }
+
+    /// Return the position one grapheme before `from`, or the end of the line
+    /// before when `allow_line_wrap` is set, or `None` at the start.
+    fn step_left(&self, from: TextPosition, allow_line_wrap: bool) -> Option<TextPosition> {
+        if from.column == 0 {
+            if !allow_line_wrap || from.line == 0 {
+                return None;
+            }
+            let line = from.line - 1;
+            return Some(TextPosition::new(line, self.line_char_len(line)));
+        }
+        let column = prev_grapheme_boundary(&self.line_text(from.line), from.column);
+        Some(TextPosition::new(from.line, column))
+    }
+
+    /// Return the position one grapheme after `from`, or the start of the
+    /// next line when `allow_line_wrap` is set, or `None` at the end.
+    fn step_right(&self, from: TextPosition, allow_line_wrap: bool) -> Option<TextPosition> {
+        if from.column >= self.line_char_len(from.line) {
+            if !allow_line_wrap || from.line + 1 >= self.line_count() {
+                return None;
+            }
+            return Some(TextPosition::new(from.line + 1, 0));
+        }
+        let column = next_grapheme_boundary(&self.line_text(from.line), from.column);
+        Some(TextPosition::new(from.line, column))
     }
 
     /// Move the cursor to the start of the current line.
