@@ -301,16 +301,11 @@ impl SearchState {
 
 /// Find text matches for a query within the buffer.
 pub fn find_matches(buffer: &TextBuffer, query: &str) -> Vec<TextRange> {
-    find_matches_from(buffer, query, TextPosition::new(0, 0))
+    find_matches_in(buffer, query, TextPosition::new(0, 0), false)
 }
 
-/// Find matches entirely within the suffix beginning at a character position.
-fn find_matches_from(buffer: &TextBuffer, query: &str, start: TextPosition) -> Vec<TextRange> {
-    find_matches_in(buffer, query, start, false)
-}
-
-/// Find matches within the suffix beginning at a character position,
-/// optionally ignoring ASCII case.
+/// Find matches entirely within the suffix beginning at a character
+/// position, optionally ignoring ASCII case.
 ///
 /// ASCII case folding keeps every byte offset, so match columns index the
 /// original text. A match starts and ends on grapheme boundaries, as in Vim,
@@ -605,7 +600,7 @@ impl Editor {
             .set_selection(Selection::new(range.start, range.end));
         self.handle_insert_text(replacement);
         self.ensure_cursor_visible(ctx);
-        find_matches_from(&self.buffer, query, self.buffer.cursor())
+        find_matches_in(&self.buffer, query, self.buffer.cursor(), false)
     }
 
     /// Render the search/replace prompt overlay.
@@ -754,14 +749,14 @@ mod tests {
     fn suffix_search_starts_before_nonoverlapping_match_collection() {
         let buffer = TextBuffer::new("ééé");
         assert_eq!(
-            find_matches_from(&buffer, "éé", TextPosition::new(0, 1)),
+            find_matches_in(&buffer, "éé", TextPosition::new(0, 1), false),
             [TextRange::new(
                 TextPosition::new(0, 1),
                 TextPosition::new(0, 3)
             )]
         );
-        assert!(find_matches_from(&buffer, "é", TextPosition::new(0, 99)).is_empty());
-        assert!(find_matches_from(&buffer, "é", TextPosition::new(1, 0)).is_empty());
+        assert!(find_matches_in(&buffer, "é", TextPosition::new(0, 99), false).is_empty());
+        assert!(find_matches_in(&buffer, "é", TextPosition::new(1, 0), false).is_empty());
         assert!(find_matches(&buffer, "").is_empty());
     }
 
