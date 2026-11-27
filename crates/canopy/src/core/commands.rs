@@ -150,13 +150,7 @@ macro_rules! impl_uint_to_arg_value {
     };
 }
 
-impl_uint_to_arg_value!(u8, u16, u32);
-
-impl ToArgValue for u64 {
-    fn to_arg_value(self) -> ArgValue {
-        ArgValue::UInt(self)
-    }
-}
+impl_uint_to_arg_value!(u8, u16, u32, u64);
 
 impl ToArgValue for usize {
     fn to_arg_value(self) -> ArgValue {
@@ -188,32 +182,6 @@ where
 {
     fn to_arg_value(self) -> ArgValue {
         ArgValue::Array(self.into_iter().map(ToArgValue::to_arg_value).collect())
-    }
-}
-
-impl<T> ToArgValue for BTreeMap<String, T>
-where
-    T: ToArgValue,
-{
-    fn to_arg_value(self) -> ArgValue {
-        ArgValue::Map(
-            self.into_iter()
-                .map(|(k, v)| (k, v.to_arg_value()))
-                .collect(),
-        )
-    }
-}
-
-impl<T> ToArgValue for HashMap<String, T>
-where
-    T: ToArgValue,
-{
-    fn to_arg_value(self) -> ArgValue {
-        ArgValue::Map(
-            self.into_iter()
-                .map(|(k, v)| (k, v.to_arg_value()))
-                .collect(),
-        )
     }
 }
 
@@ -328,36 +296,6 @@ where
     }
 }
 
-impl<T> FromArgValue for BTreeMap<String, T>
-where
-    T: FromArgValue,
-{
-    fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
-        match v {
-            ArgValue::Map(values) => values
-                .iter()
-                .map(|(k, v)| Ok((k.clone(), T::from_arg_value(v)?)))
-                .collect::<Result<Self, _>>(),
-            other => Err(CommandError::type_mismatch("BTreeMap", other)),
-        }
-    }
-}
-
-impl<T> FromArgValue for HashMap<String, T>
-where
-    T: FromArgValue,
-{
-    fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
-        match v {
-            ArgValue::Map(values) => values
-                .iter()
-                .map(|(k, v)| Ok((k.clone(), T::from_arg_value(v)?)))
-                .collect::<Result<Self, _>>(),
-            other => Err(CommandError::type_mismatch("HashMap", other)),
-        }
-    }
-}
-
 impl FromArgValue for ArgValue {
     fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
         Ok(v.clone())
@@ -445,25 +383,46 @@ impl<T: CommandType> CommandType for Vec<T> {
     }
 }
 
-impl<T: CommandType> CommandType for BTreeMap<String, T> {
-    fn luau_ty() -> declaration::Type {
-        declaration::Type::map(declaration::Type::String, T::luau_ty())
-    }
+/// Convert, parse, and declare a map keyed by strings as an argument map.
+macro_rules! impl_string_map_args {
+    ($($map:ident),+ $(,)?) => {
+        $(
+            impl<T: ToArgValue> ToArgValue for $map<String, T> {
+                fn to_arg_value(self) -> ArgValue {
+                    ArgValue::Map(
+                        self.into_iter()
+                            .map(|(k, v)| (k, v.to_arg_value()))
+                            .collect(),
+                    )
+                }
+            }
 
-    fn luau_decls(registry: &mut DeclRegistry<'_>) {
-        T::luau_decls(registry);
-    }
+            impl<T: FromArgValue> FromArgValue for $map<String, T> {
+                fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
+                    match v {
+                        ArgValue::Map(values) => values
+                            .iter()
+                            .map(|(k, v)| Ok((k.clone(), T::from_arg_value(v)?)))
+                            .collect::<Result<Self, _>>(),
+                        other => Err(CommandError::type_mismatch(stringify!($map), other)),
+                    }
+                }
+            }
+
+            impl<T: CommandType> CommandType for $map<String, T> {
+                fn luau_ty() -> declaration::Type {
+                    declaration::Type::map(declaration::Type::String, T::luau_ty())
+                }
+
+                fn luau_decls(registry: &mut DeclRegistry<'_>) {
+                    T::luau_decls(registry);
+                }
+            }
+        )+
+    };
 }
 
-impl<T: CommandType> CommandType for HashMap<String, T> {
-    fn luau_ty() -> declaration::Type {
-        declaration::Type::map(declaration::Type::String, T::luau_ty())
-    }
-
-    fn luau_decls(registry: &mut DeclRegistry<'_>) {
-        T::luau_decls(registry);
-    }
-}
+impl_string_map_args!(BTreeMap, HashMap);
 
 /// Registry for declaration items required by command argument and return
 /// types.
