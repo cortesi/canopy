@@ -49,7 +49,7 @@ enum Transport {
     Headless {
         /// The server's process; `None` for an in-process test peer that
         /// speaks the headless protocol without a process.
-        child: Option<Child>,
+        child: Option<Box<Child>>,
         /// Default fixture applied to future evals.
         default_fixture: Option<String>,
     },
@@ -97,7 +97,7 @@ impl Session {
         Ok(Self {
             client: Arc::new(client),
             transport: Transport::Headless {
-                child: Some(spawned.process),
+                child: Some(Box::new(spawned.process)),
                 default_fixture: None,
             },
         })
