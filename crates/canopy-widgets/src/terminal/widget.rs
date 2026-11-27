@@ -808,7 +808,7 @@ fn terminal_config(config: &TerminalConfig, size: TerminalSize) -> EguiTTYConfig
             .pty_args(args.iter().cloned());
     }
     if let Some(cwd) = &config.cwd {
-        builder = builder.pty_working_dir(cwd.display().to_string());
+        builder = builder.pty_working_dir(cwd.clone());
     }
     for (key, value) in &config.env {
         builder = builder.pty_env_var(key.clone(), value.clone());
@@ -1068,7 +1068,7 @@ fn encode_mouse(event: &mouse::MouseEvent, state: &TerminalState) -> Option<Vec<
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Instant};
+    use std::{path::Path, sync::Arc, time::Instant};
 
     use canopy::{
         CanopyBuilder, ContextExt,
@@ -1099,7 +1099,7 @@ mod tests {
                 rows: 24,
             },
         );
-        assert_eq!(built.pty.working_dir.as_deref(), Some("/work"));
+        assert_eq!(built.pty.working_dir.as_deref(), Some(Path::new("/work")));
         assert_eq!(built.pty.env.get("PWD").map(String::as_str), Some("/work"));
         assert_eq!(built.pty.env.get("OTHER").map(String::as_str), Some("1"));
     }
