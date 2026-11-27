@@ -342,8 +342,8 @@ fn segment_point(layout: &LineLayout, display_col: usize, row: usize, limit: usi
 pub fn metrics(buffer: &TextBuffer, wrap: Wrap) -> (usize, usize) {
     let mut lines = 0usize;
     let mut max_width = 1usize;
-    for line in 0..buffer.line_count().max(1) {
-        let layout = layout_line(&buffer.line_text(line), wrap);
+    for line in buffer.lines() {
+        let layout = layout_line(&line, wrap);
         lines = lines.saturating_add(layout.display_lines());
         max_width = max_width.max(layout.display_width);
     }
