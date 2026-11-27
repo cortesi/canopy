@@ -429,9 +429,8 @@ fn expand_group(input: &DeriveInput) -> Result<TokenStream> {
             ));
         });
 
-        let patterns = quote! { #name_lit };
         read_arms.push(quote! {
-            #patterns => return ::canopy_options::OptionField::get_path(&self.#name, rest),
+            #name_lit => return ::canopy_options::OptionField::get_path(&self.#name, rest),
         });
         let limit_check = if min.is_some() || max.is_some() {
             let min = min.unwrap_or(i64::MIN);
@@ -459,7 +458,7 @@ fn expand_group(input: &DeriveInput) -> Result<TokenStream> {
             },
         );
         write_arms.push(quote! {
-            #patterns => {
+            #name_lit => {
                 #limit_check
                 let mut next = ::core::clone::Clone::clone(&self.#name);
                 ::canopy_options::OptionField::set_path(&mut next, rest, value)?;

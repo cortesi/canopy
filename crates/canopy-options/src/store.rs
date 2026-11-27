@@ -511,7 +511,7 @@ impl<T: OptionGroup + Send + Sync> Store<T> {
     #[must_use]
     pub fn handle(&self) -> OptionsHandle<T> {
         OptionsHandle {
-            backend: Rc::clone(&self.shared) as Rc<dyn Backend>,
+            backend: self.backend(),
             prefix: String::new(),
             view: Arc::new(root_view::<T>),
             view_mut: Rc::new(root_view_mut::<T>),
