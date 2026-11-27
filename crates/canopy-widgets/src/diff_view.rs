@@ -765,10 +765,11 @@ impl DiffView {
                 row,
             });
         }
+        let view = ctx.view().view_rect();
         let mut matches = mem::take(&mut self.matches);
-        matches.sort_by_key(|found| {
+        matches.sort_by_cached_key(|found| {
             (
-                self.match_area(found, ctx.view().view_rect().w).tl.y,
+                self.match_area(found, view.w).tl.y,
                 found.side,
                 found.columns.start,
             )
@@ -794,7 +795,6 @@ impl DiffView {
                     .push(index);
             }
         }
-        let view = ctx.view().view_rect();
         self.current_match = view_search::first_at_or_below(
             self.matches
                 .iter()
