@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use super::termbuf::{MotionStyle, TermBuf};
 use crate::{
     NodeId,
@@ -430,12 +432,25 @@ impl<'a> Render<'a> {
 
         let skip_amount = intersection.tl.x.saturating_sub(l.tl.x) as usize;
         let (out, _) = text::slice_by_columns(txt, skip_amount, intersection.w as usize);
+        // A wide character that the clip's left edge cuts is dropped, and its
+        // visible cell stays blank, so the text after it keeps its column.
+        let lead = if out.is_empty() {
+            0
+        } else {
+            let start = out.as_ptr() as usize - txt.as_ptr() as usize;
+            text::width(&txt[..start]) as usize - skip_amount
+        };
+        let out: Cow<'_, str> = if lead == 0 {
+            Cow::Borrowed(out)
+        } else {
+            Cow::Owned(format!("{}{out}", " ".repeat(lead)))
+        };
         let adjusted_line = geom::Line {
             tl: self.translate_point(intersection.tl),
             w: intersection.w,
         };
         let origin = self.origin;
-        self.buf.text_with(adjusted_line, out, |p| {
+        self.buf.text_with(adjusted_line, &out, |p| {
             style.resolve_at(line_rect, untranslate(origin, p))
         })?;
         self.mark_motion(&style, adjusted_line.rect(), line_rect);

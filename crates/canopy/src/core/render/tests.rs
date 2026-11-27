@@ -354,6 +354,19 @@ fn text_clips_against_an_offset_clip_rect() {
             ),
         },
         TextCase {
+            name: "a wide character cut by the clip's left edge",
+            clip,
+            line: line(4, 4, 4),
+            text: "界ab",
+            expected: buf!(
+                "XXXXXXXXXX"
+                "XXXXXXXXXX"
+                " abXXXXXXX"
+                "XXXXXXXXXX"
+                "XXXXXXXXXX"
+            ),
+        },
+        TextCase {
             name: "text inside the clip",
             clip,
             line: line(7, 3, 5),
