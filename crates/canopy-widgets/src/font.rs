@@ -12,8 +12,6 @@ use canopy::{
 use canopy_mosaic::{RasterView, SymbolSet, Tier, coverage_into, fixed_into};
 use fontdue::{Font as FontdueFont, FontSettings, LineMetrics, Metrics};
 
-use crate::align::align_offset;
-
 /// Supersampling scale factor used to rasterize glyphs before downsampling.
 const COVERAGE_SCALE: u32 = 8;
 
@@ -210,8 +208,8 @@ impl FontRenderer {
 
         let content_width = content_width_px.div_ceil(scale_x);
         let content_height = content_height_px.div_ceil(scale_y);
-        let offset_x = align_offset(content_width, size.w, options.h_align) as i32;
-        let offset_y = align_offset(content_height, size.h, options.v_align) as i32;
+        let offset_x = options.h_align.offset(content_width, size.w) as i32;
+        let offset_y = options.v_align.offset(content_height, size.h) as i32;
 
         let buffer_width = size.w.saturating_mul(scale_x);
         let buffer_height = size.h.saturating_mul(scale_y);

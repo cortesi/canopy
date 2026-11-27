@@ -41,6 +41,19 @@ pub enum Align {
     End,
 }
 
+impl Align {
+    /// Return the offset of `content` aligned within `available`. Content
+    /// that does not fit starts at zero.
+    pub fn offset(self, content: u32, available: u32) -> u32 {
+        let room = available.saturating_sub(content);
+        match self {
+            Self::Start => 0,
+            Self::Center => room / 2,
+            Self::End => room,
+        }
+    }
+}
+
 /// Sizing strategy for a single axis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Sizing {

@@ -10,7 +10,6 @@ use canopy::{
 };
 
 use crate::{
-    align::align_offset,
     font::{FontEffects, FontLayout, FontRenderer, LayoutOptions},
     mosaic::{Tier, tier_for},
 };
@@ -223,8 +222,8 @@ fn content_rect(view_rect: Rect, layout: &FontLayout, options: LayoutOptions) ->
         return view_rect;
     }
 
-    let offset_x = align_offset(layout.content_size.w, layout.size.w, options.h_align);
-    let offset_y = align_offset(layout.content_size.h, layout.size.h, options.v_align);
+    let offset_x = options.h_align.offset(layout.content_size.w, layout.size.w);
+    let offset_y = options.v_align.offset(layout.content_size.h, layout.size.h);
 
     Rect::new(
         view_rect.tl.x.saturating_add(offset_x),

@@ -508,10 +508,9 @@ impl<'a> LayoutPass<'a> {
 
                     // Then apply alignment to position the child within content
                     // area
-                    let offset_x = natural.unwrap_or_else(|| {
-                        align_offset(child_size.w, content.w, layout.align_horizontal)
-                    });
-                    let offset_y = align_offset(child_size.h, content.h, layout.align_vertical);
+                    let offset_x = natural
+                        .unwrap_or_else(|| layout.align_horizontal.offset(child_size.w, content.w));
+                    let offset_y = layout.align_vertical.offset(child_size.h, content.h);
                     self.set_node_position(
                         *child,
                         Point {
@@ -592,15 +591,11 @@ impl<'a> LayoutPass<'a> {
         let group_main = children_main.saturating_add(gap_total);
         let available_main = layout.direction.main_size(content);
         let available_cross = layout.direction.cross_size(content);
-        let mut pos_main = align_offset(group_main, available_main, main_alignment(layout));
+        let mut pos_main = main_alignment(layout).offset(group_main, available_main);
 
         for ((child, actual), natural) in children.iter().zip(actual_sizes).zip(natural_offsets) {
             let cross = natural.unwrap_or_else(|| {
-                align_offset(
-                    layout.direction.cross_size(actual),
-                    available_cross,
-                    cross_alignment(layout),
-                )
+                cross_alignment(layout).offset(layout.direction.cross_size(actual), available_cross)
             });
             let position = match layout.direction {
                 LayoutDirection::Row => Point {
@@ -1014,15 +1009,6 @@ fn measured_child_layout(
     }
     effective.inherit_overflow(parent.overflow_x, parent.overflow_y);
     effective
-}
-
-/// Calculate the offset for aligning a child within available space.
-fn align_offset(child_size: u32, available: u32, align: Align) -> u32 {
-    match align {
-        Align::Start => 0,
-        Align::Center => available.saturating_sub(child_size) / 2,
-        Align::End => available.saturating_sub(child_size),
-    }
 }
 
 /// Return the alignment controlling a sequential layout's child group.

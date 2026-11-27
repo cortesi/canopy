@@ -8,9 +8,7 @@ use std::{
 use proptest::prelude::*;
 use rand::{RngExt, SeedableRng, rngs::StdRng};
 
-use super::{
-    LayoutPass, align_offset, clamp_outer, clamp_scroll, constraint_for_axis, weighted_shares,
-};
+use super::{LayoutPass, clamp_outer, clamp_scroll, constraint_for_axis, weighted_shares};
 use crate::{
     NodeId,
     core::{
@@ -473,7 +471,7 @@ proptest! {
         });
         let gap_total = gap.saturating_mul(u32::try_from(visible.len().saturating_sub(1)).unwrap_or(u32::MAX));
         let group_main = children_main.saturating_add(gap_total);
-        let mut expected_main = align_offset(group_main, available_main, align(main_align));
+        let mut expected_main = align(main_align).offset(group_main, available_main);
 
         for node in visible {
             let rect = core.nodes[node].rect;
@@ -482,7 +480,7 @@ proptest! {
             prop_assert_eq!(actual_main, expected_main);
             prop_assert_eq!(
                 actual_cross,
-                align_offset(direction.cross_size(rect.size()), available_cross, align(cross_align))
+                align(cross_align).offset(direction.cross_size(rect.size()), available_cross)
             );
             expected_main = expected_main
                 .saturating_add(direction.main_size(rect.size()))

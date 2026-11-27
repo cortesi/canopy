@@ -4,7 +4,6 @@
 //! user interfaces with canopy.
 
 /// Offsets that align content inside a span.
-mod align;
 /// A centred row of buttons, each of which gives one answer.
 mod answers;
 /// Large text in a built-in pixel font.
