@@ -406,7 +406,6 @@ impl EvalReport {
     pub(crate) fn error_only(
         error_type: ScriptErrorType,
         message: impl Into<String>,
-        diagnostics: Vec<ScriptCheckDiagnostic>,
         timing: ScriptTiming,
     ) -> Self {
         Self {
@@ -420,7 +419,7 @@ impl EvalReport {
             }),
             logs: Vec::new(),
             assertions: Vec::new(),
-            diagnostics,
+            diagnostics: Vec::new(),
             timing,
         }
     }
@@ -473,7 +472,6 @@ impl AppFactory {
                 return EvalReport::error_only(
                     ScriptErrorType::Invalid,
                     error.to_string(),
-                    Vec::new(),
                     ScriptTiming::default(),
                 );
             }
@@ -485,7 +483,6 @@ impl AppFactory {
                         return EvalReport::error_only(
                             ScriptErrorType::Build,
                             error.to_string(),
-                            Vec::new(),
                             ScriptTiming::default(),
                         );
                     }
@@ -505,13 +502,7 @@ impl AppFactory {
             };
             match completion {
                 Ok(completion) => outcome_from(completion, timing),
-                Err(error) => failed_info(
-                    canopy_error_info(&error),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    timing,
-                ),
+                Err(error) => canopy_failure(&error, timing),
             }
         })();
         outcome.with_metadata(metadata)
@@ -701,7 +692,6 @@ pub async fn evaluate_live_request(
             return EvalReport::error_only(
                 ScriptErrorType::Runtime,
                 message,
-                Vec::new(),
                 ScriptTiming::default(),
             )
             .with_metadata(context.unavailable_metadata());
@@ -711,7 +701,6 @@ pub async fn evaluate_live_request(
         return EvalReport::error_only(
             ScriptErrorType::Invalid,
             error.to_string(),
-            Vec::new(),
             ScriptTiming::default(),
         )
         .with_metadata(metadata);
@@ -730,13 +719,7 @@ async fn evaluate_live_request_inner(
     let ticket = match automation.submit_eval(eval_request(&request)) {
         Ok(ticket) => ticket,
         Err(error) => {
-            return failed_info(
-                canopy_error_info(&error),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                live_timing(start),
-            );
+            return canopy_failure(&error, live_timing(start));
         }
     };
     match ticket.completion.await {
@@ -744,7 +727,6 @@ async fn evaluate_live_request_inner(
         Err(error) => EvalReport::error_only(
             ScriptErrorType::Runtime,
             format!("live evaluation completion channel closed: {error}"),
-            Vec::new(),
             live_timing(start),
         ),
     }
@@ -802,14 +784,14 @@ fn outcome_from(completion: EvalOutcome, timing: ScriptTiming) -> EvalReport {
                 timing,
             ),
         },
-        Err(_) if diagnostics.iter().any(ScriptCheckDiagnostic::is_error) => {
-            EvalReport::error_only(
+        Err(_) if diagnostics.iter().any(ScriptCheckDiagnostic::is_error) => EvalReport {
+            diagnostics,
+            ..EvalReport::error_only(
                 ScriptErrorType::Typecheck,
                 "script failed Luau type checking",
-                diagnostics,
                 timing,
             )
-        }
+        },
         Err(error) => failed_info(
             canopy_error_info(&error),
             logs,
@@ -845,6 +827,18 @@ fn eval_request(request: &ScriptEvalRequest) -> EvalRequest {
         Some(timeout) => eval.timeout(Duration::from_millis(timeout)),
         None => eval,
     }
+}
+
+/// Build a failed outcome from a canopy error that left no logs,
+/// assertions, or diagnostics.
+fn canopy_failure(error: &CanopyError, timing: ScriptTiming) -> EvalReport {
+    failed_info(
+        canopy_error_info(error),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        timing,
+    )
 }
 
 /// Build a failed outcome from owned structured error fields.
