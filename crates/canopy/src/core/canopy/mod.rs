@@ -346,8 +346,8 @@ impl Canopy {
         W: Widget + 'static,
     {
         let root = self.root_id();
+        // The tree edit invalidates layout, which repaints.
         self.with_dispatch_boundary(|canopy| canopy.core.replace_subtree(root, widget))?;
-        self.core.invalidate(crate::Invalidation::Paint);
         Ok(TypedId::new(root))
     }
 
