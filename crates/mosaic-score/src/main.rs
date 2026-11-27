@@ -44,7 +44,7 @@ use crate::{
 /// How far stray looks for a color in the reference: two device pixels each
 /// way, which is a matrix pixel across and half of one down. A spur one
 /// matrix pixel long strays.
-const REACH: [usize; 2] = [CELL_W / MATRIX, CELL_W / MATRIX];
+const REACH: [usize; 2] = [CELL_W / MATRIX, CELL_H / MATRIX / 2];
 
 /// Command line interface.
 #[derive(Parser)]
