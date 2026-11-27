@@ -246,10 +246,10 @@ impl<'a> Render<'a> {
             return;
         }
         let screen = self.translate_point(location);
-        let effects = self.effects.to_vec();
         let Some(frame) = self.frame.as_mut() else {
             return;
         };
+        let effects = self.effects.to_vec();
         let node = frame.node;
         frame.cursors.retain(|cursor| cursor.node != node);
         frame.cursors.push(DeclaredCursor {
@@ -388,8 +388,7 @@ impl<'a> Render<'a> {
 
     /// Resolve a style by name and apply the current effect stack.
     pub fn resolve_style(&self, name: &str) -> Style {
-        let base = self.style.get(self.stylemap, name);
-        self.apply_effects(base)
+        self.apply_effects(self.resolve_base_style(name))
     }
 
     /// Resolve a style by name without the effect stack. A widget that
