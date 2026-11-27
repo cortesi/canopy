@@ -201,10 +201,7 @@ fn bounded_generics(
 /// Render a doc-attachment token stream for declaration model items.
 fn doc_tokens(attrs: &[Attribute]) -> proc_macro2::TokenStream {
     match parse::doc_string(attrs) {
-        Some(doc) => {
-            let doc = syn::LitStr::new(&doc, proc_macro2::Span::call_site());
-            quote! { .doc(#doc) }
-        }
+        Some(doc) => quote! { .doc(#doc) },
         None => quote! {},
     }
 }
@@ -262,9 +259,7 @@ fn expand_command_enum(input: syn::DeriveInput) -> Result<proc_macro2::TokenStre
         quote! { if value.eq_ignore_ascii_case(#name) { return Ok(Self::#variant); } }
     });
 
-    let luau_values = names
-        .iter()
-        .map(|name| syn::LitStr::new(name, proc_macro2::Span::call_site()));
+    let luau_values = names.iter();
 
     Ok(quote! {
         impl #impl_generics ::canopy::commands::ToArgValue for #ident #ty_generics #where_clause {

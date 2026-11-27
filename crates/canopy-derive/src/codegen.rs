@@ -121,25 +121,12 @@ fn call_site(tokens: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
 /// Render an `Option<&str>` metadata field from an optional string.
 fn opt_str_tokens(value: Option<&str>) -> proc_macro2::TokenStream {
     match value {
-        Some(value) => {
-            let value = syn::LitStr::new(value, proc_macro2::Span::call_site());
-            quote! { Some(#value) }
-        }
+        Some(value) => quote! { Some(#value) },
         None => quote! { None },
     }
 }
 
 impl ParamMeta {
-    /// Render this parameter name as a literal.
-    fn name_lit(&self) -> syn::LitStr {
-        syn::LitStr::new(&self.name, proc_macro2::Span::call_site())
-    }
-
-    /// Render this parameter type as a literal.
-    fn ty_lit(&self) -> syn::LitStr {
-        syn::LitStr::new(&self.ty_str, proc_macro2::Span::call_site())
-    }
-
     /// Render command metadata for this parameter when it is externally
     /// visible.
     fn spec_tokens(&self) -> Option<proc_macro2::TokenStream> {
@@ -165,8 +152,8 @@ impl ParamMeta {
         } else {
             quote! { None }
         };
-        let name = self.name_lit();
-        let ty = self.ty_lit();
+        let name = &self.name;
+        let ty = &self.ty_str;
         let optional = self.is_option;
         let doc = opt_str_tokens(self.doc.as_deref());
 
@@ -196,8 +183,8 @@ impl ParamMeta {
             ParamKind::Injected => {
                 let ident = &self.ident;
                 let ty = &self.ty;
-                let name = self.name_lit();
-                let ty_name = self.ty_lit();
+                let name = &self.name;
+                let ty_name = &self.ty_str;
                 Some(quote! {
                     let #ident: #ty = <#ty as ::canopy::commands::Inject>::inject(&*ctx).ok_or(
                         ::canopy::commands::CommandError::MissingInjected {
@@ -228,7 +215,7 @@ impl ParamMeta {
             return quote! { None };
         }
 
-        let name = self.name_lit();
+        let name = &self.name;
         match source {
             UserBindingSource::Positional(_) => quote! {
                 return Err(::canopy::commands::CommandError::ArityMismatch {
@@ -248,7 +235,7 @@ impl ParamMeta {
     fn user_binding_tokens(&self, source: UserBindingSource) -> proc_macro2::TokenStream {
         let ident = &self.ident;
         let ty = &self.ty;
-        let name = self.name_lit();
+        let name = &self.name;
         let missing = self.missing_value_tokens(source);
         let lookup = match source {
             UserBindingSource::Positional(index) => quote! { values.get(#index) },
@@ -279,12 +266,11 @@ impl ReturnMeta {
         match &self.kind {
             ReturnKind::Unit => quote! { ::canopy::commands::CommandReturnSpec::Unit },
             ReturnKind::Value { ty, ty_str } => {
-                let ty_lit = syn::LitStr::new(ty_str, proc_macro2::Span::call_site());
                 let doc = opt_str_tokens(self.doc.as_deref());
                 quote! {
                     ::canopy::commands::CommandReturnSpec::Value(
                         ::canopy::commands::CommandTypeSpec {
-                            rust: #ty_lit,
+                            rust: #ty_str,
                             ty: <#ty as ::canopy::commands::CommandType>::luau_ty,
                             decls: <#ty as ::canopy::commands::CommandType>::luau_decls,
                             doc: #doc,
@@ -426,10 +412,10 @@ impl CommandMeta {
     }
 
     /// Normalized names for user-supplied parameters.
-    fn user_param_names(&self) -> Vec<syn::LitStr> {
+    fn user_param_names(&self) -> Vec<&str> {
         self.user_params()
             .into_iter()
-            .map(ParamMeta::name_lit)
+            .map(|param| param.name.as_str())
             .collect()
     }
 
