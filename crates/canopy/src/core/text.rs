@@ -1,5 +1,6 @@
 use std::{borrow::Cow, iter::repeat_n};
 
+use textwrap::{WordSeparator, WordSplitter, WrapAlgorithm, core::Word, word_splitters};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
@@ -338,22 +339,24 @@ impl WrapOptions {
 /// `options` says.
 ///
 /// A `width` of zero counts as one. A word wider than `width` breaks across
-/// lines. An empty text gives one empty line, and a trailing line break adds
-/// no line. The function does not expand tabs.
+/// lines, between graphemes. Widths are those of [`width`], so a grapheme
+/// cluster such as an emoji sequence counts as rendering shows it. An empty
+/// text gives one empty line, and a trailing line break adds no line. The
+/// function does not expand tabs.
 #[must_use]
 pub fn wrap_with(s: &str, width: u32, options: WrapOptions) -> Vec<String> {
     let width = usize::try_from(width.max(1)).unwrap_or(usize::MAX);
     let splitter = if options.break_hyphens {
-        textwrap::WordSplitter::HyphenSplitter
+        WordSplitter::HyphenSplitter
     } else {
-        textwrap::WordSplitter::NoHyphenation
+        WordSplitter::NoHyphenation
     };
-    let wrap_options = textwrap::Options::new(width).word_splitter(splitter);
     let wrap = |text: &str| -> Vec<String> {
-        textwrap::wrap(text, &wrap_options)
-            .into_iter()
-            .map(Cow::into_owned)
-            .collect()
+        let mut lines = Vec::new();
+        for line in text.split('\n') {
+            wrap_line(line, width, &splitter, &mut lines);
+        }
+        lines
     };
     let mut lines: Vec<String> = if options.paragraphs {
         s.lines()
@@ -381,6 +384,70 @@ pub fn wrap_with(s: &str, width: u32, options: WrapOptions) -> Vec<String> {
         }
     }
     lines
+}
+
+/// Wrap one line without breaks to lines of at most `width` columns, and
+/// push them to `out`.
+///
+/// `textwrap` finds the words, splits them at hyphens, and fits them to lines
+/// as `textwrap::wrap` does, but it measures and breaks a word by `char`.
+/// Each word here takes its width from [`width`], and a word wider than a
+/// line breaks between graphemes.
+fn wrap_line(line: &str, width: usize, splitter: &WordSplitter, out: &mut Vec<String>) {
+    // A line of fewer bytes than columns fits.
+    if line.len() < width {
+        out.push(line.trim_end_matches(' ').to_owned());
+        return;
+    }
+    let found = WordSeparator::new().find_words(line);
+    let mut words = Vec::new();
+    for word in word_splitters::split_words(found, splitter) {
+        break_word(word, width, &mut words);
+    }
+    let mut at = 0;
+    for fitted in WrapAlgorithm::new().wrap(&words, &[width]) {
+        let Some(last) = fitted.last() else {
+            out.push(String::new());
+            continue;
+        };
+        // The words lie end to end in `line`.
+        let len: usize = fitted
+            .iter()
+            .map(|word| word.word.len() + word.whitespace.len())
+            .sum();
+        let mut text = line[at..at + len - last.whitespace.len()].to_owned();
+        text.push_str(last.penalty);
+        out.push(text);
+        at += len;
+    }
+}
+
+/// Push `word` to `words` with its width in cells, broken between graphemes
+/// into pieces of at most `width` columns when it is wider. The last piece
+/// keeps the word's whitespace and penalty.
+fn break_word<'a>(word: Word<'a>, width: usize, words: &mut Vec<Word<'a>>) {
+    let piece = |text: &'a str, cells| Word {
+        word: text,
+        whitespace: "",
+        penalty: "",
+        width: cells,
+    };
+    let mut start = 0;
+    let mut used = 0;
+    for (at, grapheme) in grapheme_indices(word.word) {
+        let cells = grapheme_width(grapheme);
+        if used > 0 && used + cells > width {
+            words.push(piece(&word.word[start..at], used));
+            start = at;
+            used = 0;
+        }
+        used += cells;
+    }
+    words.push(Word {
+        whitespace: word.whitespace,
+        penalty: word.penalty,
+        ..piece(&word.word[start..], used)
+    });
 }
 
 /// Wrap `s` with [`WrapOptions::PROSE`].
@@ -635,5 +702,22 @@ mod tests {
             ..WrapOptions::PROSE
         };
         assert_eq!(wrap_with("日本語 です", 6, limit), ["日本 …"]);
+    }
+
+    #[test]
+    fn a_grapheme_cluster_wraps_whole_at_its_rendered_width() {
+        let coder = "\u{1f469}\u{200d}\u{1f4bb}";
+        assert_eq!(
+            wrap(&format!("a{coder}b"), 3),
+            [format!("a{coder}"), "b".into()]
+        );
+        assert_eq!(
+            wrap(&format!("{coder} {coder}"), 5),
+            [format!("{coder} {coder}")]
+        );
+        assert_eq!(
+            wrap("e\u{301}e\u{301}e\u{301}", 2),
+            ["e\u{301}e\u{301}", "e\u{301}"]
+        );
     }
 }
