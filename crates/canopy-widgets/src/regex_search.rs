@@ -99,7 +99,7 @@ fn line_matches<'a>(
                 let found = matcher.find_at(line.as_bytes(), start).ok().flatten()?;
                 if found.start() == found.end() {
                     // Skip a zero-width match, and stop at the end of the line.
-                    let next = next_char_boundary(line, found.start() + 1);
+                    let next = line.ceil_char_boundary(found.start() + 1);
                     if next <= found.start() {
                         return None;
                     }
@@ -118,13 +118,6 @@ fn line_matches<'a>(
 fn char_column(line: &str, byte: usize) -> usize {
     line.get(..byte)
         .map_or_else(|| line.chars().count(), |prefix| prefix.chars().count())
-}
-
-/// Return the next character boundary at or after `byte`.
-fn next_char_boundary(line: &str, byte: usize) -> usize {
-    (byte..=line.len())
-        .find(|index| line.is_char_boundary(*index))
-        .unwrap_or(line.len())
 }
 
 #[cfg(test)]
