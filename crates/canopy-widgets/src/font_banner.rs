@@ -202,7 +202,7 @@ impl Widget for FontBanner {
                 }
                 let x = view_rect.tl.x.saturating_add(col_idx as u32);
                 if x >= view_rect.right() {
-                    continue;
+                    break;
                 }
                 let point = Point { x, y };
                 let coverage = Coverage {

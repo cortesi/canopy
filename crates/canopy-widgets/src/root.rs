@@ -291,7 +291,7 @@ impl Root {
             c.with_widget_mut(list, |list: &mut BindingList, context| {
                 let previous = list.replace_tree(Some(tree));
                 let scroll = context.view().scroll;
-                context.scroll(ScrollOp::To(Point { x: 0, y: 0 }));
+                context.scroll(ScrollOp::To(Point::ZERO));
                 Ok((previous, scroll))
             })?;
 
@@ -361,7 +361,7 @@ impl Root {
         let previous_scroll =
             c.with_widget_mut(list, |_: &mut notice_log::NoticeList, context| {
                 let scroll = context.view().scroll;
-                context.scroll(ScrollOp::To(Point { x: 0, y: 0 }));
+                context.scroll(ScrollOp::To(Point::ZERO));
                 Ok(scroll)
             })?;
         let opened = c.open_modal(ModalOptions {
