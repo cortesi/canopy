@@ -6454,12 +6454,12 @@ pub mod text {
     }
 
     impl WrapOptions {
-        /// Paragraphs, no hyphen breaks, and no line limit: the form of prose in
-        /// a view.
-        pub const PROSE: Self = _;
         /// Hyphen breaks, no paragraphs, and no line limit: the defaults of
         /// `textwrap`.
         pub const PLAIN: Self = _;
+        /// Paragraphs, no hyphen breaks, and no line limit: the form of prose in
+        /// a view.
+        pub const PROSE: Self = _;
     }
 
     /// Return the cells one grapheme occupies at `column`, expanding a tab to the
