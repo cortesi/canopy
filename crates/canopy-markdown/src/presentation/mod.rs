@@ -1935,7 +1935,7 @@ fn prepare_embed(
     }
     if lines.len() > EMBED_ROWS {
         lines.truncate(EMBED_ROWS);
-        lines.push(("…".into(), "markdown/embed"));
+        lines.push((geometry.glyphs.pick("…", "...").into(), "markdown/embed"));
     }
     for (line, role) in lines {
         let mut row = make_row();

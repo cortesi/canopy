@@ -14,7 +14,10 @@ use super::{
     test_support::{answer, builder, drain_resources, service, settle, take_resources},
     *,
 };
-use crate::executor::{ExecutorOptions, HeldWork, ManualExecutor, MarkdownExecutor};
+use crate::{
+    executor::{ExecutorOptions, HeldWork, ManualExecutor, MarkdownExecutor},
+    presentation::GlyphPreset,
+};
 
 fn fixture(
     text: &str,
@@ -1446,6 +1449,23 @@ fn image_blocks_ask_the_host_and_lay_out_what_it_supplies() {
         });
         assert!(painted, "{}", harness.tbuf().lines().join("\n"));
     }
+}
+
+#[test]
+fn an_ascii_embed_marks_its_cut_in_ascii() {
+    let (mut harness, manual) = configured("![[note]]\n", ViewType::Rendered, false, |o| {
+        o.resources = true;
+        o.glyphs = GlyphPreset::Ascii;
+    });
+    harness.canopy.set_screen_size(Size::new(60, 40)).unwrap();
+    settle(&mut harness, &manual);
+    let requests = take_resources(&mut harness);
+    let note: String = (0..40).map(|line| format!("Line {line}.\n\n")).collect();
+    answer(&mut harness, [(requests[0].id, Resource::Text(note))]);
+    settle(&mut harness, &manual);
+    let screen = harness.tbuf().lines().join("\n");
+    assert!(screen.contains("| ..."), "{screen}");
+    assert!(!screen.contains('…'), "{screen}");
 }
 
 #[test]
