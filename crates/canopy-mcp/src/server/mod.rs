@@ -340,7 +340,13 @@ pub fn serve_uds(
     let (ready_tx, ready_rx) = mpsc::channel();
     let listener_path = socket_path.clone();
     let thread = thread::spawn(move || {
-        let runtime = Builder::new_multi_thread().enable_all().build()?;
+        let runtime = match Builder::new_multi_thread().enable_all().build() {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                let _ignored = ready_tx.send(Err(Error::from(error)));
+                return Ok(());
+            }
+        };
         runtime.block_on(async move {
             let listener = match UnixListener::bind(&listener_path) {
                 Ok(listener) => {
@@ -359,7 +365,19 @@ pub fn serve_uds(
                 tokio::select! {
                     _ = &mut shutdown_rx => break,
                     accept_result = listener.accept() => {
-                        let (stream, _) = accept_result?;
+                        let stream = match accept_result {
+                            Ok((stream, _)) => stream,
+                            // A client that gave up before the accept ends
+                            // only its own connection.
+                            Err(error) if matches!(
+                                error.kind(),
+                                io::ErrorKind::ConnectionAborted | io::ErrorKind::Interrupted
+                            ) => continue,
+                            Err(error) => {
+                                let _ignored = fs::remove_file(&listener_path);
+                                return Err(error.into());
+                            }
+                        };
                         let automation = automation.clone();
                         let context = context.clone();
                         tokio::spawn(async move {
