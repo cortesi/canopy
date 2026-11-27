@@ -631,27 +631,7 @@ fn expand_enum(input: &DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        impl ::canopy_options::LeafValue for #ident {
-            fn kind() -> ::canopy_options::Kind {
-                ::canopy_options::Kind::Choice(
-                    <Self as ::canopy_options::OptionEnum>::variants().to_vec(),
-                )
-            }
-
-            fn to_value(&self) -> ::canopy_options::Value {
-                ::canopy_options::Value::Choice(
-                    <Self as ::canopy_options::OptionEnum>::name(*self).to_string(),
-                )
-            }
-
-            fn from_value(
-                value: &::canopy_options::Value,
-            ) -> ::core::result::Result<Self, ::std::string::String> {
-                ::canopy_options::enum_from_value(value)
-            }
-        }
-
-        ::canopy_options::leaf_field!(#ident);
+        ::canopy_options::choice_leaf!(#ident);
     })
 }
 

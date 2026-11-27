@@ -28,21 +28,7 @@ macro_rules! foreign_enum {
             }
         }
 
-        impl $crate::LeafValue for $ty {
-            fn kind() -> $crate::Kind {
-                $crate::Kind::Choice(<Self as $crate::OptionEnum>::variants().to_vec())
-            }
-
-            fn to_value(&self) -> $crate::Value {
-                $crate::Value::Choice(<Self as $crate::OptionEnum>::name(*self).to_string())
-            }
-
-            fn from_value(value: &$crate::Value) -> Result<Self, String> {
-                $crate::enum_from_value(value)
-            }
-        }
-
-        $crate::leaf_field!($ty);
+        $crate::choice_leaf!($ty);
     };
 }
 

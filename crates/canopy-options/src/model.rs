@@ -757,6 +757,33 @@ macro_rules! leaf_field {
     };
 }
 
+/// Implement [`LeafValue`] and [`OptionField`] for a fieldless enum that
+/// implements [`OptionEnum`], so it reads and writes as a choice of its
+/// variants.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! choice_leaf {
+    ($ty:ty) => {
+        impl $crate::LeafValue for $ty {
+            fn kind() -> $crate::Kind {
+                $crate::Kind::Choice(<Self as $crate::OptionEnum>::variants().to_vec())
+            }
+
+            fn to_value(&self) -> $crate::Value {
+                $crate::Value::Choice(<Self as $crate::OptionEnum>::name(*self).to_string())
+            }
+
+            fn from_value(
+                value: &$crate::Value,
+            ) -> ::core::result::Result<Self, ::std::string::String> {
+                $crate::enum_from_value(value)
+            }
+        }
+
+        $crate::leaf_field!($ty);
+    };
+}
+
 impl LeafValue for bool {
     fn kind() -> Kind {
         Kind::Bool

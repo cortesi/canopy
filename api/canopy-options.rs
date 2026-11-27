@@ -948,6 +948,15 @@ pub fn leaf_item<T: LeafValue>(meta: FieldMeta) -> Item;
 pub fn leaf_set<T: LeafValue>(target: &mut T, path: &[&str], value: &Value)
 -> Result<(), SetError>;
 
+/// Implement [`LeafValue`] and [`OptionField`] for a fieldless enum that
+/// implements [`OptionEnum`], so it reads and writes as a choice of its
+/// variants.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! choice_leaf {
+    ($ty:ty) => { ... };
+}
+
 /// Implement [`OptionField`] for types that implement [`LeafValue`]: a list
 /// of types, or one generic type as `impl<T: Bound> Type<T>`.
 #[doc(hidden)]
