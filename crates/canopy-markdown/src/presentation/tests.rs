@@ -1007,8 +1007,8 @@ fn a_quote_bar_runs_unbroken_through_spacing_and_cards() {
 
 #[test]
 fn a_character_wider_than_the_line_takes_a_line_of_its_own() {
-    assert_eq!(wrap_words("中文", 1), ["中", "文"]);
-    assert_eq!(wrap_words("a 中b", 2), ["a", "中", "b"]);
+    assert_eq!(text::wrap("中文", 1), ["中", "文"]);
+    assert_eq!(text::wrap("a 中b", 2), ["a", "中", "b"]);
 }
 
 #[test]

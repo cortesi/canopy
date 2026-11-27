@@ -5,7 +5,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
-    mem::{discriminant, replace, take},
+    mem::{discriminant, take},
     ops::Range,
     rc::Rc,
     sync::Arc,
@@ -1923,13 +1923,11 @@ fn prepare_embed(
         if index > 0 {
             lines.push((String::new(), "markdown/embed"));
         }
-        for line in paragraph.lines() {
-            lines.extend(
-                wrap_words(line, text_width)
-                    .into_iter()
-                    .map(|wrapped| (wrapped, "markdown/embed")),
-            );
-        }
+        lines.extend(
+            text::wrap(paragraph, text_width)
+                .into_iter()
+                .map(|wrapped| (wrapped, "markdown/embed")),
+        );
     }
     if lines.len() > EMBED_ROWS {
         lines.truncate(EMBED_ROWS);
@@ -1958,45 +1956,6 @@ fn prepare_embed(
         );
         rows.push(row);
     }
-}
-
-/// Break `text` into lines of at most `width` cells at spaces, and a word
-/// wider than a line across lines.
-fn wrap_words(text: &str, width: u32) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut line = String::new();
-    for word in text.split(' ') {
-        let fits = text::width(&line) + u32::from(!line.is_empty()) + text::width(word) <= width;
-        if !line.is_empty() && !fits {
-            lines.push(take(&mut line));
-        }
-        if !line.is_empty() {
-            line.push(' ');
-        }
-        line.push_str(word);
-        while text::width(&line) > width {
-            let cut = line
-                .char_indices()
-                .scan(0, |used, (at, ch)| {
-                    *used += text::width(ch.encode_utf8(&mut [0; 4]));
-                    Some((at, *used))
-                })
-                .find(|(_, used)| *used > width)
-                .map_or(line.len(), |(at, _)| at);
-            // A character wider than the line takes a line of its own.
-            let cut = match cut {
-                0 => line.chars().next().map_or(line.len(), char::len_utf8),
-                cut => cut,
-            };
-            if cut == line.len() {
-                break;
-            }
-            let rest = line.split_off(cut);
-            lines.push(replace(&mut line, rest));
-        }
-    }
-    lines.push(line);
-    lines
 }
 
 /// The cells an image of `pixels` takes: as large as `room` columns and
