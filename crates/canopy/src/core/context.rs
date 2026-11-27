@@ -320,6 +320,13 @@ impl<F, R> OneShot<F, R> {
     }
 }
 
+/// Return the widget of `node` as its concrete type `W`.
+fn downcast_widget<W: Widget + 'static>(widget: &mut dyn Widget, node: NodeId) -> Result<&mut W> {
+    (widget as &mut dyn Any)
+        .downcast_mut::<W>()
+        .ok_or_else(|| type_mismatch::<W>(node))
+}
+
 /// Validate one raw node ID against a requested widget type.
 fn checked_typed_id<W, C>(ctx: &C, node: NodeId) -> Result<TypedId<W>>
 where
@@ -379,7 +386,7 @@ pub trait ViewContextExt: ViewContext {
     ) -> impl Iterator<Item = TypedId<W>> + '_ {
         preorder_from(self, root.into())
             .skip(1)
-            .filter(|id| node_matches_type::<W, _>(self, *id))
+            .filter(|id| self.type_id_of(*id) == Some(TypeId::of::<W>()))
             .map(TypedId::new)
     }
 
@@ -399,14 +406,6 @@ pub trait ViewContextExt: ViewContext {
 }
 
 impl<T: ViewContext + ?Sized> ViewContextExt for T {}
-
-/// Return whether a node stores the requested concrete widget type.
-fn node_matches_type<W: Widget + 'static, C: ViewContext + ?Sized>(
-    context: &C,
-    node: NodeId,
-) -> bool {
-    context.type_id_of(node) == Some(TypeId::of::<W>())
-}
 
 /// A call on a widget and its context, which
 /// [`Context::with_widget_dyn_mut_or_post`] runs now or later.
@@ -950,9 +949,7 @@ pub trait ContextExt: Context + ViewContextExt {
         checked_typed_id::<W, _>(&*self, node)?;
         let mut once = OneShot::new(f);
         self.with_widget_dyn_mut(node, &mut |widget, ctx| {
-            let widget = (widget as &mut dyn Any)
-                .downcast_mut::<W>()
-                .ok_or_else(|| type_mismatch::<W>(node))?;
+            let widget = downcast_widget(widget, node)?;
             once.call(|f| f(widget, ctx))
         })?;
         once.finish()
@@ -992,12 +989,7 @@ pub trait ContextExt: Context + ViewContextExt {
         checked_typed_id::<W, _>(&*self, node)?;
         self.with_widget_dyn_mut_or_post(
             widget,
-            Box::new(move |widget, ctx| {
-                let widget = (widget as &mut dyn Any)
-                    .downcast_mut::<W>()
-                    .ok_or_else(|| type_mismatch::<W>(node))?;
-                f(widget, ctx)
-            }),
+            Box::new(move |widget, ctx| f(downcast_widget(widget, node)?, ctx)),
         )
     }
 
