@@ -8,13 +8,13 @@ use canopy::{
     layout::{Direction, Layout, MeasureConstraints, Measurement},
     render::Render,
     style::{Attr, AttrSet, StyleRules, WidgetState, themes::Palette},
+    text,
     tree::FocusScope,
 };
 use canopy_widgets::{
     Border, BoxGlyphs, Button, Container, Frame, List, Selectable, Terminal, Text,
     terminal::TerminalConfig,
 };
-use unicode_width::UnicodeWidthStr;
 
 use crate::{fixed_row, flex_row};
 
@@ -100,7 +100,7 @@ impl TermEntry {
 
     /// Compute the display width of the label text.
     fn label_width(&self) -> u32 {
-        UnicodeWidthStr::width(self.label.as_str()).max(1) as u32
+        text::width(&self.label).max(1)
     }
 }
 

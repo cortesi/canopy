@@ -8,9 +8,9 @@ use canopy::{
     layout::{Edges, Layout, MeasureConstraints, Measurement},
     render::Render,
     style::{StyleRules, WidgetState, themes::Palette},
+    text,
 };
 use canopy_widgets::{Border, BoxGlyphs, Container, Frame, List, Selectable, Text};
-use unicode_width::UnicodeWidthStr;
 
 use crate::flex_row;
 
@@ -91,8 +91,7 @@ impl CounterItem {
 
     /// Label display width in cells.
     fn label_width(&self) -> u32 {
-        let label = self.label();
-        UnicodeWidthStr::width(label.as_str()).max(1) as u32
+        text::width(&self.label()).max(1)
     }
 
     /// Update the box layout based on the current label width.
