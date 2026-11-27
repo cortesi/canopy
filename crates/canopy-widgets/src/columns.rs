@@ -258,14 +258,10 @@ impl Columns {
             return Some(*pane);
         }
         let focused = ctx.focused_node()?;
-        let mut node = Some(columns);
-        while let Some(current) = node {
-            if current == focused {
-                return self.home.iter().find(|pane| panes.contains(pane)).copied();
-            }
-            node = ctx.parent_of(current);
+        if !ctx.is_within(columns, focused) {
+            return None;
         }
-        None
+        self.home.iter().find(|pane| panes.contains(pane)).copied()
     }
 
     /// Draw the boxes around `panes` in `light`, and around the pane with

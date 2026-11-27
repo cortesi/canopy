@@ -207,6 +207,9 @@ pub trait ViewContext: sealed::ViewContext {
     /// `root` included.
     fn focused_within(&self, root: NodeId) -> Option<NodeId>;
 
+    /// Return whether `node` is `root` or lies in the subtree below it.
+    fn is_within(&self, node: NodeId, root: NodeId) -> bool;
+
     /// Return the parent of a node, or `None` if it is the root or not found.
     fn parent_of(&self, node: NodeId) -> Option<NodeId>;
 
@@ -1266,7 +1269,11 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
 
     fn focused_within(&self, root: NodeId) -> Option<NodeId> {
         self.focused_node()
-            .filter(|focus| self.core.is_ancestor_or_self(root, *focus))
+            .filter(|focus| self.is_within(*focus, root))
+    }
+
+    fn is_within(&self, node: NodeId, root: NodeId) -> bool {
+        self.core.is_ancestor_or_self(root, node)
     }
 
     fn parent_of(&self, node: NodeId) -> Option<NodeId> {

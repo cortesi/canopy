@@ -96,18 +96,6 @@ struct Tab {
     focus: Option<NodeId>,
 }
 
-/// Return whether `node` is `root` or lies below it.
-fn contains(c: &dyn Context, root: NodeId, node: NodeId) -> bool {
-    let mut current = Some(node);
-    while let Some(id) = current {
-        if id == root {
-            return true;
-        }
-        current = c.parent_of(id);
-    }
-    false
-}
-
 /// Return each tab's index, padded label, first column, and width, border
 /// included.
 fn spans<'a>(
@@ -304,7 +292,7 @@ impl Tabs {
         if focus_left && let Some(tab) = self.tabs.get(self.active) {
             let restored = match tab
                 .focus
-                .filter(|node| c.is_attached(*node) && contains(c, tab.page, *node))
+                .filter(|node| c.is_attached(*node) && c.is_within(*node, tab.page))
             {
                 Some(node) => c.focus_first(FocusScope::Node(node))?.changed(),
                 None => false,

@@ -623,6 +623,9 @@ pub trait ViewContext: ViewContext {
     /// Is the specified node on the focus path?
     fn is_on_focus_path(&self, node: NodeId) -> bool;
 
+    /// Return whether `node` is `root` or lies in the subtree below it.
+    fn is_within(&self, node: NodeId, root: NodeId) -> bool;
+
     /// Return a key that reaches `target` from the focus this context
     /// reports, if any.
     ///
@@ -1694,9 +1697,9 @@ pub mod commands {
 
     impl FromArgValue for usize {}
 
-    impl<T> FromArgValue for BTreeMap<String, T> where T: FromArgValue {}
+    impl<T: FromArgValue> FromArgValue for BTreeMap<String, T> {}
 
-    impl<T> FromArgValue for HashMap<String, T> where T: FromArgValue {}
+    impl<T: FromArgValue> FromArgValue for HashMap<String, T> {}
 
     impl<T> FromArgValue for Option<T> where T: FromArgValue {}
 
@@ -1757,9 +1760,9 @@ pub mod commands {
 
     impl ToArgValue for usize {}
 
-    impl<T> ToArgValue for BTreeMap<String, T> where T: ToArgValue {}
+    impl<T: ToArgValue> ToArgValue for BTreeMap<String, T> {}
 
-    impl<T> ToArgValue for HashMap<String, T> where T: ToArgValue {}
+    impl<T: ToArgValue> ToArgValue for HashMap<String, T> {}
 
     impl<T> ToArgValue for Option<T> where T: ToArgValue {}
 
