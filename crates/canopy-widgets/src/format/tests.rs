@@ -153,7 +153,10 @@ fn sizes_count_binary_units_with_one_decimal_below_ten() {
     assert_eq!(bytes(1023), "1023");
     assert_eq!(bytes(1024), "1.0k");
     assert_eq!(bytes(3_481), "3.4k");
+    assert_eq!(bytes(10_188), "9.9k");
+    assert_eq!(bytes(10_239), "10k");
     assert_eq!(bytes(12_288), "12k");
+    assert_eq!(bytes(1024 * 1024 - 1), "1.0m");
     assert_eq!(bytes(1024 * 1024), "1.0m");
     assert_eq!(bytes(2 * 1024 * 1024 * 1024), "2.0g");
     assert_eq!(bytes(u64::MAX), "16e");

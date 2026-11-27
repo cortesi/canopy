@@ -216,20 +216,17 @@ pub fn bytes(n: u64) -> String {
     }
     let base = 1_u64 << (10 * unit);
     let suffix = SIZE_UNITS[unit];
-    let whole = n / base;
-    let remainder = n % base;
-    if whole < 10 {
-        let tenths = (remainder * 10 + base / 2) / base;
-        let (whole, tenths) = if tenths == 10 {
-            (whole + 1, 0)
-        } else {
-            (whole, tenths)
-        };
-        format!("{whole}.{tenths}{suffix}")
-    } else {
-        let rounded = whole + u64::from(remainder >= base / 2);
-        format!("{rounded}{suffix}")
+    let (whole, remainder) = (n / base, n % base);
+    let tenths = whole * 10 + (remainder * 10 + base / 2) / base;
+    if tenths < 100 {
+        return format!("{}.{}{suffix}", tenths / 10, tenths % 10);
     }
+    let rounded = whole + u64::from(remainder >= base / 2);
+    // A size that rounds to 1024 in this unit shows in the next one.
+    if rounded == 1024 && unit + 1 < SIZE_UNITS.len() {
+        return format!("1.0{}", SIZE_UNITS[unit + 1]);
+    }
+    format!("{rounded}{suffix}")
 }
 
 /// Return a duration in its largest units: `850 ms`, `7.2 s`, `48 s`,
