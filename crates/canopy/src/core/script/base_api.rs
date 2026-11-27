@@ -23,13 +23,12 @@ use super::{
     ArgValue, Canopy, ChangeOutcome, CommandSet, Context, CoreContext, CoreViewContext, FocusScope,
     NodeId, PathFilter, Point, RectI32, ReentrantCanopyGuard, Result, ScriptCommandCall,
     ScriptMenu, available_bindings_to_arg, base_api, binding_id_arg, binding_info_to_arg,
-    command_call_from_value, command_call_type, command_info_to_arg, commands, defs,
-    dispatch_command, dispatch_explicit, error, fixtures_to_arg, host_return, host_unit,
-    host_value, inputmap, key, key_explanation_to_arg, luau_global_owner_name,
-    menu_bindings_to_arg, menu_from_value, menu_type, mouse, node_handle_type, node_id_from_value,
+    command_info_to_arg, commands, defs, dispatch_command, dispatch_explicit, display_type, error,
+    fixtures_to_arg, host_return, host_unit, host_value, inputmap, key, key_explanation_to_arg,
+    luau_global_owner_name, menu_bindings_to_arg, mouse, node_handle_type, node_id_from_value,
     node_info_to_arg, node_list_to_arg, notices_to_arg, owned_truthy, ret_arg, ret_none, ret_one,
     route_trace_to_arg, screen_capture, screen_text, screen_text_for_rect, script_callback_label,
-    script_journal_to_arg, snapshot_to_arg, validate_node_handle, values_to_args,
+    script_journal_to_arg, snapshot_to_arg, userdata_clone, validate_node_handle, values_to_args,
     with_current_canopy,
 };
 use crate::{
@@ -1748,12 +1747,12 @@ fn action_from_value<'s>(
     scope: &Scope<'s>,
     value: ScopedValue<'s>,
 ) -> StdResult<ScriptAction<'s>, RuntimeError> {
-    if let Some(call) = command_call_from_value(scope, &value) {
+    if let Some(call) = userdata_clone::<ScriptCommandCall>(scope, &value) {
         return Ok(ScriptAction::Target(inputmap::BindingAction::Command(
             call.0,
         )));
     }
-    if let Some(menu) = menu_from_value(scope, &value) {
+    if let Some(menu) = userdata_clone::<ScriptMenu>(scope, &value) {
         return Ok(ScriptAction::Target(inputmap::BindingAction::Menu(menu.0)));
     }
     match value {
@@ -2304,7 +2303,7 @@ fn host_key_for<'s>(
     let value = args
         .raw()
         .ok_or_else(|| RuntimeError::runtime("argument `action` is required"))?;
-    let target = match command_call_from_value(scope, &value) {
+    let target = match userdata_clone::<ScriptCommandCall>(scope, &value) {
         Some(call) => BindingTarget::Command(call.0),
         None => BindingTarget::Intent(read_intent_name(scope, value)?),
     };
@@ -2372,11 +2371,11 @@ pub(super) fn build_base_module(actions: &IntentCatalog) -> Result<Arc<dyn Nativ
     );
     builder.host_type(
         commands::declaration::Class::new("CommandCall"),
-        Arc::new(command_call_type()),
+        Arc::new(display_type::<ScriptCommandCall>("CommandCall")),
     );
     builder.host_type(
         commands::declaration::Class::new("MenuAction"),
-        Arc::new(menu_type()),
+        Arc::new(display_type::<ScriptMenu>("MenuAction")),
     );
     base_api::register(&mut builder, &action_type);
     builder.build().map_err(|error| {

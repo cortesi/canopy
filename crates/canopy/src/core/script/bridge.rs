@@ -196,12 +196,16 @@ fn arg_value_text(value: &commands::ArgValue) -> String {
     }
 }
 
-/// Build the host userdata descriptor for `CommandCall` values.
-pub(super) fn command_call_type() -> HostType {
-    HostTypeBuilder::<ScriptCommandCall>::new("CommandCall")
-        .class(&commands::declaration::Class::new("CommandCall"))
+/// Build the host userdata descriptor of class `name` for a value that
+/// compares by equality and shows and marshals as its display text.
+pub(super) fn display_type<T>(name: &'static str) -> HostType
+where
+    T: fmt::Display + PartialEq + Send + 'static,
+{
+    HostTypeBuilder::<T>::new(name)
+        .class(&commands::declaration::Class::new(name))
         .eq_by(|left, right| left == right)
-        .marshal(|call| ValueSnapshot::String(call.to_string().into_bytes()))
+        .marshal(|value| ValueSnapshot::String(value.to_string().into_bytes()))
         .tostring(ToString::to_string)
         .build()
 }
@@ -216,40 +220,16 @@ impl fmt::Display for ScriptMenu {
     }
 }
 
-/// Build the host userdata descriptor for `MenuAction` values.
-pub(super) fn menu_type() -> HostType {
-    HostTypeBuilder::<ScriptMenu>::new("MenuAction")
-        .class(&commands::declaration::Class::new("MenuAction"))
-        .eq_by(|left, right| left == right)
-        .marshal(|menu| ValueSnapshot::String(menu.to_string().into_bytes()))
-        .tostring(ToString::to_string)
-        .build()
-}
-
-/// Convert a script value into a menu, when it is one.
-pub(super) fn menu_from_value<'s>(
-    scope: &Scope<'s>,
-    value: &ScopedValue<'s>,
-) -> Option<ScriptMenu> {
+/// Return a copy of the host value that a script value holds, when it holds
+/// a `T`.
+pub(super) fn userdata_clone<'s, T>(scope: &Scope<'s>, value: &ScopedValue<'s>) -> Option<T>
+where
+    T: Clone + Send + 'static,
+{
     match value {
-        ScopedValue::Userdata(userdata) => userdata
-            .borrow::<ScriptMenu>(scope)
-            .ok()
-            .map(|menu| menu.clone()),
-        _ => None,
-    }
-}
-
-/// Convert a script value into a command call, when it is one.
-pub(super) fn command_call_from_value<'s>(
-    scope: &Scope<'s>,
-    value: &ScopedValue<'s>,
-) -> Option<ScriptCommandCall> {
-    match value {
-        ScopedValue::Userdata(userdata) => userdata
-            .borrow::<ScriptCommandCall>(scope)
-            .ok()
-            .map(|call| call.clone()),
+        ScopedValue::Userdata(userdata) => {
+            userdata.borrow::<T>(scope).ok().map(|held| held.clone())
+        }
         _ => None,
     }
 }
