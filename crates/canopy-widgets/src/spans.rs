@@ -113,10 +113,10 @@ impl Widget for Spans {
         let edge = x + area.w;
         let mut left_end = x;
         for span in &self.left {
-            let span_width = text::width(&span.text).min(edge - left_end);
-            if span_width == 0 {
+            if left_end >= edge {
                 break;
             }
+            let span_width = text::width(&span.text).min(edge - left_end);
             render.text(&span.style, Line::new(left_end, y, span_width), &span.text)?;
             left_end += span_width;
         }
@@ -206,6 +206,12 @@ mod tests {
         // With no right runs, the fill runs to the edge.
         let rule = Spans::new(vec![Span::new("ab", "name")]).with_fill('─', "rule");
         assert_eq!(painted(rule, 6).tbuf().lines()[0], "ab ───");
+    }
+
+    #[test]
+    fn an_empty_run_leaves_the_runs_after_it() {
+        let spans = Spans::new(vec![Span::new("", "name"), Span::new("abc", "name")]);
+        assert_eq!(painted(spans, 6).tbuf().lines()[0], "abc   ");
     }
 
     #[test]
