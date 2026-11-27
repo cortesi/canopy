@@ -156,9 +156,22 @@ impl Run {
         });
     }
 
-    /// Draw one shot of a script at a size, and file it under its page.
+    /// Draw one shot of a script at a size, and file it under its page. A
+    /// shot that fails adds no page.
     fn add(&mut self, script: &str, size: &str, shot: &Shot) -> Result<(), String> {
         check_id(&shot.id)?;
+        if let Some(page) = self.index.get(&shot.id).map(|at| &self.pages[*at])
+            && (page.script != script || page.shots.iter().any(|image| image.size == size))
+        {
+            return Err(format!("shot ID `{}` repeats", shot.id));
+        }
+        let png = self
+            .shooter
+            .png(&shot.capture)
+            .map_err(|error| format!("shot `{}`: {error}", shot.id))?;
+        let file = format!("{}-{size}.png", shot.id);
+        fs::write(self.staging.join(&file), png.data)
+            .map_err(|error| format!("write {file}: {error}"))?;
         let at = *self.index.entry(shot.id.clone()).or_insert_with(|| {
             self.pages.push(Page {
                 id: shot.id.clone(),
@@ -169,18 +182,7 @@ impl Run {
             });
             self.pages.len() - 1
         });
-        let page = &mut self.pages[at];
-        if page.script != script || page.shots.iter().any(|image| image.size == size) {
-            return Err(format!("shot ID `{}` repeats", shot.id));
-        }
-        let png = self
-            .shooter
-            .png(&shot.capture)
-            .map_err(|error| format!("shot `{}`: {error}", shot.id))?;
-        let file = format!("{}-{size}.png", shot.id);
-        fs::write(self.staging.join(&file), png.data)
-            .map_err(|error| format!("write {file}: {error}"))?;
-        page.shots.push(Image {
+        self.pages[at].shots.push(Image {
             size: size.to_owned(),
             file,
             width: png.width,
@@ -550,6 +552,23 @@ mod tests {
             .collect();
         assert_eq!(labels, ["80x24", "120x36"]);
         assert!(sizes(&["80".to_owned()]).is_err());
+    }
+
+    #[test]
+    fn a_failed_shot_adds_no_page() -> Result<()> {
+        let staging = tempdir()?;
+        let mut run = Run {
+            shooter: Screenshot::new(ScreenshotOptions::default())?,
+            staging: staging.path().join("missing"),
+            pages: Vec::new(),
+            index: HashMap::new(),
+            failures: Vec::new(),
+        };
+        let capture = json!({ "width": 1, "height": 1, "styles": [], "rows": [[]] });
+        let read = shots(json!([{ "id": "a", "capture": capture }]))?;
+        assert!(run.add("a.luau", "80x24", &read[0]).is_err());
+        assert!(run.pages.is_empty());
+        Ok(())
     }
 
     #[test]
