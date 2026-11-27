@@ -151,6 +151,19 @@ impl Core {
     ) -> Result<KeyRouteExplanation> {
         let focus = self.probe_focus(requested)?;
         let focus_path = self.path_of(self.root, focus);
+        Ok(self.explain_key_from(focus, &focus_path, key))
+    }
+
+    /// Explain where `key` would go from `focus`, an attached node whose path
+    /// is `focus_path`, so a caller that explains many keys walks to the focus
+    /// once.
+    pub(crate) fn explain_key_from(
+        &self,
+        focus: NodeId,
+        focus_path: &Path,
+        key: Key,
+    ) -> KeyRouteExplanation {
+        let focus_path = focus_path.clone();
         if self.effective_transient_mode().is_some() {
             let outcome = match self.transient_winner(focus, key) {
                 Some((node, path, record)) => {
@@ -158,13 +171,13 @@ impl Core {
                 }
                 None => RouteOutcome::TransientDismiss,
             };
-            return Ok(KeyRouteExplanation {
+            return KeyRouteExplanation {
                 key,
                 focus,
                 focus_path,
                 steps: Vec::new(),
                 outcome,
-            });
+            };
         }
         let mut steps = Vec::new();
         let mut outcome = RouteOutcome::Unhandled;
@@ -190,13 +203,13 @@ impl Core {
                 break;
             }
         }
-        Ok(KeyRouteExplanation {
+        KeyRouteExplanation {
             key,
             focus,
             focus_path,
             steps,
             outcome,
-        })
+        }
     }
 }
 

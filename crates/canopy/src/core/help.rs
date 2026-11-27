@@ -135,8 +135,10 @@ impl Core {
         start: Option<NodeId>,
         target: &BindingTarget,
     ) -> Result<Option<Key>> {
+        let focus = self.probe_focus(start)?;
+        let focus_path = self.path_of(self.root, focus);
         for key in self.input_map.candidate_keys() {
-            let explanation = self.explain_key(start, key)?;
+            let explanation = self.explain_key_from(focus, &focus_path, key);
             let Some(winner) = explanation.outcome.winner() else {
                 continue;
             };
@@ -161,7 +163,7 @@ impl Core {
 
         let mut bindings = Vec::new();
         for key in self.input_map.candidate_keys() {
-            let explanation = self.explain_key(Some(focus), key)?;
+            let explanation = self.explain_key_from(focus, &focus_path, key);
             if let Some(winner) = explanation.outcome.winner() {
                 bindings.push(self.available_binding(
                     winner.node,
