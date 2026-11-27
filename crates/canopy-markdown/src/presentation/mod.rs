@@ -142,6 +142,16 @@ pub enum GlyphPreset {
     Ascii,
 }
 
+impl GlyphPreset {
+    /// Return `unicode` or `ascii`, whichever this preset draws.
+    fn pick<T>(self, unicode: T, ascii: T) -> T {
+        match self {
+            Self::Unicode => unicode,
+            Self::Ascii => ascii,
+        }
+    }
+}
+
 /// All preferences that influence line layout. Width includes the reserved
 /// gutter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1508,11 +1518,9 @@ fn prepare_block(
             if let Ok(data) =
                 TableData::new(block.id.to_string(), revision, columns, data_rows).map(Arc::new)
             {
-                let glyphs = if geometry.glyphs == GlyphPreset::Ascii {
-                    TableGlyphs::ASCII
-                } else {
-                    TableGlyphs::UNICODE
-                };
+                let glyphs = geometry
+                    .glyphs
+                    .pick(TableGlyphs::UNICODE, TableGlyphs::ASCII);
                 let options = TableLayoutOptions {
                     glyphs,
                     ..TableLayoutOptions::default()
@@ -1912,11 +1920,7 @@ fn prepare_embed(
         prepare_unsupplied(rows, make_row, "Embed: ", info, unit, prefix, layout);
         return;
     };
-    let rail_glyph = if geometry.glyphs == GlyphPreset::Ascii {
-        "| "
-    } else {
-        "│ "
-    };
+    let rail_glyph = geometry.glyphs.pick("│ ", "| ");
     let text_width = room.saturating_sub(2).max(1);
     let mut lines = vec![(embed.link.label.clone(), "markdown/embed/title")];
     for (index, paragraph) in paragraphs.iter().enumerate() {
@@ -2036,11 +2040,7 @@ fn prepare_code(
         glyphs,
         ..
     } = layout;
-    let separator = if glyphs == GlyphPreset::Ascii {
-        " | "
-    } else {
-        " · "
-    };
+    let separator = glyphs.pick(" · ", " | ");
     let parts: Vec<&str> = [
         (!code.info.is_empty()).then_some(code.info.as_str()),
         code.receiving.then_some("receiving"),
@@ -2167,11 +2167,7 @@ fn alert_style(tone: AlertTone) -> &'static str {
 /// takes the colour of its tone.
 fn quote_rails(block: &Block, depth: usize, glyphs: GlyphPreset) -> Prefix {
     let mut prefix = Prefix::default();
-    let rail = if glyphs == GlyphPreset::Ascii {
-        "| "
-    } else {
-        "│ "
-    };
+    let rail = glyphs.pick("│ ", "| ");
     for depth in 1..=depth.min(block.quote_depth).min(16) {
         let style = block
             .alerts
@@ -2239,10 +2235,7 @@ fn cell_ground<'a>(
 fn margin_bar(render: &mut Render, bg: Paint, local: Point, glyphs: GlyphPreset) -> Result<()> {
     let mut bar = render.resolve_style("markdown/block/bar");
     bar.bg = bg;
-    let glyph = match glyphs {
-        GlyphPreset::Unicode => "▌",
-        GlyphPreset::Ascii => "|",
-    };
+    let glyph = glyphs.pick("▌", "|");
     let local_area = Rect::new(local.x, local.y, 1, 1);
     render.put_grapheme(bar.resolve_at(local_area, local), local, glyph)
 }
@@ -2297,10 +2290,7 @@ fn block_prefix(block: &Block, glyphs: GlyphPreset) -> Prefix {
     }
     if let Some(marker) = &block.list_marker {
         let marker = match marker.as_str() {
-            "-" | "+" | "*" | "•" | "◦" | "▪" => match glyphs {
-                GlyphPreset::Ascii => "-",
-                GlyphPreset::Unicode => bullet(list_depth),
-            },
+            "-" | "+" | "*" | "•" | "◦" | "▪" => glyphs.pick(bullet(list_depth), "-"),
             _ => marker,
         };
         prefix.push(format!("{marker} "), "markdown/structure");
@@ -2310,12 +2300,7 @@ fn block_prefix(block: &Block, glyphs: GlyphPreset) -> Prefix {
 
 /// Build a bounded horizontal rule in the requested glyph preset.
 fn rule(glyphs: GlyphPreset, width: u32) -> String {
-    if glyphs == GlyphPreset::Ascii {
-        "-"
-    } else {
-        "━"
-    }
-    .repeat(width as usize)
+    glyphs.pick("━", "-").repeat(width as usize)
 }
 
 /// Replace terminal controls and expand tabs at their display column.
@@ -2327,21 +2312,10 @@ fn safe(grapheme: &str, glyphs: GlyphPreset, column: u32) -> String {
         .chars()
         .any(|c| c.is_control() || matches!(c,'\u{202a}'..='\u{202e}'|'\u{2066}'..='\u{2069}'))
     {
-        return if glyphs == GlyphPreset::Ascii {
-            "?"
-        } else {
-            "�"
-        }
-        .into();
+        return glyphs.pick("�", "?").into();
     }
     if text::grapheme_width(grapheme) == 0 {
-        return if glyphs == GlyphPreset::Ascii {
-            "?"
-        } else {
-            "◌"
-        }
-        .to_owned()
-            + grapheme;
+        return glyphs.pick("◌", "?").to_owned() + grapheme;
     }
     grapheme.to_owned()
 }
@@ -2507,12 +2481,7 @@ fn wrap(
                 add(
                     &mut row,
                     inset + prefix_width,
-                    if glyphs == GlyphPreset::Ascii {
-                        "?"
-                    } else {
-                        "�"
-                    }
-                    .into(),
+                    glyphs.pick("�", "?").into(),
                     Some(offset..offset + g.len()),
                     role,
                     None,
@@ -2610,11 +2579,7 @@ fn clipped(
         decoration(
             row,
             inset + budget - 1,
-            if glyphs == GlyphPreset::Ascii {
-                ">"
-            } else {
-                "…"
-            },
+            glyphs.pick("…", ">"),
             1,
             "markdown/card/label",
             object,
