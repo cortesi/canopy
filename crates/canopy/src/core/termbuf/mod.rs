@@ -455,9 +455,9 @@ impl TermBuf {
         let Some(isec) = self.rect().intersect(l.rect()) else {
             return Ok(());
         };
-        let offset = isec.tl.x.saturating_sub(l.tl.x) as usize;
+        // The buffer starts at the origin, so the line starts inside it.
         let max = isec.w as usize;
-        let (out, _) = text::slice_by_columns(txt, offset, max);
+        let (out, _) = text::slice_by_columns(txt, 0, max);
         let mut col = 0usize;
         let mut x = isec.tl.x;
 
