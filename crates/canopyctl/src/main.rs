@@ -865,19 +865,12 @@ async fn bootstrap_command(config: LoadedConfig, args: SpawnArgs) -> Result<()> 
 /// Format a smoke script path relative to the suite root and its fixture
 /// directory.
 fn smoke_test_name(suite_dir: &Path, script_path: &Path, fixture: Option<&str>) -> String {
-    let relative = script_path
-        .strip_prefix(suite_dir)
-        .unwrap_or(script_path)
-        .to_path_buf();
-
-    if let Some(fixture) = fixture {
-        let fixture_path = Path::new(&fixture);
-        if let Ok(without_fixture) = relative.strip_prefix(fixture_path) {
-            return without_fixture.display().to_string();
-        }
-    }
-
-    relative.display().to_string()
+    let relative = script_path.strip_prefix(suite_dir).unwrap_or(script_path);
+    fixture
+        .and_then(|fixture| relative.strip_prefix(fixture).ok())
+        .unwrap_or(relative)
+        .display()
+        .to_string()
 }
 
 /// Execute `canopyctl fixtures`.

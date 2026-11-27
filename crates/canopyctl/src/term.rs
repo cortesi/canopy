@@ -218,11 +218,14 @@ pub async fn serve_control(host: TermHost, listener: UnixListener) -> Result<()>
     serve_at(host, listener, &path).await
 }
 
-/// Serve `host` on `listener`, bound at `path`, and remove `path` at the end.
-async fn serve_at(host: impl Host, listener: UnixListener, path: &Path) -> Result<()> {
-    let result = accept(host, &listener).await;
+/// Accept control connections on `listener`, bound at `path`, until one
+/// stops the host or the app exits. Stop the host on every path, then remove
+/// `path`.
+async fn serve_at(mut host: impl Host, listener: UnixListener, path: &Path) -> Result<()> {
+    let result = run(&mut host, &listener).await;
+    let stopped = host.stop().await;
     drop(fs::remove_file(path));
-    result
+    result.and(stopped)
 }
 
 /// What the control loop sees next.
@@ -260,14 +263,6 @@ impl Connection {
         self.writer.write_all(&encoded).await?;
         Ok(())
     }
-}
-
-/// Accept control connections until one stops the host or the app exits,
-/// and stop the host on every path.
-async fn accept(mut host: impl Host, listener: &UnixListener) -> Result<()> {
-    let result = run(&mut host, listener).await;
-    let stopped = host.stop().await;
-    result.and(stopped)
 }
 
 /// Serve connections one at a time, watching the app's exit throughout.
