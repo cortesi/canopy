@@ -3487,6 +3487,12 @@ pub mod layout {
         End,
     }
 
+    impl Align {
+        /// Return the offset of `content` aligned within `available`. Content
+        /// that does not fit starts at zero.
+        pub fn offset(self, content: u32, available: u32) -> u32;
+    }
+
     /// Child layout results for canvas computations.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub struct CanvasChild {
